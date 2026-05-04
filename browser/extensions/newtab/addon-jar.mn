@@ -27,6 +27,7 @@ browser.jar:
   builtin-addons/newtab/prerendered/activity-stream-debug.html (./prerendered/activity-stream-debug.html)
 #endif
   builtin-addons/newtab/prerendered/activity-stream-noscripts.html (./prerendered/activity-stream-noscripts.html)
+  builtin-addons/newtab/prerendered/lykon-home.html (./prerendered/lykon-home.html)
 
 # The following are resources that exist in other component folders that are
 # included in the newtab resources at build time. Specifically, these are for

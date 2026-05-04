@@ -53,6 +53,7 @@ FINAL_TARGET_FILES.data.css["nova"] += [
 FINAL_TARGET_FILES.prerendered += [
     "../prerendered/activity-stream-noscripts.html",
     "../prerendered/activity-stream.html",
+    "../prerendered/lykon-home.html",
 ]
 
 # The following are resources that exist in other component folders that are
