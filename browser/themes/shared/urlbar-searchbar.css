@@ -1119,26 +1119,25 @@ toolbar[inactive="true"] .urlbar,
 
 /* Default: always show the lock */
 .urlbar-input-box::before {
-  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='14' height='14'%3E%3Cpath fill='%23ffffff' d='M7.5 10V7a4.5 4.5 0 0 1 9 0v3h-2.5V7a2 2 0 0 0-4 0v3H7.5z'/%3E%3Crect fill='%23ffffff' x='4.5' y='10' width='15' height='11.5' rx='3.5'/%3E%3C/svg%3E");
+  content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='16' height='16'%3E%3Cpath fill='%23ffffff' d='M7.5 10V7a4.5 4.5 0 0 1 9 0v3h-2.5V7a2 2 0 0 0-4 0v3H7.5z'/%3E%3Crect fill='%23ffffff' x='4.5' y='10' width='15' height='11.5' rx='3.5'/%3E%3C/svg%3E");
   display: flex;
   align-self: center;
   flex-shrink: 0;
-  margin-inline-start: 8px;
-  margin-inline-end: 6px;
-  opacity: 0.45;
+  margin-inline-end: 5px;
+  opacity: 0.75;
   pointer-events: none;
   line-height: 0;
 }
 
-/* Slightly more visible on hover/idle */
+/* Dim slightly when not focused */
 #urlbar:not([focused]):not([open]) .urlbar-input-box::before {
-  opacity: 0.45;
+  opacity: 0.6;
 }
 
-/* Full brightness when focused — matches Safari */
+/* Full brightness when focused */
 #urlbar[focused] .urlbar-input-box::before,
 #urlbar[open] .urlbar-input-box::before {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* ── HIDE when a real page is loaded ──────────────────────

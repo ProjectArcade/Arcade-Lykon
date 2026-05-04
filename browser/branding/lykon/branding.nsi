@@ -8,10 +8,10 @@
 
 # BrandFullNameInternal is used for some registry and file system values
 # instead of BrandFullName and typically should not be modified.
-!define BrandFullNameInternal "Mozilla Firefox"
-!define BrandFullName         "Mozilla Firefox"
-!define CompanyName           "Mozilla Corporation"
-!define URLInfoAbout          "https://www.mozilla.org"
+!define BrandFullNameInternal "Lykon"
+!define BrandFullName         "Lykon"
+!define CompanyName           "Lykon"
+!define URLInfoAbout          "https://lykon.org"
 !define URLUpdateInfo         "https://www.firefox.com/firefox/${AppVersion}/releasenotes"
 !define HelpLink              "https://support.mozilla.org"
 

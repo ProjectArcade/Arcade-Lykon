@@ -5,10 +5,6 @@
 @import url("chrome://browser/skin/browser-shared.css");
 @import url("chrome://browser/skin/contextmenu.css");
 
-/**
- * We still want to do some of the tweaks that browser-colors does, like
- * disabling the toolbar field border and backgrounds.
- */
 @media not (prefers-contrast) {
   :root:not([lwtheme]) {
     @media (-moz-gtk-theme-family) {
@@ -22,42 +18,45 @@
 
 :root {
   --tab-min-height: 34px;
-  --tab-border-radius: 8px;
-  --toolbox-bgcolor: #1a1b1e;
-  --toolbar-bgcolor: #1a1b1e;
+  --tab-border-radius: 10px;
+
+  /* ── Core chrome colors ── */
+  --toolbox-bgcolor: rgb(24, 24, 28);
+  --toolbar-bgcolor: #18181c;
+
+  /* ── Urlbar ── */
   --urlbar-min-height: 38px;
   --urlbar-padding-block: 5px;
   --urlbar-border-radius: 14px;
-  --tab-selected-bgcolor: #2f3136;
-  --tab-hover-background-color: #2a2b2f;
-  --toolbar-field-background-color: #2a2b2f;
-  --toolbar-field-focus-background-color: #2f3136;
-  --toolbar-field-border-color: #3c4043;
+
+  /* ── Tab colors — iOS feel:
+        unselected  : near-invisible, no background
+        hover       : soft frosted white lift
+        selected    : elevated surface with subtle top highlight  */
+  --tab-unselected-bgcolor: transparent;
+  --tab-hover-background-color: rgba(255, 255, 255, 0.07);
+  --tab-selected-bgcolor: rgba(255, 255, 255, 0.11);
+  --tab-selected-border-color: rgba(255, 255, 255, 0.14);
+
+  /* ── Toolbar field ── */
+  --toolbar-field-background-color: rgba(33, 33, 33, 0.9);
+  --toolbar-field-focus-background-color: rgba(33, 33, 33, 0.9);
+  --toolbar-field-border-color: rgba(255, 255, 255, 0.10);
   --toolbar-field-focus-border-color: #8ab4f8;
   --toolbar-field-color: #e8eaed;
-  --toolbar-field-placeholder-color: #80868b;
+  --toolbar-field-placeholder-color: rgba(255, 255, 255, 0.38);
 }
 
 #menubar-items {
-  flex-direction: column; /* for flex hack */
-  justify-content: normal; /* align the menubar to the top also in customize mode */
+  flex-direction: column;
+  justify-content: normal;
 }
 
-/**
- * Titlebar drawing:
- *
- * GTK windows have both a window radius (exposed via the
- * `-moz-gtk-csd-titlebar-radius`) environment variable, and a window shadow
- * (which we can't read back from GTK). Note that the -moz-window-decorations
- * (in X11) or the compositor (in Wayland) does draw the shadow corners
- * already.
- */
 @media (-moz-gtk-csd-transparency-available) {
   :root[customtitlebar] {
     background-color: transparent;
 
     &[sizemode="normal"]:not([gtktiledwindow="true"]) {
-      /* This takes care of drawing our window decorations on X11 */
       -moz-default-appearance: -moz-window-decorations;
       appearance: auto;
 
@@ -70,13 +69,11 @@
       /* stylelint-disable-next-line media-query-no-invalid */
       @media -moz-pref("widget.gtk.rounded-bottom-corners.enabled") {
         #navigator-toolbox {
-          /* The body clip below covers this. */
           border-radius: 0;
         }
 
         body,
         dialog::backdrop {
-          /* Use an uniform clip to allow WebRender to optimize it better */
           border-radius: env(-moz-gtk-csd-titlebar-radius);
         }
       }
@@ -84,7 +81,7 @@
   }
 }
 
-/* Bookmark menus */
+/* ── Bookmark menus ── */
 .bookmark-item {
   &:is(menu, menuitem) {
     min-width: 0;
@@ -95,14 +92,13 @@
     margin-block: 0;
   }
 
-  /* Bookmark drag and drop styles */
   &[dragover-into="true"] {
     background: SelectedItem !important;
     color: SelectedItemText !important;
   }
 }
 
-/* Address bar */
+/* ── Address bar ── */
 #urlbar,
 #searchbar {
   font-size: 1.0em;
@@ -115,16 +111,16 @@
   }
 }
 
-/* AutoComplete */
-
+/* ── AutoComplete ── */
 #PopupAutoComplete > richlistbox > richlistitem[originaltype~="datalist-first"] {
   border-top: 1px solid ThreeDShadow;
 }
 
-/* Tabstrip */
+/* ══════════════════════════════════════════════════════════
+   TAB STRIP — iOS-inspired
+   ══════════════════════════════════════════════════════════ */
 
 #tabbrowser-tabs {
-  /* override the native styling */
   border-bottom: 0;
 }
 
@@ -132,17 +128,133 @@
   min-height: 0;
 }
 
+/* Unselected tab — completely transparent, ghost state */
 .tabbrowser-tab:not([selected]):not([multiselected]) > .tab-stack > .tab-background {
-  background-color: #232427;
+  background-color: var(--tab-unselected-bgcolor);
+  box-shadow: none;
+  border: none;
 }
 
+/* Hover — delicate frosted lift, iOS control center style */
 .tabbrowser-tab:hover:not([selected]):not([multiselected]) > .tab-stack > .tab-background {
   background-color: var(--tab-hover-background-color);
+  /* Subtle inner top highlight — like glass catching light */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  border-radius: var(--tab-border-radius);
+  transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
+/* Selected tab — elevated frosted card */
 .tabbrowser-tab:is([selected], [multiselected]) > .tab-stack > .tab-background {
   background-color: var(--tab-selected-bgcolor);
+  /* Top specular line + outer ring — like an iOS selected segment */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px var(--tab-selected-border-color),
+    0 2px 8px rgba(0, 0, 0, 0.28);
+  border-radius: var(--tab-border-radius);
 }
+
+/* Tab text — dimmed when unselected, full white when selected */
+.tabbrowser-tab:not([selected]) .tab-label {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.tabbrowser-tab:hover:not([selected]) .tab-label {
+  opacity: 0.78;
+}
+
+.tabbrowser-tab[selected] .tab-label {
+  opacity: 1;
+  font-weight: 500;
+}
+
+/* Favicon opacity — same treatment */
+.tabbrowser-tab:not([selected]) .tab-icon-image,
+.tabbrowser-tab:not([selected]) .tab-throbber,
+.tabbrowser-tab:not([selected]) .tab-icon-overlay {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.tabbrowser-tab:hover:not([selected]) .tab-icon-image {
+  opacity: 0.85;
+}
+
+.tabbrowser-tab[selected] .tab-icon-image {
+  opacity: 1;
+}
+
+/* Close button — hidden until hover */
+.tabbrowser-tab:not(:hover):not([selected]) .tab-close-button {
+  opacity: 0 !important;
+}
+
+/* ── TAB SEPARATORS ──────────────────────────────────────
+   Thin right-edge divider between tabs, iOS Notes style  */
+
+.tabbrowser-tab {
+  position: relative;
+}
+
+.tabbrowser-tab::after {
+  content: "";
+  display: block;
+  position: absolute;
+  right: 0;
+  top: 22%;
+  height: 56%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(255, 255, 255, 0.09) 30%,
+    rgba(255, 255, 255, 0.09) 70%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* No separator after the last visible tab */
+.tabbrowser-tab:last-of-type::after {
+  display: none;
+}
+
+/* No separator after the selected tab or the one before it */
+.tabbrowser-tab[selected]::after,
+.tabbrowser-tab:has(+ .tabbrowser-tab[selected])::after {
+  display: none;
+}
+
+/* Kill the leftmost built-in Firefox separator line */
+#tabbrowser-tabs::before,
+#tabbrowser-arrowscrollbox::before,
+.tabbrowser-tab:first-of-type::before {
+  display: none !important;
+}
+
+.tabbrowser-tab .tab-context-line,
+.tabbrowser-tab[visuallyselected] .tab-context-line {
+  display: none;
+}
+
+/* ── Firefox View button — hidden ── */
+#firefox-view-button {
+  display: none !important;
+}
+
+/* ── Firefox Accounts button — hidden ── */
+#fxa-toolbar-menu-button {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════
+   URLBAR
+   ══════════════════════════════════════════════════════════ */
 
 #urlbar-background,
 .searchbar-textbox {
@@ -172,40 +284,36 @@
   align-items: center;
 }
 
+/* ── New Tab (+) button ── */
 #tabs-newtab-button > .toolbarbutton-icon,
 #TabsToolbar #new-tab-button > .toolbarbutton-icon {
-  background-color: #1f2224;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 999px;
   padding: 6px;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
 }
 
 #tabs-newtab-button:hover > .toolbarbutton-icon,
 #TabsToolbar #new-tab-button:hover > .toolbarbutton-icon {
-  background-color: #232629;
-  border-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 #tabs-newtab-button:active > .toolbarbutton-icon,
 #TabsToolbar #new-tab-button:active > .toolbarbutton-icon {
-  background-color: #2a2e31;
+  background-color: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.22);
 }
 
-#fxa-toolbar-menu-button {
-  display: none;
-}
-#firefox-view-button {
-  display: none !important;
-}
-
+/* ── Navigator toolbox ── */
 #navigator-toolbox {
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
   background-color: var(--toolbox-bgcolor);
   background-clip: padding-box;
-  backdrop-filter: blur(18px) saturate(170%);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: clip;
 }
 
@@ -216,20 +324,13 @@
   color: inherit;
 }
 
-/* All tabs menupopup */
-
+/* ── All tabs menupopup ── */
 .alltabs-item[selected="true"] {
   font-weight: bold;
 }
 
 #UITourHighlight {
-  /* Below are some fixes for people without an X compositor on Linux.
-     This is why we can't have nice things: */
-  /* Animations don't repaint properly without an X compositor. */
   animation-name: none !important;
-  /* Opacity rounds to 0 or 1 on Linux without an X compositor, making the
-     background color not visible. Anti-aliasing is not available either. Make a
-     thicker outline and cancel border-radius for that case. */
   outline: 4px solid rgb(0, 200, 215);
   border-radius: 0 !important;
 }
@@ -242,27 +343,15 @@
   margin-inline-end: -4px;
 }
 
-/**
- * Override the --arrowpanel-padding so the background extends
- * to the sides and bottom of the panel.
- */
 #UITourTooltipButtons {
   margin-inline-start: -10px;
   margin-bottom: -10px;
 }
 
-/* The button box must appear on top of the navigator-toolbox in order for
- * click and hover mouse events to work properly for the button in the restored
- * window state. Otherwise, elements in the navigator-toolbox, like the menubar,
- * can swallow those events. */
+/* ── Titlebar buttons ── */
 .titlebar-buttonbox {
   z-index: 1;
   align-items: stretch;
-  /* The spacing on each side of the titlebar button. In libadwaita, that's
-   * 3px of gap + 5px * 2 of padding = 13px / 2, see:
-   * https://gitlab.gnome.org/GNOME/libadwaita/-/blob/fe21c3c823443a8f2333cf3cc09ba3d0fa753228/src/stylesheet/widgets/_header-bar.scss#L164
-   * We want a contiguous hit region so we use 6.5px of padding instead.
-   */
   --titlebar-button-spacing: 6.5px;
   --titlebar-button-end-spacing: 10px;
   --max-titlebar-button-position: max(
@@ -289,7 +378,6 @@
     var(--titlebar-button-end-spacing) * (var(--titlebar-button-position) - var(--max-titlebar-button-position) + 1)
   );
   order: var(--titlebar-button-position);
-  /* In GTK applications, you can drag the window by titlebar buttons */
   -moz-window-dragging: drag;
 
   > .toolbarbutton-icon {
@@ -298,14 +386,11 @@
     background-repeat: no-repeat;
     -moz-context-properties: stroke;
     stroke: currentColor;
-    /* Roughly the Adwaita size */
     width: 24px;
     height: 24px;
-    /* Matches the libadwaita transition */
     transition: background-color 0.2s ease;
 
     @media (-moz-gtk-theme-family: adwaita) or (-moz-gtk-theme-family: yaru) {
-      /* On Adwaita / Yaru, the titlebar buttons have a background by default */
       background-color: color-mix(in srgb, currentColor 10%, transparent);
     }
   }
@@ -365,459 +450,494 @@
   }
 }
 
-/* ── LYKON SHIELD PANEL ── */
+/* ════════════════════════════════════════════════════
+   LYKON SHIELD PANEL  —  lykon-shield.css
+   Uses Firefox native --arrowpanel-* variables so the
+   panel always matches the browser theme (light/dark).
+   ════════════════════════════════════════════════════ */
+
+/* ── Panel arrow popup itself ── */
+#lykon-shield-popup {
+  --panel-border-color: transparent;
+  --panel-border-radius: 12px;
+  --panel-shadow: none;
+  -moz-appearance: none;
+  appearance: none;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* ── Root content wrapper ── */
 #lykon-shield-panel-content {
   padding: 16px;
-  color: var(--arrowpanel-color);
-  font-family: system-ui, -apple-system, sans-serif;
-  min-width: 360px;
-  max-width: 400px;
+  min-width: 300px;
+  max-width: 320px;
+
+  /* Use the browser's own panel background — adapts to light/dark theme */
   background-color: var(--arrowpanel-background);
-  border-radius: 16px;
+  color: var(--arrowpanel-color);
+  border: none;
+  border-radius: 0;
+
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  -moz-user-select: none;
 }
 
-/* Header with Icon & Title */
-.lykon-shield-header {
+/* ════════════════════════════════════════════════════
+   HEADER
+   ════════════════════════════════════════════════════ */
+.lks-header {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 20px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
 }
 
-.lykon-shield-header-icon {
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
+.lks-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lks-icon-wrap {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  background: linear-gradient(145deg, #30d158, #00b67a);
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #34c759 0%, #00c884 100%);
-  border-radius: 12px;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
 }
 
-.lykon-shield-header-icon img {
-  width: 28px;
+.lks-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--arrowpanel-color);
+}
+
+/* ════════════════════════════════════════════════════
+   TOGGLE
+   ════════════════════════════════════════════════════ */
+.lks-toggle-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.lks-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.lks-toggle-track {
+  display: block;
+  width: 50px;
   height: 28px;
-  filter: brightness(0) invert(1);
+  background: color-mix(in srgb, var(--arrowpanel-color) 20%, transparent);
+  border-radius: 14px;
+  position: relative;
+  transition: background 0.22s ease;
+  cursor: pointer;
 }
 
-.lykon-shield-header-text {
-  flex: 1;
+.lks-toggle-thumb {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: var(--arrowpanel-background);
+  border-radius: 11px;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.22s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+}
+
+.lks-toggle-input:checked + .lks-toggle-track {
+  background: #30d158;
+}
+
+.lks-toggle-input:checked + .lks-toggle-track .lks-toggle-thumb {
+  transform: translateX(22px);
+}
+
+/* Small toggle (advanced panel) */
+.lks-toggle-sm .lks-toggle-track {
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+}
+
+.lks-toggle-sm .lks-toggle-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+}
+
+.lks-toggle-sm .lks-toggle-input:checked + .lks-toggle-track .lks-toggle-thumb {
+  transform: translateX(16px);
+}
+
+/* ════════════════════════════════════════════════════
+   STATUS CARD
+   ════════════════════════════════════════════════════ */
+.lks-status-card {
+  background: color-mix(in srgb, var(--arrowpanel-color) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
+  border-radius: 12px;
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lks-status-left {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.lykon-shield-title {
-  font-weight: 700;
-  font-size: 1.1em;
-  color: var(--arrowpanel-color);
-  margin: 0;
-  line-height: 1.2;
-}
-
-.lykon-shield-subtitle {
+.lks-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 0.9em;
-  color: var(--arrowpanel-color);
-  margin: 0;
-  line-height: 1.3;
+  color: #30d158;
 }
 
-.lykon-shield-description {
-  font-size: 0.75em;
-  color: inherit;
-  opacity: 0.68;
-  margin: 2px 0 0 0;
+.lks-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  min-width: 7px;
+  background: #30d158;
+  border-radius: 4px;
+}
+
+.lks-status-hint {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--arrowpanel-color) 55%, transparent);
+  margin: 0;
   line-height: 1.4;
 }
 
-/* Main Toggle Section */
-.lykon-shield-main-toggle {
-  background-color: var(--toolbar-field-background-color);
-  border: 1px solid var(--toolbar-field-border-color);
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 14px;
-}
-
-.lykon-shield-toggle-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.lykon-shield-toggle-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.lykon-shield-toggle-label {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.lykon-shield-toggle-input {
-  position: absolute;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-}
-
-.lykon-shield-toggle-slider {
+.lks-sparkline {
   display: block;
-  width: 44px;
-  height: 24px;
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  position: relative;
-  transition: background-color 0.3s ease;
-  pointer-events: none;
+  margin-top: 8px;
 }
 
-.lykon-shield-toggle-slider::before {
-  content: '';
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  background-color: white;
-  border-radius: 10px;
-  top: 2px;
-  left: 2px;
-  transition: transform 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.lykon-shield-toggle-input:checked + .lykon-shield-toggle-slider {
-  background-color: #34c759;
-}
-
-.lykon-shield-toggle-input:checked + .lykon-shield-toggle-slider::before {
-  transform: translateX(20px);
-}
-
-.lykon-shield-status-text {
-  font-weight: 600;
-  font-size: 0.92em;
-  color: var(--arrowpanel-color);
-}
-
-.lykon-shield-status-hint {
-  font-size: 0.75em;
-  color: inherit;
-  opacity: 0.68;
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* Stats Grid */
-.lykon-shield-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.lykon-shield-stat-item {
-  background-color: var(--toolbar-field-background-color);
-  border: 1px solid var(--toolbar-field-border-color);
-  border-radius: 10px;
-  padding: 12px 8px;
-  text-align: center;
-}
-
-.lykon-shield-stat-value {
-  font-size: 1.6em;
-  font-weight: 700;
-  color: #34c759;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.lykon-shield-stat-label {
-  font-size: 0.65em;
-  color: inherit;
-  opacity: 0.68;
-  line-height: 1.3;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  font-weight: 500;
-}
-
-/* Divider */
-.lykon-shield-divider {
-  border: none;
-  border-top: 1px solid var(--toolbar-field-border-color);
-  margin: 12px 0;
-}
-
-/* Warning */
-.lykon-shield-warning {
-  background-color: rgba(255, 217, 102, 0.1);
-  border: 1px solid rgba(255, 217, 102, 0.3);
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 0.75em;
-  color: inherit;
-  margin-bottom: 12px;
-  line-height: 1.4;
-}
-
-/* Quick Actions */
-.lykon-shield-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-bottom: 12px;
-}
-
-.lykon-shield-action-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--toolbar-field-border-color);
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.lykon-shield-action-item:last-child {
-  border-bottom: none;
-}
-
-.lykon-shield-action-item:hover {
-  background-color: color-mix(in srgb, var(--toolbar-field-background-color) 50%, transparent);
-}
-
-.lykon-shield-action-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-}
-
-.lykon-shield-action-icon {
-  font-size: 1.2em;
-  min-width: 24px;
-  text-align: center;
-}
-
-.lykon-shield-action-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lykon-shield-action-title {
-  font-weight: 600;
-  font-size: 0.85em;
-  color: var(--arrowpanel-color);
-}
-
-.lykon-shield-action-desc {
-  font-size: 0.72em;
-  color: inherit;
-  opacity: 0.62;
-}
-
-.lykon-shield-action-arrow {
-  color: #0a84ff;
-  font-size: 1.2em;
-  opacity: 0.6;
-  margin-left: 8px;
-}
-
-/* Advanced Section Toggle */
-.lykon-shield-advanced-toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  padding: 10px 8px;
-  border-radius: 8px;
-  transition: background-color 0.15s ease;
-}
-
-.lykon-shield-advanced-toggle:hover {
-  background-color: color-mix(in srgb, var(--toolbar-field-background-color) 50%, transparent);
-}
-
-.lykon-shield-adv-label {
-  color: #0a84ff;
-  font-weight: 600;
-  font-size: 0.85em;
-  letter-spacing: 0.01em;
-}
-
-.lykon-shield-adv-arrow {
-  color: #0a84ff;
-  font-size: 0.9em;
-  transition: transform 0.3s ease;
-}
-
-/* Advanced section */
-.lykon-shield-advanced {
-  display: none;
-  background-color: var(--toolbar-field-background-color);
-  border-radius: 10px;
-  padding: 12px;
-  margin-top: 6px;
-  border: 1px solid var(--toolbar-field-border-color);
-}
-
-.lykon-shield-section {
-  margin-bottom: 12px;
-}
-
-.lykon-shield-section:last-child {
-  margin-bottom: 0;
-}
-
-/* Section label */
-.lykon-shield-section-label {
-  font-size: 0.7em;
-  font-weight: 600;
-  color: var(--arrowpanel-color);
-  opacity: 0.62;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
-  padding-left: 2px;
-}
-
-/* Control row with select */
-.lykon-shield-control-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.lykon-shield-select-label {
-  font-size: 0.8em;
-  color: var(--arrowpanel-color);
-  min-width: 100px;
-  font-weight: 500;
-}
-
-.lykon-shield-select {
-  flex: 1;
-  background-color: var(--toolbar-field-background-color);
-  color: var(--toolbar-field-color);
-  border: 1px solid var(--toolbar-field-border-color);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 0.8em;
-  cursor: pointer;
-  appearance: auto;
-  transition: border-color 0.15s ease;
-}
-
-.lykon-shield-select:hover {
-  border-color: #0a84ff;
-}
-
-.lykon-shield-select:focus {
-  outline: none;
-  border-color: #0a84ff;
-  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
-}
-
-/* Toggle rows */
-.lykon-shield-toggle-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 10px 0;
-  border-top: 1px solid var(--toolbar-field-border-color);
-  gap: 8px;
-}
-
-.lykon-shield-toggle-row:first-of-type {
-  border-top: none;
-}
-
-.lykon-shield-toggle-row .lykon-shield-toggle-label {
-  width: 44px;
+.lks-status-right {
+  text-align: right;
   flex-shrink: 0;
 }
 
-.lykon-shield-toggle-text {
+.lks-big-num {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--arrowpanel-color);
+  letter-spacing: -1.5px;
+  line-height: 1;
+}
+
+.lks-big-label {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--arrowpanel-color) 50%, transparent);
+  margin-top: 4px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+/* Paused state */
+#lykon-shield-panel-content[data-paused="true"] .lks-status-badge {
+  color: #ff453a;
+}
+#lykon-shield-panel-content[data-paused="true"] .lks-dot {
+  background: #ff453a;
+}
+
+/* ════════════════════════════════════════════════════
+   STATS ROW
+   ════════════════════════════════════════════════════ */
+.lks-stats-row {
+  background: color-mix(in srgb, var(--arrowpanel-color) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr 1px 1fr;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.lks-stat-cell {
+  padding: 11px 6px;
+  text-align: center;
+}
+
+.lks-stat-sep {
+  background: color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
+  margin: 10px 0;
+}
+
+.lks-stat-val {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--arrowpanel-color);
+  letter-spacing: -0.3px;
+  line-height: 1;
+}
+
+.lks-stat-lbl {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--arrowpanel-color) 50%, transparent);
+  margin-top: 5px;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+}
+
+/* ════════════════════════════════════════════════════
+   DIVIDER
+   ════════════════════════════════════════════════════ */
+.lks-divider {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--arrowpanel-color) 12%, transparent);
+  margin: 10px 0;
+}
+
+/* ════════════════════════════════════════════════════
+   WARNING STRIP
+   ════════════════════════════════════════════════════ */
+.lks-warning {
+  background: rgba(255, 214, 10, 0.1);
+  border: 1px solid rgba(255, 214, 10, 0.22);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: var(--arrowpanel-color);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+/* ════════════════════════════════════════════════════
+   ACTION ROWS
+   ════════════════════════════════════════════════════ */
+.lks-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.lks-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.14s ease;
+}
+
+.lks-action-row:last-child {
+  border-bottom: none;
+}
+
+.lks-action-row:hover {
+  background: color-mix(in srgb, var(--arrowpanel-color) 8%, transparent);
+}
+
+.lks-action-icon-wrap {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  background: color-mix(in srgb, var(--arrowpanel-color) 8%, transparent);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Make SVG strokes adapt to theme color */
+.lks-action-icon-wrap svg path,
+.lks-action-icon-wrap svg circle {
+  stroke: color-mix(in srgb, var(--arrowpanel-color) 70%, transparent);
+}
+
+.lks-action-text {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.lykon-shield-toggle-title {
-  font-size: 0.83em;
-  font-weight: 600;
+.lks-action-title {
+  font-size: 13px;
+  font-weight: 500;
   color: var(--arrowpanel-color);
 }
 
-.lykon-shield-toggle-desc {
-  font-size: 0.72em;
-  color: inherit;
-  opacity: 0.62;
+.lks-action-desc {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--arrowpanel-color) 50%, transparent);
+}
+
+/* ════════════════════════════════════════════════════
+   ADVANCED TOGGLE ROW
+   ════════════════════════════════════════════════════ */
+.lks-adv-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 9px 6px;
+  border-radius: 8px;
+  margin-top: 2px;
+  transition: background 0.14s ease;
+}
+
+.lks-adv-toggle:hover {
+  background: color-mix(in srgb, var(--arrowpanel-color) 6%, transparent);
+}
+
+.lks-adv-toggle-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0a84ff;
+}
+
+.lks-adv-arrow {
+  display: block;
+  transition: transform 0.24s ease;
+}
+
+.lks-adv-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* ════════════════════════════════════════════════════
+   ADVANCED PANEL
+   ════════════════════════════════════════════════════ */
+.lks-adv-panel {
+  background: color-mix(in srgb, var(--arrowpanel-color) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 8px;
+}
+
+.lks-adv-section {
+  margin-bottom: 14px;
+}
+
+.lks-adv-section:last-child {
+  margin-bottom: 0;
+}
+
+.lks-adv-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--arrowpanel-color) 45%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+
+.lks-ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.lks-ctrl-label {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--arrowpanel-color) 85%, transparent);
+  font-weight: 400;
+  flex: 1;
+}
+
+.lks-select {
+  background: color-mix(in srgb, var(--arrowpanel-color) 8%, transparent);
+  color: var(--arrowpanel-color);
+  border: 1px solid color-mix(in srgb, var(--arrowpanel-color) 15%, transparent);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.14s ease;
+  appearance: auto;
+}
+
+.lks-select:hover {
+  border-color: color-mix(in srgb, var(--arrowpanel-color) 30%, transparent);
+}
+
+.lks-select:focus {
+  border-color: #0a84ff;
+}
+
+/* ─ Toggle rows inside advanced ─ */
+.lks-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
+  gap: 10px;
+}
+
+.lks-toggle-row:first-of-type {
+  border-top: none;
+}
+
+.lks-toggle-row-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lks-toggle-row-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--arrowpanel-color) 85%, transparent);
+}
+
+.lks-toggle-row-desc {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--arrowpanel-color) 45%, transparent);
   line-height: 1.3;
 }
 
-/* Footer */
-.lykon-shield-footer-links {
+/* ─ Footer ─ */
+.lks-adv-footer {
   text-align: center;
-  padding-top: 8px;
-  border-top: 1px solid var(--toolbar-field-border-color);
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--arrowpanel-color) 10%, transparent);
 }
 
-.lykon-shield-learn-more {
-  color: #0a84ff;
-  cursor: pointer;
-  text-decoration: none;
-  font-size: 0.75em;
+.lks-learn-more {
+  font-size: 11.5px;
   font-weight: 500;
-  transition: color 0.15s ease;
+  color: #0a84ff;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.14s ease;
 }
 
-.lykon-shield-learn-more:hover {
-  color: #0570ff;
+.lks-learn-more:hover {
+  color: #409cff;
   text-decoration: underline;
-}
-/* ── TAB SEPARATORS ─────────────────────────────────────
-   Right-side divider on every tab, skip the first one    */
-
-/* Draw a right-side separator on every tab */
-.tabbrowser-tab::after {
-  content: "";
-  display: block;
-  position: absolute;
-  right: 0;
-  top: 20%;
-  height: 60%;
-  width: 1px;
-  background-color: rgba(255, 255, 255, 1);
-  pointer-events: none;
-}
-
-/* Remove the separator after the last tab before the + button */
-.tabbrowser-tab:last-of-type::after {
-  display: none;
-}
-
-/* Remove the leftmost line — this is the separator Firefox
-   draws before the first tab via the tab strip itself */
-#tabbrowser-tabs::before,
-#tabbrowser-arrowscrollbox::before,
-.tabbrowser-tab:first-of-type::before {
-  display: none !important;
-}
-
-/* Also kill the built-in tab separator elements Firefox injects */
-.tabbrowser-tab .tab-context-line,
-.tabbrowser-tab[visuallyselected] .tab-context-line {
-  display: none;
 }

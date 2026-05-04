@@ -1,348 +1,140 @@
+/* ════════════════════════════════════════════════════
+   LYKON SHIELD  —  lykon-shield.js
+   ════════════════════════════════════════════════════ */
+
 var LykonShield = {
-  _shieldsUp: true,
-  _advancedOpen: false,
 
+  /* ─ DOM refs ─ */
+  _el: {},
+
+  /* ─ Init (called on popupshown) ─ */
   init() {
-    if (!gBrowser) {
-      setTimeout(() => this.init(), 500);
-      return;
-    }
+    const $ = id => document.getElementById(id);
+    this._el = {
+      toggle:      $("lykon-shield-toggle"),
+      content:     $("lykon-shield-panel-content"),
+      statusText:  $("lykon-shield-status-text"),
+      statusHint:  $("lks-status-hint"),
+      dot:         $("lks-dot"),
+      advHeader:   $("lykon-shield-advanced-header"),
+      advPanel:    $("lykon-shield-advanced"),
+      advArrow:    $("lykon-shield-adv-arrow"),
+      count:       $("lykon-shield-count"),
+      total:       $("lykon-shield-total-count"),
+      trackers:    $("lykon-shield-tracker-count"),
+      bandwidth:   $("lykon-shield-bandwidth"),
+    };
 
-    // Read global enabled state first
-    this._shieldsUp = globalThis.LykonAdblock?.getStats?.().enabled ?? true;
-    this._syncFingerprintState();
+    this._el.toggle.addEventListener("change", () => this._onMainToggle());
+    this._el.advHeader.addEventListener("click", () => this._toggleAdvanced());
 
-    const btn = document.getElementById("lykon-shield-button");
-    if (btn) {
-      btn.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.open(btn);
-      });
-    }
-
-    // Attach toggle listener via addEventListener
-    const toggle = document.getElementById("lykon-shield-toggle");
-    if (toggle) {
-      toggle.addEventListener("change", (e) => {
-        e.stopPropagation();
-        this.toggleShields();
-      });
-    }
-
-    const advancedHeader = document.getElementById("lykon-shield-advanced-header");
-    if (advancedHeader) {
-      advancedHeader.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.toggleAdvanced();
-      });
-    }
-
-    const learnMoreLink = document.getElementById("lykon-shield-learn-more");
-    if (learnMoreLink) {
-      learnMoreLink.addEventListener("click", event => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.openLearnMore();
-      });
-    }
-
-    gBrowser.tabContainer.addEventListener("TabSelect", () => {
-      this._updateButtonState();
-      this._syncShieldStateForCurrentSite();
-    });
-    gBrowser.addTabsProgressListener({
-      onLocationChange: () => {
-        this._updateButtonState();
-        this._syncShieldStateForCurrentSite();
-      }
-    });
-
-    this._updateButtonState();
-    this._syncShieldStateForCurrentSite();
+    this._loadPrefs();
+    this._updateStats();
   },
 
-  open(anchor = document.getElementById("lykon-shield-button")) {
-    try {
-      const popup = document.getElementById("lykon-shield-popup");
-      if (!popup || !anchor) {
-        console.error("[LykonShield] open failed: missing popup or anchor");
-        return;
-      }
-
-      if (popup.state == "open") {
-        popup.hidePopup();
-        return;
-      }
-
-      this._onPanelOpen();
-      popup.openPopup(anchor, "bottomright topright");
-    } catch (e) {
-      console.error("[LykonShield] open failed:", e);
-    }
+  /* ─ Main toggle ─ */
+  _onMainToggle() {
+    const on = this._el.toggle.checked;
+    this._el.content.setAttribute("data-paused", on ? "false" : "true");
+    this._el.statusText.textContent = on ? "Blocking ads"  : "Paused";
+    this._el.statusHint.textContent = on ? "You're browsing ad-free." : "Ads may appear on this page.";
+    try { Services.prefs.setBoolPref("lykon.shield.enabled", on); } catch(e) {}
   },
 
-  _isRestrictedPage() {
-    try {
-      const uri = gBrowser?.selectedBrowser?.currentURI;
-      if (!uri) return false;
-      const spec = uri.spec;
-      return spec === "about:blank" ||
-             spec === "about:newtab" ||
-             spec === "about:home" ||
-             spec === "about:privatebrowsing" ||
-             (spec.startsWith("about:") && spec !== "about:reader");
-    } catch(e) { return false; }
+  /* ─ Advanced panel ─ */
+  _toggleAdvanced() {
+    const open = this._el.advPanel.style.display !== "none";
+    this._el.advPanel.style.display = open ? "none" : "block";
+    this._el.advArrow.classList.toggle("open", !open);
   },
 
-  _getCurrentOrigin() {
-    try {
-      const uri = gBrowser?.selectedBrowser?.currentURI;
-      if (!uri || this._isRestrictedPage()) return null;
-      return uri.prePath;
-    } catch(e) { return null; }
+  /* ─ Pref setters ─ */
+  setTrackerMode(val) {
+    try { Services.prefs.setStringPref("lykon.shield.tracker.mode", val); } catch(e) {}
   },
 
-  _updateButtonState() {
-    const btn = document.getElementById("lykon-shield-button");
-    if (!btn) return;
-    if (this._isRestrictedPage()) {
-      btn.setAttribute("disabled", "true");
-      btn.style.opacity = "0.35";
-      btn.style.pointerEvents = "none";
-    } else {
-      btn.removeAttribute("disabled");
-      btn.style.opacity = "1";
-      btn.style.pointerEvents = "";
-    }
-  },
-
-  _syncShieldStateForCurrentSite() {
-    const origin = this._getCurrentOrigin();
-    if (!origin) return;
-    const isDisabled = globalThis.LykonAdblock?.isOriginDisabled?.(origin) ?? false;
-    this._shieldsUp = !isDisabled;
-    // Sync checkbox visual state
-    const toggle = document.getElementById("lykon-shield-toggle");
-    if (toggle) toggle.checked = this._shieldsUp;
-    this._refreshPanelStatus();
-  },
-
-  _refreshPanelStatus() {
-    const statusEl = document.getElementById("lykon-shield-status-text");
-    const hintEl = document.querySelector(".lykon-shield-status-hint");
-    if (statusEl) {
-      statusEl.textContent = this._shieldsUp ? "Blocking ads" : "Blocking disabled";
-      statusEl.style.color = this._shieldsUp ? "#34c759" : "#ff453a";
-    }
-    if (hintEl) {
-      hintEl.textContent = this._shieldsUp
-        ? "You're browsing ad-free."
-        : "Ads may appear on this site.";
-    }
-  },
-
-  _onPanelOpen() {
-    this._syncShieldStateForCurrentSite();
-    this.updateSiteInfo();
-  },
-
-  updateSiteInfo() {
-    try {
-      const browser = gBrowser.selectedBrowser;
-      const uri = browser?.currentURI;
-      if (!uri) return;
-
-      const origin = uri.prePath || "";
-      const adblockStats = globalThis.LykonAdblock?.getStats?.(origin);
-      const count = adblockStats?.ready ? adblockStats.siteBlockedCount : this._getBlockedCount();
-      
-      // Update all stats
-      this._updateCount(count);
-      this._updateTotalBlockedCount();
-      this._updateTrackerBlockedCount();
-      this._syncFingerprintState();
-
-      // Warn user if bridge isn't ready (only CSS blocking active)
-      const warningEl = document.getElementById("lykon-shield-bridge-warning");
-      if (warningEl) {
-        const bridgeReady = adblockStats?.ready ?? false;
-        warningEl.style.display = bridgeReady ? "none" : "block";
-        warningEl.textContent = bridgeReady
-          ? ""
-          : "⚠️ Network blocking unavailable — check browser console for errors.";
-      }
-    } catch(e) {
-      console.error("[LykonShield] updateSiteInfo failed:", e);
-    }
-  },
-
-  _getBlockedCount() {
-    try {
-      const browser = gBrowser.selectedBrowser;
-      const blockedLog = browser?.securityUI?.contentBlockingLog;
-      if (!blockedLog) return 0;
-      const log = JSON.parse(blockedLog);
-      let count = 0;
-      for (const entries of Object.values(log)) {
-        if (entries.some(e => e[0] === true)) count++;
-      }
-      return count;
-    } catch(e) { return 0; }
-  },
-
-  _updateCount(count) {
-    const el = document.getElementById("lykon-shield-count");
-    if (el) el.textContent = count.toLocaleString();
-  },
-
-  _updateTotalBlockedCount() {
-    try {
-      const totalEl = document.getElementById("lykon-shield-total-count");
-      const totalCount = globalThis.LykonAdblock?.getTotalBlockedCount?.() ?? 0;
-      if (totalEl) totalEl.textContent = totalCount.toLocaleString();
-    } catch(e) {}
-  },
-
-  _updateTrackerBlockedCount() {
-    try {
-      const origin = this._getCurrentOrigin();
-      if (!origin) return;
-      const trackerEl = document.getElementById("lykon-shield-tracker-count");
-      const trackerCount = globalThis.LykonAdblock?.getTrackerBlockedCount?.(origin) ?? 0;
-      if (trackerEl) trackerEl.textContent = trackerCount.toLocaleString();
-    } catch(e) {}
-  },
-
-  _syncFingerprintState() {
-    try {
-      const el = document.getElementById("lykon-shield-fingerprint");
-      const stateEl = document.getElementById("lykon-shield-fingerprint-count");
-      const enabled = Services.prefs.getBoolPref("privacy.resistFingerprinting", false);
-      if (el) el.checked = enabled;
-      if (stateEl) {
-        stateEl.textContent = enabled ? "On" : "Off";
-        stateEl.style.color = enabled ? "#34c759" : "#ff453a";
-      }
-    } catch (e) {}
-  },
-
-  _reloadCurrentSite() {
-    try {
-      const browser = gBrowser?.selectedBrowser;
-      const spec = browser?.currentURI?.spec || "";
-      if (browser && spec && !spec.startsWith("about:")) {
-        browser.reload();
-      }
-    } catch (e) {}
-  },
-
-  toggleShields() {
-    const origin = this._getCurrentOrigin();
-    if (!origin) {
-      console.warn("[LykonShield] toggleShields: no valid origin for current tab");
-      return;
-    }
-
-    // Read desired state directly from the checkbox
-    const toggle = document.getElementById("lykon-shield-toggle");
-    this._shieldsUp = toggle ? toggle.checked : !this._shieldsUp;
-    this._refreshPanelStatus();
-
-    console.log(`[LykonShield] toggleShields: origin=${origin} shieldsUp=${this._shieldsUp}`);
-
-    try {
-      globalThis.LykonAdblock?.setOriginEnabled?.(origin, this._shieldsUp);
-
-      const browser = gBrowser.selectedBrowser;
-      const perm = Services.perms;
-      if (this._shieldsUp) {
-        perm.removeFromPrincipal(browser.contentPrincipal, "trackingprotection");
-      } else {
-        perm.addFromPrincipal(
-          browser.contentPrincipal,
-          "trackingprotection",
-          Services.perms.DENY_ACTION
-        );
-      }
-
-      this._reloadCurrentSite();
-    } catch(e) {
-      console.error("[LykonShield] toggleShields failed:", e);
-    }
-  },
-
-  toggleAdvanced() {
-    this._advancedOpen = !this._advancedOpen;
-    const el = document.getElementById("lykon-shield-advanced");
-    const arrow = document.getElementById("lykon-shield-adv-arrow");
-    const label = document.getElementById("lykon-shield-adv-label");
-    if (el) el.style.display = this._advancedOpen ? "block" : "none";
-    if (arrow) arrow.textContent = this._advancedOpen ? "⌃" : "⌄";
-    if (label) label.textContent = this._advancedOpen
-      ? "Hide advanced controls"
-      : "Advanced controls";
-  },
-
-  setTrackerMode(mode) {
-    try {
-      const prefs = Services.prefs;
-      if (mode === "aggressive") {
-        prefs.setBoolPref("privacy.trackingprotection.enabled", true);
-        prefs.setBoolPref("privacy.trackingprotection.socialtracking.enabled", true);
-      } else if (mode === "standard") {
-        prefs.setBoolPref("privacy.trackingprotection.enabled", true);
-        prefs.setBoolPref("privacy.trackingprotection.socialtracking.enabled", false);
-      } else {
-        prefs.setBoolPref("privacy.trackingprotection.enabled", false);
-      }
-      this._reloadCurrentSite();
-    } catch(e) {}
-  },
-
-  setHttpsMode(mode) {
-    try {
-      Services.prefs.setBoolPref("dom.security.https_only_mode", mode === "strict");
-      this._reloadCurrentSite();
-    } catch(e) {}
+  setHttpsMode(val) {
+    try { Services.prefs.setStringPref("lykon.shield.https.mode", val); } catch(e) {}
   },
 
   toggleScripts() {
-    try {
-      const el = document.getElementById("lykon-shield-scripts");
-      Services.prefs.setBoolPref("javascript.enabled", !el?.checked);
-      this._reloadCurrentSite();
-    } catch(e) {}
+    const el = document.getElementById("lykon-shield-scripts");
+    try { Services.prefs.setBoolPref("lykon.shield.scripts.blocked", el.checked); } catch(e) {}
   },
 
   toggleFingerprint() {
-    try {
-      const el = document.getElementById("lykon-shield-fingerprint");
-      Services.prefs.setBoolPref("privacy.resistFingerprinting", el?.checked);
-      this._syncFingerprintState();
-      this._reloadCurrentSite();
-    } catch(e) {}
+    const el  = document.getElementById("lykon-shield-fingerprint");
+    const lbl = document.getElementById("lykon-shield-fingerprint-count");
+    try { Services.prefs.setBoolPref("lykon.shield.fingerprint.enabled", el.checked); } catch(e) {}
+    lbl.textContent = el.checked ? "Active" : "Off";
   },
 
-  setCookieMode(mode) {
-    try {
-      const val = mode === "all" ? 0 : mode === "third-party" ? 1 : 2;
-      Services.prefs.setIntPref("network.cookie.cookieBehavior", val);
-      this._reloadCurrentSite();
-    } catch(e) {}
+  setCookieMode(val) {
+    try { Services.prefs.setStringPref("lykon.shield.cookie.mode", val); } catch(e) {}
   },
 
   toggleForget() {
+    const el = document.getElementById("lykon-shield-forget");
+    try { Services.prefs.setBoolPref("lykon.shield.forget.onexit", el.checked); } catch(e) {}
+  },
+
+  /* ─ Load saved prefs into UI ─ */
+  _loadPrefs() {
     try {
-      const el = document.getElementById("lykon-shield-forget");
-      Services.prefs.setIntPref("network.cookie.lifetimePolicy", el?.checked ? 2 : 0);
-      this._reloadCurrentSite();
+      const on = Services.prefs.getBoolPref("lykon.shield.enabled", true);
+      this._el.toggle.checked = on;
+      this._el.content.setAttribute("data-paused", on ? "false" : "true");
+      if (!on) {
+        this._el.statusText.textContent = "Paused";
+        this._el.statusHint.textContent = "Ads may appear on this page.";
+      }
+
+      const tm = Services.prefs.getStringPref("lykon.shield.tracker.mode", "standard");
+      document.getElementById("lykon-shield-tracker-mode").value = tm;
+
+      const hm = Services.prefs.getStringPref("lykon.shield.https.mode", "soft");
+      document.getElementById("lykon-shield-https-mode").value = hm;
+
+      const cm = Services.prefs.getStringPref("lykon.shield.cookie.mode", "all");
+      document.getElementById("lykon-shield-cookie-mode").value = cm;
+
+      const sc = Services.prefs.getBoolPref("lykon.shield.scripts.blocked", false);
+      document.getElementById("lykon-shield-scripts").checked = sc;
+
+      const fp = Services.prefs.getBoolPref("lykon.shield.fingerprint.enabled", false);
+      document.getElementById("lykon-shield-fingerprint").checked = fp;
+      document.getElementById("lykon-shield-fingerprint-count").textContent = fp ? "Active" : "Off";
+
+      const fg = Services.prefs.getBoolPref("lykon.shield.forget.onexit", false);
+      document.getElementById("lykon-shield-forget").checked = fg;
+
+    } catch(e) { /* first run — defaults are fine */ }
+  },
+
+  /* ─ Update stat counters ─ */
+  _updateStats() {
+    try {
+      const sess    = Services.prefs.getIntPref("lykon.shield.stats.session",  0);
+      const total   = Services.prefs.getIntPref("lykon.shield.stats.total",    0);
+      const tracker = Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
+      const bytes   = Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
+
+      this._el.count.textContent    = sess.toLocaleString();
+      this._el.total.textContent    = total.toLocaleString();
+      this._el.trackers.textContent = tracker.toLocaleString();
+      this._el.bandwidth.textContent = this._fmtBytes(bytes);
     } catch(e) {}
   },
 
-  openLearnMore() {
-    openTrustedLinkIn("https://lykon.vercel.app/lykon-shield", "tab");
-    document.getElementById("lykon-shield-popup")?.hidePopup();
+  /* ─ Format bytes ─ */
+  _fmtBytes(b) {
+    if (b < 1024)       return b + " B";
+    if (b < 1048576)    return (b / 1024).toFixed(1) + " KB";
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
+    return (b / 1073741824).toFixed(2) + " GB";
   },
 };
+
+/* Fire on every popup open */
+document.getElementById("lykon-shield-popup")
+  .addEventListener("popupshown", () => LykonShield.init());
