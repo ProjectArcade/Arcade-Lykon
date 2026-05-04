@@ -161,6 +161,13 @@
   skin/classic/browser/preferences/containers-dialog.css       (../shared/preferences/containers-dialog.css)
   skin/classic/browser/preferences/dialog.css                  (../shared/preferences/dialog.css)
   skin/classic/browser/preferences/fox-ai.svg                  (../shared/preferences/fox-ai.svg)
+
+  
+  skin/classic/browser/preferences/Adblocker-on.png            (../shared/preferences/Adblocker-on.png)
+  skin/classic/browser/preferences/Adblocker-off-concern.png   (../shared/preferences/Adblocker-off-concern.png)
+  skin/classic/browser/preferences/Adblocker-off-concer.png    (../shared/preferences/Adblocker-off-concern.png)
+
+  
   skin/classic/browser/preferences/fxaPairDevice.css           (../shared/preferences/fxaPairDevice.css)
   skin/classic/browser/preferences/ios-menu.svg                (../shared/preferences/ios-menu.svg)
   skin/classic/browser/preferences/monitor-logo.svg            (../shared/preferences/monitor-logo.svg)

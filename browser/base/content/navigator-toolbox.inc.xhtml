@@ -498,7 +498,7 @@
 
 <toolbarbutton id="lykon-shield-button"
                class="toolbarbutton-1 chromeclass-toolbar-additional"
-               image="chrome://browser/skin/icons/adblocker-icon.svg"
+               image="chrome://browser/skin/preferences/Adblocker-on.png"
                removable="false"
                tooltiptext="Adblocker"
                type="menu">
@@ -534,6 +534,21 @@
             <html:span class="lks-toggle-thumb"></html:span>
           </html:span>
         </html:label>
+      </html:div>
+
+      <!-- HERO: large status image + primary message/action (changes with on/off) -->
+      <html:div class="lks-hero" id="lykon-shield-hero">
+        <html:div class="lks-hero-media">
+          <html:img src="chrome://browser/skin/preferences/Adblocker-on.png"
+                    class="lks-hero-img lks-hero-img-on" alt="adblocker on"/>
+          <html:img src="chrome://browser/skin/preferences/Adblocker-off-concer.png"
+                    class="lks-hero-img lks-hero-img-off" alt="adblocker off"/>
+        </html:div>
+        <html:div class="lks-hero-text">
+          <html:div class="lks-hero-title" id="lykon-shield-hero-title">You're protected!</html:div>
+          <html:div class="lks-hero-sub" id="lykon-shield-hero-sub">Enjoy an ad-free browsing experience.</html:div>
+          <html:button class="lks-hero-action" id="lykon-shield-hero-action">Turn off Adblocker</html:button>
+        </html:div>
       </html:div>
 
       <!-- ═══ STATUS CARD ═══ -->
