@@ -1264,3 +1264,275 @@
 .lks-adv-arrow {
   display: none;
 }
+
+/* ════════════════════════════════════════════════════
+   LYKON SHIELD PANEL — professional finish
+   Single-toggle UX + subtle green/red state glow
+   ════════════════════════════════════════════════════ */
+
+#lykon-shield-popup {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#lykon-shield-panel-content {
+  min-width: 350px;
+  max-width: 350px;
+  padding: 14px;
+  border-radius: 14px;
+  background:
+    radial-gradient(90% 70% at 88% 0%, rgba(42, 216, 108, 0.16) 0%, rgba(42, 216, 108, 0) 60%),
+    radial-gradient(120% 90% at 4% 100%, rgba(54, 90, 164, 0.18) 0%, rgba(54, 90, 164, 0) 58%),
+    #161b26;
+  color: #edf3ff;
+  border: 1px solid rgba(122, 142, 181, 0.25);
+  box-shadow:
+    0 14px 34px rgba(3, 7, 16, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+#lykon-shield-panel-content[data-paused="true"] {
+  background:
+    radial-gradient(90% 70% at 88% 0%, rgba(255, 105, 97, 0.2) 0%, rgba(255, 105, 97, 0) 60%),
+    radial-gradient(120% 90% at 4% 100%, rgba(120, 53, 50, 0.2) 0%, rgba(120, 53, 50, 0) 58%),
+    #181b25;
+}
+
+.lks-header {
+  margin-bottom: 8px;
+}
+
+.lks-icon-wrap {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 50%;
+  background: rgba(28, 36, 52, 0.9);
+  border: 1px solid rgba(103, 126, 166, 0.55);
+}
+
+#lykon-shield-panel-content:not([data-paused="true"]) .lks-icon-wrap {
+  box-shadow: 0 0 0 1px rgba(58, 220, 114, 0.26), 0 0 18px rgba(58, 220, 114, 0.18);
+}
+
+#lykon-shield-panel-content[data-paused="true"] .lks-icon-wrap {
+  box-shadow: 0 0 0 1px rgba(255, 114, 106, 0.3), 0 0 18px rgba(255, 114, 106, 0.2);
+}
+
+.lks-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: #f5f8ff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.lks-title::after {
+  content: "You're protected. Enjoy a cleaner web.";
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(224, 233, 251, 0.74);
+}
+
+#lykon-shield-panel-content[data-paused="true"] .lks-title::after {
+  content: "Adblocker is off. Ads may appear.";
+}
+
+/* Single master toggle */
+.lks-toggle-track {
+  width: 78px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(73, 81, 103, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.lks-toggle-thumb {
+  width: 22px;
+  height: 22px;
+  top: 3px;
+  left: 4px;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #f8faff 0%, #dce3f2 100%);
+}
+
+.lks-toggle-track::after {
+  content: "OFF";
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(233, 239, 252, 0.76);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.lks-toggle-input:checked + .lks-toggle-track {
+  background: linear-gradient(135deg, #24c764 0%, #1fa457 100%);
+  border-color: rgba(78, 255, 151, 0.4);
+}
+
+.lks-toggle-input:checked + .lks-toggle-track .lks-toggle-thumb {
+  transform: translateX(47px);
+}
+
+.lks-toggle-input:checked + .lks-toggle-track::after {
+  content: "ON";
+  right: 37px;
+  color: #fff;
+}
+
+.lks-hero {
+  margin: 8px 0 10px;
+  gap: 12px;
+  align-items: center;
+}
+
+.lks-hero-media {
+  flex: 0 0 118px;
+}
+
+.lks-hero-img {
+  width: 118px;
+  height: 118px;
+  border-radius: 0;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.3));
+}
+
+.lks-hero-title {
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -0.2px;
+  color: #34d86f;
+}
+
+#lykon-shield-panel-content[data-paused="true"] .lks-hero-title {
+  color: #ff7a73;
+}
+
+.lks-hero-sub {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(224, 233, 251, 0.82);
+}
+
+.lks-hero-action {
+  margin-top: 7px;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: linear-gradient(145deg, #ff8b78, #ff6f68);
+  color: #fff;
+}
+
+#lykon-shield-panel-content:not([data-paused="true"]) .lks-hero-action {
+  display: none;
+}
+
+.lks-status-card {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(89, 104, 139, 0.35);
+  border-radius: 12px;
+  background: linear-gradient(165deg, rgba(30, 38, 54, 0.94), rgba(22, 28, 42, 0.94));
+}
+
+.lks-status-badge {
+  color: #3ddf79;
+}
+
+#lykon-shield-panel-content[data-paused="true"] .lks-status-badge {
+  color: #ff7f78;
+}
+
+.lks-dot {
+  width: 7px;
+  height: 7px;
+  min-width: 7px;
+  border-radius: 999px;
+  background: #3ddf79;
+}
+
+#lykon-shield-panel-content[data-paused="true"] .lks-dot {
+  background: #ff7f78;
+}
+
+.lks-status-hint {
+  color: rgba(219, 229, 248, 0.76);
+}
+
+.lks-big-num {
+  font-size: 18px;
+  color: #eef3ff;
+}
+
+.lks-big-label {
+  font-size: 10px;
+  color: rgba(220, 229, 248, 0.63);
+}
+
+.lks-stats-row {
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(83, 98, 133, 0.33);
+  background: linear-gradient(165deg, rgba(28, 35, 50, 0.94), rgba(21, 27, 40, 0.94));
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.lks-stat-cell {
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.lks-stat-cell + .lks-stat-cell {
+  border-inline-start: 1px solid rgba(92, 109, 145, 0.28);
+}
+
+.lks-stat-val {
+  font-size: 14px;
+  color: #3bda74;
+}
+
+#lykon-shield-panel-content[data-paused="true"] .lks-stat-val {
+  color: #ff7b74;
+}
+
+.lks-stat-lbl {
+  font-size: 9.5px;
+  margin-top: 4px;
+  line-height: 1.25;
+  color: rgba(219, 229, 248, 0.72);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Hide extra controls; keep clean professional one-toggle panel */
+.lks-sparkline,
+.lks-divider,
+.lks-stat-sep,
+.lks-actions,
+.lks-adv-toggle,
+.lks-adv-panel,
+.lks-toggle-sm,
+#lykon-shield-bridge-warning {
+  display: none !important;
+}
+
+/* Warning note requested: shown in both states */
+#lykon-shield-panel-content::after {
+  content: "If a site is broken, try turning Adblocker off for this site.";
+  display: block;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 170, 94, 0.36);
+  background: rgba(255, 170, 94, 0.08);
+  color: rgba(255, 219, 181, 0.95);
+  font-size: 11px;
+  line-height: 1.35;
+}

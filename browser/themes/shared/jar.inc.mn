@@ -62,6 +62,7 @@
   skin/classic/browser/addons/addon-install-installed.svg      (../shared/addons/addon-install-installed.svg)
   skin/classic/browser/addons/extension-controlled.css         (../shared/addons/extension-controlled.css)
   skin/classic/browser/addons/extensions-panel-empty-illustration.svg (../shared/addons/extensions-panel-empty-illustration.svg)
+  skin/classic/browser/addons/puzzle-fox.svg                   (../../extensions/newtab/data/content/assets/puzzle-fox.svg)
   skin/classic/browser/addons/unified-extensions.css           (../shared/addons/unified-extensions.css)
   skin/classic/browser/controlcenter/3rdpartycookies.svg       (../shared/controlcenter/3rdpartycookies.svg)
   skin/classic/browser/controlcenter/cryptominers.svg          (../shared/controlcenter/cryptominers.svg)

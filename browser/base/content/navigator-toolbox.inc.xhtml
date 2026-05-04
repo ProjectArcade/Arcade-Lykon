@@ -154,7 +154,7 @@
                      context="backForwardMenu"/>
       <toolbaritem id="stop-reload-button" class="chromeclass-toolbar-additional"
                    data-l10n-id="toolbar-button-stop-reload"
-                   removable="true" overflows="false">
+                   removable="false" overflows="false">
         <toolbarbutton id="reload-button" class="toolbarbutton-1"
                        data-l10n-id="toolbar-button-reload"
                        command="Browser:ReloadOrDuplicate"
@@ -500,40 +500,39 @@
                class="toolbarbutton-1 chromeclass-toolbar-additional"
                image="chrome://browser/skin/preferences/Adblocker-on.png"
                removable="false"
-               tooltiptext="Adblocker"
+               tooltiptext="Lykon Shield"
                type="menu">
-  <panel id="lykon-shield-popup"
-         type="arrow"
-         orient="vertical"
-         role="group"
-         noautofocus="true">
+  <menupopup id="lykon-shield-popup"
+             class="panel-subview-body">
     <html:div id="lykon-shield-panel-content">
 
-      <!-- ═══ HEADER ═══ -->
-      <html:div class="lks-header">
-        <html:div class="lks-header-left">
-          <html:div class="lks-icon-wrap">
-            <html:svg xmlns="http://www.w3.org/2000/svg"
-                      width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <html:path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6L12 2z"
-                         fill="rgba(255,255,255,0.25)" stroke="white"
-                         stroke-width="1.8" stroke-linejoin="round"/>
-              <html:path d="M9 12l2.2 2.2 3.8-3.8"
-                         stroke="white" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round"/>
-            </html:svg>
+      <!-- ═══ ADBLOCKER SECTION ═══ -->
+      <html:div class="lks-section-header">
+        <html:div class="lks-header">
+          <html:div class="lks-header-left">
+            <html:div class="lks-icon-wrap">
+              <html:svg xmlns="http://www.w3.org/2000/svg"
+                        width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <html:path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6L12 2z"
+                           fill="rgba(255,255,255,0.25)" stroke="white"
+                           stroke-width="1.8" stroke-linejoin="round"/>
+                <html:path d="M9 12l2.2 2.2 3.8-3.8"
+                           stroke="white" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round"/>
+              </html:svg>
+            </html:div>
+            <html:span class="lks-title">Lykon Shield</html:span>
           </html:div>
-          <html:span class="lks-title">Adblocker</html:span>
+          <html:label class="lks-toggle-label">
+            <html:input id="lykon-shield-toggle"
+                        type="checkbox"
+                        class="lks-toggle-input"
+                        checked="true"/>
+            <html:span class="lks-toggle-track">
+              <html:span class="lks-toggle-thumb"></html:span>
+            </html:span>
+          </html:label>
         </html:div>
-        <html:label class="lks-toggle-label">
-          <html:input id="lykon-shield-toggle"
-                      type="checkbox"
-                      class="lks-toggle-input"
-                      checked="true"/>
-          <html:span class="lks-toggle-track">
-            <html:span class="lks-toggle-thumb"></html:span>
-          </html:span>
-        </html:label>
       </html:div>
 
       <!-- HERO: large status image + primary message/action (changes with on/off) -->
@@ -547,9 +546,11 @@
         <html:div class="lks-hero-text">
           <html:div class="lks-hero-title" id="lykon-shield-hero-title">You're protected!</html:div>
           <html:div class="lks-hero-sub" id="lykon-shield-hero-sub">Enjoy an ad-free browsing experience.</html:div>
-          <html:button class="lks-hero-action" id="lykon-shield-hero-action">Turn off Adblocker</html:button>
+          <!-- <html:button class="lks-hero-action" id="lykon-shield-hero-action">Turn off Lykon Shield</html:button> -->
         </html:div>
       </html:div>
+
+      <html:hr class="lks-divider"/>
 
       <!-- ═══ STATUS CARD ═══ -->
       <html:div class="lks-status-card">
@@ -603,173 +604,10 @@
 
       <html:hr class="lks-divider"/>
 
-      <!-- Bridge Warning (hidden by default) -->
-      <html:div id="lykon-shield-bridge-warning"
-                class="lks-warning"
-                style="display:none;"></html:div>
 
-      <!-- ═══ ACTION ROWS ═══ -->
-      <html:div class="lks-actions">
-
-        <html:div class="lks-action-row" id="lykon-shield-allowsite">
-          <html:div class="lks-action-icon-wrap">
-            <html:svg xmlns="http://www.w3.org/2000/svg"
-                      width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <html:path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6L12 2z"
-                         stroke="rgba(255,255,255,0.65)" stroke-width="1.7"
-                         stroke-linejoin="round"/>
-            </html:svg>
-          </html:div>
-          <html:div class="lks-action-text">
-            <html:div class="lks-action-title">Allow ads on this site</html:div>
-            <html:div class="lks-action-desc">Trusted sites and exceptions</html:div>
-          </html:div>
-          <html:svg xmlns="http://www.w3.org/2000/svg"
-                    width="8" height="13" viewBox="0 0 8 13" fill="none">
-            <html:path d="M1.5 1.5l5 5-5 5"
-                       stroke="#0a84ff" stroke-width="1.8"
-                       stroke-linecap="round" stroke-linejoin="round"/>
-          </html:svg>
-        </html:div>
-
-        <html:div class="lks-action-row" id="lykon-shield-open-settings">
-          <html:div class="lks-action-icon-wrap">
-            <html:svg xmlns="http://www.w3.org/2000/svg"
-                      width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <html:circle cx="12" cy="12" r="3"
-                           stroke="rgba(255,255,255,0.65)" stroke-width="1.7"/>
-              <html:path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-                         stroke="rgba(255,255,255,0.65)" stroke-width="1.7"/>
-            </html:svg>
-          </html:div>
-          <html:div class="lks-action-text">
-            <html:div class="lks-action-title">Adblocker settings</html:div>
-            <html:div class="lks-action-desc">Customize your protection</html:div>
-          </html:div>
-          <html:svg xmlns="http://www.w3.org/2000/svg"
-                    width="8" height="13" viewBox="0 0 8 13" fill="none">
-            <html:path d="M1.5 1.5l5 5-5 5"
-                       stroke="#0a84ff" stroke-width="1.8"
-                       stroke-linecap="round" stroke-linejoin="round"/>
-          </html:svg>
-        </html:div>
-
-      </html:div>
-
-      <!-- ═══ ADVANCED TOGGLE ═══ -->
-      <html:div class="lks-adv-toggle" id="lykon-shield-advanced-header">
-        <html:span class="lks-adv-toggle-label">Advanced controls</html:span>
-        <html:svg xmlns="http://www.w3.org/2000/svg"
-                  id="lykon-shield-adv-arrow"
-                  width="14" height="8" viewBox="0 0 14 8" fill="none"
-                  class="lks-adv-arrow">
-          <html:path d="M1 1l6 6 6-6"
-                     stroke="#0a84ff" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round"/>
-        </html:svg>
-      </html:div>
-
-      <!-- ═══ ADVANCED PANEL ═══ -->
-      <html:div id="lykon-shield-advanced"
-                class="lks-adv-panel"
-                style="display:none;">
-
-        <html:div class="lks-adv-section">
-          <html:div class="lks-adv-section-label">Tracking Protection</html:div>
-          <html:div class="lks-ctrl-row">
-            <html:label class="lks-ctrl-label" for="lykon-shield-tracker-mode">Protection Level</html:label>
-            <html:select id="lykon-shield-tracker-mode" class="lks-select"
-                         onchange="LykonShield.setTrackerMode(this.value)">
-              <html:option value="off">Off</html:option>
-              <html:option value="standard" selected="true">Standard</html:option>
-              <html:option value="aggressive">Aggressive</html:option>
-            </html:select>
-          </html:div>
-        </html:div>
-
-        <html:div class="lks-adv-section">
-          <html:div class="lks-adv-section-label">Connection Security</html:div>
-          <html:div class="lks-ctrl-row">
-            <html:label class="lks-ctrl-label" for="lykon-shield-https-mode">HTTPS Mode</html:label>
-            <html:select id="lykon-shield-https-mode" class="lks-select"
-                         onchange="LykonShield.setHttpsMode(this.value)">
-              <html:option value="off">Off</html:option>
-              <html:option value="soft" selected="true">Standard</html:option>
-              <html:option value="strict">Strict</html:option>
-            </html:select>
-          </html:div>
-        </html:div>
-
-        <html:div class="lks-adv-section">
-          <html:div class="lks-adv-section-label">Privacy Controls</html:div>
-          <html:div class="lks-toggle-row">
-            <html:div class="lks-toggle-row-text">
-              <html:div class="lks-toggle-row-title">Block Scripts</html:div>
-              <html:div class="lks-toggle-row-desc">Disable JavaScript</html:div>
-            </html:div>
-            <html:label class="lks-toggle-label lks-toggle-sm">
-              <html:input id="lykon-shield-scripts" type="checkbox"
-                          class="lks-toggle-input"
-                          onclick="LykonShield.toggleScripts()"/>
-              <html:span class="lks-toggle-track">
-                <html:span class="lks-toggle-thumb"></html:span>
-              </html:span>
-            </html:label>
-          </html:div>
-          <html:div class="lks-toggle-row">
-            <html:div class="lks-toggle-row-text">
-              <html:div class="lks-toggle-row-title">Fingerprint Protection</html:div>
-              <html:div class="lks-toggle-row-desc" id="lykon-shield-fingerprint-count">Off</html:div>
-            </html:div>
-            <html:label class="lks-toggle-label lks-toggle-sm">
-              <html:input id="lykon-shield-fingerprint" type="checkbox"
-                          class="lks-toggle-input"
-                          onclick="LykonShield.toggleFingerprint()"/>
-              <html:span class="lks-toggle-track">
-                <html:span class="lks-toggle-thumb"></html:span>
-              </html:span>
-            </html:label>
-          </html:div>
-        </html:div>
-
-        <html:div class="lks-adv-section">
-          <html:div class="lks-adv-section-label">Cookie Settings</html:div>
-          <html:div class="lks-ctrl-row">
-            <html:label class="lks-ctrl-label" for="lykon-shield-cookie-mode">Cookie Behavior</html:label>
-            <html:select id="lykon-shield-cookie-mode" class="lks-select"
-                         onchange="LykonShield.setCookieMode(this.value)">
-              <html:option value="all" selected="true">Allow All</html:option>
-              <html:option value="third-party">Block Third-Party</html:option>
-              <html:option value="none">Block All</html:option>
-            </html:select>
-          </html:div>
-          <html:div class="lks-toggle-row">
-            <html:div class="lks-toggle-row-text">
-              <html:div class="lks-toggle-row-title">Clear Cookies on Exit</html:div>
-              <html:div class="lks-toggle-row-desc">Session-only cookies</html:div>
-            </html:div>
-            <html:label class="lks-toggle-label lks-toggle-sm">
-              <html:input id="lykon-shield-forget" type="checkbox"
-                          class="lks-toggle-input"
-                          onclick="LykonShield.toggleForget()"/>
-              <html:span class="lks-toggle-track">
-                <html:span class="lks-toggle-thumb"></html:span>
-              </html:span>
-            </html:label>
-          </html:div>
-        </html:div>
-
-        <html:hr class="lks-divider" style="margin:10px 0;"/>
-        <html:div class="lks-adv-footer">
-          <html:a id="lykon-shield-learn-more" class="lks-learn-more" href="#">
-            Learn more about Lykon Shield
-          </html:a>
-        </html:div>
-
-      </html:div>
 
     </html:div>
-  </panel>
+  </menupopup>
 </toolbarbutton>
 
       <toolbarbutton id="unified-extensions-button"

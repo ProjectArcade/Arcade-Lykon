@@ -75,7 +75,7 @@ var LykonShield = {
     }
 
     if (this._el.statusText) {
-      this._el.statusText.textContent = on ? "Blocking ads" : "Adblocker is disabled";
+      this._el.statusText.textContent = on ? "Blocking ads" : "Lykon Shield is Down";
     }
     if (this._el.statusHint) {
       this._el.statusHint.textContent = on
@@ -84,7 +84,7 @@ var LykonShield = {
     }
 
     if (this._el.heroTitle) {
-      this._el.heroTitle.textContent = on ? "You're protected!" : "Adblocker is disabled";
+      this._el.heroTitle.textContent = on ? "You're protected!" : "Lykon Shield is Down";
     }
     if (this._el.heroSub) {
       this._el.heroSub.textContent = on
@@ -92,7 +92,7 @@ var LykonShield = {
         : "You may see more ads and trackers online.";
     }
     if (this._el.heroAction) {
-      this._el.heroAction.textContent = on ? "Turn off Adblocker" : "Turn on Adblocker";
+      this._el.heroAction.textContent = on ? "Turn off Lykon Shield" : "Turn on Lykon Shield";
     }
   },
 
