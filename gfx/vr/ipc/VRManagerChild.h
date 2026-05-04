@@ -77,7 +77,8 @@ class VRManagerChild : public PVRManagerChild {
   static bool IsPresenting();
   static TimeStamp GetIdleDeadlineHint(TimeStamp aDefault);
 
-  PVRLayerChild* CreateVRLayer(uint32_t aDisplayID, uint32_t aGroup);
+  already_AddRefed<VRLayerChild> CreateVRLayer(uint32_t aDisplayID,
+                                               uint32_t aGroup);
 
   static void IdentifyTextureHost(
       const layers::TextureFactoryIdentifier& aIdentifier);
@@ -109,10 +110,6 @@ class VRManagerChild : public PVRManagerChild {
  protected:
   explicit VRManagerChild();
   ~VRManagerChild();
-
-  PVRLayerChild* AllocPVRLayerChild(const uint32_t& aDisplayID,
-                                    const uint32_t& aGroup);
-  bool DeallocPVRLayerChild(PVRLayerChild* actor);
 
   // MOZ_CAN_RUN_SCRIPT_BOUNDARY until we can mark ipdl-generated things as
   // MOZ_CAN_RUN_SCRIPT.

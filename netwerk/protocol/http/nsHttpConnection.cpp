@@ -426,6 +426,9 @@ void nsHttpConnection::PostProcessNPNSetup(bool handshakeSucceeded,
   if (mTransaction) {
     mTransaction->OnTransportStatus(mSocketTransport,
                                     NS_NET_STATUS_TLS_HANDSHAKE_ENDED, 0);
+    if (handshakeSucceeded) {
+      mTransaction->OnPSKResumptionAccepted();
+    }
   }
 
   // this is happening after the bootstrap was originally written to. so update
