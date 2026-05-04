@@ -195,6 +195,9 @@
 #fxa-toolbar-menu-button {
   display: none;
 }
+#firefox-view-button {
+  display: none !important;
+}
 
 #navigator-toolbox {
   border-top-left-radius: 8px;
@@ -783,4 +786,38 @@
 .lykon-shield-learn-more:hover {
   color: #0570ff;
   text-decoration: underline;
+}
+/* ── TAB SEPARATORS ─────────────────────────────────────
+   Right-side divider on every tab, skip the first one    */
+
+/* Draw a right-side separator on every tab */
+.tabbrowser-tab::after {
+  content: "";
+  display: block;
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background-color: rgba(255, 255, 255, 1);
+  pointer-events: none;
+}
+
+/* Remove the separator after the last tab before the + button */
+.tabbrowser-tab:last-of-type::after {
+  display: none;
+}
+
+/* Remove the leftmost line — this is the separator Firefox
+   draws before the first tab via the tab strip itself */
+#tabbrowser-tabs::before,
+#tabbrowser-arrowscrollbox::before,
+.tabbrowser-tab:first-of-type::before {
+  display: none !important;
+}
+
+/* Also kill the built-in tab separator elements Firefox injects */
+.tabbrowser-tab .tab-context-line,
+.tabbrowser-tab[visuallyselected] .tab-context-line {
+  display: none;
 }
