@@ -379,6 +379,49 @@ toolbar[inactive="true"] .urlbar,
   padding-inline-end: 0;
 }
 
+/* Styles for the adblocker (Lykon Shield) panel */
+.adblocker-panel .adblocker-header {
+  gap: 8px;
+  padding: 12px 16px;
+  align-items: center;
+}
+.adblocker-panel .adblocker-header-icon {
+  width: 20px;
+  height: 20px;
+  list-style-image: url("chrome://browser/skin/icons/adblocker-icon.svg");
+  -moz-image-region: auto;
+}
+.adblocker-panel .adblocker-title {
+  font-weight: 600;
+}
+.adblocker-panel .adblocker-subtitle {
+  color: var(--toolbar-field-color-muted, gray);
+  font-size: 12px;
+}
+.adblocker-panel .adblocker-stats-card {
+  padding: 12px 16px;
+  gap: 12px;
+  align-items: center;
+}
+.adblocker-panel .adblocker-stats-number {
+  font-size: 20px;
+  font-weight: 700;
+}
+.adblocker-panel .adblocker-row {
+  justify-content: space-between;
+  padding: 6px 12px;
+}
+.adblocker-panel .adblocker-sparkline {
+  width: 72px;
+  height: 34px;
+}
+.adblocker-panel .panel-footer {
+  padding: 8px 10px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
 .urlbar-input-box {
   #urlbar & {
     /* Show the url scheme in a static box when overflowing to the left */
@@ -691,6 +734,10 @@ toolbar[inactive="true"] .urlbar,
 
 #pageActionButton {
   list-style-image: url("chrome://global/skin/icons/more.svg");
+}
+
+#adblocker-toolbar-button > .toolbarbutton-icon {
+  list-style-image: url("chrome://browser/skin/icons/adblocker-icon.svg");
 }
 
 /*

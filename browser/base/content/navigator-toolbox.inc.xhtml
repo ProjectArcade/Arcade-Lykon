@@ -501,7 +501,182 @@
                      hidden="true"
                      overflows="false"
                      removable="false"/>
-    </hbox>
+
+<toolbarbutton id="lykon-shield-button"
+               class="toolbarbutton-1 chromeclass-toolbar-additional"
+               removable="false"
+               image="chrome://browser/skin/icons/adblocker-icon.svg"
+               tooltiptext="Adblocker"
+               type="menu">
+  <panel id="lykon-shield-popup"
+         type="arrow"
+         orient="vertical"
+         role="group"
+         noautofocus="true">
+    <html:div id="lykon-shield-panel-content">
+
+      <!-- Header with Icon & Title -->
+      <html:div class="lykon-shield-header">
+        <html:div class="lykon-shield-header-icon">
+          <html:img src="chrome://browser/skin/icons/adblocker-icon.svg" alt="" />
+        </html:div>
+        <html:div class="lykon-shield-header-text">
+          <html:h2 class="lykon-shield-title">Adblocker</html:h2>
+          <html:p class="lykon-shield-subtitle">Block ads. Browse faster. Stay in control.</html:p>
+          <html:p class="lykon-shield-description">A lightweight adblocker that protects your experience across the web.</html:p>
+        </html:div>
+      </html:div>
+
+      <!-- Main Toggle Section -->
+      <html:div class="lykon-shield-main-toggle">
+        <html:div class="lykon-shield-toggle-content">
+          <html:div class="lykon-shield-toggle-header">
+            <html:label class="lykon-shield-toggle-label">
+              <html:input id="lykon-shield-toggle" type="checkbox" class="lykon-shield-toggle-input" checked="true"/>
+              <html:span class="lykon-shield-toggle-slider"></html:span>
+            </html:label>
+            <html:span id="lykon-shield-status-text" class="lykon-shield-status-text">Blocking ads</html:span>
+          </html:div>
+          <html:p class="lykon-shield-status-hint">You're browsing ad-free.</html:p>
+        </html:div>
+      </html:div>
+
+      <!-- Stats Grid -->
+      <html:div class="lykon-shield-stats">
+        <html:div class="lykon-shield-stat-item">
+          <html:div class="lykon-shield-stat-value" id="lykon-shield-count">0</html:div>
+          <html:div class="lykon-shield-stat-label">Ads blocked<html:br/>This session</html:div>
+        </html:div>
+        <html:div class="lykon-shield-stat-item">
+          <html:div class="lykon-shield-stat-value" id="lykon-shield-total-count">0</html:div>
+          <html:div class="lykon-shield-stat-label">Total blocked</html:div>
+        </html:div>
+        <html:div class="lykon-shield-stat-item">
+          <html:div class="lykon-shield-stat-value" id="lykon-shield-tracker-count">0</html:div>
+          <html:div class="lykon-shield-stat-label">Trackers blocked</html:div>
+        </html:div>
+      </html:div>
+
+      <!-- Divider -->
+      <html:hr class="lykon-shield-divider"/>
+
+      <!-- Bridge Warning -->
+      <html:div id="lykon-shield-bridge-warning" class="lykon-shield-warning" style="display:none;"></html:div>
+
+      <!-- Quick Actions -->
+      <html:div class="lykon-shield-actions">
+        <html:div class="lykon-shield-action-item">
+          <html:div class="lykon-shield-action-left">
+            <html:div class="lykon-shield-action-icon">🛡️</html:div>
+            <html:div class="lykon-shield-action-text">
+              <html:div class="lykon-shield-action-title">Allow ads on this site</html:div>
+              <html:div class="lykon-shield-action-desc">Trusted sites and exceptions</html:div>
+            </html:div>
+          </html:div>
+          <html:span class="lykon-shield-action-arrow">›</html:span>
+        </html:div>
+
+        <html:div class="lykon-shield-action-item">
+          <html:div class="lykon-shield-action-left">
+            <html:div class="lykon-shield-action-icon">⚙️</html:div>
+            <html:div class="lykon-shield-action-text">
+              <html:div class="lykon-shield-action-title">Adblocker settings</html:div>
+              <html:div class="lykon-shield-action-desc">Customize your protection</html:div>
+            </html:div>
+          </html:div>
+          <html:span class="lykon-shield-action-arrow">›</html:span>
+        </html:div>
+      </html:div>
+
+      <!-- Advanced Section Toggle -->
+      <html:div id="lykon-shield-advanced-header" class="lykon-shield-advanced-toggle">
+        <html:span id="lykon-shield-adv-label" class="lykon-shield-adv-label">Advanced controls</html:span>
+        <html:span id="lykon-shield-adv-arrow" class="lykon-shield-adv-arrow">⌄</html:span>
+      </html:div>
+
+      <!-- Advanced Section (hidden by default) -->
+      <html:div id="lykon-shield-advanced" class="lykon-shield-advanced" style="display:none;">
+        <html:div class="lykon-shield-section">
+          <html:div class="lykon-shield-section-label">Tracking Protection</html:div>
+          <html:div class="lykon-shield-control-row">
+            <html:label class="lykon-shield-select-label" for="lykon-shield-tracker-mode">Protection Level</html:label>
+            <html:select id="lykon-shield-tracker-mode" class="lykon-shield-select" onchange="LykonShield.setTrackerMode(this.value)">
+              <html:option value="off">Off</html:option>
+              <html:option value="standard" selected="true">Standard</html:option>
+              <html:option value="aggressive">Aggressive</html:option>
+            </html:select>
+          </html:div>
+        </html:div>
+
+        <html:div class="lykon-shield-section">
+          <html:div class="lykon-shield-section-label">Connection Security</html:div>
+          <html:div class="lykon-shield-control-row">
+            <html:label class="lykon-shield-select-label" for="lykon-shield-https-mode">HTTPS Mode</html:label>
+            <html:select id="lykon-shield-https-mode" class="lykon-shield-select" onchange="LykonShield.setHttpsMode(this.value)">
+              <html:option value="off">Off</html:option>
+              <html:option value="soft" selected="true">Standard</html:option>
+              <html:option value="strict">Strict</html:option>
+            </html:select>
+          </html:div>
+        </html:div>
+
+        <html:div class="lykon-shield-section">
+          <html:div class="lykon-shield-section-label">Privacy Controls</html:div>
+          <html:div class="lykon-shield-toggle-row">
+            <html:label class="lykon-shield-toggle-label">
+              <html:input id="lykon-shield-scripts" type="checkbox" class="lykon-shield-toggle-input" onclick="LykonShield.toggleScripts()"/>
+              <html:span class="lykon-shield-toggle-slider"></html:span>
+            </html:label>
+            <html:div class="lykon-shield-toggle-text">
+              <html:div class="lykon-shield-toggle-title">Block Scripts</html:div>
+              <html:div class="lykon-shield-toggle-desc">Disable JavaScript</html:div>
+            </html:div>
+          </html:div>
+
+          <html:div class="lykon-shield-toggle-row">
+            <html:label class="lykon-shield-toggle-label">
+              <html:input id="lykon-shield-fingerprint" type="checkbox" class="lykon-shield-toggle-input" onclick="LykonShield.toggleFingerprint()"/>
+              <html:span class="lykon-shield-toggle-slider"></html:span>
+            </html:label>
+            <html:div class="lykon-shield-toggle-text">
+              <html:div class="lykon-shield-toggle-title">Fingerprint Protection</html:div>
+              <html:div class="lykon-shield-toggle-desc" id="lykon-shield-fingerprint-count">Off</html:div>
+            </html:div>
+          </html:div>
+        </html:div>
+
+        <html:div class="lykon-shield-section">
+          <html:div class="lykon-shield-section-label">Cookie Settings</html:div>
+          <html:div class="lykon-shield-control-row">
+            <html:label class="lykon-shield-select-label" for="lykon-shield-cookie-mode">Cookie Behavior</html:label>
+            <html:select id="lykon-shield-cookie-mode" class="lykon-shield-select" onchange="LykonShield.setCookieMode(this.value)">
+              <html:option value="all" selected="true">Allow All</html:option>
+              <html:option value="third-party">Block Third-Party</html:option>
+              <html:option value="none">Block All</html:option>
+            </html:select>
+          </html:div>
+
+          <html:div class="lykon-shield-toggle-row">
+            <html:label class="lykon-shield-toggle-label">
+              <html:input id="lykon-shield-forget" type="checkbox" class="lykon-shield-toggle-input" onclick="LykonShield.toggleForget()"/>
+              <html:span class="lykon-shield-toggle-slider"></html:span>
+            </html:label>
+            <html:div class="lykon-shield-toggle-text">
+              <html:div class="lykon-shield-toggle-title">Clear Cookies on Exit</html:div>
+              <html:div class="lykon-shield-toggle-desc">Session-only cookies</html:div>
+            </html:div>
+          </html:div>
+        </html:div>
+
+        <html:hr class="lykon-shield-divider" style="margin: 12px 0;"/>
+
+        <html:div class="lykon-shield-footer-links">
+          <html:a id="lykon-shield-learn-more" class="lykon-shield-learn-more" href="#">Learn more about Lykon Shield</html:a>
+        </html:div>
+      </html:div>
+    </html:div>
+  </panel>
+</toolbarbutton>
 
     <toolbarbutton id="document-pip-return-to-opener-button" class="toolbarbutton-1"
                     data-l10n-id="browser-window-return-to-opener"
@@ -522,6 +697,7 @@
                       data-l10n-id="smartwindow-ask-button">
       </toolbarbutton>
     </toolbaritem>
+    </hbox>
 
     <toolbarbutton id="nav-bar-overflow-button"
                    class="toolbarbutton-1 chromeclass-toolbar-additional"

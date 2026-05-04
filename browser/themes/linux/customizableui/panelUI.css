@@ -9,6 +9,11 @@ menupopup::part(drop-indicator) {
   margin-inline-start: 5px;
 }
 
+#appMenu-fxa-status2,
+#appMenu-fxa-separator {
+  display: none;
+}
+
 .subviewradio > .radio-label-box {
   appearance: none;
 }

@@ -4,6 +4,7 @@
 
 <popupset id="mainPopupSet">
   <script src="chrome://browser/content/main-popupset.js" />
+  <script src="chrome://browser/content/lykon-shield-panel.js" />
 
   <menupopup id="tabContextMenu">
     <menuitem id="context_openANewTab" data-lazy-l10n-id="tab-context-new-tab-open"/>
@@ -207,6 +208,52 @@
          noautofocus="true"
          type="arrow">
     <vbox class="panel-subview-body"/>
+  </panel>
+
+  <!-- Adblocker panel (Lykon Shield) -->
+  <panel id="adblocker-panel"
+         class="panel-no-padding adblocker-panel"
+         type="arrow"
+         noautofocus="true"
+         hidden="true"
+         level="parent"
+         align="start"
+         orient="vertical">
+    <box class="panel-header">
+      <hbox align="center" class="adblocker-header">
+        <image class="adblocker-header-icon" />
+        <vbox flex="1" class="adblocker-header-text">
+          <hbox>
+            <label class="adblocker-title" value="Adblocker" />
+          </hbox>
+          <label class="adblocker-subtitle" value="Blocking ads" />
+        </vbox>
+        <toolbarbutton id="adblocker-toggle"
+                       class="small-toggle-button"
+                       type="checkbox"
+                       checked="true"
+                       tooltiptext="Toggle ad blocking" />
+      </hbox>
+    </box>
+    <vbox class="panel-subview-body adblocker-body">
+      <hbox class="adblocker-stats-card" align="center">
+        <vbox class="adblocker-stats-left">
+          <label class="adblocker-stats-number" value="12,846"/>
+          <label class="adblocker-stats-label" value="Ads blocked"/>
+        </vbox>
+        <image class="adblocker-sparkline" />
+      </hbox>
+      <vbox class="adblocker-totals">
+        <hbox class="adblocker-row"><label value="Total blocked"/><label value="128,451"/></hbox>
+        <hbox class="adblocker-row"><label value="Trackers blocked"/><label value="8,301"/></hbox>
+        <hbox class="adblocker-row"><label value="Bandwidth saved"/><label value="96.4 MB"/></hbox>
+      </vbox>
+    </vbox>
+    <toolbarseparator />
+    <html:moz-button-group class="panel-footer">
+      <button id="adblocker-allow-button" class="footer-button">Allow ads on this site</button>
+      <button id="adblocker-settings-button" class="footer-button">Adblocker settings</button>
+    </html:moz-button-group>
   </panel>
 
   <html:template id="screenshotsPagePanelTemplate">

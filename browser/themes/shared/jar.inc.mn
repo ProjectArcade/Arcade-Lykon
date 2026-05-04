@@ -143,6 +143,7 @@
   skin/classic/browser/tracking-protection-active.svg                 (../shared/identity-block/tracking-protection-active.svg)
 
   skin/classic/browser/toolbar-drag-indicator.svg                     (../shared/toolbar-drag-indicator.svg)
+  skin/classic/browser/icons/adblocker-icon.svg                       (../shared/icons/adblocker-icon.svg)
 
   skin/classic/browser/protections/resolved-breach.svg         (../shared/protections/resolved-breach.svg)
   skin/classic/browser/protections/resolved-breach-gray.svg    (../shared/protections/resolved-breach-gray.svg)

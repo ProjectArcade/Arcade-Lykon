@@ -632,6 +632,8 @@ document.addEventListener(
           break;
       }
     });
+
+    // Adblocker handlers moved to lykon-shield-panel.js
   },
   { once: true }
 );

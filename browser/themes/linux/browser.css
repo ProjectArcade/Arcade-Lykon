@@ -22,9 +22,12 @@
 
 :root {
   --tab-min-height: 34px;
-  --tab-border-radius: 16px;
+  --tab-border-radius: 8px;
   --toolbox-bgcolor: #1a1b1e;
   --toolbar-bgcolor: #1a1b1e;
+  --urlbar-min-height: 38px;
+  --urlbar-padding-block: 5px;
+  --urlbar-border-radius: 14px;
   --tab-selected-bgcolor: #2f3136;
   --tab-hover-background-color: #2a2b2f;
   --toolbar-field-background-color: #2a2b2f;
@@ -143,16 +146,30 @@
 
 #urlbar-background,
 .searchbar-textbox {
-  background-color: #2a2b2f !important;
-  border: 1px solid #3c4043 !important;
-  border-radius: 16px !important;
+  background-color: color-mix(in srgb, var(--toolbar-field-background-color) 92%, black) !important;
+  border: 1px solid color-mix(in srgb, var(--toolbar-field-border-color) 88%, white) !important;
+  border-radius: 999px !important;
   box-shadow: none !important;
+}
+
+#urlbar-input-container,
+#searchbar {
+  border-radius: 999px !important;
+  padding-inline: 4px !important;
 }
 
 #urlbar[focused] > #urlbar-background,
 #urlbar[open] > #urlbar-background {
-  border-color: #8ab4f8 !important;
-  box-shadow: 0 0 0 1px #8ab4f8 !important;
+  border-color: var(--toolbar-field-focus-border-color) !important;
+  box-shadow: 0 0 0 1px var(--toolbar-field-focus-border-color) !important;
+}
+
+.urlbar-page-action,
+.urlbar-go-button,
+.search-go-button,
+#star-button-box {
+  justify-content: center;
+  align-items: center;
 }
 
 #tabs-newtab-button > .toolbarbutton-icon,
@@ -173,6 +190,10 @@
 #TabsToolbar #new-tab-button:active > .toolbarbutton-icon {
   background-color: #2a2e31;
   border-color: rgba(255, 255, 255, 0.22);
+}
+
+#fxa-toolbar-menu-button {
+  display: none;
 }
 
 #navigator-toolbox {
@@ -339,4 +360,427 @@
   @media not (-moz-gtk-csd-minimize-button) {
     display: none;
   }
+}
+
+/* ── LYKON SHIELD PANEL ── */
+#lykon-shield-panel-content {
+  padding: 16px;
+  color: var(--arrowpanel-color);
+  font-family: system-ui, -apple-system, sans-serif;
+  min-width: 360px;
+  max-width: 400px;
+  background-color: var(--arrowpanel-background);
+  border-radius: 16px;
+}
+
+/* Header with Icon & Title */
+.lykon-shield-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.lykon-shield-header-icon {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #34c759 0%, #00c884 100%);
+  border-radius: 12px;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
+}
+
+.lykon-shield-header-icon img {
+  width: 28px;
+  height: 28px;
+  filter: brightness(0) invert(1);
+}
+
+.lykon-shield-header-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lykon-shield-title {
+  font-weight: 700;
+  font-size: 1.1em;
+  color: var(--arrowpanel-color);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.lykon-shield-subtitle {
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--arrowpanel-color);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.lykon-shield-description {
+  font-size: 0.75em;
+  color: inherit;
+  opacity: 0.68;
+  margin: 2px 0 0 0;
+  line-height: 1.4;
+}
+
+/* Main Toggle Section */
+.lykon-shield-main-toggle {
+  background-color: var(--toolbar-field-background-color);
+  border: 1px solid var(--toolbar-field-border-color);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.lykon-shield-toggle-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lykon-shield-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lykon-shield-toggle-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.lykon-shield-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.lykon-shield-toggle-slider {
+  display: block;
+  width: 44px;
+  height: 24px;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  position: relative;
+  transition: background-color 0.3s ease;
+  pointer-events: none;
+}
+
+.lykon-shield-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: white;
+  border-radius: 10px;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.lykon-shield-toggle-input:checked + .lykon-shield-toggle-slider {
+  background-color: #34c759;
+}
+
+.lykon-shield-toggle-input:checked + .lykon-shield-toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.lykon-shield-status-text {
+  font-weight: 600;
+  font-size: 0.92em;
+  color: var(--arrowpanel-color);
+}
+
+.lykon-shield-status-hint {
+  font-size: 0.75em;
+  color: inherit;
+  opacity: 0.68;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Stats Grid */
+.lykon-shield-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.lykon-shield-stat-item {
+  background-color: var(--toolbar-field-background-color);
+  border: 1px solid var(--toolbar-field-border-color);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.lykon-shield-stat-value {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: #34c759;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.lykon-shield-stat-label {
+  font-size: 0.65em;
+  color: inherit;
+  opacity: 0.68;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+
+/* Divider */
+.lykon-shield-divider {
+  border: none;
+  border-top: 1px solid var(--toolbar-field-border-color);
+  margin: 12px 0;
+}
+
+/* Warning */
+.lykon-shield-warning {
+  background-color: rgba(255, 217, 102, 0.1);
+  border: 1px solid rgba(255, 217, 102, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.75em;
+  color: inherit;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+/* Quick Actions */
+.lykon-shield-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 12px;
+}
+
+.lykon-shield-action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--toolbar-field-border-color);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.lykon-shield-action-item:last-child {
+  border-bottom: none;
+}
+
+.lykon-shield-action-item:hover {
+  background-color: color-mix(in srgb, var(--toolbar-field-background-color) 50%, transparent);
+}
+
+.lykon-shield-action-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.lykon-shield-action-icon {
+  font-size: 1.2em;
+  min-width: 24px;
+  text-align: center;
+}
+
+.lykon-shield-action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lykon-shield-action-title {
+  font-weight: 600;
+  font-size: 0.85em;
+  color: var(--arrowpanel-color);
+}
+
+.lykon-shield-action-desc {
+  font-size: 0.72em;
+  color: inherit;
+  opacity: 0.62;
+}
+
+.lykon-shield-action-arrow {
+  color: #0a84ff;
+  font-size: 1.2em;
+  opacity: 0.6;
+  margin-left: 8px;
+}
+
+/* Advanced Section Toggle */
+.lykon-shield-advanced-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px 8px;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.lykon-shield-advanced-toggle:hover {
+  background-color: color-mix(in srgb, var(--toolbar-field-background-color) 50%, transparent);
+}
+
+.lykon-shield-adv-label {
+  color: #0a84ff;
+  font-weight: 600;
+  font-size: 0.85em;
+  letter-spacing: 0.01em;
+}
+
+.lykon-shield-adv-arrow {
+  color: #0a84ff;
+  font-size: 0.9em;
+  transition: transform 0.3s ease;
+}
+
+/* Advanced section */
+.lykon-shield-advanced {
+  display: none;
+  background-color: var(--toolbar-field-background-color);
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 6px;
+  border: 1px solid var(--toolbar-field-border-color);
+}
+
+.lykon-shield-section {
+  margin-bottom: 12px;
+}
+
+.lykon-shield-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Section label */
+.lykon-shield-section-label {
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--arrowpanel-color);
+  opacity: 0.62;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+
+/* Control row with select */
+.lykon-shield-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.lykon-shield-select-label {
+  font-size: 0.8em;
+  color: var(--arrowpanel-color);
+  min-width: 100px;
+  font-weight: 500;
+}
+
+.lykon-shield-select {
+  flex: 1;
+  background-color: var(--toolbar-field-background-color);
+  color: var(--toolbar-field-color);
+  border: 1px solid var(--toolbar-field-border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.8em;
+  cursor: pointer;
+  appearance: auto;
+  transition: border-color 0.15s ease;
+}
+
+.lykon-shield-select:hover {
+  border-color: #0a84ff;
+}
+
+.lykon-shield-select:focus {
+  outline: none;
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+}
+
+/* Toggle rows */
+.lykon-shield-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid var(--toolbar-field-border-color);
+  gap: 8px;
+}
+
+.lykon-shield-toggle-row:first-of-type {
+  border-top: none;
+}
+
+.lykon-shield-toggle-row .lykon-shield-toggle-label {
+  width: 44px;
+  flex-shrink: 0;
+}
+
+.lykon-shield-toggle-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lykon-shield-toggle-title {
+  font-size: 0.83em;
+  font-weight: 600;
+  color: var(--arrowpanel-color);
+}
+
+.lykon-shield-toggle-desc {
+  font-size: 0.72em;
+  color: inherit;
+  opacity: 0.62;
+  line-height: 1.3;
+}
+
+/* Footer */
+.lykon-shield-footer-links {
+  text-align: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--toolbar-field-border-color);
+}
+
+.lykon-shield-learn-more {
+  color: #0a84ff;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.75em;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.lykon-shield-learn-more:hover {
+  color: #0570ff;
+  text-decoration: underline;
 }
