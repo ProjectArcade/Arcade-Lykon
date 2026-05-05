@@ -1,6 +1,12 @@
 # Adblock Component
 
-This component integrates the Brave **adblock-rust** engine into the Lykon browser for powerful ad filtering.
+This component provides the Lykon browser adblocker: a custom build and blocker developed by Project Arcade for integrated ad, tracker, and cosmetic filtering.
+
+It is designed to be practical, fast, and easy to maintain while giving the browser its built-in blocking controls.
+
+## License
+
+This component is released under the GNU General Public License v2.0 (GPL-2.0).
 
 ## Architecture
 
@@ -24,6 +30,12 @@ The adblock component consists of three layers:
 - Provides convenient API for content scripts and browser chrome
 - Handles enable/disable functionality
 
+### 4. **Browser UI Integration**
+- Lykon Shield panel controls the main adblock state
+- Supports live enable/disable behavior
+- Updates browser UI and reloads the active tab when needed
+- Exposes tracker, script, fingerprinting, cookie, and forget-on-exit options
+
 ## File Structure
 
 ```
@@ -38,6 +50,14 @@ components/adblock/
 ```
 
 ## Usage
+
+The blocker is meant to be used as the browser's built-in protection layer. It can:
+
+- block ad requests before they load
+- hide cosmetic ad containers in the page
+- toggle protection on or off from the browser UI
+- persist user preferences across sessions
+- track basic blocking statistics for the current session and total use
 
 ### From C++
 
@@ -100,6 +120,8 @@ The adblock engine supports multiple filter rule formats:
 - **Adblock Plus** - ABP syntax
 - **Custom domain-based rules**
 
+In addition to network-level filtering, Lykon also applies cosmetic selectors for common ad containers and placeholders.
+
 Example rules:
 ```
 ! Comments start with exclamation mark
@@ -132,6 +154,8 @@ The adblock component requires:
 2. **C++ compiler** - For AdblockEngine wrapper
 3. **Mozilla build tools** - Integrated via moz.build
 
+This is a custom Project Arcade build, so local paths and integration points may differ from upstream browser adblock implementations.
+
 To rebuild the Rust library:
 ```bash
 cd /home/notspidey/Desktop/adblock-rust
@@ -153,6 +177,13 @@ cargo build --release
 - [ ] Persistent rule caching
 - [ ] Debugging/inspection API
 - [ ] Filter edit mode for user-created rules
+
+## Project Notes
+
+- Developed by Project Arcade
+- Built specifically for the Lykon browser
+- Includes both network blocking and cosmetic hiding behavior
+- Intended to remain lightweight and easy to extend
 
 ## References
 
