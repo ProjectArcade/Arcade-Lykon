@@ -80,8 +80,20 @@ export class FilterManager {
         continue;
       }
 
-      // Skip overly complex regex rules to save memory
-      if (line.startsWith("/") && line.endsWith("/")) continue;
+      // Handle regex rules - convert to simple pattern matching for common cases
+      if (line.startsWith("/") && line.endsWith("/")) {
+        const pattern = line.slice(1, -1);
+        // For simple patterns, convert to substring check
+        try {
+          if (!pattern.includes("(") && !pattern.includes("?") && !pattern.includes("[")) {
+            // Safe to treat as substring
+            if (!isAllowlist && pattern.length > 3) {
+              this._substringBlocks.push(pattern);
+            }
+          }
+        } catch (e) {}
+        continue;
+      }
 
       // Plain substring (no special chars) — fast indexOf check
       const cleaned = line.replace(/^\|+/, "").replace(/\^/g, "").replace(/\*/g, "");
@@ -106,9 +118,19 @@ export class FilterManager {
       // Fast domain check — extract hostname from url
       let hostname = "";
       try {
-        hostname = new URL(url).hostname;
+        const urlObj = new URL(url);
+        hostname = urlObj.hostname || "";
+        
+        // If no hostname extracted, try from URL string
+        if (!hostname) {
+          const match = url.match(/(?:https?:\/\/)?([^\/\?#]+)/);
+          if (match) hostname = match[1];
+        }
       } catch (e) {
-        return false;
+        // Fallback: extract domain from string
+        const match = url.match(/(?:https?:\/\/)?([^\/\?#]+)/);
+        if (match) hostname = match[1];
+        else return false;
       }
 
       // Check domain and all parent domains
@@ -117,9 +139,8 @@ export class FilterManager {
         if (this._domainBlocks.has(parts.slice(i).join("."))) return true;
       }
 
-      // Substring check (only first 3000 rules to avoid lag on hot path)
-      const checkCount = Math.min(this._substringBlocks.length, 3000);
-      for (let i = 0; i < checkCount; i++) {
+      // Substring check - check ALL rules for thorough blocking
+      for (let i = 0; i < this._substringBlocks.length; i++) {
         if (url.includes(this._substringBlocks[i])) return true;
       }
 

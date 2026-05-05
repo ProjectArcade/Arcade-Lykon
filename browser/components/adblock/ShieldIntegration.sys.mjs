@@ -51,6 +51,7 @@ export class ShieldIntegration {
   _setupNetworkObservers() {
     Services.obs.addObserver(this, "http-on-before-connect", false);
     Services.obs.addObserver(this, "http-on-modify-request", false);
+    Services.obs.addObserver(this, "document-element-inserted", false);
     Services.obs.addObserver(this, "adblock-shield-toggled", false);
   }
 
@@ -62,6 +63,9 @@ export class ShieldIntegration {
       case "http-on-before-connect":
       case "http-on-modify-request":
         this._onHttpRequest(subject);
+        break;
+      case "document-element-inserted":
+        this._onDocumentInserted(subject);
         break;
       case "adblock-shield-toggled":
         this.adblockEnabled = data === "true";
@@ -84,6 +88,38 @@ export class ShieldIntegration {
         AdblockService.setEnabled(this.adblockEnabled);
         console.log(`[ShieldIntegration] Shield toggled: ${this.adblockEnabled}`);
         break;
+    }
+  }
+
+  /**
+   * Apply cosmetic filtering as soon as a document is inserted
+   */
+  _onDocumentInserted(subject) {
+    if (!this.adblockEnabled || !this.initialized) {
+      return;
+    }
+
+    try {
+      const document = subject?.defaultView ? subject : subject?.documentElement?.ownerDocument || subject;
+      if (!document || document.nodeType !== 9) {
+        return;
+      }
+
+      // Only act on HTML documents
+      const root = document.documentElement;
+      if (!root || root.localName !== "html") {
+        return;
+      }
+
+      // Inject CSS immediately so ad containers are hidden before the page
+      // finishes rendering. This catches placeholders like aswift_1_host.
+      this._injectCosmeticCSS(document);
+
+      // Run cosmetic cleanup immediately; if the page is still building,
+      // the next DOM mutation will catch late ads.
+      this.sanitizeDocument(document);
+    } catch (error) {
+      // Ignore document insertion errors
     }
   }
 
@@ -160,10 +196,12 @@ export class ShieldIntegration {
     }
 
     try {
+      this._injectCosmeticCSS(document);
       this._removeAdFrames(document);
       this._removeAdImages(document);
       this._removeAdScripts(document);
       this._removeTrackingPixels(document);
+      this._removeAdContainers(document);
     } catch (error) {
       console.error("[ShieldIntegration] Error sanitizing document:", error);
     }
@@ -237,6 +275,190 @@ export class ShieldIntegration {
           img.remove();
         }
       }
+    }
+  }
+
+  /**
+   * Remove ad containers and collapse empty ad areas
+   */
+  _removeAdContainers(document) {
+    try {
+      const selectors = [
+        "ins.adsbygoogle",
+        "[id*='asw-']",
+        "[id*='aswift_']",
+        "[id*='google_ads_']",
+        "[id*='gpt_unit']",
+        "[id*='div-gpt-ad']",
+        "[id*='ad-']",
+        "[id^='ad_']",
+        "[id^='ad-']",
+        "[class*='adsbygoogle']",
+        "[class*='gpt-ad']",
+        "[class*='ad-slot']",
+        "[class*='ad-unit']",
+        "[class*='ad-banner']",
+        "[class*='advertisement']",
+        "[class*='sponsored']",
+        "[class*='promoted']",
+        "[class*='adwrapper']",
+        "[data-ad-slot]",
+        "[data-ad-format]",
+        "[data-ad-client]",
+        "[data-google-query-id]",
+        "iframe[src*='doubleclick.net']",
+        "iframe[src*='googlesyndication']",
+        "iframe[src*='googleadservices']",
+      ];
+
+      for (const selector of selectors) {
+        for (const el of document.querySelectorAll(selector)) {
+          this._removeAdElementAndContainer(el);
+        }
+      }
+
+      // Remove empty ad-like containers that still occupy space.
+      for (const el of document.querySelectorAll("div, section, aside, article")) {
+        const id = (el.id || "").toLowerCase();
+        const cls = (el.className || "").toLowerCase();
+        const style = (el.getAttribute("style") || "").toLowerCase();
+        const hasAdMarker =
+          id.includes("ad") ||
+          cls.includes("ad") ||
+          el.hasAttribute("data-ad-slot") ||
+          el.hasAttribute("data-ad-client") ||
+          el.hasAttribute("data-google-query-id") ||
+          style.includes("height: 280px") ||
+          style.includes("height:280px") ||
+          style.includes("min-height: 250px") ||
+          style.includes("min-height:250px");
+
+        if (!hasAdMarker) {
+          continue;
+        }
+
+        const rect = el.getBoundingClientRect();
+        const text = el.textContent.trim();
+        if ((rect.height > 0 || rect.width > 0) && text.length === 0) {
+          this._removeAdElementAndContainer(el);
+        }
+      }
+    } catch (error) {
+      console.error("[ShieldIntegration] Error removing ad containers:", error);
+    }
+  }
+
+  /**
+   * Inject cosmetic CSS to hide ad containers before they are painted.
+   */
+  _injectCosmeticCSS(document) {
+    try {
+      if (!document || !document.documentElement) {
+        return;
+      }
+
+      const existing = document.getElementById("lykon-adblock-cosmetic-style");
+      if (existing) {
+        return;
+      }
+
+      const style = document.createElement("style");
+      style.id = "lykon-adblock-cosmetic-style";
+      style.textContent = `
+        ins.adsbygoogle,
+        .ads,
+        .ad,
+        .ad-box,
+        .ad-container,
+        .ad-wrapper,
+        .ad-slot,
+        .ad-unit,
+        .ad-banner,
+        .advertisement,
+        .sponsored,
+        .promoted,
+        [id*="asw-"],
+        [id*="aswift_"],
+        [id*="google_ads_"],
+        [id*="gpt_unit"],
+        [id*="div-gpt-ad"],
+        [id^="ad_"],
+        [id^="ad-"],
+        [class*="adsbygoogle"],
+        [class*="gpt-ad"],
+        [class*="ad-slot"],
+        [class*="ad-unit"],
+        [class*="ad-banner"],
+        [class*="advertisement"],
+        [class*="sponsored"],
+        [class*="promoted"],
+        [data-ad-slot],
+        [data-ad-format],
+        [data-ad-client],
+        [data-google-query-id],
+        iframe[src*="doubleclick.net"],
+        iframe[src*="googlesyndication"],
+        iframe[src*="googleadservices"],
+        iframe[src*="ads.google"],
+        iframe[src*="amazon-adsystem"] {
+          display: none !important;
+          visibility: hidden !important;
+          width: 0 !important;
+          height: 0 !important;
+          min-width: 0 !important;
+          min-height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border: 0 !important;
+          overflow: hidden !important;
+        }
+      `;
+
+      const parent = document.head || document.documentElement;
+      parent.appendChild(style);
+    } catch (error) {
+      // Cosmetic CSS is best-effort only.
+    }
+  }
+
+  /**
+   * Remove an element and its likely ad wrapper to eliminate blank space
+   */
+  _removeAdElementAndContainer(element) {
+    try {
+      let target = element;
+      let parent = element?.parentElement;
+
+      for (let i = 0; i < 4 && parent; i++) {
+        const id = (parent.id || "").toLowerCase();
+        const cls = (parent.className || "").toLowerCase();
+        const data = [
+          parent.getAttribute("data-ad-slot"),
+          parent.getAttribute("data-ad-format"),
+          parent.getAttribute("data-ad-client"),
+          parent.getAttribute("data-google-query-id"),
+        ].filter(Boolean).join(" ").toLowerCase();
+
+        if (
+          id.includes("ad") ||
+          cls.includes("ad") ||
+          data.includes("ad") ||
+          id.includes("asw") ||
+          id.includes("gpt") ||
+          cls.includes("adsbygoogle")
+        ) {
+          target = parent;
+          break;
+        }
+
+        parent = parent.parentElement;
+      }
+
+      target.remove();
+    } catch (error) {
+      try {
+        element?.remove();
+      } catch (e) {}
     }
   }
 
