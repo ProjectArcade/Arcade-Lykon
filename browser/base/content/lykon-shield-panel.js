@@ -209,6 +209,13 @@ var LykonCosmeticFilter = {
     "[id^='google_ads_iframe_']",
     "iframe[id^='google_ads_iframe_']",
     "iframe[name^='google_ads_iframe_']",
+    "[id^='div-gpt-ad-']",
+    "div[id^='div-gpt-ad-']",
+    ".adInv",
+    "div.adInv",
+    ".paisa-wrapper.mrec_placeHolder",
+    "div.paisa-wrapper.mrec_placeHolder",
+    ".mrec_placeHolder",
     ".ad_position_box.ad-placeholder.mb20.mt-20.desktop.adsbygoogle",
     "div.ad_position_box.ad-placeholder.mb20.mt-20.desktop.adsbygoogle",
     "div.ad_position_box.ad-placeholder.desktop.adsbygoogle",
@@ -257,6 +264,13 @@ var LykonCosmeticFilter = {
   ],
 
   _strictCollapseSelectors: [
+    "[id^='div-gpt-ad-']",
+    "div[id^='div-gpt-ad-']",
+    ".adInv",
+    "div.adInv",
+    ".paisa-wrapper.mrec_placeHolder",
+    "div.paisa-wrapper.mrec_placeHolder",
+    ".mrec_placeHolder",
     ".ad_position_box.ad-placeholder.mb20.mt-20.desktop.adsbygoogle",
     "div.ad_position_box.ad-placeholder.mb20.mt-20.desktop.adsbygoogle",
     "div.ad_position_box.ad-placeholder.desktop.adsbygoogle",
@@ -546,10 +560,10 @@ var LykonCosmeticFilter = {
         if (
           id.includes("asw") || id.includes("gpt") || id.includes("ad") ||
           cls.includes("adsbygoogle") || cls.includes("ad") ||
+          cls.includes("placeholder") || cls.includes("mrec") || cls.includes("paisa-wrapper") ||
           data.includes("ad")
         ) {
           target = parent;
-          break;
         }
         parent = parent.parentElement;
       }
