@@ -29,6 +29,7 @@ DIRS += [
     "aboutlogins",
     "aboutwelcome",
     "aiwindow",
+    "adblock",
     "asrouter",
     "attribution",
     "backup",

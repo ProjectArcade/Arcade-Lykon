@@ -1,0 +1,37 @@
+EXPORTS += [
+    "AdblockEngine.h",
+    "libadblock.h",
+]
+
+EXTRA_JS_MODULES += [
+    "AdblockConfig.sys.mjs",
+    "AdblockIntegration.sys.mjs",
+    "AdblockService.sys.mjs",
+    "easylist.txt",
+    "easyprivacy.txt",
+    "FilterManager.sys.mjs",
+    "ShieldIntegration.sys.mjs",
+    "ShieldToggle.sys.mjs",
+    "ShieldUIController.sys.mjs",
+    "StatsMonitor.sys.mjs",
+]
+
+EXTRA_COMPONENTS += [
+    "adblock.manifest",
+    "components.conf",
+]
+
+SOURCES += [
+    "AdblockEngine.cpp",
+]
+
+UNIFIED_SOURCES += [
+]
+
+# Link against the prebuilt adblock library shipped in this directory.
+EXTRA_DSO_LDOPTS += [
+    "-L" + TOPOBJDIR + "/browser/components/adblock",
+    "-l:libadblock.so",
+]
+
+FINAL_LIBRARY = "xul"

@@ -1,0 +1,170 @@
+ 0:00.34 W Warnings in third-party code are being suppressed from the terminal output. Use --show-all-warnings or --verbose to see them.
+ 0:00.34 W All warnings will still be dumped to /home/notspidey/Desktop/Lykon/lykon/obj-x86_64-pc-linux-gnu/.mozbuild/logs/build/warnings_*.json at the end of the build.
+ 0:00.42 Clobber not needed.
+ 0:00.97 W Adding make options from None
+    MOZ_OBJDIR=/home/notspidey/Desktop/Lykon/lykon/obj-x86_64-pc-linux-gnu
+    OBJDIR=/home/notspidey/Desktop/Lykon/lykon/obj-x86_64-pc-linux-gnu
+ 0:00.97 Parallelism determined by memory: using 7 jobs for 8 cores based on 7.5 GiB RAM and estimated job size of 1.0 GiB
+ 0:00.97 /usr/bin/make -f client.mk -j7 -s
+ 0:01.71 ./buildid.h.stub
+ 0:01.71 ./source-repo.h.stub
+ 0:01.90 ./application.ini.stub
+ 0:02.03 ./application.ini.h.stub
+ 0:02.33 browser/app
+ 0:02.40 accessible/base
+ 0:04.54 toolkit/library/buildid.cpp.stub
+ 0:04.90 toolkit/library/buildid.cpp.stub
+ 0:05.02 browser/app/lykon
+ 0:05.14 toolkit/library
+ 0:07.74    Compiling either v1.8.1
+ 0:07.74    Compiling bitflags v2.10.0
+ 0:07.74    Compiling aho-corasick v1.1.0
+ 0:07.80    Compiling itertools v0.14.0
+ 0:08.53    Compiling regex-automata v0.4.14
+ 0:08.99    Compiling bindgen v0.72.0 (https://github.com/rust-lang/rust-bindgen?rev=9366e0af8da529c958b4cd4fcbe492d951c86f5c#9366e0af)
+ 0:11.05    Compiling regex v1.12.3
+ 0:12.42    Compiling mozilla-central-workspace-hack v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/build/workspace-hack)
+ 0:13.21    Compiling bindgen v0.69.999 (/home/notspidey/Desktop/Lykon/lykon/build/rust/bindgen)
+ 0:19.04    Compiling pkcs11-bindings v0.1.7
+ 0:19.04    Compiling test-trust-anchors-static v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/security/manager/ssl/tests/unit/test_trust_anchors)
+ 0:20.25     Finished `release` profile [optimized] target(s) in 15.13s
+ 0:20.67 security/manager/ssl/tests/unit/test_trust_anchors/libtest_trust_anchors_static.a
+ 0:20.69 security/manager/ssl/tests/unit/test_trust_anchors/dynamic-library/libtest_trust_anchors.so
+ 0:22.73    Compiling memchr v2.7.4
+ 0:22.73    Compiling getrandom v0.2.999 (/home/notspidey/Desktop/Lykon/lykon/build/rust/getrandom)
+ 0:22.73    Compiling regex-automata v0.4.14
+ 0:22.73    Compiling itertools v0.14.0
+ 0:22.73    Compiling num-traits v0.2.19
+ 0:22.73    Compiling libcrux-macros v0.0.3
+ 0:22.79    Compiling rand_core v0.6.4
+ 0:23.09    Compiling rand_chacha v0.3.1
+ 0:23.86    Compiling nom v7.1.3
+ 0:24.06    Compiling rand v0.8.6
+ 0:24.14    Compiling log v0.4.29
+ 0:24.16    Compiling num-integer v0.1.46
+ 0:24.36    Compiling env_logger v0.10.0
+ 0:24.92    Compiling regex v1.12.3
+ 0:25.03    Compiling libcrux-traits v0.0.3 (/home/notspidey/Desktop/Lykon/lykon/build/rust/libcrux-traits)
+ 0:25.05    Compiling libcrux-hacl-rs v0.0.3
+ 0:25.12    Compiling num-bigint v0.4.6
+ 0:25.96    Compiling cexpr v0.6.0
+ 0:26.06    Compiling mozilla-central-workspace-hack v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/build/workspace-hack)
+ 0:27.52    Compiling bindgen v0.72.0 (https://github.com/rust-lang/rust-bindgen?rev=9366e0af8da529c958b4cd4fcbe492d951c86f5c#9366e0af)
+ 0:29.24    Compiling libcrux-sha2 v0.0.3
+ 0:32.23    Compiling libcrux-p256 v0.0.3
+ 0:33.96 toolkit/library/build/libxul.so
+ 0:40.71    Compiling pkcs11-bindings v0.1.7
+ 0:47.70    Compiling rsclientcerts v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/security/manager/ssl/rsclientcerts)
+ 0:58.85    Compiling pkcs11testmodule-static v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/security/manager/ssl/tests/unit/pkcs11testmodule)
+ 1:05.31     Finished `release` profile [optimized] target(s) in 44.59s
+ 1:09.27 security/manager/ssl/tests/unit/pkcs11testmodule/libpkcs11testmodule_static.a
+ 1:13.17 security/manager/ssl/tests/unit/pkcs11testmodule/dynamic-library/libpkcs11testmodule.so
+ 1:32.98 toolkit/crashreporter/test/libtestcrasher.so
+ 1:32.98 ipc/app/plugin-container
+ 1:32.99 js/xpconnect/shell/xpcshell
+ 1:35.17    Compiling winnow v0.7.13
+ 1:35.17    Compiling thiserror v2.0.12
+ 1:35.17    Compiling qlog v0.16.0
+ 1:35.17    Compiling strum v0.27.1
+ 1:35.17    Compiling mtu v0.3.0 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:35.17    Compiling rustc-hash v2.1.1
+ 1:35.17    Compiling dist-bin v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/build/rust/dist-bin)
+ 1:35.43    Compiling sfv v0.14.0
+ 1:35.43    Compiling neqo-bin v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:35.64    Compiling clap-verbosity-flag v3.0.1
+ 1:35.70    Compiling mozilla-central-workspace-hack v0.1.0 (/home/notspidey/Desktop/Lykon/lykon/build/workspace-hack)
+ 1:36.55    Compiling toml_parser v1.0.4
+ 1:36.80    Compiling toml v0.9.8
+ 1:38.02    Compiling neqo-crypto v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:38.62    Compiling neqo-common v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:39.67    Compiling neqo-udp v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:40.98    Compiling neqo-transport v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:42.97    Compiling neqo-qpack v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:43.31    Compiling neqo-http3 v0.26.1 (https://github.com/mozilla/neqo?tag=v0.26.1#0eb6238f)
+ 1:48.40    Compiling http3server v0.1.1 (/home/notspidey/Desktop/Lykon/lykon/netwerk/test/http3server)
+ 1:48.99     Finished `release` profile [optimized] target(s) in 36.84s
+ 1:49.33 netwerk/test/http3server/http3server
+ 1:49.47 ./run.js.stub
+ 1:49.47 ./run.js.stub
+ 1:49.47 ./manifest.json.stub
+ 1:49.69 ./node.stub.stub
+ 1:49.73 ./node.stub.stub
+ 1:49.74 ./node.stub.stub
+ 1:49.74 ./node.stub.stub
+ 1:49.77 ./node.stub.stub
+ 1:49.89 ./node.stub.stub
+ 1:50.03 ./node.stub.stub
+ 1:50.10 ./node.stub.stub
+ 1:50.43 ./node.stub.stub
+ 1:50.46 ./node.stub.stub
+ 1:50.62 ./node.stub.stub
+ 1:50.80 ./node.stub.stub
+ 1:50.85 ./node.stub.stub
+ 1:50.85 ./node.stub.stub
+ 1:51.06 ./node.stub.stub
+ 1:51.08 ./node.stub.stub
+ 1:51.11 ./node.stub.stub
+ 1:51.30 ./node.stub.stub
+ 1:51.34 ./node.stub.stub
+ 1:51.56 ./node.stub.stub
+ 1:52.05 ./node.stub.stub
+ 1:52.12 ./node.stub.stub
+ 1:52.17 ./node.stub.stub
+ 1:52.23 ./node.stub.stub
+ 1:52.28 ./node.stub.stub
+ 1:52.32 ./node.stub.stub
+ 1:52.60 ./node.stub.stub
+ 1:52.69 ./node.stub.stub
+ 1:52.73 ./node.stub.stub
+ 1:52.88 ./node.stub.stub
+ 1:53.21 ./node.stub.stub
+ 1:53.33 ./node.stub.stub
+ 1:53.41 ./node.stub.stub
+ 1:53.41 ./node.stub.stub
+ 1:53.42 ./node.stub.stub
+ 1:53.90 ./event-list.json.stub
+ 1:53.95 ./reserved-js-words.js.stub
+ 1:54.08 Successfully generated event list for DevTools
+ 1:54.21 ./spidermonkey_checks.stub
+ 1:54.30 ./css_properties.js.stub
+ 1:54.75 ./last_modified.json.stub
+ 1:54.96 ./lib.gecko.glean.d.ts.stub
+ 1:54.99 ./normandydriver-a-1.0.xpi.stub
+ 1:55.00 ./normandydriver-b-1.0.xpi.stub
+ 1:55.07 ./normandydriver-a-2.0.xpi.stub
+ 1:55.93 ./dependentlibs.list.stub
+ 1:56.18 ./built_in_addons.json.stub
+ 1:56.20 ./browser_dragdrop1.xpi.stub
+ 1:56.28 ./browser_dragdrop1.zip.stub
+ 1:56.37 TEST-PASS | check_spidermonkey_style.py | ok
+ 1:56.47 ./browser_dragdrop1.1.xpi.stub
+ 1:56.49 ./browser_dragdrop1.1.zip.stub
+ 1:56.55 ./browser_dragdrop2.xpi.stub
+ 1:56.61 TEST-PASS | check_macroassembler_style.py | ok
+ 1:56.66 TEST-PASS | check_js_opcode.py | ok
+ 1:56.66 ./browser_dragdrop2.zip.stub
+ 1:56.73 ./browser_dragdrop_incompat.xpi.stub
+ 1:56.75 ./browser_dragdrop_incompat.zip.stub
+ 1:56.76 ./browser_installssl.xpi.stub
+ 1:56.79 ./browser_installssl.zip.stub
+ 1:56.84 ./browser_theme.xpi.stub
+ 1:56.93 ./browser_theme.zip.stub
+ 1:57.23 ./error_list.json.stub
+ 1:57.50 browser/locales/updater.ini.stub
+ 2:01.20 Packaging long-fields.xpi...
+ 2:01.21 Packaging restartless.xpi...
+ 2:01.26 Packaging system.xpi...
+ 2:02.07 Packaging specialpowers@mozilla.org.xpi...
+ 2:02.23 Packaging data-leak-blocker@mozilla.com.xpi...
+ 2:02.34 Packaging ipp-activator@mozilla.com.xpi...
+ 2:02.44 Packaging webcompat@mozilla.org.xpi...
+ 2:02.68 Packaging newtab@mozilla.org.xpi...
+ 2:03.24 Packaging mozscreenshots@mozilla.org.xpi...
+ 2:03.45 W 0 compiler warnings present.
+ 2:03.51 W Overall system resources - Wall time: 123s; CPU: 50%; Read bytes: 16286400512; Write bytes: 8695689216; Read time: 695786; Write time: 260315
+ 2:03.51 W Swap in/out (MB): 2598.2265625/4178.4609375
+ 2:03.51 To view a profile of the build, run |mach resource-usage|.
+ 2:03.51 Your build was successful!
+ 2:03.51 To take your build for a test drive, run: |mach run|
+ 2:03.51 For more information on what to do now, see https://firefox-source-docs.mozilla.org/setup/contributing_code.html
+Streaming resource usage profile to: /home/notspidey/Desktop/Lykon/lykon/obj-x86_64-pc-linux-gnu/.mozbuild/logs/build/profile_log_20260504_192306.json

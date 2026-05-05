@@ -15,6 +15,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource:///modules/asrouter/ASRouterDefaultConfig.sys.mjs",
   ASRouterNewTabHook: "resource:///modules/asrouter/ASRouterNewTabHook.sys.mjs",
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
+  shieldIntegration: "resource:///modules/ShieldIntegration.sys.mjs",
   BackupService: "resource:///modules/backup/BackupService.sys.mjs",
   BrowserSearchTelemetry:
     "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
@@ -83,6 +84,8 @@ XPCOMUtils.defineLazyServiceGetters(lazy, {
   BrowserHandler: ["@mozilla.org/browser/clh;1", Ci.nsIBrowserHandler],
   PushService: ["@mozilla.org/push/Service;1", Ci.nsIPushService],
 });
+
+
 
 if (AppConstants.ENABLE_WEBDRIVER) {
   XPCOMUtils.defineLazyServiceGetter(
@@ -386,6 +389,9 @@ BrowserGlue.prototype = {
   _beforeUIStartup: function BG__beforeUIStartup() {
     lazy.SessionStartup.init();
 
+    // Initialize Lykon Shield with ad blocking
+    this._initializeShield();
+
     // check if we're in safe mode
     if (Services.appinfo.inSafeMode) {
       Services.ww.openWindow(
@@ -449,6 +455,27 @@ BrowserGlue.prototype = {
         Cc["@mozilla.org/updates/update-service;1"]
           .getService(Ci.nsIApplicationUpdateService)
           .checkForBackgroundUpdates();
+      }
+    }
+  },
+
+  /**
+   * Initialize Lykon Shield with integrated ad blocking
+   */
+async _initializeShield() {
+    try {
+      await lazy.shieldIntegration.init();
+      console.log("[BrowserGlue] Lykon Shield initialized with ad blocking");
+    } catch (error) {
+      console.error("[BrowserGlue] Failed to initialize Lykon Shield:", error);
+      try {
+        const { AdblockService } = ChromeUtils.importESModule(
+          "resource:///modules/AdblockService.sys.mjs"
+        );
+        await AdblockService.init();
+        console.log("[BrowserGlue] Fallback: AdblockService initialized");
+      } catch (err) {
+        console.error("[BrowserGlue] Fallback AdblockService initialization failed:", err);
       }
     }
   },
