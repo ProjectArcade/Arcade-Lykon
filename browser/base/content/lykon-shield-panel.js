@@ -362,6 +362,10 @@ var LykonCosmeticFilter = {
     "div.ad_position_box.ad-placeholder.desktop.adsbygoogle",
     "span.ad-text",
     "div.ad-placeholder",
+    /* YouTube elements */
+    "ytd-companion-slot-renderer",
+    "ytd-ad-slot-renderer",
+    "yt-formatted-string[role='tooltip'][aria-label='Advertisement']",
     /* TpGnAd / ads-wrp family */
     "[class*='TpGnAd_ad-wr']",
     "div[class*='TpGnAd_ad-wr']",
@@ -396,6 +400,8 @@ var LykonCosmeticFilter = {
     ".mrec_placeHolder",
     ".ad_position_box.ad-placeholder",
     ".ads-wrp_txt",
+    "ytd-companion-slot-renderer",
+    "ytd-ad-slot-renderer",
     "[class*='TpGnAd_ad-wr']",
     "div[class*='TpGnAd_ad-wr']",
     "[class^='TpGnAd_ad-wr']",
