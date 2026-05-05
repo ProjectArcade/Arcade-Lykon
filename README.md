@@ -1,6 +1,6 @@
 # Lykon Browser – Advanced Privacy & Ad-Blocking Web Browser
 
-![Lykon Shield Badge](docs/readme/readme-banner.svg)
+<!--![Lykon Shield Badge](docs/readme/readme-banner.svg)-->
 
 **Lykon** is a custom Firefox-based web browser engineered for privacy, performance, and user control. Built on the Mozilla Firefox codebase, Lykon integrates native ad-blocking, tracker protection, privacy controls, and an intuitive **Lykon Shield** interface to give users complete visibility and control over their browsing experience.
 
@@ -552,10 +552,8 @@ Lykon is licensed under the **Mozilla Public License 2.0 (MPL-2.0)** with the fo
 
 ## 📞 Support & Resources
 
-- **Official Docs** – [Lykon Documentation](https://wiki.lykon-browser.org)
+- **Official Docs** – [Lykon Documentation](https://lykon.vercel.app/)
 - **Build Issues** – [Build Documentation](./docs/building/)
-- **Security Issues** – [SECURITY.md](SECURITY.md)
-- **Code of Conduct** – [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ---
 
