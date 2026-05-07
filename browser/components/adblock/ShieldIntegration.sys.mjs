@@ -4,6 +4,7 @@
 
 import { AdblockService } from "resource:///modules/AdblockService.sys.mjs";
 import { PREFS } from "resource:///modules/AdblockConfig.sys.mjs";
+import { statsMonitor } from "resource:///modules/StatsMonitor.sys.mjs";
 
 export class ShieldIntegration {
   constructor() {
@@ -16,6 +17,7 @@ export class ShieldIntegration {
     try {
       console.log("[ShieldIntegration] Initializing...");
       await AdblockService.init();
+      await statsMonitor.init();
       this.adblockEnabled = AdblockService.enabled;
       this._setupNetworkObservers();
       Services.prefs.addObserver(PREFS.ENABLED, this);
@@ -75,15 +77,20 @@ export class ShieldIntegration {
 
       const win = document.defaultView;
       if (!win || win.top !== win) {
+        console.log("[ShieldIntegration] Skipping iframe/subdocument");
         return;
       }
 
       try {
         const pageUrl = document.documentURI || document.URL || "";
+        console.log("[ShieldIntegration] Document inserted, URL:", pageUrl);
         if (pageUrl.startsWith("http://") || pageUrl.startsWith("https://")) {
+          console.log("[ShieldIntegration] Emitting adblock-page-navigated for:", pageUrl);
           Services.obs.notifyObservers(null, "adblock-page-navigated", pageUrl);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error("[ShieldIntegration] Error in _onDocumentInserted:", e);
+      }
 
       this._injectCosmeticCSS(document);
       this.sanitizeDocument(document);
@@ -114,7 +121,7 @@ export class ShieldIntegration {
           Services.obs.notifyObservers(
             null,
             "adblock-request-blocked",
-            `${url}|${contentType}|0`
+            `${url}|${contentType}|0|${referrer}`
           );
         } catch (e) {}
       }

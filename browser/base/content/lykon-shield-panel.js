@@ -23,6 +23,7 @@ var LykonShield = {
   _latestStats: null,
 
   init() {
+    console.log("[LykonShield] init() called");
     const $ = id => document.getElementById(id);
     this._el = {
       button:     $("lykon-shield-button"),
@@ -42,6 +43,8 @@ var LykonShield = {
       trackers:   $("lykon-shield-tracker-count"),
       bandwidth:  $("lykon-shield-bandwidth"),
     };
+
+    console.log("[LykonShield] Elements found:", this._el.count ? "count OK" : "NO count", this._el.toggle ? "toggle OK" : "NO toggle");
 
     if (!this._el.toggle || !this._el.content) return;
 
@@ -63,7 +66,10 @@ var LykonShield = {
       try {
         Services.obs.addObserver(this, "adblock-stats-updated");
         this._statsObserverBound = true;
-      } catch (e) {}
+        console.log("[LykonShield] Observer registered");
+      } catch (e) {
+        console.error("[LykonShield] Failed to register observer:", e);
+      }
     }
 
     this._refreshLatestStats();
@@ -77,7 +83,9 @@ var LykonShield = {
     try {
       const { statsMonitor } = ChromeUtils.importESModule("resource:///modules/StatsMonitor.sys.mjs");
       this._latestStats = statsMonitor?.getStats ? statsMonitor.getStats() : null;
+      console.log("[LykonShield] _refreshLatestStats result:", JSON.stringify(this._latestStats));
     } catch (e) {
+      console.error("[LykonShield] _refreshLatestStats error:", e);
       this._latestStats = null;
     }
   },
@@ -89,6 +97,7 @@ var LykonShield = {
 
     try {
       this._latestStats = data ? JSON.parse(data) : null;
+      console.log("[LykonShield] observe event, stats:", JSON.stringify(this._latestStats));
     } catch (e) {
       this._latestStats = null;
     }
@@ -174,10 +183,11 @@ var LykonShield = {
       const tracker = Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
       const bytes   = Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
 
-      const perSiteBlocked = this._latestStats?.page?.blocked;
-      const adsBlockedThisSite = Number.isFinite(perSiteBlocked)
-        ? perSiteBlocked
-        : session;
+      // Count shows ONLY website-specific blocked ads, never session total
+      const adsBlockedThisSite = this._latestStats?.page?.blocked || 0;
+
+      console.log("[LykonShield] _updateStats: latestStats=", JSON.stringify(this._latestStats), 
+                  "adsBlockedThisSite=", adsBlockedThisSite);
 
       if (this._el.count) {
         this._el.count.textContent = adsBlockedThisSite.toLocaleString();
@@ -191,7 +201,9 @@ var LykonShield = {
       if (this._el.bandwidth) {
         this._el.bandwidth.textContent = this._fmtBytes(bytes);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[LykonShield] _updateStats error:", e);
+    }
   },
 
   _fmtBytes(b) {

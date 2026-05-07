@@ -69,7 +69,14 @@ export class StatsMonitor {
     }
   }
 
-  recordBlock(url, contentType, sizeBytes) {
+  recordBlock(url, contentType, sizeBytes, referrer) {
+    // If we don't yet have a page key, try to infer it from the request's referrer.
+    if (!this.currentPageKey && referrer) {
+      try {
+        this.recordNavigation(referrer);
+      } catch (e) {}
+    }
+
     this.session.blocked++;
     this.session.bytes += sizeBytes;
 
@@ -85,9 +92,12 @@ export class StatsMonitor {
       this.pageStats.set(this.currentPageKey, page);
     }
 
+    console.log("[StatsMonitor] recordBlock: url=", url, "currentPageKey=", this.currentPageKey, "referrer=", referrer, "pageStats=", this.pageStats);
+
     this._persistToPrefs();
     this._broadcast();
   }
+
 
   _isTracker(url) {
     return url.includes("analytics") ||
@@ -103,6 +113,7 @@ export class StatsMonitor {
 
   recordNavigation(pageKey) {
     const normalizedKey = this._normalizePageKey(pageKey);
+    console.log("[StatsMonitor] recordNavigation: pageKey=", pageKey, "normalizedKey=", normalizedKey);
     if (!normalizedKey) {
       return;
     }
@@ -111,6 +122,7 @@ export class StatsMonitor {
     if (!this.pageStats.has(normalizedKey)) {
       this.pageStats.set(normalizedKey, { blocked: 0, trackers: 0, bytes: 0 });
     }
+    console.log("[StatsMonitor] currentPageKey updated to:", this.currentPageKey);
     this._broadcast();
   }
 
@@ -155,10 +167,31 @@ export class StatsMonitor {
   }
 
   observe(subject, topic, data) {
+    console.log("[StatsMonitor] observe called with topic:", topic);
     switch (topic) {
       case "adblock-request-blocked": {
         const parts = (data || "").split("|");
-        this.recordBlock(parts[0] || "", parts[1] || "other", parseInt(parts[2]) || 0);
+        const url = parts[0] || "";
+        const contentType = parts[1] || "other";
+        const size = parseInt(parts[2]) || 0;
+        const referrer = parts[3] || "";
+
+        // If we don't have a current page key yet, try to infer it from
+        // the top window's selected tab (best-effort) before recording.
+        if (!this.currentPageKey) {
+          try {
+            const { BrowserWindowTracker } = ChromeUtils.importESModule(
+              "resource:///modules/BrowserWindowTracker.sys.mjs"
+            );
+            const win = BrowserWindowTracker.getTopWindow();
+            const selectedURI = win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
+            if (selectedURI) {
+              this.recordNavigation(selectedURI);
+            }
+          } catch (e) {}
+        }
+
+        this.recordBlock(url, contentType, size, referrer);
         break;
       }
       case "adblock-page-navigated":

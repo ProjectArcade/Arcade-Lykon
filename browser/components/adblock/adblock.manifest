@@ -4,12 +4,12 @@
 
 # Adblock component manifest for registration with Firefox
 
-resource://gre/modules/AdblockService.sys.mjs ../adblock/AdblockService.sys.mjs
-resource://gre/modules/AdblockIntegration.sys.mjs ../adblock/AdblockIntegration.sys.mjs
-resource://gre/modules/AdblockConfig.sys.mjs ../adblock/AdblockConfig.sys.mjs
-resource://gre/modules/ShieldIntegration.sys.mjs ../adblock/ShieldIntegration.sys.mjs
-resource://gre/modules/ShieldUIController.sys.mjs ../adblock/ShieldUIController.sys.mjs
-resource://gre/modules/ShieldToggle.sys.mjs ../adblock/ShieldToggle.sys.mjs
-resource://gre/modules/FilterManager.sys.mjs ../adblock/FilterManager.sys.mjs
-resource://gre/modules/StatsMonitor.sys.mjs ../adblock/StatsMonitor.sys.mjs
+resource:///modules/AdblockService.sys.mjs ../adblock/AdblockService.sys.mjs
+resource:///modules/AdblockIntegration.sys.mjs ../adblock/AdblockIntegration.sys.mjs
+resource:///modules/AdblockConfig.sys.mjs ../adblock/AdblockConfig.sys.mjs
+resource:///modules/ShieldIntegration.sys.mjs ../adblock/ShieldIntegration.sys.mjs
+resource:///modules/ShieldUIController.sys.mjs ../adblock/ShieldUIController.sys.mjs
+resource:///modules/ShieldToggle.sys.mjs ../adblock/ShieldToggle.sys.mjs
+resource:///modules/FilterManager.sys.mjs ../adblock/FilterManager.sys.mjs
+resource:///modules/StatsMonitor.sys.mjs ../adblock/StatsMonitor.sys.mjs
 
