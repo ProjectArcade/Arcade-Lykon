@@ -65,17 +65,32 @@ export class StatsMonitor {
       }
       return uri.displayHost || uri.host || uri.spec;
     } catch (e) {
+      // Try a forgiving URL parse fallback (some referer strings may be
+      // slightly different). Use the global URL constructor if available.
+      try {
+        const parsed = new URL(pageKey);
+        return parsed.hostname || null;
+      } catch (e2) {
+        return null;
+      }
+    }
+  }
+
+  _getSelectedPageKey() {
+    try {
+      const { BrowserWindowTracker } = ChromeUtils.importESModule(
+        "resource:///modules/BrowserWindowTracker.sys.mjs"
+      );
+      const win = BrowserWindowTracker.getTopWindow();
+      const selectedURI = win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
+      return this._normalizePageKey(selectedURI);
+    } catch (e) {
       return null;
     }
   }
 
   recordBlock(url, contentType, sizeBytes, referrer) {
-    // If we don't yet have a page key, try to infer it from the request's referrer.
-    if (!this.currentPageKey && referrer) {
-      try {
-        this.recordNavigation(referrer);
-      } catch (e) {}
-    }
+    const pageKey = this._normalizePageKey(referrer) || this.currentPageKey || this._getSelectedPageKey();
 
     this.session.blocked++;
     this.session.bytes += sizeBytes;
@@ -84,15 +99,15 @@ export class StatsMonitor {
     if (this._isTracker(url)) this.session.trackers++;
 
     // Per-page stats
-    if (this.currentPageKey) {
-      const page = this.pageStats.get(this.currentPageKey) || { blocked: 0, trackers: 0, bytes: 0 };
+    if (pageKey) {
+      const page = this.pageStats.get(pageKey) || { blocked: 0, trackers: 0, bytes: 0 };
       page.blocked++;
       page.bytes += sizeBytes;
       if (this._isTracker(url)) page.trackers++;
-      this.pageStats.set(this.currentPageKey, page);
+      this.pageStats.set(pageKey, page);
     }
 
-    console.log("[StatsMonitor] recordBlock: url=", url, "currentPageKey=", this.currentPageKey, "referrer=", referrer, "pageStats=", this.pageStats);
+    console.log("[StatsMonitor] recordBlock: url=", url, "pageKey=", pageKey, "currentPageKey=", this.currentPageKey, "referrer=", referrer, "pageStats=", this.pageStats);
 
     this._persistToPrefs();
     this._broadcast();
@@ -128,7 +143,8 @@ export class StatsMonitor {
 
   getStats() {
     const total = (() => { try { return Services.prefs.getIntPref("lykon.shield.stats.total", 0); } catch(e) { return 0; } })();
-    const page  = this.currentPageKey ? (this.pageStats.get(this.currentPageKey) || {}) : {};
+    const currentPageKey = this._getSelectedPageKey() || this.currentPageKey;
+    const page  = currentPageKey ? (this.pageStats.get(currentPageKey) || {}) : {};
     return {
       session:  this.session.blocked,
       total,
@@ -175,21 +191,6 @@ export class StatsMonitor {
         const contentType = parts[1] || "other";
         const size = parseInt(parts[2]) || 0;
         const referrer = parts[3] || "";
-
-        // If we don't have a current page key yet, try to infer it from
-        // the top window's selected tab (best-effort) before recording.
-        if (!this.currentPageKey) {
-          try {
-            const { BrowserWindowTracker } = ChromeUtils.importESModule(
-              "resource:///modules/BrowserWindowTracker.sys.mjs"
-            );
-            const win = BrowserWindowTracker.getTopWindow();
-            const selectedURI = win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
-            if (selectedURI) {
-              this.recordNavigation(selectedURI);
-            }
-          } catch (e) {}
-        }
 
         this.recordBlock(url, contentType, size, referrer);
         break;

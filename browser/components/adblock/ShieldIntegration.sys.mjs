@@ -113,6 +113,15 @@ export class ShieldIntegration {
 
       let referrer = "";
       try { referrer = channel.referrer?.spec || ""; } catch (e) {}
+      // Fallback: sometimes the nsIReferrerInfo isn't available — try the
+      // HTTP Referer header if present on the channel.
+      if (!referrer) {
+        try {
+          let hdr = null;
+          try { hdr = channel.getRequestHeader("Referer"); } catch (e) { hdr = null; }
+          if (hdr) referrer = hdr;
+        } catch (e) {}
+      }
 
       if (AdblockService.shouldBlock(url, referrer, contentType)) {
         console.log(`[ShieldIntegration] Blocking: ${url}`);
