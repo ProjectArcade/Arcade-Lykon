@@ -53,6 +53,22 @@ export class StatsMonitor {
     } catch (e) {}
   }
 
+  _normalizePageKey(pageKey) {
+    if (!pageKey || typeof pageKey !== "string") {
+      return null;
+    }
+
+    try {
+      const uri = Services.io.newURI(pageKey);
+      if (!uri || !(uri.scheme === "http" || uri.scheme === "https")) {
+        return null;
+      }
+      return uri.displayHost || uri.host || uri.spec;
+    } catch (e) {
+      return null;
+    }
+  }
+
   recordBlock(url, contentType, sizeBytes) {
     this.session.blocked++;
     this.session.bytes += sizeBytes;
@@ -86,9 +102,14 @@ export class StatsMonitor {
   }
 
   recordNavigation(pageKey) {
-    this.currentPageKey = pageKey;
-    if (!this.pageStats.has(pageKey)) {
-      this.pageStats.set(pageKey, { blocked: 0, trackers: 0, bytes: 0 });
+    const normalizedKey = this._normalizePageKey(pageKey);
+    if (!normalizedKey) {
+      return;
+    }
+
+    this.currentPageKey = normalizedKey;
+    if (!this.pageStats.has(normalizedKey)) {
+      this.pageStats.set(normalizedKey, { blocked: 0, trackers: 0, bytes: 0 });
     }
     this._broadcast();
   }
@@ -143,6 +164,17 @@ export class StatsMonitor {
       case "adblock-page-navigated":
         this.recordNavigation(data);
         break;
+      case "browser-select-tab": {
+        try {
+          const { BrowserWindowTracker } = ChromeUtils.importESModule(
+            "resource:///modules/BrowserWindowTracker.sys.mjs"
+          );
+          const win = BrowserWindowTracker.getTopWindow();
+          const selectedURI = win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
+          this.recordNavigation(selectedURI);
+        } catch (e) {}
+        break;
+      }
     }
   }
 

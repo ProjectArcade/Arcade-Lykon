@@ -28,6 +28,8 @@ const MEDIA_STREAM_PATTERNS = [
   "yt_live_broadcast",
   "/api/timedtext",
   "googlevideo.com",
+  "live_chat",
+  "live_chat_replay",
 ];
 
 // Resource types that carry actual video/audio — never block on allowlisted domains
@@ -35,15 +37,17 @@ const SAFE_MEDIA_TYPES = new Set([
   "media",
   "object",
   "xmlhttprequest",
+  "subdocument",
+  "document",
 ]);
 
 export class FilterManager {
   constructor() {
     this.initialized = false;
-    this._domainBlocks = new Set();    // ||domain^ style — fast Set lookup
-    this._substringBlocks = [];        // [{pattern, types: Set|null}]
-    this._regexBlocks = [];            // regex rules (minimized)
-    this._allowlist = [];              // [{pattern, types: Set|null}]
+    this._domainBlocks = new Set();
+    this._substringBlocks = [];
+    this._regexBlocks = [];
+    this._allowlist = [];
     this.customFilters = new Map();
   }
 
@@ -81,25 +85,21 @@ export class FilterManager {
     }
   }
 
-  // Parse a $options string into a Set of resource types (or null = apply to all)
   _parseOptions(optStr) {
     if (!optStr) return null;
     const types = new Set();
     for (const opt of optStr.split(",")) {
       const o = opt.trim().toLowerCase();
-      // Skip non-type options
       if (o.startsWith("domain=") || o === "third-party" || o === "first-party" ||
           o === "~third-party" || o === "~first-party" || o === "important" ||
           o === "popup" || o === "generichide" || o === "genericblock") {
         continue;
       }
-      // Negated type — means "all types except this", treat as no type restriction
       if (o.startsWith("~")) continue;
-      // Map known types
       const typeMap = {
         script: "script", stylesheet: "stylesheet", image: "image",
         media: "media", object: "object", xmlhttprequest: "xmlhttprequest",
-        font: "font", subdocument: "document", document: "document",
+        font: "font", subdocument: "subdocument", document: "document",
         xhr: "xmlhttprequest", ping: "other", other: "other",
       };
       if (typeMap[o]) types.add(typeMap[o]);
@@ -111,7 +111,6 @@ export class FilterManager {
     for (let line of text.split("\n")) {
       line = line.trim();
 
-      // Skip comments, empty, element hiding, cosmetic rules
       if (!line || line.startsWith("!") || line.startsWith("[") ||
           line.includes("##") || line.includes("#@#") ||
           line.includes("#?#") || line.includes("#$#")) {
@@ -121,7 +120,6 @@ export class FilterManager {
       const isAllowlist = line.startsWith("@@");
       if (isAllowlist) line = line.slice(2);
 
-      // Extract and parse options BEFORE stripping them
       let types = null;
       const dollarIdx = line.lastIndexOf("$");
       if (dollarIdx !== -1 && !line.includes("$/")) {
@@ -131,14 +129,11 @@ export class FilterManager {
       }
       if (!line) continue;
 
-      // Fast path: pure domain anchor ||domain^ with no wildcards
       if (line.startsWith("||") && line.endsWith("^") && !line.includes("*")) {
         const domain = line.slice(2, -1);
         if (isAllowlist) {
           this._allowlist.push({ pattern: domain, types, isDomain: true });
         } else {
-          // Only add to domainBlocks if rule applies to ALL types or non-media types
-          // Media-only rules go to substringBlocks so type check can be applied
           if (!types || !this._isMediaOnlyRule(types)) {
             this._domainBlocks.add(domain);
           } else {
@@ -148,7 +143,6 @@ export class FilterManager {
         continue;
       }
 
-      // Regex rules
       if (line.startsWith("/") && line.endsWith("/")) {
         const pattern = line.slice(1, -1);
         try {
@@ -161,7 +155,6 @@ export class FilterManager {
         continue;
       }
 
-      // Plain substring
       const cleaned = line.replace(/^\|+/, "").replace(/\^/g, "").replace(/\*/g, "");
       if (cleaned.length > 4) {
         if (isAllowlist) {
@@ -182,13 +175,11 @@ export class FilterManager {
   }
 
   _isYouTubeMediaRequest(hostname, url, resourceType) {
-    // Check if hostname belongs to YouTube/Google video CDN
     for (const domain of MEDIA_ALLOWLIST_DOMAINS) {
       if (hostname === domain || hostname.endsWith("." + domain)) {
         return true;
       }
     }
-    // Check for YouTube video stream URL patterns
     for (const pattern of MEDIA_STREAM_PATTERNS) {
       if (url.includes(pattern)) return true;
     }
@@ -198,7 +189,6 @@ export class FilterManager {
   matches(url, originUrl, resourceType) {
     if (!this.initialized || !url) return false;
     try {
-      // Extract hostname
       let hostname = "";
       try {
         hostname = new URL(url).hostname || "";
@@ -208,18 +198,18 @@ export class FilterManager {
         else return false;
       }
 
-      // ── YouTube / Google video CDN hard bypass ──────────────────────────────
-      // Never block media, XHR, or object requests to YouTube/Google video CDN
+      // Hard bypass: never block live chat
+      if (url.includes("live_chat") || url.includes("live_chat_replay")) return false;
+
+      // YouTube / Google video CDN hard bypass
       if (SAFE_MEDIA_TYPES.has(resourceType) && this._isYouTubeMediaRequest(hostname, url, resourceType)) {
         return false;
       }
-      // Also never block video stream URL patterns regardless of reported type
       for (const pattern of MEDIA_STREAM_PATTERNS) {
         if (url.includes(pattern)) return false;
       }
-      // ────────────────────────────────────────────────────────────────────────
 
-      // Allowlist check — respects type
+      // Allowlist check
       for (const rule of this._allowlist) {
         if (this._ruleMatchesType(rule.types, resourceType)) {
           if (rule.isDomain) {
@@ -230,13 +220,13 @@ export class FilterManager {
         }
       }
 
-      // Fast domain block check (these are type-unrestricted rules)
+      // Fast domain block check
       const parts = hostname.split(".");
       for (let i = 0; i < parts.length - 1; i++) {
         if (this._domainBlocks.has(parts.slice(i).join("."))) return true;
       }
 
-      // Substring check — now type-aware
+      // Substring check
       for (let i = 0; i < this._substringBlocks.length; i++) {
         const rule = this._substringBlocks[i];
         if (!this._ruleMatchesType(rule.types, resourceType)) continue;
@@ -253,10 +243,9 @@ export class FilterManager {
     }
   }
 
-  // Returns true if a rule with given types applies to the request's resourceType
   _ruleMatchesType(ruleTypes, resourceType) {
-    if (!ruleTypes) return true;           // no type restriction = applies to all
-    if (!resourceType) return true;        // unknown request type = apply rule
+    if (!ruleTypes) return true;
+    if (!resourceType) return true;
     return ruleTypes.has(resourceType);
   }
 

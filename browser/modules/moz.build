@@ -139,6 +139,7 @@ EXTRA_JS_MODULES += [
     "SharingUtils.sys.mjs",
     "SiteDataManager.sys.mjs",
     "SitePermissions.sys.mjs",
+    "TorWindow.sys.mjs",
     "TransientPrefs.sys.mjs",
     "UpdatePolicyEnforcer.sys.mjs",
     "URILoadingHelper.sys.mjs",

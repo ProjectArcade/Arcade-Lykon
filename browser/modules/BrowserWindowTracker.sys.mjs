@@ -23,6 +23,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/aiwindow/ui/modules/AIWindow.sys.mjs",
   HomePage: "resource:///modules/HomePage.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+  TorWindow: "resource:///modules/TorWindow.sys.mjs",
 });
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -305,6 +306,8 @@ export const BrowserWindowTracker = {
    *   True to make the window a private browsing window.
    * @param {boolean} [options.aiWindow]
    *   True to make the window an AI browsing window.
+   * @param {boolean} [options.tor]
+   *   True to make the window a TOR browsing window.
    * @param {string} [options.features]
    *   Additional window features to give the new window.
    * @param {boolean} [options.all]
@@ -325,6 +328,7 @@ export const BrowserWindowTracker = {
     let {
       openerWindow = undefined,
       private: isPrivate = false,
+      tor = false,
       features = undefined,
       all = true,
       args = null,
@@ -333,6 +337,7 @@ export const BrowserWindowTracker = {
     } = options;
 
     args = lazy.AIWindow.handleAIWindowOptions(options);
+    args = lazy.TorWindow.handleTorWindowOptions({ tor, args });
 
     let windowFeatures = "chrome,dialog=no";
     if (all) {
@@ -351,6 +356,9 @@ export const BrowserWindowTracker = {
       }
     } else {
       windowFeatures += ",non-private";
+    }
+    if (tor) {
+      windowFeatures += ",tor";
     }
     if (!args) {
       loadURIString ??= lazy.BrowserHandler.defaultArgs;
@@ -387,6 +395,22 @@ export const BrowserWindowTracker = {
       args
     );
     this.registerOpeningWindow(win, isPrivate);
+
+    // Initialize TOR window if needed
+    if (tor) {
+      win.addEventListener(
+        "load",
+        () => {
+          lazy.TorWindow.initializeTorWindow(win);
+        },
+        { once: true }
+      );
+
+      // Also cleanup on window unload
+      win.addEventListener("unload", () => {
+        lazy.TorWindow.cleanupTorWindow(win);
+      });
+    }
 
     win.addEventListener(
       "MozAfterPaint",

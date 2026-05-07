@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<!--
+  - This Source Code Form is subject to the terms of the Mozilla Public
+  - License, v. 2.0. If a copy of the MPL was not distributed with this
+  - file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-->
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8" />
+  <title>Connect to TOR Network</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #662d91 0%, #8c3aa6 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    .container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 20px;
+    }
+
+    .dialog-box {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .dialog-header {
+      background: linear-gradient(135deg, #662d91 0%, #8c3aa6 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .dialog-header h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .dialog-header p {
+      font-size: 14px;
+      opacity: 0.95;
+      margin: 0;
+    }
+
+    .dialog-content {
+      padding: 30px;
+    }
+
+    .status-section {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #662d91;
+    }
+
+    .status-label {
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #666;
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    .status-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .status-icon.disconnected {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .status-icon.connecting {
+      background: #fff3e0;
+      color: #e65100;
+      animation: spin 1s linear infinite;
+    }
+
+    .status-icon.connected {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .status-text {
+      font-size: 14px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .info-section {
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    .info-section strong {
+      display: block;
+      color: #333;
+      margin-top: 10px;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .info-section ul {
+      margin-left: 20px;
+      margin-top: 8px;
+    }
+
+    .info-section li {
+      margin-bottom: 5px;
+    }
+
+    .warning-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      padding: 12px;
+      border-radius: 6px;
+      color: #856404;
+      font-size: 12px;
+      margin-top: 15px;
+      line-height: 1.5;
+    }
+
+    .checkbox-section {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+    }
+
+    .checkbox-section label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #555;
+    }
+
+    .checkbox-section input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .progress-section {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .progress-section.show {
+      display: block;
+    }
+
+    .progress-label {
+      font-size: 13px;
+      margin-bottom: 10px;
+      color: #555;
+      font-weight: 500;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #662d91, #8c3aa6);
+      animation: progress 1.5s ease-in-out infinite;
+      width: 35%;
+    }
+
+    @keyframes progress {
+      0% { width: 0; }
+      50% { width: 100%; }
+      100% { width: 0; }
+    }
+
+    .dialog-footer {
+      padding: 20px 30px;
+      background: #fafafa;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      border-top: 1px solid #eee;
+    }
+
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-connect {
+      background: linear-gradient(135deg, #662d91 0%, #8c3aa6 100%);
+      color: white;
+    }
+
+    .btn-connect:hover {
+      background: linear-gradient(135deg, #5a2681 0%, #7a2f93 100%);
+      box-shadow: 0 4px 12px rgba(102, 45, 145, 0.3);
+    }
+
+    .btn-connect:active {
+      transform: scale(0.98);
+    }
+
+    .btn-cancel {
+      background: #e8e8e8;
+      color: #333;
+    }
+
+    .btn-cancel:hover {
+      background: #d8d8d8;
+    }
+
+    .btn-cancel:active {
+      transform: scale(0.98);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="dialog-box">
+      <div class="dialog-header">
+        <h1>TOR Connection</h1>
+        <p>Connect to the TOR network</p>
+      </div>
+
+      <div class="dialog-content">
+        <!-- Status Section -->
+        <div class="status-section">
+          <span class="status-label">Connection Status</span>
+          <div class="status-content">
+            <div class="status-icon disconnected" id="statusIcon">✗</div>
+            <span class="status-text" id="statusText">Not connected</span>
+          </div>
+        </div>
+
+        <!-- Information Section -->
+        <div class="info-section">
+          <strong>What is TOR?</strong>
+          <p>TOR is a network that allows you to browse the internet anonymously. Your connection is routed through multiple servers, masking your IP address and location.</p>
+
+          <strong>Benefits:</strong>
+          <ul>
+            <li>Browse anonymously and privately</li>
+            <li>Bypass geographic restrictions</li>
+            <li>Encrypted and secure communications</li>
+            <li>Extra layer of protection online</li>
+          </ul>
+
+          <div class="warning-box">
+            <strong>Important:</strong> TOR connection may be slower than regular browsing. While TOR masks your IP address, your browsing activity may still be logged by websites you visit. Use responsibly.
+          </div>
+        </div>
+
+        <!-- Remember Choice -->
+        <div class="checkbox-section">
+          <label>
+            <input type="checkbox" id="rememberChoice" />
+            Automatically connect in future TOR windows
+          </label>
+        </div>
+
+        <!-- Progress Indicator -->
+        <div class="progress-section" id="progressSection">
+          <div class="progress-label">Connecting to TOR network...</div>
+          <div class="progress-bar">
+            <div class="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-cancel" id="cancelBtn">Cancel</button>
+        <button class="btn-connect" id="connectBtn">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="torConnectionDialog.js"></script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#torConnectionDialog {
+  width: 500px;
+  min-height: 350px;
+}
+
+.torConnectionHeader {
+  background: linear-gradient(135deg, #662d91 0%, #8c3aa6 100%);
+  color: white;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+}
+
+.torConnectionTitle {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.torConnectionDescription {
+  font-size: 14px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.torConnectionStatus {
+  background: #f5f5f5;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 4px;
+  border-left: 4px solid #662d91;
+}
+
+.torConnectionStatusLabel {
+  font-weight: bold;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.torConnectionStatusIcon {
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.torConnectionStatusIcon.connected::before {
+  content: "✓";
+  color: #2ecc71;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.torConnectionStatusIcon.connecting::before {
+  content: "◔";
+  color: #f39c12;
+  font-size: 18px;
+  animation: spin 1s linear infinite;
+}
+
+.torConnectionStatusIcon.disconnected::before {
+  content: "✗";
+  color: #e74c3c;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.torConnectionStatusText {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.torConnectionInfo {
+  margin-bottom: 15px;
+  padding: 0 5px;
+}
+
+.torConnectionInfo description {
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: #555;
+  line-height: 1.4;
+}
+
+.torConnectionWarning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 10px;
+  border-radius: 4px;
+  color: #856404;
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.tor-dialog-options {
+  padding: 10px 5px;
+  border-top: 1px solid #ddd;
+}
+
+.tor-dialog-options checkbox {
+  font-size: 12px;
+}
+
+.tor-progress-section {
+  margin-top: 15px;
+  padding: 10px;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+.tor-progress-section label {
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: #555;
+}
+
+#torProgressMeter {
+  height: 20px;
+  border-radius: 4px;
+}
+
+dialog buttons {
+  min-width: 80px;
+}
+
+dialog button[dlgtype="accept"] {
+  background: linear-gradient(135deg, #662d91 0%, #8c3aa6 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+dialog button[dlgtype="accept"]:hover {
+  background: linear-gradient(135deg, #5a2681 0%, #7a2f93 100%);
+}
+
+dialog button[dlgtype="cancel"] {
+  background: #e8e8e8;
+  border: 1px solid #ccc;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+dialog button[dlgtype="cancel"]:hover {
+  background: #d8d8d8;
+}

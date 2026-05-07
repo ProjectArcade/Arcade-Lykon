@@ -1,813 +1,684 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+
 <head>
+    <base target="_blank">
+    </base>
     <meta charset="UTF-8">
+    </meta>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </meta>
     <title>New Tab</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    </link>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+    </link>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet">
+    </link>
     <script>
+        //<![CDATA[
+
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
                     },
                     colors: {
-                        surface: {
-                            50: 'rgba(255,255,255,0.03)',
-                            100: 'rgba(255,255,255,0.06)',
-                            200: 'rgba(255,255,255,0.09)',
-                            300: 'rgba(255,255,255,0.12)',
-                        },
-                        ink: {
-                            900: '#07080f',
-                            800: '#0c0e1a',
-                            700: '#111322',
-                        },
-                        accent: {
-                            DEFAULT: '#6366f1',
-                            soft: 'rgba(99,102,241,0.15)',
-                            glow: 'rgba(99,102,241,0.4)',
-                        },
+                        glass: 'rgba(255, 255, 255, 0.05)',
+                        glassHover: 'rgba(255, 255, 255, 0.08)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                        accent: '#8B5CF6',
+                        accentGlow: 'rgba(139, 92, 246, 0.3)',
                     },
                     animation: {
-                        'breathe': 'breathe 8s ease-in-out infinite',
-                        'float': 'float 6s ease-in-out infinite',
-                        'fade-up': 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'fade-in': 'fadeIn 0.6s ease-out',
+                        'slide-up': 'slideUp 0.5s ease-out',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     },
                     keyframes: {
-                        breathe: {
-                            '0%, 100%': { transform: 'scale(1)' },
-                            '50%': { transform: 'scale(1.05)' },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
                         },
-                        float: {
-                            '0%, 100%': { transform: 'translateY(0)' },
-                            '50%': { transform: 'translateY(-8px)' },
-                        },
-                        fadeUp: {
-                            '0%': { opacity: '0', transform: 'translateY(24px)' },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
                             '100%': { opacity: '1', transform: 'translateY(0)' },
                         },
                     },
                 },
             },
         }
+
+        //]]>
     </script>
     <style>
-        :root {
-            --glass-border: rgba(255,255,255,0.06);
-            --glass-bg: rgba(255,255,255,0.03);
-            --glass-highlight: rgba(255,255,255,0.08);
+        /*<![CDATA[*/
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-            background: #07080f;
-            color: #e2e8f0;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #0B0F19;
+            color: #FFFFFF;
             overflow-x: hidden;
             min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
         }
 
-        /* Ambient background layers */
-        .ambient-bg {
+        /* Background layers */
+        .bg-layer {
             position: fixed;
             inset: 0;
             z-index: 0;
             background-size: cover;
             background-position: center;
-            transition: opacity 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: opacity 1.2s ease-in-out;
         }
-        .ambient-bg.active { opacity: 1; }
-        .ambient-bg.inactive { opacity: 0; }
 
-        .ambient-overlay {
+        .bg-layer.active {
+            opacity: 1;
+        }
+
+        .bg-layer.inactive {
+            opacity: 0;
+        }
+
+        .bg-overlay {
             position: fixed;
             inset: 0;
             z-index: 1;
-            background: 
-                radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99,102,241,0.08) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 50% at 80% 80%, rgba(139,92,246,0.06) 0%, transparent 50%),
-                linear-gradient(180deg, rgba(7,8,15,0.2) 0%, rgba(7,8,15,0.4) 50%, rgba(7,8,15,0.85) 100%);
+            background: linear-gradient(to bottom,
+                    rgba(11, 15, 25, 0.4) 0%,
+                    rgba(11, 15, 25, 0.2) 50%,
+                    rgba(11, 15, 25, 0.6) 100%);
             pointer-events: none;
         }
 
-        .mesh-gradient {
-            position: fixed;
-            inset: 0;
-            z-index: 0;
-            opacity: 0.4;
-            background: 
-                radial-gradient(at 0% 0%, rgba(99,102,241,0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(236,72,153,0.1) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(99,102,241,0.1) 0px, transparent 50%),
-                radial-gradient(at 0% 100%, rgba(139,92,246,0.1) 0px, transparent 50%);
-            pointer-events: none;
-        }
-
-        /* Glass tokens */
-        .glass-surface {
-            background: var(--glass-bg);
-            backdrop-filter: blur(24px) saturate(1.6);
-            -webkit-backdrop-filter: blur(24px) saturate(1.6);
-            border: 1px solid var(--glass-border);
-            box-shadow: 
-                0 1px 2px rgba(0,0,0,0.1),
-                inset 0 1px 0 rgba(255,255,255,0.04);
-        }
-
-        .glass-elevated {
-            background: rgba(255,255,255,0.05);
-            backdrop-filter: blur(32px) saturate(1.8);
-            -webkit-backdrop-filter: blur(32px) saturate(1.8);
-            border: 1px solid rgba(255,255,255,0.08);
-            box-shadow: 
-                0 8px 32px rgba(0,0,0,0.3),
-                inset 0 1px 0 rgba(255,255,255,0.06);
+        /* Glassmorphism */
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px) saturate(1.8);
+            -webkit-backdrop-filter: blur(20px) saturate(1.8);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .glass-strong {
-            background: rgba(12,14,26,0.95);
-            backdrop-filter: blur(48px) saturate(2);
-            -webkit-backdrop-filter: blur(48px) saturate(2);
-            border: 1px solid rgba(255,255,255,0.06);
-            box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+            background: rgba(20, 24, 35, 0.7);
+            backdrop-filter: blur(30px) saturate(1.8);
+            -webkit-backdrop-filter: blur(30px) saturate(1.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Search */
-        .search-orbit {
-            background: rgba(17,19,34,0.8);
-            border: 1px solid rgba(255,255,255,0.06);
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        /* Search bar */
+        .search-container {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .search-orbit:focus-within {
-            border-color: rgba(99,102,241,0.3);
-            box-shadow: 
-                0 0 0 3px rgba(99,102,241,0.08),
-                0 8px 40px rgba(0,0,0,0.4);
-            transform: translateY(-1px);
+
+        .search-container:focus-within {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15),
+                0 0 24px rgba(255, 255, 255, 0.08),
+                0 4px 20px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.18);
         }
+
         .search-input {
             background: transparent;
             border: none;
             outline: none;
-            color: #f1f5f9;
+            color: white;
             width: 100%;
             font-size: 15px;
-            font-weight: 400;
-            letter-spacing: -0.01em;
-        }
-        .search-input::placeholder { color: rgba(148,163,184,0.5); }
-
-        /* Quick links - Orb style */
-        .orbit-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            position: relative;
-        }
-        .orbit-item:hover { transform: translateY(-4px); }
-        .orbit-item:hover .orbit-icon {
-            border-color: rgba(255,255,255,0.15);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
-        }
-        .orbit-icon {
-            width: 52px;
-            height: 52px;
-            border-radius: 16px;
-            display: grid;
-            place-items: center;
-            background: rgba(255,255,255,0.06);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.06);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04);
-            transition: all 0.3s ease;
-            overflow: hidden;
-        }
-        .orbit-icon img {
-            width: 24px;
-            height: 24px;
-            object-fit: contain;
-            opacity: 0.9;
-        }
-        .orbit-label {
-            font-size: 11px;
-            font-weight: 500;
-            color: rgba(226,232,240,0.7);
-            max-width: 68px;
-            text-align: center;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            letter-spacing: 0.01em;
+            outline: none;
+            box-shadow: none;
         }
 
-        /* Pills for recent */
-        .pill {
-            padding: 6px 14px;
+
+        .search-input:focus {
+            outline: none;
+            box-shadow: none;
+        }
+
+
+        .search-input::placeholder {
+            color: rgba(160, 167, 181, 0.8);
+        }
+
+        .search-engine-icon {
+            width: 20px;
+            height: 20px;
             border-radius: 999px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.05);
-            font-size: 12px;
-            color: rgba(226,232,240,0.65);
-            transition: all 0.2s ease;
-            cursor: pointer;
-        }
-        .pill:hover {
-            background: rgba(255,255,255,0.08);
-            border-color: rgba(255,255,255,0.1);
-            color: rgba(226,232,240,0.9);
+            object-fit: cover;
+            opacity: 0.95;
+            flex-shrink: 0;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
         }
 
-        /* Stats - Horizontal ribbon */
-        .stat-ribbon {
-            display: flex;
-            gap: 32px;
-            padding: 20px 28px;
-            border-radius: 20px;
-        }
-        .stat-unit {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        .stat-number {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 20px;
-            font-weight: 500;
-            letter-spacing: -0.02em;
-            line-height: 1.2;
-        }
-        .stat-caption {
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: rgba(148,163,184,0.5);
+        .icon-unified {
+            width: 20px;
+            height: 20px;
         }
 
-        /* Settings - Floating sheet */
-        .sheet-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(12px);
-            z-index: 40;
+        /* Stats cards */
+        .stat-card {
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Settings panel */
+        .settings-panel {
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .settings-panel.open {
+            transform: translateX(0);
+        }
+
+        .settings-overlay {
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s ease;
         }
-        .sheet-overlay.open { opacity: 1; pointer-events: auto; }
 
-        .sheet {
-            position: fixed;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            width: min(100%, 420px);
-            z-index: 50;
-            transform: translateX(100%);
-            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-            display: flex;
-            flex-direction: column;
-        }
-        .sheet.open { transform: translateX(0); }
-
-        .sheet-nav {
-            display: flex;
-            gap: 4px;
-            padding: 6px;
-            margin: 16px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-        .sheet-tab {
-            flex: 1;
-            padding: 8px;
-            border-radius: 10px;
-            border: none;
-            background: transparent;
-            color: rgba(148,163,184,0.6);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-        .sheet-tab:hover { color: rgba(226,232,240,0.8); }
-        .sheet-tab.active {
-            background: rgba(255,255,255,0.07);
-            color: #f1f5f9;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        .settings-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
         }
 
-        .sheet-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0 24px 24px;
-        }
-        .sheet-body::-webkit-scrollbar { width: 5px; }
-        .sheet-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
-
-        /* Settings controls */
-        .control-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-        }
-        .control-row:last-child { border-bottom: none; }
-        .control-title {
-            font-size: 14px;
-            font-weight: 500;
-            color: rgba(241,245,249,0.9);
-            margin-bottom: 2px;
-        }
-        .control-desc {
-            font-size: 12px;
-            color: rgba(148,163,184,0.5);
-            line-height: 1.4;
-        }
-
-        /* Modern toggle */
-        .toggle-modern {
+        /* Toggle switch */
+        .toggle {
             appearance: none;
             width: 44px;
             height: 24px;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.15);
             border-radius: 12px;
             position: relative;
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-            flex-shrink: 0;
+            transition: background 0.2s ease;
         }
-        .toggle-modern::after {
+
+        .toggle::after {
             content: '';
             position: absolute;
             top: 2px;
             left: 2px;
             width: 20px;
             height: 20px;
-            background: rgba(255,255,255,0.9);
+            background: white;
             border-radius: 50%;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            transition: transform 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         }
-        .toggle-modern:checked {
-            background: #6366f1;
+
+        .toggle:checked {
+            background: #8B5CF6;
         }
-        .toggle-modern:checked::after {
+
+        .toggle:checked::after {
             transform: translateX(20px);
-            background: white;
         }
 
-        /* Engine list */
-        .engine-option {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            border: 1.5px solid transparent;
-        }
-        .engine-option:hover { background: rgba(255,255,255,0.03); }
-        .engine-option.selected {
-            background: rgba(99,102,241,0.08);
-            border-color: rgba(99,102,241,0.25);
-        }
-        .engine-option img {
-            width: 20px;
-            height: 20px;
-            object-fit: contain;
-            opacity: 0.9;
-        }
-        .engine-option span {
-            flex: 1;
-            font-size: 13px;
-            font-weight: 500;
-            color: rgba(226,232,240,0.85);
-        }
-        .radio {
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(255,255,255,0.2);
-            border-radius: 50%;
-            position: relative;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-        .engine-option.selected .radio {
-            border-color: #6366f1;
-            background: #6366f1;
-        }
-        .radio::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0);
-            width: 6px;
-            height: 6px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .engine-option.selected .radio::after {
-            transform: translate(-50%, -50%) scale(1);
-        }
-
-        /* Wallpaper grid */
-        .wall-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            margin-top: 12px;
-        }
-        .wall-thumb {
-            aspect-ratio: 16/10;
+        /* Custom select */
+        .custom-select {
+            appearance: none;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 10px;
-            overflow: hidden;
+            padding: 10px 14px;
+            color: white;
+            font-size: 14px;
             cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.2s ease;
-            position: relative;
-            background: rgba(255,255,255,0.04);
-        }
-        .wall-thumb:hover { transform: scale(1.03); }
-        .wall-thumb.active { border-color: #6366f1; }
-        .wall-thumb img {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .wall-thumb .wall-check {
-            position: absolute;
-            top: 6px;
-            right: 6px;
-            width: 18px;
-            height: 18px;
-            background: #6366f1;
-            border-radius: 50%;
-            display: grid;
-            place-items: center;
-            opacity: 0;
-            transform: scale(0.5);
-            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .wall-thumb.active .wall-check { opacity: 1; transform: scale(1); }
-
-        .upload-zone {
-            aspect-ratio: 16/10;
-            border-radius: 10px;
-            border: 2px dashed rgba(255,255,255,0.1);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            color: rgba(148,163,184,0.5);
-            cursor: pointer;
             transition: all 0.2s ease;
-            grid-column: span 2;
-        }
-        .upload-zone:hover {
-            border-color: rgba(99,102,241,0.4);
-            background: rgba(99,102,241,0.04);
-            color: rgba(226,232,240,0.7);
         }
 
-        /* Section header */
-        .section-head {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: rgba(148,163,184,0.4);
-            margin: 24px 0 12px;
+        .custom-select:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
         }
 
-        .hidden { display: none !important; }
+        .custom-select:focus {
+            outline: none;
+            border-color: rgba(139, 92, 246, 0.5);
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+        }
+
+        .custom-select option {
+            background: #1a1f2e;
+            color: white;
+        }
+
+        /* Sparkline */
+        .sparkline {
+            width: 100%;
+            height: 40px;
+        }
+
+        /* Scrollbar for settings */
+        .settings-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .settings-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .settings-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .settings-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Wolf logo animation */
+        @keyframes wolfGlow {
+
+            0%,
+            100% {
+                filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.2));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 30px rgba(139, 92, 246, 0.35));
+            }
+        }
+
+        .wolf-logo {
+            animation: wolfGlow 4s ease-in-out infinite;
+        }
+
+        /* Number counter animation */
+        @keyframes countUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .stat-number {
+            animation: countUp 0.6s ease-out forwards;
+        }
+
+        /* Attribution */
+        .attribution {
+            transition: opacity 0.3s ease;
+        }
+
+
+        /*]]>*/
     </style>
-<base target="_blank">
+    <base target="_blank" />
 </head>
-<body>
 
-    <!-- Ambient Background -->
-    <div id="bg-1" class="ambient-bg active"></div>
-    <div id="bg-2" class="ambient-bg inactive"></div>
-    <div class="mesh-gradient"></div>
-    <div class="ambient-overlay"></div>
+<body class="antialiased">
+    <!-- Background Layers -->
+    <div id="bg-layer-1" class="bg-layer active"></div>
+    <div id="bg-layer-2" class="bg-layer inactive"></div>
+    <div class="bg-overlay"></div>
 
     <!-- Main Content -->
     <div class="relative z-10 min-h-screen flex flex-col">
 
-        <!-- Header -->
-        <header class="flex justify-between items-start p-6 md:p-10">
-            <div id="clock-wrap" class="animate-fade-up">
-                <div class="flex items-baseline gap-2">
-                    <span id="clock-time" class="text-5xl md:text-6xl font-extralight tracking-tight text-slate-100 font-mono">--:--</span>
-                    <span id="clock-ampm" class="text-sm font-medium text-slate-500 tracking-wide">--</span>
-                </div>
-                <div id="clock-date" class="text-sm text-slate-500 mt-1 font-medium tracking-wide">Loading...</div>
+        <!-- Top Bar -->
+        <div class="flex justify-between items-start p-6 md:p-8">
+            <!-- Clock -->
+            <div id="clock-container" class="animate-fade-in">
+                <div id="clock-time" class="text-4xl md:text-5xl font-light tracking-tight text-white/90">--:--</div>
+                <div id="clock-date" class="text-sm md:text-base text-white/50 mt-1 font-light">Loading...</div>
             </div>
-            
-            <button id="btn-settings" class="p-3 rounded-2xl glass-surface hover:bg-white/[0.06] transition-all duration-300 group" aria-label="Settings">
-                <i data-lucide="sliders-horizontal" class="w-5 h-5 text-slate-400 group-hover:text-slate-200 transition-colors"></i>
+
+            <!-- Settings Button -->
+            <button id="settings-btn" class="p-3 rounded-2xl glass hover:bg-white/10 transition-all duration-200 group"
+                aria-label="Settings">
+                <i data-lucide="settings"
+                    class="icon-unified text-white/70 group-hover:text-white group-hover:rotate-90 transition-all duration-300"></i>
             </button>
-        </header>
+        </div>
 
-        <!-- Center Stage -->
-        <main class="flex-1 flex flex-col items-center px-4 pt-8 md:pt-16">
+        <!-- Center Content -->
+        <div class="flex-1 flex flex-col items-center justify-center px-4 -mt-20">
 
-            <!-- Orbital Links -->
-            <div id="orbital-links" class="flex flex-wrap justify-center gap-x-5 gap-y-5 max-w-3xl animate-fade-up" style="animation-delay: 0.08s"></div>
-
-            <!-- Search -->
-            <div class="w-full max-w-xl mt-10 animate-fade-up" style="animation-delay: 0.14s">
-                <div class="search-orbit rounded-2xl px-5 py-3.5 flex items-center gap-4">
-                    <img id="search-icon" class="w-5 h-5 object-contain opacity-70" src="" alt="">
-                    <input type="text" id="search-input" class="search-input" placeholder="Search the web..." autocomplete="off">
-                    <kbd class="hidden md:inline-flex items-center px-2 py-0.5 rounded-md bg-white/5 border border-white/[0.06] text-[10px] font-mono text-slate-500">/</kbd>
-                </div>
+            <!-- Wolf Logo -->
+            <div class="mb-6 animate-slide-up" style="animation-delay: 0.1s">
+                <img src="chrome://branding/content/about-logo@2x.png" class="w-16 h-16 md:w-20 md:h-20" />
             </div>
 
-            <!-- Recent Pills -->
-            <div id="recent-wrap" class="mt-5 animate-fade-up hidden" style="animation-delay: 0.2s">
-                <div id="recent-pills" class="flex flex-wrap justify-center gap-2 max-w-xl"></div>
-            </div>
-        </main>
+            <!-- Headline -->
+            <h1 class="text-2xl md:text-3xl font-semibold text-white text-center mb-2 animate-slide-up"
+                style="animation-delay: 0.15s">
+                Welcome to Lykon
+            </h1>
+            <p class="text-sm md:text-base text-white/50 text-center mb-8 animate-slide-up"
+                style="animation-delay: 0.2s">
+                Your professional, privacy-first browser
+            </p>
 
-        <!-- Bottom Ribbon -->
-        <footer class="px-4 pb-6 mt-auto">
-            <div id="stats-wrap" class="max-w-lg mx-auto glass-surface rounded-2xl stat-ribbon animate-fade-up" style="animation-delay: 0.28s">
-                <div class="stat-unit">
-                    <div class="stat-number text-indigo-400" data-target="53538" data-suffix="">0</div>
-                    <div class="stat-caption">Trackers blocked</div>
-                </div>
-                <div class="w-px bg-white/[0.06]"></div>
-                <div class="stat-unit">
-                    <div class="stat-number text-violet-400" data-target="843" data-suffix=" MB">0</div>
-                    <div class="stat-caption">Bandwidth saved</div>
-                </div>
-                <div class="w-px bg-white/[0.06]"></div>
-                <div class="stat-unit">
-                    <div class="stat-number text-slate-200" data-target="45" data-suffix=" min">0</div>
-                    <div class="stat-caption">Time saved</div>
+            <!-- Search Bar -->
+            <div class="w-full max-w-xl animate-slide-up" style="animation-delay: 0.25s">
+                <div class="search-container glass rounded-full px-5 py-3.5 flex items-center gap-3">
+
+                    <img id="search-engine-icon" class="search-engine-icon" src="https://duckduckgo.com/favicon.ico"
+                        alt="Selected search engine" />
+
+                    <input type="text" id="search-input" class="search-input" placeholder="Search the web privately..."
+                        autocomplete="off" focusable="false" outline="none"></input>
+
+                    <button id="search-btn"
+                        class="p-1.5 rounded-full hover:bg-white/10 transition-colors flex-shrink-0">
+                        <i data-lucide="search" class="icon-unified text-white/60"></i>
+                    </button>
                 </div>
             </div>
-            <div class="text-center mt-4 text-[11px] text-slate-600 font-medium tracking-wide">Nova Tab — Built for focus</div>
-        </footer>
+        </div>
+
+        <!-- Privacy Stats -->
+        <div id="stats-container" class="px-4 pb-8 md:pb-12 animate-slide-up" style="animation-delay: 0.3s">
+            <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                <!-- Trackers Blocked -->
+                <div class="stat-card glass rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="p-1.5 rounded-lg bg-purple-500/10">
+                            <i data-lucide="shield" class="icon-unified text-purple-400"></i>
+                        </div>
+                    </div>
+                    <div class="stat-number text-2xl md:text-3xl font-semibold text-white mb-1" data-target="52990"
+                        data-suffix="">
+                        0
+                    </div>
+                    <div class="text-xs text-white/50 mb-3">Trackers &amp; ads blocked</div>
+                    <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+                        <path d="M0,35 Q10,30 20,32 T40,25 T60,28 T80,18 T100,15" fill="none"
+                            stroke="rgba(139, 92, 246, 0.4)" stroke-width="1.5" />
+                        <path d="M0,35 Q10,30 20,32 T40,25 T60,28 T80,18 T100,15 L100,40 L0,40Z"
+                            fill="url(#sparkGradient1)" opacity="0.2" />
+                        <defs>
+                            <linearGradient id="sparkGradient1" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#8B5CF6" />
+                                <stop offset="100%" stop-color="transparent" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+
+                <!-- Bandwidth Saved -->
+                <div class="stat-card glass rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="p-1.5 rounded-lg bg-blue-500/10">
+                            <i data-lucide="download" class="icon-unified text-blue-400"></i>
+                        </div>
+                    </div>
+                    <div class="stat-number text-2xl md:text-3xl font-semibold text-white mb-1" data-target="814.2"
+                        data-suffix=" MB" data-decimals="1">
+                        0
+                    </div>
+                    <div class="text-xs text-white/50 mb-3">Bandwidth saved</div>
+                    <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+                        <path d="M0,30 Q15,28 30,20 T50,22 T70,12 T100,8" fill="none" stroke="rgba(59, 130, 246, 0.4)"
+                            stroke-width="1.5" />
+                        <path d="M0,30 Q15,28 30,20 T50,22 T70,12 T100,8 L100,40 L0,40Z" fill="url(#sparkGradient2)"
+                            opacity="0.2" />
+                        <defs>
+                            <linearGradient id="sparkGradient2" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#3B82F6" />
+                                <stop offset="100%" stop-color="transparent" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+
+                <!-- Time Saved -->
+                <div class="stat-card glass rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="p-1.5 rounded-lg bg-emerald-500/10">
+                            <i data-lucide="clock" class="icon-unified text-emerald-400"></i>
+                        </div>
+                    </div>
+                    <div class="stat-number text-2xl md:text-3xl font-semibold text-white mb-1" data-target="45"
+                        data-suffix=" min">
+                        0
+                    </div>
+                    <div class="text-xs text-white/50 mb-3">Time saved</div>
+                    <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none">
+                        <path d="M0,25 Q20,22 40,18 T60,20 T80,10 T100,12" fill="none" stroke="rgba(16, 185, 129, 0.4)"
+                            stroke-width="1.5" />
+                        <path d="M0,25 Q20,22 40,18 T60,20 T80,10 T100,12 L100,40 L0,40Z" fill="url(#sparkGradient3)"
+                            opacity="0.2" />
+                        <defs>
+                            <linearGradient id="sparkGradient3" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#10B981" />
+                                <stop offset="100%" stop-color="transparent" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center pb-4 text-xs text-white/30 animate-fade-in" style="animation-delay: 0.5s">
+            Built for privacy. Designed for you.
+        </div>
+
+        <!-- Wallpaper Attribution -->
+        <div id="attribution" class="attribution fixed bottom-4 left-4 text-[10px] text-white/30 z-10">
+            Photo by <span id="attribution-author">Unsplash</span>
+        </div>
     </div>
 
-    <!-- Settings Sheet -->
-    <div id="sheet-overlay" class="sheet-overlay"></div>
-    <div id="sheet" class="sheet glass-strong">
-        <div class="flex items-center justify-between px-6 pt-6 pb-2">
-            <h2 class="text-base font-semibold text-slate-100">Settings</h2>
-            <button id="btn-close" class="p-2 rounded-xl hover:bg-white/5 transition-colors">
-                <i data-lucide="x" class="w-4 h-4 text-slate-500"></i>
+    <!-- Settings Overlay -->
+    <div id="settings-overlay" class="settings-overlay fixed inset-0 bg-black/40 backdrop-blur-sm z-40"></div>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel"
+        class="settings-panel fixed right-0 top-0 h-full w-full max-w-sm glass-strong z-50 flex flex-col">
+        <div class="flex items-center justify-between p-6 border-b border-white/5">
+            <h2 class="text-lg font-semibold text-white">Settings</h2>
+            <button id="close-settings" class="p-2 rounded-xl hover:bg-white/10 transition-colors">
+                <i data-lucide="x" class="icon-unified text-white/70"></i>
             </button>
         </div>
 
-        <div class="sheet-nav">
-            <button class="sheet-tab active" data-tab="appearance">
-                <i data-lucide="image" class="w-4 h-4"></i>
-                <span>Look</span>
-            </button>
-            <button class="sheet-tab" data-tab="search">
-                <i data-lucide="search" class="w-4 h-4"></i>
-                <span>Search</span>
-            </button>
-            <button class="sheet-tab" data-tab="content">
-                <i data-lucide="layout" class="w-4 h-4"></i>
-                <span>Content</span>
-            </button>
-        </div>
+        <div class="settings-content flex-1 overflow-y-auto p-6 space-y-8">
 
-        <div class="sheet-body">
-            <!-- Appearance -->
-            <div id="tab-appearance" class="tab-content">
-                <div class="control-row">
+            <!-- Background Section -->
+            <div class="space-y-4">
+                <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider">Background</h3>
+
+                <div class="text-xs text-white/40">Random wallpapers are enabled automatically.</div>
+
+                <!-- Auto Change -->
+                <div class="flex items-center justify-between">
                     <div>
-                        <div class="control-title">Auto-cycle wallpapers</div>
-                        <div class="control-desc">Rotate background every 5 minutes</div>
+                        <div class="text-sm text-white/70">Auto-change wallpaper</div>
+                        <div class="text-xs text-white/40">Cycle through wallpapers automatically</div>
                     </div>
-                    <input type="checkbox" id="tog-auto" class="toggle-modern" checked>
-                </div>
-                
-                <div class="control-row">
-                    <div>
-                        <div class="control-title">Show photo credit</div>
-                        <div class="control-desc">Display photographer attribution</div>
-                    </div>
-                    <input type="checkbox" id="tog-credit" class="toggle-modern" checked>
+                    <input type="checkbox" id="auto-change-toggle" class="toggle"></input>
                 </div>
 
-                <div class="section-head">Wallpapers</div>
-                <div class="wall-grid" id="wall-grid"></div>
-                
-                <div class="upload-zone mt-3" id="upload-zone">
-                    <i data-lucide="upload-cloud" class="w-5 h-5"></i>
-                    <span class="text-xs font-medium">Upload custom</span>
-                </div>
-                <input type="file" id="file-input" accept="image/*" hidden>
-            </div>
-
-            <!-- Search -->
-            <div id="tab-search" class="tab-content hidden">
-                <div class="section-head">Search Engine</div>
-                <div id="engine-list" class="space-y-1"></div>
-                
-                <div class="section-head">Shortcuts</div>
-                <div class="control-row">
-                    <div>
-                        <div class="control-title">Focus search on "/"</div>
-                        <div class="control-desc">Press slash to jump to search bar</div>
-                    </div>
-                    <input type="checkbox" id="tog-shortcut" class="toggle-modern" checked>
+                <!-- Change Interval -->
+                <div class="space-y-2" id="interval-container" style="opacity: 0.4; pointer-events: none;">
+                    <label class="text-sm text-white/70">Change interval</label>
+                    <select id="interval-select" class="custom-select">
+                        <option value="60000">1 minute</option>
+                        <option value="300000" selected="selected">5 minutes</option>
+                        <option value="3600000">1 hour</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- Content -->
-            <div id="tab-content" class="tab-content hidden">
-                <div class="control-row">
-                    <div>
-                        <div class="control-title">Show clock</div>
-                        <div class="control-desc">Time and date in header</div>
-                    </div>
-                    <input type="checkbox" id="tog-clock" class="toggle-modern" checked>
+            <!-- Search Engine Section -->
+            <div class="space-y-4">
+                <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider">Search Engine</h3>
+                <div class="space-y-2">
+                    <label class="text-sm text-white/70">Default search engine</label>
+                    <select id="search-engine-select" class="custom-select">
+                        <option value="google">Google</option>
+                        <option value="duckduckgo" selected="selected">DuckDuckGo</option>
+                        <option value="brave">Brave</option>
+                        <option value="bing">Bing</option>
+                    </select>
                 </div>
-                <div class="control-row">
-                    <div>
-                        <div class="control-title">Show stats</div>
-                        <div class="control-desc">Privacy metrics ribbon</div>
-                    </div>
-                    <input type="checkbox" id="tog-stats" class="toggle-modern" checked>
-                </div>
-                <div class="control-row">
-                    <div>
-                        <div class="control-title">Show recent sites</div>
-                        <div class="control-desc">Quick access pills below search</div>
-                    </div>
-                    <input type="checkbox" id="tog-recent" class="toggle-modern">
-                </div>
-                <div class="control-row">
-                    <div>
-                        <div class="control-title">Show top sites</div>
-                        <div class="control-desc">Orbital shortcut icons</div>
-                    </div>
-                    <input type="checkbox" id="tog-topsites" class="toggle-modern" checked>
+            </div>
+
+            <!-- Layout Section -->
+            <div class="space-y-4">
+                <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider">Layout</h3>
+
+                <div class="flex items-center justify-between">
+                    <div class="text-sm text-white/70">Show Privacy Stats</div>
+                    <input type="checkbox" id="show-stats-toggle" class="toggle" checked="checked"></input>
                 </div>
 
-                <div class="section-head">Data</div>
-                <button id="btn-reset" class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/8 border border-white/[0.06] text-xs font-medium text-slate-400 hover:text-slate-200 transition-all">
-                    Reset all settings
+                <div class="flex items-center justify-between">
+                    <div class="text-sm text-white/70">Show Clock</div>
+                    <input type="checkbox" id="show-clock-toggle" class="toggle" checked="checked"></input>
+                </div>
+            </div>
+
+            <!-- Extra Section -->
+            <div class="space-y-4">
+                <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider">Extra</h3>
+
+                <div class="text-sm text-white/60">Wallpaper credit is always shown.</div>
+
+                <button id="reset-defaults"
+                    class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-white/70 hover:text-white transition-all duration-200">
+                    Reset to defaults
                 </button>
             </div>
         </div>
     </div>
 
     <script>
+        //<![CDATA[
+
         // ============================================
-        // CONFIGURATION
+        // STATE & CONFIG
         // ============================================
-        const CONFIG = {
-            wallpapers: [
-                'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80',
+        const DEFAULTS = {
+            searchEngine: 'duckduckgo',
+            autoChange: true,
+            changeInterval: 300000,
+            showStats: true,
+            showClock: true,
+        };
+
+        const SEARCH_ENGINES = {
+            google: 'https://www.google.com/search?q=',
+            duckduckgo: 'https://duckduckgo.com/?q=',
+            brave: 'https://search.brave.com/search?q=',
+            bing: 'https://www.bing.com/search?q=',
+        };
+
+        const SEARCH_ENGINE_ICONS = {
+            google: 'https://www.google.com/favicon.ico',
+            duckduckgo: 'https://duckduckgo.com/favicon.ico',
+            brave: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/brave.svg',
+            bing: 'https://www.bing.com/favicon.ico',
+        };
+
+        const WALLPAPERS = {
+            space: [
+                'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80',
+                'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1920&q=80',
+                'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&q=80',
+                'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80',
+                'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=1920&q=80',
+            ],
+            nature: [
                 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
+                'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1920&q=80',
+                'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80',
                 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80',
                 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1920&q=80',
-                'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=1920&q=80',
-                'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80',
-                'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&q=80',
-                'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=80',
             ],
-            engines: {
-                google: { name: 'Google', url: 'https://www.google.com/search?q=', icon: 'https://www.google.com/favicon.ico' },
-                duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=', icon: 'https://duckduckgo.com/favicon.ico' },
-                brave: { name: 'Brave', url: 'https://search.brave.com/search?q=', icon: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/brave.svg' },
-                bing: { name: 'Bing', url: 'https://www.bing.com/search?q=', icon: 'https://www.bing.com/favicon.ico' },
-                qwant: { name: 'Qwant', url: 'https://www.qwant.com/?q=', icon: 'https://www.qwant.com/favicon.ico' },
-                ecosia: { name: 'Ecosia', url: 'https://www.ecosia.org/search?q=', icon: 'https://www.ecosia.org/favicon.ico' },
-            },
-            links: [
-                { label: 'GitHub', url: 'https://github.com', icon: 'https://github.com/favicon.ico' },
-                { label: 'ChatGPT', url: 'https://chatgpt.com', icon: 'https://chatgpt.com/favicon.ico' },
-                { label: 'Spotify', url: 'https://open.spotify.com', icon: 'https://open.spotify.com/favicon.ico' },
-                { label: 'YouTube', url: 'https://youtube.com', icon: 'https://www.youtube.com/favicon.ico' },
-                { label: 'Gmail', url: 'https://mail.google.com', icon: 'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico' },
-                { label: 'Vercel', url: 'https://vercel.com', icon: 'https://assets.vercel.com/image/upload/front/favicon/vercel/favicon.ico' },
-                { label: 'Notion', url: 'https://notion.so', icon: 'https://www.notion.so/images/favicon.ico' },
-                { label: 'Figma', url: 'https://figma.com', icon: 'https://static.figma.com/app/icon/1/favicon.png' },
-            ]
+            minimal: [
+                'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=1920&q=80',
+                'https://images.unsplash.com/photo-1507608616759-54f48f0af0ee?w=1920&q=80',
+                'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&q=80',
+                'https://images.unsplash.com/photo-1487147264018-f937fba0c817?w=1920&q=80',
+                'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?w=1920&q=80',
+            ],
         };
 
-        const DEFAULT_STATE = {
-            engine: 'google',
-            autoCycle: true,
-            showClock: true,
-            showStats: true,
-            showRecent: false,
-            showTopSites: true,
-            showCredit: true,
-            shortcutFocus: true,
-        };
+        let state = { ...DEFAULTS };
+        let currentWallpaperIndex = 0;
+        let wallpaperInterval = null;
+        let activeBgLayer = 1;
+
+        function isValidSearchEngine(engine) {
+            return Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine);
+        }
+
+        function pickRandomWallpaperIndex(excludeIndex = -1) {
+            const wallpapers = getAllWallpapers();
+            if (!wallpapers.length) return -1;
+            if (wallpapers.length === 1) return 0;
+
+            let nextIndex = Math.floor(Math.random() * wallpapers.length);
+            while (nextIndex === excludeIndex) {
+                nextIndex = Math.floor(Math.random() * wallpapers.length);
+            }
+            return nextIndex;
+        }
 
         // ============================================
-        // STATE
+        // LOCAL STORAGE
         // ============================================
-        let state = { ...DEFAULT_STATE };
-        let customWalls = [];
-        let currentWall = '';
-        let activeLayer = 1;
-        let intervalId = null;
-        let recentSites = [];
-
-        function load() {
+        function loadState() {
             try {
-                const s = localStorage.getItem('nova_state');
-                if (s) state = { ...DEFAULT_STATE, ...JSON.parse(s) };
-                const cw = localStorage.getItem('nova_walls');
-                if (cw) customWalls = JSON.parse(cw).filter(w => w && w.dataUrl);
-                const cwUrl = localStorage.getItem('nova_current');
-                if (cwUrl) currentWall = cwUrl;
-                const rs = localStorage.getItem('nova_recent');
-                if (rs) recentSites = JSON.parse(rs).slice(0, 30);
-            } catch(e) {}
+                const saved = localStorage.getItem('lykonHomepageState');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state = { ...DEFAULTS, ...parsed };
+                }
+
+                const savedEngine = localStorage.getItem('lykonSearchEngine');
+                if (savedEngine && isValidSearchEngine(savedEngine)) {
+                    state.searchEngine = savedEngine;
+                } else if (localStorage.getItem('wolfSearchEngine') && isValidSearchEngine(localStorage.getItem('wolfSearchEngine'))) {
+                    // Migrate from old storage key
+                    state.searchEngine = localStorage.getItem('wolfSearchEngine');
+                }
+
+                if (!isValidSearchEngine(state.searchEngine)) {
+                    state.searchEngine = DEFAULTS.searchEngine;
+                }
+            } catch (e) {
+                console.warn('Failed to load state:', e);
+            }
         }
 
-        function save() {
+        function saveState() {
             try {
-                localStorage.setItem('nova_state', JSON.stringify(state));
-                localStorage.setItem('nova_walls', JSON.stringify(customWalls));
-                localStorage.setItem('nova_current', currentWall);
-                localStorage.setItem('nova_recent', JSON.stringify(recentSites));
-            } catch(e) {}
-        }
-
-        // ============================================
-        // WALLPAPER ENGINE
-        // ============================================
-        function allWalls() { return [...CONFIG.wallpapers, ...customWalls.map(w => w.dataUrl)]; }
-
-        function setWallpaper(url) {
-            if (!url) return;
-            currentWall = url;
-            const l1 = document.getElementById('bg-1');
-            const l2 = document.getElementById('bg-2');
-            const active = activeLayer === 1 ? l1 : l2;
-            const inactive = activeLayer === 1 ? l2 : l1;
-
-            const img = new Image();
-            img.onload = () => {
-                inactive.style.backgroundImage = `url(${url})`;
-                inactive.classList.remove('inactive');
-                inactive.classList.add('active');
-                active.classList.remove('active');
-                active.classList.add('inactive');
-                activeLayer = activeLayer === 1 ? 2 : 1;
-                save();
-                renderWallGrid();
-            };
-            img.src = url;
-        }
-
-        function cycle() {
-            const all = allWalls();
-            if (all.length < 2) return;
-            let next = Math.floor(Math.random() * all.length);
-            while (all[next] === currentWall) next = Math.floor(Math.random() * all.length);
-            setWallpaper(all[next]);
-        }
-
-        function startCycle() {
-            if (intervalId) clearInterval(intervalId);
-            if (state.autoCycle) intervalId = setInterval(cycle, 300000);
-        }
-
-        function initWallpaper() {
-            const all = allWalls();
-            if (!all.length) return;
-            if (!currentWall || !all.includes(currentWall)) currentWall = all[0];
-            document.getElementById('bg-1').style.backgroundImage = `url(${currentWall})`;
-            startCycle();
+                localStorage.setItem('lykonHomepageState', JSON.stringify(state));
+                localStorage.setItem('lykonSearchEngine', state.searchEngine);
+                localStorage.setItem('lykonLastWallpaperIndex', String(currentWallpaperIndex));
+            } catch (e) {
+                console.warn('Failed to save state:', e);
+            }
         }
 
         // ============================================
@@ -815,262 +686,273 @@
         // ============================================
         function updateClock() {
             const now = new Date();
-            const h = now.getHours();
-            const m = now.getMinutes().toString().padStart(2, '0');
-            document.getElementById('clock-time').textContent = `${h % 12 || 12}:${m}`;
-            document.getElementById('clock-ampm').textContent = h >= 12 ? 'PM' : 'AM';
-            document.getElementById('clock-date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+            const hours = now.getHours();
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const displayHours = hours % 12 || 12;
+
+            document.getElementById('clock-time').textContent = `${displayHours}:${minutes}`;
+
+            const options = { weekday: 'long', month: 'short', day: 'numeric' };
+            const dateStr = now.toLocaleDateString('en-US', options);
+            document.getElementById('clock-date').textContent = dateStr;
         }
 
         // ============================================
-        // ORBITAL LINKS
+        // WALLPAPER SYSTEM
         // ============================================
-        function renderLinks() {
-            const container = document.getElementById('orbital-links');
-            if (!container) return;
-            container.innerHTML = '';
-            if (!state.showTopSites) { container.classList.add('hidden'); return; }
-            container.classList.remove('hidden');
+        function getAllWallpapers() {
+            return Object.values(WALLPAPERS).flat();
+        }
 
-            const items = (state.showRecent && recentSites.length)
-                ? recentSites.slice(0, 8).map(r => ({ label: r.title, url: r.url, recent: true }))
-                : CONFIG.links;
+        function setWallpaper(url) {
+            const layer1 = document.getElementById('bg-layer-1');
+            const layer2 = document.getElementById('bg-layer-2');
 
-            items.forEach((item, i) => {
-                const a = document.createElement('a');
-                a.className = 'orbit-item animate-fade-up';
-                a.style.animationDelay = `${0.05 * i}s`;
-                a.href = item.url;
-                a.target = '_blank';
-                a.rel = 'noopener noreferrer';
+            const activeLayer = activeBgLayer === 1 ? layer1 : layer2;
+            const inactiveLayer = activeBgLayer === 1 ? layer2 : layer1;
 
-                const icon = document.createElement('div');
-                icon.className = 'orbit-icon';
-                if (item.recent) {
-                    icon.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`;
-                } else {
-                    const img = document.createElement('img');
-                    img.src = item.icon;
-                    img.onerror = () => { icon.innerHTML = `<span class="text-sm font-bold text-slate-300">${item.label[0]}</span>`; };
-                    icon.appendChild(img);
+            // Preload image
+            const img = new Image();
+            img.onload = () => {
+                inactiveLayer.style.backgroundImage = `url(${url})`;
+                inactiveLayer.classList.remove('inactive');
+                inactiveLayer.classList.add('active');
+
+                activeLayer.classList.remove('active');
+                activeLayer.classList.add('inactive');
+
+                activeBgLayer = activeBgLayer === 1 ? 2 : 1;
+            };
+            img.src = url;
+        }
+
+        function cycleWallpaper() {
+            const wallpapers = getAllWallpapers();
+            if (!wallpapers.length) return;
+
+            const nextIndex = pickRandomWallpaperIndex(currentWallpaperIndex);
+            if (nextIndex < 0) return;
+            currentWallpaperIndex = nextIndex;
+            setWallpaper(wallpapers[currentWallpaperIndex]);
+            saveState();
+        }
+
+        function startAutoChange() {
+            if (wallpaperInterval) clearInterval(wallpaperInterval);
+            if (state.autoChange) {
+                wallpaperInterval = setInterval(cycleWallpaper, state.changeInterval);
+            }
+        }
+
+        function initWallpaper() {
+            const wallpapers = getAllWallpapers();
+            if (!wallpapers.length) return;
+
+            let lastIndex = -1;
+            try {
+                const raw = localStorage.getItem('lykonLastWallpaperIndex');
+                if (raw !== null) {
+                    const parsed = parseInt(raw, 10);
+                    if (!Number.isNaN(parsed)) {
+                        lastIndex = parsed;
+                    }
                 }
+            } catch (e) {}
 
-                const label = document.createElement('div');
-                label.className = 'orbit-label';
-                label.textContent = item.label;
-
-                a.appendChild(icon);
-                a.appendChild(label);
-                a.addEventListener('click', () => addRecent(item.url, item.label));
-                container.appendChild(a);
-            });
-        }
-
-        // ============================================
-        // RECENT
-        // ============================================
-        function addRecent(url, title) {
-            if (!url || url.startsWith('about:')) return;
-            recentSites = recentSites.filter(r => r.url !== url);
-            recentSites.unshift({ url, title: title || url, ts: Date.now() });
-            if (recentSites.length > 30) recentSites.pop();
-            save();
-            renderRecent();
-            if (!state.showTopSites) renderLinks();
-        }
-
-        function renderRecent() {
-            const wrap = document.getElementById('recent-wrap');
-            const list = document.getElementById('recent-pills');
-            if (!wrap || !list) return;
-            if (!state.showRecent) { wrap.classList.add('hidden'); return; }
-            wrap.classList.remove('hidden');
-            list.innerHTML = '';
-            recentSites.slice(0, 6).forEach(item => {
-                const pill = document.createElement('a');
-                pill.className = 'pill';
-                pill.href = item.url;
-                pill.target = '_blank';
-                pill.textContent = item.title.length > 20 ? item.title.slice(0, 20) + '...' : item.title;
-                list.appendChild(pill);
-            });
+            currentWallpaperIndex = pickRandomWallpaperIndex(lastIndex);
+            document.getElementById('bg-layer-1').style.backgroundImage = `url(${wallpapers[currentWallpaperIndex]})`;
+            saveState();
+            startAutoChange();
         }
 
         // ============================================
         // SEARCH
         // ============================================
-        function doSearch(q) {
-            if (!q.trim()) return;
-            const e = CONFIG.engines[state.engine];
-            const dest = (e ? e.url : CONFIG.engines.google.url) + encodeURIComponent(q);
-            addRecent(dest, q);
-            window.location.href = dest;
-        }
-
-        function updateSearchIcon() {
-            const icon = document.getElementById('search-icon');
-            const e = CONFIG.engines[state.engine];
-            if (icon && e) icon.src = e.icon;
+        function performSearch(query) {
+            if (!query.trim()) return;
+            const engineUrl = SEARCH_ENGINES[state.searchEngine] || SEARCH_ENGINES.duckduckgo;
+            window.location.href = engineUrl + encodeURIComponent(query);
         }
 
         // ============================================
-        // STATS
+        // STATS ANIMATION
         // ============================================
-        function animateStat(el) {
-            const target = parseFloat(el.dataset.target);
-            const suffix = el.dataset.suffix || '';
-            const start = performance.now();
-            function tick(now) {
-                const p = Math.min((now - start) / 1800, 1);
-                const ease = 1 - Math.pow(1 - p, 4);
-                el.textContent = Math.floor(target * ease).toLocaleString() + suffix;
-                if (p < 1) requestAnimationFrame(tick);
+        function animateValue(element, target, duration = 1500, decimals = 0, suffix = '') {
+            const start = 0;
+            const startTime = performance.now();
+
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Easing function (ease-out cubic)
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                const current = start + (target - start) * easeOut;
+
+                if (decimals > 0) {
+                    element.textContent = current.toFixed(decimals) + suffix;
+                } else {
+                    element.textContent = Math.floor(current).toLocaleString() + suffix;
+                }
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                }
             }
-            requestAnimationFrame(tick);
+
+            requestAnimationFrame(update);
         }
 
-        function initStats() {
-            const obs = new IntersectionObserver(entries => {
+        function initStatsAnimation() {
+            const statElements = document.querySelectorAll('.stat-number');
+            const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
-                        animateStat(entry.target);
-                        obs.unobserve(entry.target);
+                        const el = entry.target;
+                        const target = parseFloat(el.dataset.target);
+                        const decimals = parseInt(el.dataset.decimals) || 0;
+                        const suffix = el.dataset.suffix || '';
+                        animateValue(el, target, 2000, decimals, suffix);
+                        observer.unobserve(el);
                     }
                 });
-            }, { threshold: 0.4 });
-            document.querySelectorAll('.stat-number').forEach(el => obs.observe(el));
+            }, { threshold: 0.5 });
+
+            statElements.forEach(el => observer.observe(el));
         }
 
         // ============================================
-        // SETTINGS SHEET
+        // SETTINGS PANEL
         // ============================================
-        function openSheet() {
-            document.getElementById('sheet').classList.add('open');
-            document.getElementById('sheet-overlay').classList.add('open');
+        function openSettings() {
+            document.getElementById('settings-panel').classList.add('open');
+            document.getElementById('settings-overlay').classList.add('open');
             document.body.style.overflow = 'hidden';
-            lucide.createIcons();
         }
-        function closeSheet() {
-            document.getElementById('sheet').classList.remove('open');
-            document.getElementById('sheet-overlay').classList.remove('open');
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('open');
+            document.getElementById('settings-overlay').classList.remove('open');
             document.body.style.overflow = '';
         }
 
-        function syncUI() {
-            document.getElementById('tog-auto').checked = state.autoCycle;
-            document.getElementById('tog-credit').checked = state.showCredit;
-            document.getElementById('tog-clock').checked = state.showClock;
-            document.getElementById('tog-stats').checked = state.showStats;
-            document.getElementById('tog-recent').checked = state.showRecent;
-            document.getElementById('tog-topsites').checked = state.showTopSites;
-            document.getElementById('tog-shortcut').checked = state.shortcutFocus;
-
-            document.getElementById('clock-wrap').style.display = state.showClock ? 'block' : 'none';
-            document.getElementById('stats-wrap').style.display = state.showStats ? 'flex' : 'none';
-            
-            updateSearchIcon();
-            renderLinks();
-            renderRecent();
-            renderEngines();
-            renderWallGrid();
-        }
-
-        function renderEngines() {
-            const list = document.getElementById('engine-list');
-            if (!list) return;
-            list.innerHTML = '';
-            Object.entries(CONFIG.engines).forEach(([key, data]) => {
-                const row = document.createElement('div');
-                row.className = `engine-option ${state.engine === key ? 'selected' : ''}`;
-                row.innerHTML = `
-                    <img src="${data.icon}" alt="">
-                    <span>${data.name}</span>
-                    <div class="radio"></div>
-                `;
-                row.addEventListener('click', () => {
-                    state.engine = key;
-                    save();
-                    syncUI();
-                });
-                list.appendChild(row);
-            });
-        }
-
-        function renderWallGrid() {
-            const grid = document.getElementById('wall-grid');
-            if (!grid) return;
-            grid.innerHTML = '';
-            allWalls().forEach(url => {
-                const thumb = document.createElement('div');
-                thumb.className = `wall-thumb ${url === currentWall ? 'active' : ''}`;
-                thumb.innerHTML = `
-                    <img src="${url}" alt="" loading="lazy">
-                    <div class="wall-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-                `;
-                thumb.addEventListener('click', () => setWallpaper(url));
-                grid.appendChild(thumb);
-            });
-        }
-
-        function setupSettings() {
-            document.getElementById('btn-settings').addEventListener('click', openSheet);
-            document.getElementById('btn-close').addEventListener('click', closeSheet);
-            document.getElementById('sheet-overlay').addEventListener('click', closeSheet);
-
-            // Tabs
-            document.querySelectorAll('.sheet-tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    const target = tab.dataset.tab;
-                    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-                    document.getElementById(`tab-${target}`).classList.remove('hidden');
-                    lucide.createIcons();
-                });
-            });
+        function updateUIFromState() {
+            // Search engine
+            document.getElementById('search-engine-select').value = state.searchEngine;
+            updateSearchEngineIcon();
 
             // Toggles
-            const toggles = {
-                'tog-auto': 'autoCycle',
-                'tog-credit': 'showCredit',
-                'tog-clock': 'showClock',
-                'tog-stats': 'showStats',
-                'tog-recent': 'showRecent',
-                'tog-topsites': 'showTopSites',
-                'tog-shortcut': 'shortcutFocus',
-            };
-            Object.entries(toggles).forEach(([id, key]) => {
-                const el = document.getElementById(id);
-                if (el) el.addEventListener('change', (e) => {
-                    state[key] = e.target.checked;
-                    save();
-                    syncUI();
-                });
+            document.getElementById('auto-change-toggle').checked = state.autoChange;
+            document.getElementById('interval-select').value = state.changeInterval.toString();
+            document.getElementById('show-stats-toggle').checked = state.showStats;
+            document.getElementById('show-clock-toggle').checked = state.showClock;
+
+            // Interval container opacity
+            const intervalContainer = document.getElementById('interval-container');
+            intervalContainer.style.opacity = state.autoChange ? '1' : '0.4';
+            intervalContainer.style.pointerEvents = state.autoChange ? 'auto' : 'none';
+
+            // Visibility
+            document.getElementById('stats-container').style.display = state.showStats ? 'block' : 'none';
+            document.getElementById('clock-container').style.display = state.showClock ? 'block' : 'none';
+            document.getElementById('attribution').classList.remove('hidden');
+        }
+
+        function setupSettingsListeners() {
+            // Open/Close
+            document.getElementById('settings-btn').addEventListener('click', openSettings);
+            document.getElementById('close-settings').addEventListener('click', closeSettings);
+            document.getElementById('settings-overlay').addEventListener('click', closeSettings);
+
+            // Search engine
+            document.getElementById('search-engine-select').addEventListener('change', (e) => {
+                state.searchEngine = e.target.value;
+                updateSearchEngineIcon();
+                saveState();
             });
 
-            // Upload
-            document.getElementById('upload-zone').addEventListener('click', () => document.getElementById('file-input').click());
-            document.getElementById('file-input').addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (!file || !file.type.startsWith('image/')) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                    customWalls.push({ id: Date.now().toString(), name: file.name, dataUrl: reader.result });
-                    setWallpaper(reader.result);
-                    save();
-                };
-                reader.readAsDataURL(file);
-                e.target.value = '';
+            // Auto change toggle
+            document.getElementById('auto-change-toggle').addEventListener('change', (e) => {
+                state.autoChange = e.target.checked;
+                startAutoChange();
+                updateUIFromState();
+                saveState();
             });
 
-            // Reset
-            document.getElementById('btn-reset').addEventListener('click', () => {
-                state = { ...DEFAULT_STATE };
-                customWalls = [];
-                currentWall = '';
+            // Interval select
+            document.getElementById('interval-select').addEventListener('change', (e) => {
+                state.changeInterval = parseInt(e.target.value);
+                startAutoChange();
+                saveState();
+            });
+
+            // Show stats toggle
+            document.getElementById('show-stats-toggle').addEventListener('change', (e) => {
+                state.showStats = e.target.checked;
+                updateUIFromState();
+                saveState();
+            });
+
+            // Show clock toggle
+            document.getElementById('show-clock-toggle').addEventListener('change', (e) => {
+                state.showClock = e.target.checked;
+                updateUIFromState();
+                saveState();
+            });
+
+            // Reset defaults
+            document.getElementById('reset-defaults').addEventListener('click', () => {
+                state = { ...DEFAULTS };
+                currentWallpaperIndex = 0;
                 initWallpaper();
-                save();
-                syncUI();
+                updateUIFromState();
+                saveState();
+            });
+        }
+
+        // ============================================
+        // SEARCH BAR
+        // ============================================
+        function updateSearchEngineIcon() {
+            const icon = document.getElementById('search-engine-icon');
+            if (!icon) return;
+            const key = state.searchEngine || 'duckduckgo';
+            icon.src = SEARCH_ENGINE_ICONS[key] || SEARCH_ENGINE_ICONS.duckduckgo;
+            icon.alt = `${key} icon`;
+        }
+
+        function setupSearch() {
+            const input = document.getElementById('search-input');
+            const btn = document.getElementById('search-btn');
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    performSearch(input.value);
+                }
+            });
+
+            btn.addEventListener('click', () => {
+                performSearch(input.value);
+            });
+        }
+
+        // ============================================
+        // KEYBOARD SHORTCUTS
+        // ============================================
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                // Focus search on /
+                if (e.key === '/' && document.activeElement !== document.getElementById('search-input')) {
+                    e.preventDefault();
+                    document.getElementById('search-input').focus();
+                }
+
+                // Close settings on Escape
+                if (e.key === 'Escape') {
+                    closeSettings();
+                    document.getElementById('search-input').blur();
+                }
             });
         }
 
@@ -1078,38 +960,34 @@
         // INIT
         // ============================================
         function init() {
-            load();
+            loadState();
             initWallpaper();
             updateClock();
             setInterval(updateClock, 1000);
-            initStats();
-            syncUI();
-            setupSettings();
+            initStatsAnimation();
+            updateUIFromState();
+            setupSettingsListeners();
+            setupSearch();
+            setupKeyboardShortcuts();
 
-            const input = document.getElementById('search-input');
-            document.getElementById('search-btn')?.addEventListener('click', () => doSearch(input.value));
-            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(input.value); });
-
-            document.addEventListener('keydown', (e) => {
-                if (e.key === '/' && state.shortcutFocus && document.activeElement !== input) {
-                    e.preventDefault();
-                    input.focus();
-                }
-                if (e.key === 'Escape') {
-                    closeSheet();
-                    input.blur();
-                }
-            });
-
+            // Initialize Lucide icons
             lucide.createIcons();
-            setTimeout(() => input.focus(), 600);
+
+            // Focus search on load after a short delay
+            setTimeout(() => {
+                document.getElementById('search-input').focus();
+            }, 500);
         }
 
+        // Start
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
             init();
         }
+
+        //]]>
     </script>
 </body>
+
 </html>

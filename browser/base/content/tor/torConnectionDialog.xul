@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  - This Source Code Form is subject to the terms of the Mozilla Public
+  - License, v. 2.0. If a copy of the MPL was not distributed with this
+  - file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-->
+
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
+<?xml-stylesheet href="chrome://browser/skin/preferences/dialog.css" type="text/css"?>
+<?xml-stylesheet href="chrome://browser/content/tor/torConnectionDialog.css" type="text/css"?>
+
+<!DOCTYPE dialog [
+  <!ENTITY % torConnectionDialogDTD SYSTEM "chrome://browser/locale/tor/torConnectionDialog.dtd">
+  %torConnectionDialogDTD;
+]>
+
+<dialog
+  id="torConnectionDialog"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  windowtype="tor:connection"
+  buttons="accept,cancel"
+  onload="BrowserTorConnectionDialog.init();"
+  ondialogaccept="BrowserTorConnectionDialog.onConnect();"
+  ondialogcancel="BrowserTorConnectionDialog.onCancel();"
+  title="&torConnection.title;"
+>
+  <script src="chrome://browser/content/tor/torConnectionDialog.js" />
+
+  <hbox flex="1" orient="vertical">
+    <!-- Header Section -->
+    <vbox class="torConnectionHeader">
+      <label class="torConnectionTitle" value="&torConnection.header;" />
+      <description class="torConnectionDescription">
+        &torConnection.description;
+      </description>
+    </vbox>
+
+    <!-- Connection Status Section -->
+    <vbox class="torConnectionStatus" id="connectionStatus">
+      <label class="torConnectionStatusLabel" value="&torConnection.statusLabel;" />
+      <hbox align="center">
+        <image id="connectionStatusIcon" class="torConnectionStatusIcon" />
+        <label id="connectionStatusText" class="torConnectionStatusText" value="&torConnection.statusDisconnected;" />
+      </hbox>
+    </vbox>
+
+    <!-- Information Section -->
+    <vbox class="torConnectionInfo">
+      <description>
+        &torConnection.benefits;
+      </description>
+      <description class="torConnectionWarning">
+        &torConnection.warning;
+      </description>
+    </vbox>
+
+    <!-- Checkbox for "Ask again" -->
+    <hbox class="tor-dialog-options">
+      <checkbox
+        id="torRememberChoice"
+        label="&torConnection.rememberChoice;"
+      />
+    </hbox>
+
+    <!-- Progress Indicator (hidden by default) -->
+    <vbox class="tor-progress-section" id="progressSection" hidden="true">
+      <label value="&torConnection.connecting;" />
+      <progressmeter id="torProgressMeter" mode="undetermined" />
+    </vbox>
+  </hbox>
+</dialog>

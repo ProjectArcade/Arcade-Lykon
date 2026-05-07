@@ -622,4 +622,4 @@ See [CHANGELOG.md](./docs/CHANGELOG.md) for detailed version history and release
 
 **Built with ❤️ for privacy, performance, and user control.**
 
-For questions or discussions, open an issue or reach out to the community on [Discussions](https://github.com/lykon-browser/lykon/discussions).
+For questions or discussions, open an issue or reach out to the community on [Discussions](https://github.com/ProjectArcade/Arcade-Lykon/discussions).

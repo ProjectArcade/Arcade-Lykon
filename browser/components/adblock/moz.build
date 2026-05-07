@@ -1,37 +1,49 @@
 EXPORTS += [
-    "AdblockEngine.h",
-    "libadblock.h",
+   "AdblockEngine.h",
+   "libadblock.h",
 ]
 
 EXTRA_JS_MODULES += [
-    "AdblockConfig.sys.mjs",
-    "AdblockIntegration.sys.mjs",
-    "AdblockService.sys.mjs",
-    "easylist.txt",
-    "easyprivacy.txt",
-    "FilterManager.sys.mjs",
-    "ShieldIntegration.sys.mjs",
-    "ShieldToggle.sys.mjs",
-    "ShieldUIController.sys.mjs",
-    "StatsMonitor.sys.mjs",
+   "AdblockConfig.sys.mjs",
+   "AdblockIntegration.sys.mjs",
+   "AdblockService.sys.mjs",
+   "easylist.txt",
+   "easyprivacy.txt",
+   "FilterManager.sys.mjs",
+   "ShieldIntegration.sys.mjs",
+   "ShieldToggle.sys.mjs",
+   "ShieldUIController.sys.mjs",
+   "StatsMonitor.sys.mjs",
 ]
 
 EXTRA_COMPONENTS += [
-    "adblock.manifest",
-    "components.conf",
+   "adblock.manifest",
+   "components.conf",
 ]
 
 SOURCES += [
-    "AdblockEngine.cpp",
+   "AdblockEngine.cpp",
 ]
 
-UNIFIED_SOURCES += [
+UNIFIED_SOURCES += []
+
+LOCAL_INCLUDES += [
+   ".",
 ]
 
-# Link against the prebuilt adblock library shipped in this directory.
-EXTRA_DSO_LDOPTS += [
-    "-L" + TOPOBJDIR + "/browser/components/adblock",
-    "-l:libadblock.so",
+OS_LIBS += [
+   "-L%s/browser/components/adblock" % TOPSRCDIR,
+   "-l:libadblock.so",
 ]
+
+LDFLAGS += [
+   "-Wl,-rpath,$ORIGIN",
+]
+
+CXXFLAGS += ["-fvisibility=default"]
 
 FINAL_LIBRARY = "xul"
+
+FINAL_TARGET_FILES.bin[""] += [
+   "libadblock.so",
+]

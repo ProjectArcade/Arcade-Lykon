@@ -47,3 +47,7 @@ pref("app.update.badgeWaitTime", 345600);
 // Number of usages of the web console.
 // If this is less than 5, then pasting code into the web console is disabled
 pref("devtools.selfxss.count", 0);
+// Search engine configuration for Lykon
+// Set Brave Search as the default search engine
+pref("browser.search.defaultenginename", "Brave Search");
+pref("browser.search.defaultenginename.private", "Brave Search");

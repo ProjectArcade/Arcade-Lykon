@@ -10,6 +10,11 @@ USE_LIBS += [
 # all the C++ code so any possible C++ -> Rust calls can be resolved.
 USE_LIBS += ["gkrust"]
 
+# Add rpath for libadblock.so
+LDFLAGS += [
+    "-Wl,-rpath,$ORIGIN",
+]
+
 Libxul("xul-real")
 
 if CONFIG["COMPILE_ENVIRONMENT"]:

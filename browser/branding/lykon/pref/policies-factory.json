@@ -1,0 +1,17 @@
+{
+  "policies": {
+    "SearchEngines": {
+      "Default": "Brave Search",
+      "Add": [
+        {
+          "Name": "Brave Search",
+          "URLTemplate": "https://search.brave.com/search?q={searchTerms}",
+          "Alias": "brave",
+          "Description": "Brave Search - Private Search Engine",
+          "IconURL": "https://cdn.search.brave.com/serp/v2/_app/immutable/assets/brave-fav-36x36.55c5bcec8ee5aae5fa28.png",
+          "SuggestURLTemplate": ""
+        }
+      ]
+    }
+  }
+}

@@ -107,6 +107,9 @@ browser.jar:
         content/browser/blockedSite.js                  (content/blockedSite.js)
         content/browser/spotlight.html                (content/spotlight.html)
         content/browser/spotlight.js                  (content/spotlight.js)
+        content/browser/tor/torConnectionDialog.html  (content/tor/torConnectionDialog.html)
+        content/browser/tor/torConnectionDialog.js    (content/tor/torConnectionDialog.js)
+        content/browser/tor/torConnectionDialog.css   (content/tor/torConnectionDialog.css)
 *       content/browser/default-bookmarks.html        (content/default-bookmarks.html)
 
 # L10n resources and overrides.

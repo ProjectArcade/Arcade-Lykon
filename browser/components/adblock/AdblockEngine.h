@@ -2,52 +2,28 @@
 #define ADBLOCK_ENGINE_H
 
 #include <string>
-#include <memory>
-#include "libadblock.h"
 
-/**
- * C++ wrapper for the adblock engine FFI
- */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+__attribute__((visibility("default"))) void* adblock_engine_create();
+__attribute__((visibility("default"))) void  adblock_engine_destroy(void* engine);
+__attribute__((visibility("default"))) bool  adblock_engine_add_filter_list(void* engine, const char* rules);
+__attribute__((visibility("default"))) bool  adblock_engine_check_network_url(void* engine, const char* url, const char* source, const char* type);
+
+#ifdef __cplusplus
+}
+#endif
+
 class AdblockFilterEngine {
 public:
-    /**
-     * Create a new adblock engine
-     */
     AdblockFilterEngine();
-
-    /**
-     * Destructor - cleans up the engine
-     */
     ~AdblockFilterEngine();
-
-    // Prevent copying
-    AdblockFilterEngine(const AdblockFilterEngine&) = delete;
-    AdblockFilterEngine& operator=(const AdblockFilterEngine&) = delete;
-
-    /**
-     * Add filter rules to the engine
-     * @param rules Filter rules as a string (supports multiple formats: EasyList, EasyPrivacy, etc.)
-     * @return true if successful, false otherwise
-     */
     bool addFilterList(const std::string& rules);
-
-    /**
-     * Check if a URL should be blocked
-     * @param url The URL to check
-     * @param sourceUrl The source/referrer URL (optional)
-     * @param resourceType The resource type (e.g., "script", "image", "document", "xmlhttprequest")
-     * @return true if the URL should be blocked, false if it should be allowed
-     */
-    bool shouldBlock(const std::string& url, const std::string& sourceUrl = "",
-                     const std::string& resourceType = "other") const;
-
-    /**
-     * Check if engine is valid
-     */
-    bool isValid() const { return engine_ != nullptr; }
-
+    bool shouldBlock(const std::string& url, const std::string& source, const std::string& type) const;
 private:
-    AdblockEngine engine_;
+    void* engine_;
 };
 
 #endif // ADBLOCK_ENGINE_H

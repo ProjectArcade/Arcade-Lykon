@@ -102,7 +102,6 @@ const SEARCH_FILTERS = [
   "google",
   "search.yahoo",
   "yahoo",
-  "bing",
   "ask",
   "duckduckgo",
 ];

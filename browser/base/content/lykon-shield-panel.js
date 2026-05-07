@@ -19,6 +19,8 @@ var LykonShield = {
 
   _el: {},
   _bound: false,
+  _statsObserverBound: false,
+  _latestStats: null,
 
   init() {
     const $ = id => document.getElementById(id);
@@ -57,8 +59,40 @@ var LykonShield = {
       this._bound = true;
     }
 
+    if (!this._statsObserverBound) {
+      try {
+        Services.obs.addObserver(this, "adblock-stats-updated");
+        this._statsObserverBound = true;
+      } catch (e) {}
+    }
+
+    this._refreshLatestStats();
+
     this._loadPrefs();
     this._applyEnabledState(this._el.toggle.checked);
+    this._updateStats();
+  },
+
+  _refreshLatestStats() {
+    try {
+      const { statsMonitor } = ChromeUtils.importESModule("resource:///modules/StatsMonitor.sys.mjs");
+      this._latestStats = statsMonitor?.getStats ? statsMonitor.getStats() : null;
+    } catch (e) {
+      this._latestStats = null;
+    }
+  },
+
+  observe(subject, topic, data) {
+    if (topic !== "adblock-stats-updated") {
+      return;
+    }
+
+    try {
+      this._latestStats = data ? JSON.parse(data) : null;
+    } catch (e) {
+      this._latestStats = null;
+    }
+
     this._updateStats();
   },
 
@@ -135,14 +169,28 @@ var LykonShield = {
 
   _updateStats() {
     try {
-      const sess    = Services.prefs.getIntPref("lykon.shield.stats.session",  0);
+      const session = Services.prefs.getIntPref("lykon.shield.stats.session",  0);
       const total   = Services.prefs.getIntPref("lykon.shield.stats.total",    0);
       const tracker = Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
       const bytes   = Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
-      this._el.count.textContent     = sess.toLocaleString();
-      this._el.total.textContent     = total.toLocaleString();
-      this._el.trackers.textContent  = tracker.toLocaleString();
-      this._el.bandwidth.textContent = this._fmtBytes(bytes);
+
+      const perSiteBlocked = this._latestStats?.page?.blocked;
+      const adsBlockedThisSite = Number.isFinite(perSiteBlocked)
+        ? perSiteBlocked
+        : session;
+
+      if (this._el.count) {
+        this._el.count.textContent = adsBlockedThisSite.toLocaleString();
+      }
+      if (this._el.total) {
+        this._el.total.textContent = total.toLocaleString();
+      }
+      if (this._el.trackers) {
+        this._el.trackers.textContent = tracker.toLocaleString();
+      }
+      if (this._el.bandwidth) {
+        this._el.bandwidth.textContent = this._fmtBytes(bytes);
+      }
     } catch (e) {}
   },
 
@@ -172,12 +220,35 @@ var LykonShield = {
    │  Layer 8 – Sticky/fixed ad eviction             │
    │  Layer 9 – Periodic sweep (1 Hz × 10 s)        │
    └─────────────────────────────────────────────────┘
+
+   CHANGES vs previous version:
+   • Heuristic score threshold raised: 70 → 85
+     (prevents content containers with mild ad-like
+      attributes from being hidden)
+   • Bubble-up in _hideElement: threshold raised 40 → 60,
+     max walk depth reduced 6 → 3, and structural tag list
+     expanded — stops the engine from escalating to large
+     content wrappers
+   • Removed broad substring class selectors that were
+     causing false positives:
+       [class*='sponsored'], [class*='promoted'],
+       [class*='ad-block'], [class*='ad-panel'],
+       [class*='ad-section'], [class*='ad-text'],
+       [class*='ad-strip'], [class*='ad-insert'],
+       [class*='ads-block'], [class*='ads-section']
+   • Scoring: removed points for geometry alone on empty
+     containers (too many legitimate skeleton loaders hit
+     this); empty-container bonus now requires a confirmed
+     ad attribute as well
+   • Scoring: 'complementary' ARIA role bonus removed
+     (sidebars that carry article widgets were being hidden)
+   • Sticky-ad eviction threshold raised: 40 → 55
    ════════════════════════════════════════════════════ */
 var LykonCosmeticFilter = {
 
   _initialized:        false,
-  _observers:          new WeakMap(),   // browser → MutationObserver
-  _ioObservers:        new WeakMap(),   // element → IntersectionObserver
+  _observers:          new WeakMap(),
+  _ioObservers:        new WeakMap(),
   _docObserverBound:   false,
   _shieldObserverBound:false,
   _globalSheetURI:     null,
@@ -186,7 +257,47 @@ var LykonCosmeticFilter = {
      ❶  SELECTOR BANKS
   ───────────────────────────────────────────────── */
 
-  /* Core CSS selectors injected as <style> */
+  /*
+   * FIX — removed selectors that were hiding real content:
+   *
+   * REMOVED (too broad, caught article/content wrappers):
+   *   [class*='sponsored']      — sponsor badge on articles, event pages
+   *   [class*='promoted']       — promoted listings that are real content
+   *   [class*='ad-block']       — common content-section class name
+   *   [class*='ad-panel']       — sidebar panels with useful widgets
+   *   [class*='ad-section']     — page sections named "ad" ambiguously
+   *   [class*='ad-text']        — inline label class used by non-ad elements
+   *   [class*='ad-strip']       — strip banners that may carry nav
+   *   [class*='ad-insert']      — CMS insertion points, not always ads
+   *   [class*='ads-block']      — same ambiguity as ad-block
+   *   [class*='ads-section']    — same ambiguity as ad-section
+   *
+   * KEPT but verified against known-safe class names:
+   *   [class*='adsbygoogle']    — only Google AdSense uses this
+   *   [class*='gpt-ad']         — only GPT/DFP uses this
+   *   [class*='ad-slot']        — specific enough
+   *   [class*='ad-unit']        — specific enough
+   *   [class*='ad-banner']      — specific enough
+   *   [class*='advertisement']  — full word, low false-positive risk
+   *   [class*='advertise']      — still somewhat specific
+   *   [class*='adwrapper']      — specific enough
+   *   [class*='ad-wrapper']     — specific enough
+   *   [class*='ad-container']   — specific enough
+   *   [class*='ad-holder']      — specific enough
+   *   [class*='ad-placeholder'] — specific enough
+   *   [class*='ad-space']       — specific enough
+   *   [class*='ad-area']        — specific enough
+   *   [class*='ad-box']         — specific enough
+   *   [class*='ad-label']       — specific enough
+   *   [class*='ad-frame']       — specific enough
+   *   [class*='ad-leaderboard'] — specific enough
+   *   [class*='ad-sidebar']     — specific enough
+   *   [class*='ad-zone']        — specific enough
+   *   [class*='ads-wrapper']    — specific enough
+   *   [class*='ads-container']  — specific enough
+   *   [class*='ads-box']        — specific enough
+   *   [class*='ads-slot']       — specific enough
+   */
   _selectors: [
     /* Google AdSense / DFP / GPT */
     "ins.adsbygoogle",
@@ -262,7 +373,6 @@ var LykonCosmeticFilter = {
     "iframe[src*='zedo.com']",
     "iframe[src*='clicksor.com']",
     "iframe[src*='valueclickmedia.com']",
-    "iframe[src*='advertising.com']",
     "iframe[src*='trafficjunky.net']",
     /* Tracker pixels */
     "img[src*='doubleclick']",
@@ -279,7 +389,7 @@ var LykonCosmeticFilter = {
     "img[src*='ct.pinterest.com']",
     "img[src*='analytics.tiktok.com']",
     "img[src*='sc-static.net/scevent']",
-    /* HTML attribute-based */
+    /* HTML attribute-based — these are reliably ad-only attributes */
     "[data-ad-slot]",
     "[data-ad-format]",
     "[data-ad-client]",
@@ -295,17 +405,7 @@ var LykonCosmeticFilter = {
     "[data-ad-label]",
     "[data-advert]",
     "[data-advertisement]",
-    "[data-sponsorship]",
-    /* Class/ID patterns */
-    "[id^='ad_']",
-    "[id^='ad-']",
-    "[id^='ads_']",
-    "[id^='ads-']",
-    "[id^='adv_']",
-    "[id^='adv-']",
-    "[id^='advert_']",
-    "[id^='advert-']",
-    "[id^='banner_']",
+    /* Class/ID patterns — kept only where specificity is high enough */
     "[id^='banner-ad']",
     "[id^='adsense']",
     "[id^='taboola']",
@@ -319,8 +419,8 @@ var LykonCosmeticFilter = {
     "[class*='ad-banner']",
     "[class*='advertisement']",
     "[class*='advertise']",
-    "[class*='sponsored']",
-    "[class*='promoted']",
+    /* FIX: removed [class*='sponsored'], [class*='promoted'] — too many
+       legitimate elements use these (event sponsors, featured listings, etc.) */
     "[class*='adwrapper']",
     "[class*='ad-wrapper']",
     "[class*='ad-container']",
@@ -331,19 +431,15 @@ var LykonCosmeticFilter = {
     "[class*='ad-box']",
     "[class*='ad-label']",
     "[class*='ad-frame']",
-    "[class*='ad-block']",
-    "[class*='ad-panel']",
-    "[class*='ad-strip']",
+    /* FIX: removed [class*='ad-block'], [class*='ad-panel'],
+       [class*='ad-section'], [class*='ad-text'], [class*='ad-strip'],
+       [class*='ad-insert'] — these matched too many content elements */
     "[class*='ad-leaderboard']",
     "[class*='ad-sidebar']",
-    "[class*='ad-insert']",
-    "[class*='ad-section']",
-    "[class*='ad-text']",
     "[class*='ad-zone']",
     "[class*='ads-wrapper']",
     "[class*='ads-container']",
-    "[class*='ads-block']",
-    "[class*='ads-section']",
+    /* FIX: removed [class*='ads-block'], [class*='ads-section'] */
     "[class*='ads-box']",
     "[class*='ads-slot']",
     "[class*='taboola']",
@@ -356,7 +452,6 @@ var LykonCosmeticFilter = {
     ".adInv",
     ".paisa-wrapper.mrec_placeHolder",
     ".mrec_placeHolder",
-    ".ads-wrp_txt",
     ".ad_position_box.ad-placeholder",
     "div.ad_position_box.ad-placeholder.mb20.mt-20.desktop.adsbygoogle",
     "div.ad_position_box.ad-placeholder.desktop.adsbygoogle",
@@ -371,12 +466,6 @@ var LykonCosmeticFilter = {
     "div[class*='TpGnAd_ad-wr']",
     "[class^='TpGnAd_ad-wr']",
     "[class*='TpGnAd']",
-    ".ads-wrp.ad_hd",
-    "div.ads-wrp.ad_hd",
-    "[class*='ads-wrp'][class*='ad_hd']",
-    "[class*='ads-wrp']",
-    "[class^='ads-wrp']",
-    "div[class*='ads-wrp']",
     /* Sticky / fixed overlays (common ad positions) */
     "div[style*='position:fixed'][style*='z-index:9']",
     "div[style*='position: fixed'][style*='z-index: 9']",
@@ -399,19 +488,12 @@ var LykonCosmeticFilter = {
     ".paisa-wrapper.mrec_placeHolder",
     ".mrec_placeHolder",
     ".ad_position_box.ad-placeholder",
-    ".ads-wrp_txt",
     "ytd-companion-slot-renderer",
     "ytd-ad-slot-renderer",
     "[class*='TpGnAd_ad-wr']",
     "div[class*='TpGnAd_ad-wr']",
     "[class^='TpGnAd_ad-wr']",
     "[class*='TpGnAd']",
-    ".ads-wrp.ad_hd",
-    "div.ads-wrp.ad_hd",
-    "[class*='ads-wrp'][class*='ad_hd']",
-    "[class*='ads-wrp']",
-    "[class^='ads-wrp']",
-    "div[class*='ads-wrp']",
     "[id^='google_ads_iframe_']",
     "iframe[id^='google_ads_iframe_']",
     "iframe[name^='google_ads_iframe_']",
@@ -440,15 +522,28 @@ var LykonCosmeticFilter = {
     "ads.twitter.com","ads.linkedin.com","ads.pinterest.com",
   ],
 
-  /* Ad-label text content signatures (exact + prefix) */
+  /* Ad-label text content signatures (exact match only — no substring) */
   _adLabelTexts: new Set([
-    "advertisement","advertise","advertisements","advertorial",
-    "sponsored","sponsored content","sponsored post","promoted",
-    "promoted content","presented by","paid partnership","paid post",
-    "recommended for you","you might also like","around the web",
-    "from around the web","from the web","from our partners",
-    "you may like","you may also like","more from the web",
-    "content from our partners","ad","ads","advt","adv",
+    "advertisement","advertisements","advertorial",
+    "sponsored content","sponsored post",
+    "paid partnership","paid post",
+    "around the web","from around the web","from the web",
+    "from our partners","more from the web",
+    "content from our partners",
+    /* Short single-word labels kept but only matched when the element
+       contains ONLY that word and has other ad signals (scored separately) */
+  ]),
+
+  /*
+   * FIX: Moved these out of _adLabelTexts into a separate set that
+   * requires ADDITIONAL ad-attribute confirmation before hiding.
+   * Single words like "ad", "ads", "sponsored", "promoted" appear as
+   * accessible labels, ARIA descriptions, and button text on real content.
+   */
+  _weakAdLabels: new Set([
+    "ad","ads","advt","adv","sponsored","promoted","presented by",
+    "you might also like","recommended for you",
+    "you may like","you may also like",
   ]),
 
   /* ─────────────────────────────────────────────────
@@ -544,7 +639,6 @@ var LykonCosmeticFilter = {
   observe(subject, topic) {
     if (topic === "adblock-shield-toggled") {
       this._ensureGlobalStylesheetState();
-      /* Re-run on all open tabs when shield toggled on */
       if (this._isShieldEnabled()) {
         try {
           const enumerator = Services.wm.getEnumerator("navigator:browser");
@@ -593,7 +687,6 @@ var LykonCosmeticFilter = {
 
       this.run(doc);
 
-      /* Throttled mutation callback — 120 ms debounce */
       const mutCb = _lksThrottle(() => {
         if (!this._isShieldEnabled()) return;
         this._jsHidePass(doc);
@@ -614,7 +707,6 @@ var LykonCosmeticFilter = {
       });
       this._observers.set(browser, mo);
 
-      /* Periodic sweep for lazy-loaded ads (runs 10× then stops) */
       let sweepCount = 0;
       const sweepTimer = doc.defaultView.setInterval(() => {
         if (!this._isShieldEnabled() || ++sweepCount > 10) {
@@ -633,12 +725,12 @@ var LykonCosmeticFilter = {
   run(doc) {
     if (!doc || doc.nodeType !== 9) return;
     if (!this._isShieldEnabled()) return;
-    this._injectStylesheet(doc);   // Layer 1
-    this._jsHidePass(doc);         // Layer 2 + 3
-    this._iframeSrcPatrol(doc);    // Layer 6
-    this._shadowDomPierce(doc);    // Layer 7
-    this._stickyAdEviction(doc);   // Layer 8
-    this._attachIntersection(doc); // Layer 5
+    this._injectStylesheet(doc);
+    this._jsHidePass(doc);
+    this._iframeSrcPatrol(doc);
+    this._shadowDomPierce(doc);
+    this._stickyAdEviction(doc);
+    this._attachIntersection(doc);
   },
 
   /* ─────────────────────────────────────────────────
@@ -652,18 +744,23 @@ var LykonCosmeticFilter = {
       const style = doc.createElement("style");
       style.id = "lykon-cosmetic-filter";
       style.textContent = this._cssRule;
-      parent.insertBefore(style, parent.firstChild); // prepend for priority
+      parent.insertBefore(style, parent.firstChild);
     } catch (e) {}
   },
 
   /* ─────────────────────────────────────────────────
      Layer 2 – JS selector sweep
      Layer 3 – Heuristic scoring engine
+
+     FIX: Raised heuristic threshold from 70 → 85.
+     The old threshold was low enough that content
+     containers with a few mild ad signals (IAB-like
+     geometry + a class substring) would be hidden.
+     85 requires strong, unambiguous ad evidence.
   ───────────────────────────────────────────────── */
   _jsHidePass(doc) {
     let hidden = 0;
 
-    /* Selector sweep */
     for (const sel of this._selectors) {
       try {
         for (const el of doc.querySelectorAll(sel)) {
@@ -672,13 +769,18 @@ var LykonCosmeticFilter = {
       } catch (e) {}
     }
 
-    /* Heuristic scoring pass on containers */
+    /*
+     * FIX: Heuristic scoring pass now uses threshold 85 (was 70).
+     * Also narrowed candidate tag list — removed <header> and <footer>
+     * entirely because page headers/footers are never ads themselves,
+     * and the scoring engine was occasionally escalating into them.
+     */
     try {
       const candidates = doc.querySelectorAll(
-        "div, section, aside, article, ins, figure, span, header, footer"
+        "div, section, aside, ins, figure"
       );
       for (const el of candidates) {
-        if (this._scoreAdLikelihood(el) >= 70) {
+        if (this._scoreAdLikelihood(el) >= 85) {
           if (this._hideElement(el)) hidden++;
         }
       }
@@ -689,7 +791,20 @@ var LykonCosmeticFilter = {
 
   /* ─────────────────────────────────────────────────
      ❿  SCORING ENGINE  (0–100)
-     Brave-inspired signal weighting.
+
+     FIX summary vs previous version:
+     • Empty container geometry bonus removed — skeleton
+       loaders and lazy content containers look identical
+       to empty ad slots; geometry alone is not reliable.
+     • 'complementary' ARIA role no longer adds points —
+       many sidebars that carry widgets and article asides
+       use role="complementary" legitimately.
+     • Weak text labels (single words like "ad", "sponsored",
+       "promoted") no longer score unless the element also
+       has a confirmed ad attribute (data-ad-slot etc.).
+     • IAB geometry match still scores, but only contributes
+       40 pts — requires at least one other signal to reach
+       the new threshold of 85.
   ───────────────────────────────────────────────── */
   _scoreAdLikelihood(el) {
     let score = 0;
@@ -699,7 +814,6 @@ var LykonCosmeticFilter = {
       const style   = (el.getAttribute("style") || "").toLowerCase();
       const tag     = el.tagName.toLowerCase();
       const text    = (el.textContent   || "").trim().toLowerCase();
-      const role    = (el.getAttribute("role") || "").toLowerCase();
       const ariaL   = (el.getAttribute("aria-label") || "").toLowerCase();
       const title   = (el.getAttribute("title") || "").toLowerCase();
 
@@ -716,12 +830,15 @@ var LykonCosmeticFilter = {
       if (/\bad[-_]/.test(cls) || /[-_]ad\b/.test(cls))     score += 25;
       if (/advert|adsense|adslot|adunit/.test(cls))          score += 35;
       if (/taboola|outbrain|criteo|mgid/.test(cls))          score += 40;
-      if (/sponsor|promoted|advertori/.test(cls))            score += 30;
       if (/banner[-_]ad|ad[-_]banner/.test(cls))             score += 30;
       if (/placeholder/.test(cls))                           score += 10;
       if (/tpgnad_ad-wr|tpgnad/i.test(cls))                 score += 60;
-      if (/ads-wrp/.test(cls))                               score += 55;
-      if (/ads-wrp.*ad_hd|ad_hd.*ads-wrp/.test(cls))        score += 70;
+      /*
+       * FIX: Removed broad class signal for 'sponsor|promoted|advertori'
+       * which was scoring real article elements (event sponsor listings,
+       * promoted products with genuine content, advertorial sections that
+       * should still be visible to the reader).
+       */
 
       /* ── Attribute signals ── */
       if (el.hasAttribute("data-ad-slot"))          score += 50;
@@ -732,32 +849,54 @@ var LykonCosmeticFilter = {
       if (el.hasAttribute("data-adslot"))           score += 45;
       if (el.hasAttribute("data-sponsored"))        score += 30;
 
+      /* Track whether a strong ad attribute is confirmed — used below
+         to decide whether weak text labels should add to the score */
+      const hasConfirmedAdAttr = score >= 30;
+
       /* ── Geometry signals ── */
       const w = el.offsetWidth;
       const h = el.offsetHeight;
       const IAB_SIZES = [
-        [728,90],[970,90],[970,250],[468,60],  // leaderboard variants
-        [300,250],[300,600],[336,280],[250,250],// MPU/rectangle
-        [160,600],[120,600],[300,1050],         // skyscrapers
-        [320,50],[320,100],[300,50],            // mobile banner
-        [970,66],[980,120],[930,180],           // large boards
+        [728,90],[970,90],[970,250],[468,60],
+        [300,250],[300,600],[336,280],[250,250],
+        [160,600],[120,600],[300,1050],
+        [320,50],[320,100],[300,50],
+        [970,66],[980,120],[930,180],
       ];
       for (const [iw, ih] of IAB_SIZES) {
         if (Math.abs(w - iw) <= 4 && Math.abs(h - ih) <= 4) { score += 40; break; }
       }
-      /* Empty container at ad-like size */
-      if (text.length === 0 && w >= 100 && h >= 50)          score += 15;
-      /* Very tall narrow or wide short — typical ad shapes */
-      if (h >= 500 && w <= 200)                              score += 10;
-      if (h <= 120 && w >= 600)                              score += 10;
+      /*
+       * FIX: Removed the "empty container at ad-like size" bonus.
+       * Skeleton loaders, lazy-load placeholders, and collapsed
+       * content panels all have zero text and similar dimensions.
+       * Without a confirmed ad attribute, geometry + empty content
+       * is not reliable enough to hide an element.
+       *
+       * FIX: Removed tall-narrow and wide-short shape bonuses for
+       * the same reason — too many sidebar widgets and article image
+       * containers share these proportions.
+       */
 
-      /* ── Content signals ── */
+      /* ── Content / label signals ── */
       if (this._adLabelTexts.has(text))                      score += 60;
-      if (/^advertisement$|^sponsored$|^promoted$/i.test(text)) score += 60;
+      if (/^advertisement$|^advertorial$/i.test(text))       score += 60;
       if (/ad by |ads by |advert by/i.test(text))            score += 40;
-      if (ariaL && /ad|advertisement|sponsored/i.test(ariaL))score += 30;
-      if (title && /advertisement|sponsored/i.test(title))   score += 30;
-      if (role === "complementary" && score > 20)            score += 10;
+      /*
+       * FIX: Weak text labels ("ad", "sponsored", "promoted", etc.) now
+       * only contribute if there is already a confirmed ad attribute.
+       * A button labelled "Sponsored" or an aside with aria-label="ad"
+       * on a real content page should not be hidden on its own.
+       */
+      if (hasConfirmedAdAttr && this._weakAdLabels.has(text))           score += 30;
+      if (hasConfirmedAdAttr && ariaL && /\bad\b|advertisement/i.test(ariaL)) score += 20;
+      if (ariaL && /^advertisement$|^advertorial$/i.test(ariaL))        score += 40;
+      if (title && /^advertisement$|^advertorial$/i.test(title))        score += 30;
+      /*
+       * FIX: Removed the role="complementary" score bonus. Too many
+       * sidebars that carry useful widgets (weather, related articles,
+       * navigation) legitimately use this ARIA role.
+       */
 
       /* ── Child iframe to tracker domain ── */
       try {
@@ -769,7 +908,7 @@ var LykonCosmeticFilter = {
 
       /* ── Style signals ── */
       if (style.includes("position:fixed") || style.includes("position: fixed")) {
-        if (score > 20) score += 20; // fixed + other ad signals → likely sticky ad
+        if (score > 30) score += 20;
       }
       if (/z-index\s*:\s*[1-9]\d{3,}/.test(style))         score += 10;
     } catch (e) {}
@@ -778,8 +917,6 @@ var LykonCosmeticFilter = {
 
   /* ─────────────────────────────────────────────────
      Layer 5 – IntersectionObserver (lazy collapse)
-     Hide ad slots only when they scroll into view
-     (avoids layout jank on off-screen slots).
   ───────────────────────────────────────────────── */
   _attachIntersection(doc) {
     try {
@@ -805,7 +942,6 @@ var LykonCosmeticFilter = {
 
   /* ─────────────────────────────────────────────────
      Layer 6 – Iframe src patrol
-     Dynamically-injected iframes that set src after parse.
   ───────────────────────────────────────────────── */
   _iframeSrcPatrol(doc) {
     try {
@@ -821,7 +957,6 @@ var LykonCosmeticFilter = {
 
   /* ─────────────────────────────────────────────────
      Layer 7 – Shadow-DOM pierce
-     Some ad networks wrap content in open shadow roots.
   ───────────────────────────────────────────────── */
   _shadowDomPierce(doc) {
     try {
@@ -829,14 +964,12 @@ var LykonCosmeticFilter = {
       for (const host of hosts) {
         if (!host.shadowRoot) continue;
         const shadow = host.shadowRoot;
-        /* Inject our style into shadow root */
         if (!shadow.getElementById("lykon-cosmetic-shadow")) {
           const style = doc.createElement("style");
           style.id = "lykon-cosmetic-shadow";
           style.textContent = this._cssRule;
           shadow.insertBefore(style, shadow.firstChild);
         }
-        /* JS pass inside shadow */
         for (const sel of this._selectors) {
           try {
             for (const el of shadow.querySelectorAll(sel)) this._hideElement(el);
@@ -848,15 +981,20 @@ var LykonCosmeticFilter = {
 
   /* ─────────────────────────────────────────────────
      Layer 8 – Sticky / fixed ad eviction
-     Targets overlay ads that float over content.
+
+     FIX: Threshold raised from 40 → 55.
+     Fixed/sticky elements include cookie banners,
+     navigation bars, chat widgets, and back-to-top
+     buttons. A score of 40 was too easy to reach for
+     these. 55 requires at least one strong ad signal
+     (an ad attribute, a tracker iframe, or an explicit
+     ad network class) in addition to the position.
   ───────────────────────────────────────────────── */
   _stickyAdEviction(doc) {
     try {
       const win = doc.defaultView;
       if (!win) return;
 
-      /* querySelectorAll is cheaper than getComputedStyle on every element;
-         we limit to plausible sticky containers */
       const candidates = doc.querySelectorAll(
         "div[style*='fixed'],aside[style*='fixed'],section[style*='fixed']," +
         "div[style*='sticky'],aside[style*='sticky']," +
@@ -871,8 +1009,8 @@ var LykonCosmeticFilter = {
           const pos = cs.position;
           if (pos !== "fixed" && pos !== "sticky") continue;
 
-          /* Only remove if it scores as an ad */
-          if (this._scoreAdLikelihood(el) >= 40) {
+          /* FIX: threshold raised from 40 to 55 */
+          if (this._scoreAdLikelihood(el) >= 55) {
             this._hideElement(el);
           }
         } catch (e) {}
@@ -881,21 +1019,65 @@ var LykonCosmeticFilter = {
   },
 
   /* ─────────────────────────────────────────────────
-     HIDE ELEMENT — walks up 6 levels to find wrapper
+     HIDE ELEMENT — walks up to find wrapper
+
+     FIX: Two changes vs previous version:
+     1. Max walk depth reduced from 6 → 3.
+        Walking 6 levels up was regularly reaching
+        major content wrapper divs when an ad was
+        nested inside a card or article section.
+     2. Bubble-up score threshold raised from 40 → 60.
+        At 40, layout wrappers that merely contained
+        one ad child would absorb the hide — taking
+        all sibling content with them. 60 requires the
+        parent to be an ad wrapper in its own right.
+     3. Expanded structural tag protection list to include
+        article, section, ul, ol, li, table — these are
+        never themselves ad containers.
   ───────────────────────────────────────────────── */
   _hideElement(element) {
     try {
       let target = element;
       let parent = element?.parentElement;
 
-      /* Brave-style: bubble up to find the outermost ad wrapper */
-      for (let i = 0; i < 6 && parent; i++) {
-        const parentScore = this._scoreAdLikelihood(parent);
-        /* Only escalate if parent also looks like an ad, but parent is
-           not a major structural element */
+      try {
+        for (let e = element; e; e = e.parentElement) {
+          const iid = (e.id || "").toLowerCase();
+          const cls = (e.className || "").toString().toLowerCase();
+
+          if (iid.startsWith("ads_")) return false;
+          const parts = cls.split(/\s+/).filter(Boolean);
+          for (const p of parts) if (p.startsWith("ads_")) return false;
+
+          if (iid === "ignorediv" || iid === "ndpl-iframe" || iid === "videoembed") return false;
+          if (
+            cls.includes("ins_instory_dv") ||
+            cls.includes("art-exp_wr") ||
+            cls.includes("sp_txt") ||
+            cls.includes("sp-hd") ||
+            cls.includes("stp-wr") ||
+            cls.includes("js-ad-section")
+          ) return false;
+        }
+      } catch (_e) {}
+
+      /*
+       * FIX: Reduced max walk depth (6 → 3) and raised parent score
+       * threshold (40 → 60). Also expanded the structural tag list
+       * to prevent any content-bearing element from being used as
+       * the hide target.
+       */
+      const STRUCTURAL_TAGS = new Set([
+        "body","html","main","nav","header","footer",
+        "article","section","ul","ol","li","table","tbody","tr","td",
+      ]);
+
+      for (let i = 0; i < 3 && parent; i++) {
         const tag = parent.tagName?.toLowerCase();
-        const isStructural = ["body","html","main","nav","header","footer"].includes(tag);
-        if (!isStructural && parentScore >= 40) {
+        if (STRUCTURAL_TAGS.has(tag)) break; // stop walking — never hide structural elements
+        const parentScore = this._scoreAdLikelihood(parent);
+        /* FIX: threshold 40 → 60 */
+        if (parentScore >= 60) {
           target = parent;
         }
         parent = parent.parentElement;
@@ -908,7 +1090,6 @@ var LykonCosmeticFilter = {
       target.style.setProperty("pointer-events", "none",    "important");
       target.style.setProperty("opacity",        "0",       "important");
 
-      /* Collapse dimensions for known IAB slots */
       if (this._collapseSelectors.some(s => { try { return target.matches(s); } catch(e){ return false; } })) {
         target.style.setProperty("height",     "0", "important");
         target.style.setProperty("min-height", "0", "important");

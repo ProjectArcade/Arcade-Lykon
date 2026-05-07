@@ -1,0 +1,18 @@
+&lt;!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. --&gt;
+
+&lt;!ENTITY torConnection.title "Connect to TOR Network"&gt;
+&lt;!ENTITY torConnection.header "TOR Connection"&gt;
+&lt;!ENTITY torConnection.description "This is a TOR browsing window. Would you like to connect to the TOR network to browse anonymously?"&gt;
+&lt;!ENTITY torConnection.statusLabel "Connection Status:"&gt;
+&lt;!ENTITY torConnection.statusDisconnected "Disconnected"&gt;
+&lt;!ENTITY torConnection.statusConnecting "Connecting..."&gt;
+&lt;!ENTITY torConnection.statusConnected "Connected"&gt;
+&lt;!ENTITY torConnection.connecting "Connecting to TOR network..."&gt;
+&lt;!ENTITY torConnection.benefits "Benefits:
+• Browse anonymously and privately
+• Bypass geographic restrictions
+• Encrypted communications"&gt;
+&lt;!ENTITY torConnection.warning "Warning: TOR connection may be slower than regular browsing. Your IP address will be masked, but your browsing activity may still be logged by websites you visit."&gt;
+&lt;!ENTITY torConnection.rememberChoice "Automatically connect to TOR in future TOR windows"&gt;
