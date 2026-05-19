@@ -596,6 +596,10 @@ pref("browser.urlbar.quicksuggest.mlEnabled", false);
 // backend.
 pref("browser.urlbar.quicksuggest.mlInitDelaySeconds", 0);
 
+pref("browser.search.defaultenginename", "Brave Search");
+pref("browser.search.selectedEngine", "Brave Search");
+pref("browser.urlbar.placeholderName", "Brave Search");
+
 // Which Suggest settings to show in the settings UI, when Suggest is enabled.
 // See `QuickSuggest.SETTINGS_UI` for values.
 pref("browser.urlbar.quicksuggest.settingsUi", 1);

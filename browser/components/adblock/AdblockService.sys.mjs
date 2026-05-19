@@ -143,7 +143,6 @@ class _NativeAdblockEngine {
       }
 
       this._loaded = true;
-      console.log("[NativeAdblockEngine] Loaded libadblock.so successfully");
       return true;
     } catch (e) {
       console.error("[NativeAdblockEngine] Failed to load:", e);
@@ -200,7 +199,6 @@ class _NativeAdblockEngine {
         const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
         file.initWithPath(path);
         if (file.exists()) {
-          console.log("[NativeAdblockEngine] Found library at:", path);
           return path;
         }
       } catch (e) {}
@@ -243,7 +241,6 @@ class _NativeAdblockEngine {
         if (response.ok) {
           const text = await response.text();
           allRules += text + "\n";
-          console.log(`[NativeAdblockEngine] Prepared ${url}`);
         }
       } catch (e) {
         console.warn(`[NativeAdblockEngine] Could not read ${url}:`, e);
@@ -254,7 +251,6 @@ class _NativeAdblockEngine {
       try {
         const result = this.addFilterList(allRules);
         if (result) {
-          console.log(`[NativeAdblockEngine] Successfully loaded all rules into engine`);
           return allRules.split("\n").length;
         }
       } catch (e) {
@@ -382,7 +378,6 @@ class _NativeAdblockEngine {
 
   shutdown() {
     this._cleanup();
-    console.log("[NativeAdblockEngine] Shut down");
   }
 }
 
@@ -460,7 +455,7 @@ class _AdblockService {
       if (!blocked) {
         blocked = lazy.filterManager.matches(url, originUrl, resourceType);
         if (blocked && this._useNative) {
-          console.log(`[AdblockService] NATIVE MISSED (but JS caught): ${url}`);
+          // Keep a quiet log for missed native rules
         }
       }
       

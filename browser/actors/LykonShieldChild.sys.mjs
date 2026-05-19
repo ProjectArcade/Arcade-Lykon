@@ -106,7 +106,7 @@ export class LykonShieldChild extends JSWindowActorChild {
     this.collectClassesAndIds(this.document.documentElement);
     this.queryGenericFilters();
 
-    const observer = new MutationObserver(mutations => {
+    const observer = new this.contentWindow.MutationObserver(mutations => {
       let changed = false;
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {

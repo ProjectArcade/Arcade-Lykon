@@ -23,7 +23,6 @@ var LykonShield = {
   _latestStats: null,
 
   init() {
-    console.log("[LykonShield] init() called");
     const $ = id => document.getElementById(id);
     this._el = {
       button:     $("lykon-shield-button"),
@@ -48,8 +47,6 @@ var LykonShield = {
       blockedList: $("lykon-shield-blocked-list"),
     };
 
-    console.log("[LykonShield] Elements found:", this._el.count ? "count OK" : "NO count", this._el.toggle ? "toggle OK" : "NO toggle");
-
     if (!this._el.toggle || !this._el.content) return;
 
     if (!this._bound) {
@@ -73,7 +70,6 @@ var LykonShield = {
       try {
         Services.obs.addObserver(this, "adblock-stats-updated");
         this._statsObserverBound = true;
-        console.log("[LykonShield] Observer registered");
       } catch (e) {
         console.error("[LykonShield] Failed to register observer:", e);
       }
@@ -90,7 +86,6 @@ var LykonShield = {
     try {
       const { statsMonitor } = ChromeUtils.importESModule("resource:///modules/StatsMonitor.sys.mjs");
       this._latestStats = statsMonitor?.getStats ? statsMonitor.getStats() : null;
-      console.log("[LykonShield] _refreshLatestStats result:", JSON.stringify(this._latestStats));
     } catch (e) {
       console.error("[LykonShield] _refreshLatestStats error:", e);
       this._latestStats = null;
@@ -104,7 +99,6 @@ var LykonShield = {
 
     try {
       this._latestStats = data ? JSON.parse(data) : null;
-      console.log("[LykonShield] observe event, stats:", JSON.stringify(this._latestStats));
     } catch (e) {
       this._latestStats = null;
     }
@@ -201,11 +195,7 @@ var LykonShield = {
       const tracker = stats.trackers || Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
       const bytes   = stats.bytes    || Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
 
-      // Count shows ONLY website-specific blocked ads, never session total
       const adsBlockedThisSite = stats.page?.blocked || 0;
-
-      console.log("[LykonShield] _updateStats: latestStats=", JSON.stringify(this._latestStats), 
-                  "adsBlockedThisSite=", adsBlockedThisSite);
 
       if (this._el.count) {
         this._el.count.textContent = adsBlockedThisSite.toLocaleString();
@@ -233,23 +223,43 @@ var LykonShield = {
     const items = this._latestStats.page.blockedList;
     
     if (items.length === 0) {
-      list.innerHTML = '<div class="lks-blocked-empty">No elements blocked yet.</div>';
+      list.textContent = "";
+      const empty = document.createElement("div");
+      empty.className = "lks-blocked-empty";
+      empty.textContent = "No elements blocked yet.";
+      list.appendChild(empty);
       return;
     }
 
-    list.innerHTML = "";
+    list.textContent = "";
     for (const item of items) {
       const row = document.createElement("div");
       row.className = "lks-blocked-item";
       
       const urlSpan = document.createElement("span");
       urlSpan.className = "lks-blocked-url";
-      urlSpan.textContent = item.url;
+      
+      try {
+        const url = new URL(item.url);
+        const domain = url.hostname;
+        const path = url.pathname + url.search;
+        
+        const b = document.createElement("strong");
+        b.textContent = domain;
+        urlSpan.appendChild(b);
+        
+        const s = document.createElement("span");
+        s.style.opacity = "0.5";
+        s.textContent = path;
+        urlSpan.appendChild(s);
+      } catch (e) {
+        urlSpan.textContent = item.url;
+      }
       urlSpan.title = item.url;
       
       const typeSpan = document.createElement("span");
       typeSpan.className = "lks-blocked-type" + (item.isTracker ? " tracker" : "");
-      typeSpan.textContent = item.type;
+      typeSpan.textContent = item.isTracker ? "TRACKER" : item.type.toUpperCase();
       
       row.appendChild(urlSpan);
       row.appendChild(typeSpan);

@@ -145,8 +145,9 @@ export class ShieldIntegration {
 
       const blocked = AdblockService.shouldBlock(url, referrer, contentType);
       
-      if (blocked) {
-        console.log(`[ShieldIntegration] BLOCKED: ${url} (type: ${contentType}, ref: ${referrer})`);
+      if (blocked || url.includes("ads.mozilla.org")) {
+        const shortUrl = url.split('?')[0].substring(0, 80);
+        console.log(`[Shield] BLOCKED: ${shortUrl}`);
         channel.cancel(Cr.NS_BINDING_ABORTED);
         try {
           Services.obs.notifyObservers(
@@ -155,8 +156,6 @@ export class ShieldIntegration {
             `${url}|${contentType}|0|${referrer}`
           );
         } catch (e) {}
-      } else if (url.includes("media.net") || url.includes("ads") || url.includes("doubleclick")) {
-        console.log(`[ShieldIntegration] ALLOWED (suspicious): ${url} (type: ${contentType}, ref: ${referrer})`);
       }
     } catch (error) {
       console.error("[ShieldIntegration] _onHttpRequest error:", error);

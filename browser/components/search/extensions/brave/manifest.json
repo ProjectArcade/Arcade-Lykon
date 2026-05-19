@@ -1,0 +1,22 @@
+{
+  "name": "Brave Search",
+  "description": "Brave Search Engine",
+  "manifest_version": 2,
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "brave@search.lykon.org"
+    }
+  },
+  "hidden": true,
+  "default_locale": "en",
+  "chrome_settings_overrides": {
+    "search_provider": {
+      "keyword": "@brave",
+      "name": "Brave Search",
+      "search_url": "https://search.brave.com/search",
+      "suggest_url": "https://search.brave.com/api/suggest?q={searchTerms}",
+      "search_url_get_params": "q={searchTerms}"
+    }
+  }
+}
