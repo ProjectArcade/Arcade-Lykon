@@ -203,12 +203,15 @@ export class ShieldIntegration {
         /* High-specificity Generic Ad Hiding */
         ins.adsbygoogle, .ads, .ad, .ad-box, .ad-container, .ad-wrapper,
         .ad-slot, .ad-unit, .ad-banner, .advertisement, .sponsored-post,
+        .ads__slot, [class*="ads__slot"], [class*="ads__"],
         [id*="asw-"], [id*="aswift_"], [id*="google_ads_"], [id*="gpt_unit"],
         [id*="div-gpt-ad"], [id^="ad_"], [id^="ad-"], [id*="-ad-"],
         [class*="adsbygoogle"], [class*="gpt-ad"], [class*="ad-slot"],
+        [class*="adslot"], [id*="adslot"], [class*="ad_slot"], [id*="ad_slot"],
         [class*="ad-unit"], [class*="ad-banner"], [class*="advertisement"],
         [data-ad-slot], [data-ad-format], [data-ad-client], [data-google-query-id],
         [data-adunit], [data-adslot], [data-gpt-slot],
+        iframe[id*="google_ads_iframe"], iframe[id*="ad-slot"], iframe[id*="adslot"],
         
         /* YouTube Specific Ad Hiding */
         ytd-companion-slot-renderer, 

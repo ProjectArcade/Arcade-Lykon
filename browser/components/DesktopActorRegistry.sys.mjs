@@ -76,6 +76,19 @@ let JSPROCESSACTORS = {
  * available at https://firefox-source-docs.mozilla.org/dom/ipc/jsactors.html
  */
 let JSWINDOWACTORS = {
+  LykonShield: {
+    parent: {
+      esModuleURI: "resource:///actors/LykonShieldParent.sys.mjs",
+    },
+    child: {
+      esModuleURI: "resource:///actors/LykonShieldChild.sys.mjs",
+      events: {
+        DOMDocElementInserted: {},
+      },
+    },
+    allFrames: true,
+  },
+
   Megalist: {
     parent: {
       esModuleURI: "resource://gre/actors/MegalistParent.sys.mjs",
