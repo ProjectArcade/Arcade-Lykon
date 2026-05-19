@@ -1,13 +1,9 @@
-EXPORTS += [
-    "AdblockEngine.h",
-    "libadblock.h",
-]
-
 EXTRA_JS_MODULES += [
     "AdblockConfig.sys.mjs",
     "AdblockIntegration.sys.mjs",
     "AdblockService.sys.mjs",
     "FilterManager.sys.mjs",
+    "NativeAdblockEngine.sys.mjs",
     "ShieldIntegration.sys.mjs",
     "ShieldToggle.sys.mjs",
     "ShieldUIController.sys.mjs",
@@ -17,30 +13,8 @@ EXTRA_JS_MODULES += [
 FINAL_TARGET_FILES.modules += [
     "easylist.txt",
     "easyprivacy.txt",
+    "ublock-filters.txt",
 ]
-
-SOURCES += [
-    "AdblockEngine.cpp",
-]
-
-LOCAL_INCLUDES += [
-    ".",
-]
-
-OS_LIBS += [
-    "-L%s/browser/components/adblock" % TOPSRCDIR,
-    "-l:libadblock.so",
-]
-
-LDFLAGS += [
-    "-Wl,-rpath,$ORIGIN",
-]
-
-CXXFLAGS += [
-    "-fvisibility=default",
-]
-
-FINAL_LIBRARY = "xul"
 
 FINAL_TARGET_FILES.bin += [
     "libadblock.so",

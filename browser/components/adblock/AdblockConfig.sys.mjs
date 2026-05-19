@@ -10,10 +10,10 @@ export const DEFAULT_FILTER_LISTS = {
     url: "https://easylist.to/easylist/easyprivacy.txt",
     description: "Privacy tracking protection list",
   },
-  ublockresource: {
-    name: "uBlock Resources",
-    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resources.txt",
-    description: "uBlock Origin resource replacements",
+  ublockfilters: {
+    name: "uBlock Filters",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+    description: "uBlock Origin ad filters",
   },
 };
 
@@ -65,10 +65,11 @@ export const CACHE_CONFIG = {
 
 // Feature flags
 export const FEATURES = {
-  COSMETIC_FILTERING: false, // Disabled for now - requires advanced setup
-  DYNAMIC_UPDATES: false, // Needs persistent storage implementation
-  RESOURCE_REPLACEMENT: false, // Disabled for now
-  DEBUGGING: true, // Enable debug info logging
+  COSMETIC_FILTERING: true,
+  NATIVE_ENGINE: true,
+  DYNAMIC_UPDATES: false,
+  RESOURCE_REPLACEMENT: false,
+  DEBUGGING: true,
 };
 
 // Performance thresholds (in milliseconds)

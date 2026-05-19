@@ -71,6 +71,7 @@ export class FilterManager {
     const lists = [
       "resource:///modules/easylist.txt",
       "resource:///modules/easyprivacy.txt",
+      "resource:///modules/ublock-filters.txt",
     ];
     for (const url of lists) {
       try {
