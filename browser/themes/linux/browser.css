@@ -1298,6 +1298,20 @@
     #181b25;
 }
 
+#lykon-shield-panel-content[data-inactive="true"] {
+  filter: grayscale(1) opacity(0.8);
+  pointer-events: none !important;
+}
+
+#lykon-shield-panel-content[data-inactive="true"] .lks-toggle-label {
+  display: none !important;
+}
+
+#lykon-shield-panel-content[data-inactive="true"] .lks-hero-img-on,
+#lykon-shield-panel-content[data-inactive="true"] .lks-hero-img-off {
+  filter: saturate(0);
+}
+
 .lks-header {
   margin-bottom: 8px;
 }

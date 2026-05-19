@@ -63,6 +63,19 @@ var LykonShield = {
       if (this._el.nerdHeader) {
         this._el.nerdHeader.addEventListener("click", () => this._toggleNerdView());
       }
+
+      // ── New: Watch for tab/navigation changes ──
+      if (window.gBrowser) {
+        window.gBrowser.tabContainer.addEventListener("TabSelect", () => this._updatePanelState());
+        
+        // Use a proper progress listener for location changes
+        const progressListener = {
+          onLocationChange: () => this._updatePanelState(),
+          QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
+        };
+        window.gBrowser.addTabsProgressListener(progressListener);
+      }
+
       this._bound = true;
     }
 
@@ -79,6 +92,7 @@ var LykonShield = {
 
     this._loadPrefs();
     this._applyEnabledState(this._el.toggle.checked);
+    this._updatePanelState();
     this._updateStats();
   },
 
@@ -145,6 +159,43 @@ var LykonShield = {
     this._el.nerdArrow.classList.toggle("open", !open);
     if (!open) {
       this._updateBlockedList();
+    }
+  },
+
+  _updatePanelState() {
+    if (!window.gBrowser) return;
+    
+    let url = "";
+    try {
+      url = window.gBrowser.currentURI?.spec || "";
+    } catch (e) {}
+
+    const isWeb = url.startsWith("http://") || url.startsWith("https://");
+    
+    if (this._el.button) {
+      if (isWeb) {
+        this._el.button.removeAttribute("disabled");
+        this._el.button.style.opacity = "1";
+        this._el.button.style.pointerEvents = "auto";
+      } else {
+        this._el.button.setAttribute("disabled", "true");
+        this._el.button.style.opacity = "0.4";
+        this._el.button.style.pointerEvents = "none";
+      }
+    }
+    
+    if (this._el.content) {
+      this._el.content.setAttribute("data-inactive", isWeb ? "false" : "true");
+      
+      if (!isWeb) {
+        if (this._el.statusText) this._el.statusText.textContent = "Inactive on this page";
+        if (this._el.statusHint) this._el.statusHint.textContent = "Shield only works on websites.";
+        if (this._el.heroTitle)  this._el.heroTitle.textContent  = "Shield is Inactive";
+        if (this._el.heroSub)    this._el.heroSub.textContent    = "Open a website to enable protection.";
+      } else {
+        // Restore active UI state (on/off)
+        this._applyEnabledState(this._el.toggle.checked);
+      }
     }
   },
 
@@ -1206,10 +1257,9 @@ var LykonCosmeticFilter = {
   }
 
   startCosmeticFiltering();
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bindPopup, { once: true });
-  } else {
-    bindPopup();
-  }
+  bindPopup();
+  // Ensure the button state is updated immediately
+  window.addEventListener("DOMContentLoaded", () => {
+    LykonShield.init();
+  }, { once: true });
 })();
