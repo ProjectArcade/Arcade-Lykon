@@ -95,19 +95,18 @@ export class StatsMonitor {
     this.session.blocked++;
     this.session.bytes += sizeBytes;
 
-    // Count trackers separately (analytics/tracking domains)
     if (this._isTracker(url)) this.session.trackers++;
 
-    // Per-page stats
     if (pageKey) {
       const page = this.pageStats.get(pageKey) || { blocked: 0, trackers: 0, bytes: 0 };
       page.blocked++;
       page.bytes += sizeBytes;
       if (this._isTracker(url)) page.trackers++;
       this.pageStats.set(pageKey, page);
+      console.log(`[StatsMonitor] Recorded block for pageKey: ${pageKey} (url: ${url})`);
+    } else {
+      console.warn(`[StatsMonitor] Block recorded but NO pageKey found! (url: ${url}, ref: ${referrer}, current: ${this.currentPageKey})`);
     }
-
-    console.log("[StatsMonitor] recordBlock: url=", url, "pageKey=", pageKey, "currentPageKey=", this.currentPageKey, "referrer=", referrer, "pageStats=", this.pageStats);
 
     this._persistToPrefs();
     this._broadcast();

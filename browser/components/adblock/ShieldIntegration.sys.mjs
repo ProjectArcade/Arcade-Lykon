@@ -143,7 +143,10 @@ export class ShieldIntegration {
         } catch (e) {}
       }
 
-      if (AdblockService.shouldBlock(url, referrer, contentType)) {
+      const blocked = AdblockService.shouldBlock(url, referrer, contentType);
+      
+      if (blocked) {
+        console.log(`[ShieldIntegration] BLOCKED: ${url} (type: ${contentType}, ref: ${referrer})`);
         channel.cancel(Cr.NS_BINDING_ABORTED);
         try {
           Services.obs.notifyObservers(
@@ -152,8 +155,12 @@ export class ShieldIntegration {
             `${url}|${contentType}|0|${referrer}`
           );
         } catch (e) {}
+      } else if (url.includes("media.net") || url.includes("ads") || url.includes("doubleclick")) {
+        console.log(`[ShieldIntegration] ALLOWED (suspicious): ${url} (type: ${contentType}, ref: ${referrer})`);
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error("[ShieldIntegration] _onHttpRequest error:", error);
+    }
   }
 
   _getResourceType(channel) {

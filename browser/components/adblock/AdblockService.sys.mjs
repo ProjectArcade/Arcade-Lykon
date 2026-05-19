@@ -86,7 +86,7 @@ class _NativeAdblockEngine {
       this._fns.addFilterList = this._lib.declare(
         "adblock_engine_add_filter_list",
         ctypes.default_abi,
-        ctypes.bool,
+        ctypes.uint8_t,
         ctypes.voidptr_t,
         ctypes.char.ptr
       );
@@ -94,7 +94,7 @@ class _NativeAdblockEngine {
       this._fns.checkNetworkUrl = this._lib.declare(
         "adblock_engine_check_network_url",
         ctypes.default_abi,
-        ctypes.bool,
+        ctypes.uint8_t,
         ctypes.voidptr_t,
         ctypes.char.ptr,
         ctypes.char.ptr,
@@ -193,8 +193,9 @@ class _NativeAdblockEngine {
       if (result) {
         const lineCount = rulesText.split("\n").length;
         this._rulesLoaded += lineCount;
+        return true;
       }
-      return result;
+      return false;
     } catch (e) {
       console.error("[NativeAdblockEngine] addFilterList failed:", e);
       return false;
@@ -208,30 +209,32 @@ class _NativeAdblockEngine {
       "resource:///modules/ublock-filters.txt",
     ];
 
-    let totalLoaded = 0;
+    let allRules = "";
     for (const url of lists) {
       try {
         const response = await fetch(url);
         if (response.ok) {
           const text = await response.text();
-          if (this.addFilterList(text)) {
-            const count = text.split("\n").length;
-            totalLoaded += count;
-            console.log(
-              `[NativeAdblockEngine] Loaded ${url}: ${count} rules`
-            );
-          } else {
-            console.warn(`[NativeAdblockEngine] Engine rejected ${url}`);
-          }
+          allRules += text + "\n";
+          console.log(`[NativeAdblockEngine] Prepared ${url}`);
         }
       } catch (e) {
-        console.warn(`[NativeAdblockEngine] Could not load ${url}:`, e);
+        console.warn(`[NativeAdblockEngine] Could not read ${url}:`, e);
       }
     }
-    console.log(
-      `[NativeAdblockEngine] Total rules loaded: ${totalLoaded}`
-    );
-    return totalLoaded;
+
+    if (allRules.length > 0) {
+      try {
+        const result = this.addFilterList(allRules);
+        if (result) {
+          console.log(`[NativeAdblockEngine] Successfully loaded all rules into engine`);
+          return allRules.split("\n").length;
+        }
+      } catch (e) {
+        console.error("[NativeAdblockEngine] Failed to load combined rules:", e);
+      }
+    }
+    return 0;
   }
 
   shouldBlock(url, sourceUrl, resourceType) {
@@ -256,12 +259,13 @@ class _NativeAdblockEngine {
     }
 
     try {
-      return this._fns.checkNetworkUrl(
+      const result = this._fns.checkNetworkUrl(
         this._engine,
         url,
         sourceUrl || "",
         resourceType || "other"
       );
+      return !!result;
     } catch (e) {
       console.error("[NativeAdblockEngine] checkNetworkUrl failed:", e);
       return false;
@@ -366,15 +370,26 @@ class _AdblockService {
   shouldBlock(url, originUrl, resourceType) {
     if (!this.enabled || !this._initialized) return false;
     try {
+      let blocked = false;
       if (this._useNative) {
-        return NativeAdblockEngine.shouldBlock(
+        blocked = NativeAdblockEngine.shouldBlock(
           url,
           originUrl,
           resourceType
         );
       }
-      return lazy.filterManager.matches(url, originUrl, resourceType);
+      
+      // Fallback to JS engine if native didn't block it
+      if (!blocked) {
+        blocked = lazy.filterManager.matches(url, originUrl, resourceType);
+        if (blocked && this._useNative) {
+          console.log(`[AdblockService] NATIVE MISSED (but JS caught): ${url}`);
+        }
+      }
+      
+      return blocked;
     } catch (e) {
+      console.error("[AdblockService] shouldBlock error:", e);
       return false;
     }
   }
