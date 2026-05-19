@@ -92,58 +92,74 @@ export class StatsMonitor {
   recordBlock(url, contentType, sizeBytes, referrer) {
     const pageKey = this._normalizePageKey(referrer) || this.currentPageKey || this._getSelectedPageKey();
 
+    // Estimate size if not provided (blocked requests save what they would have cost)
+    if (sizeBytes <= 0) {
+      const estimates = {
+        script: 35000,
+        image: 45000,
+        media: 250000,
+        stylesheet: 12000,
+        xmlhttprequest: 5000,
+        subdocument: 15000,
+        other: 2000,
+      };
+      sizeBytes = estimates[contentType] || estimates.other;
+    }
+
     this.session.blocked++;
     this.session.bytes += sizeBytes;
 
-    if (this._isTracker(url)) this.session.trackers++;
+    const isTracker = this._isTracker(url);
+    if (isTracker) this.session.trackers++;
 
     if (pageKey) {
-      const page = this.pageStats.get(pageKey) || { blocked: 0, trackers: 0, bytes: 0 };
+      const page = this.pageStats.get(pageKey) || { blocked: 0, trackers: 0, bytes: 0, blockedList: [] };
       page.blocked++;
       page.bytes += sizeBytes;
-      if (this._isTracker(url)) page.trackers++;
+      if (isTracker) page.trackers++;
+      
+      // Store blocked items for the "nerd" view (limit to last 50)
+      if (!page.blockedList) page.blockedList = [];
+      page.blockedList.unshift({
+        url,
+        type: contentType,
+        isTracker,
+        time: Date.now()
+      });
+      if (page.blockedList.length > 50) page.blockedList.pop();
+      
       this.pageStats.set(pageKey, page);
-      console.log(`[StatsMonitor] Recorded block for pageKey: ${pageKey} (url: ${url})`);
-    } else {
-      console.warn(`[StatsMonitor] Block recorded but NO pageKey found! (url: ${url}, ref: ${referrer}, current: ${this.currentPageKey})`);
     }
 
     this._persistToPrefs();
     this._broadcast();
   }
 
-
   _isTracker(url) {
-    return url.includes("analytics") ||
-           url.includes("tracker") ||
-           url.includes("telemetry") ||
-           url.includes("pixel") ||
-           url.includes("beacon") ||
-           url.includes("doubleclick") ||
-           url.includes("facebook.com/tr") ||
-           url.includes("google-analytics") ||
-           url.includes("googletagmanager");
+    const trackerDomains = [
+      "analytics", "tracker", "telemetry", "pixel", "beacon",
+      "doubleclick", "adservice", "adsystem", "adnxs", "taboola",
+      "outbrain", "facebook.com/tr", "google-analytics", "googletagmanager",
+      "scorecardresearch", "hotjar", "clarity.ms", "mixpanel"
+    ];
+    return trackerDomains.some(d => url.includes(d));
   }
 
   recordNavigation(pageKey) {
     const normalizedKey = this._normalizePageKey(pageKey);
-    console.log("[StatsMonitor] recordNavigation: pageKey=", pageKey, "normalizedKey=", normalizedKey);
-    if (!normalizedKey) {
-      return;
-    }
+    if (!normalizedKey) return;
 
     this.currentPageKey = normalizedKey;
     if (!this.pageStats.has(normalizedKey)) {
-      this.pageStats.set(normalizedKey, { blocked: 0, trackers: 0, bytes: 0 });
+      this.pageStats.set(normalizedKey, { blocked: 0, trackers: 0, bytes: 0, blockedList: [] });
     }
-    console.log("[StatsMonitor] currentPageKey updated to:", this.currentPageKey);
     this._broadcast();
   }
 
   getStats() {
     const total = (() => { try { return Services.prefs.getIntPref("lykon.shield.stats.total", 0); } catch(e) { return 0; } })();
     const currentPageKey = this._getSelectedPageKey() || this.currentPageKey;
-    const page  = currentPageKey ? (this.pageStats.get(currentPageKey) || {}) : {};
+    const page = currentPageKey ? (this.pageStats.get(currentPageKey) || {}) : {};
     return {
       session:  this.session.blocked,
       total,
@@ -153,6 +169,7 @@ export class StatsMonitor {
         blocked:  page.blocked  || 0,
         trackers: page.trackers || 0,
         bytes:    page.bytes    || 0,
+        blockedList: page.blockedList || [],
       },
     };
   }

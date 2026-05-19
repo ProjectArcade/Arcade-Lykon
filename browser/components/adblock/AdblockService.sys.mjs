@@ -83,7 +83,16 @@ class _NativeAdblockEngine {
         ctypes.voidptr_t
       );
 
-      this._fns.addFilterList = this._lib.declare(
+      const safeDeclare = (name, abi, ret, ...args) => {
+        try {
+          return this._lib.declare(name, abi, ret, ...args);
+        } catch (e) {
+          console.warn(`[NativeAdblockEngine] Function ${name} not found in library:`, e.message);
+          return null;
+        }
+      };
+
+      this._fns.addFilterList = safeDeclare(
         "adblock_engine_add_filter_list",
         ctypes.default_abi,
         ctypes.uint8_t,
@@ -91,7 +100,7 @@ class _NativeAdblockEngine {
         ctypes.char.ptr
       );
 
-      this._fns.checkNetworkUrl = this._lib.declare(
+      this._fns.checkNetworkUrl = safeDeclare(
         "adblock_engine_check_network_url",
         ctypes.default_abi,
         ctypes.uint8_t,
@@ -101,7 +110,25 @@ class _NativeAdblockEngine {
         ctypes.char.ptr
       );
 
-      this._fns.freeString = this._lib.declare(
+      this._fns.getCosmeticResources = safeDeclare(
+        "adblock_engine_get_cosmetic_resources",
+        ctypes.default_abi,
+        ctypes.char.ptr,
+        ctypes.voidptr_t,
+        ctypes.char.ptr
+      );
+
+      this._fns.getHiddenClassIdSelectors = safeDeclare(
+        "adblock_engine_get_hidden_class_id_selectors",
+        ctypes.default_abi,
+        ctypes.char.ptr,
+        ctypes.voidptr_t,
+        ctypes.char.ptr,
+        ctypes.char.ptr,
+        ctypes.char.ptr
+      );
+
+      this._fns.freeString = safeDeclare(
         "adblock_free_string",
         ctypes.default_abi,
         ctypes.void_t,
@@ -285,6 +312,43 @@ class _NativeAdblockEngine {
     }
   }
 
+  getCosmeticResources(url) {
+    if (!this.loaded || !this._fns.getCosmeticResources) return null;
+    try {
+      const ptr = this._fns.getCosmeticResources(this._engine, url);
+      if (!ptr || ptr.isNull()) return null;
+      const json = ptr.readString();
+      if (this._fns.freeString) {
+        this._fns.freeString(ptr);
+      }
+      return JSON.parse(json);
+    } catch (e) {
+      console.error("[NativeAdblockEngine] getCosmeticResources failed:", e);
+      return null;
+    }
+  }
+
+  getHiddenClassIdSelectors(classes, ids, exceptions) {
+    if (!this.loaded || !this._fns.getHiddenClassIdSelectors) return [];
+    try {
+      const ptr = this._fns.getHiddenClassIdSelectors(
+        this._engine,
+        JSON.stringify(classes),
+        JSON.stringify(ids),
+        JSON.stringify(exceptions)
+      );
+      if (!ptr || ptr.isNull()) return [];
+      const json = ptr.readString();
+      if (this._fns.freeString) {
+        this._fns.freeString(ptr);
+      }
+      return JSON.parse(json);
+    } catch (e) {
+      console.error("[NativeAdblockEngine] getHiddenClassIdSelectors failed:", e);
+      return [];
+    }
+  }
+
   _isMediaAllowlisted(hostname, url) {
     for (const domain of MEDIA_ALLOWLIST_DOMAINS) {
       if (hostname === domain || hostname.endsWith("." + domain)) {
@@ -428,6 +492,26 @@ class _AdblockService {
       NativeAdblockEngine.addFilterList(rules);
     }
     await lazy.filterManager.addList(name, rules);
+  }
+
+  getCosmeticResources(url) {
+    if (!this.enabled || !this._initialized) return null;
+    if (this._useNative) {
+      return NativeAdblockEngine.getCosmeticResources(url);
+    }
+    return null; // Fallback JS engine doesn't support this yet
+  }
+
+  getHiddenClassIdSelectors(classes, ids, exceptions) {
+    if (!this.enabled || !this._initialized) return [];
+    if (this._useNative) {
+      return NativeAdblockEngine.getHiddenClassIdSelectors(
+        classes,
+        ids,
+        exceptions
+      );
+    }
+    return [];
   }
 
   get isNative() {

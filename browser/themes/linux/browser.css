@@ -1556,3 +1556,87 @@
   font-size: 11px;
   line-height: 1.35;
 }
+
+/* Nerd View */
+.lks-advanced-header {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(30, 38, 54, 0.5);
+  border: 1px solid rgba(83, 98, 133, 0.3);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  color: #0a84ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lks-advanced-header:hover {
+  background: rgba(30, 38, 54, 0.8);
+}
+
+.lks-nerd-panel {
+  margin-top: 4px;
+  padding: 8px;
+  background: rgba(10, 15, 25, 0.7);
+  border: 1px solid rgba(83, 98, 133, 0.2);
+  border-radius: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.lks-blocked-item {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: monospace;
+  font-size: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lks-blocked-item:last-child {
+  border-bottom: none;
+}
+
+.lks-blocked-url {
+  color: #edf3ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin-right: 8px;
+  text-align: left;
+}
+
+.lks-blocked-type {
+  color: #ff7b74;
+  text-transform: uppercase;
+  font-weight: bold;
+  font-size: 9px;
+  padding: 1px 4px;
+  background: rgba(255, 123, 116, 0.1);
+  border-radius: 4px;
+}
+
+.lks-blocked-type.tracker {
+  color: #ffcc00;
+  background: rgba(255, 204, 0, 0.1);
+}
+
+.lks-blocked-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.lks-arrow {
+  transition: transform 0.2s ease;
+}
+
+.lks-arrow.open {
+  transform: rotate(180deg);
+}

@@ -197,6 +197,31 @@ export class ShieldIntegration {
         "lykon-adblock-cosmetic-style"
       );
       if (existing) return;
+
+      const pageUrl = document.documentURI || document.URL || "";
+      const resources = AdblockService.getCosmeticResources(pageUrl);
+      
+      let additionalCSS = "";
+      if (resources && resources.hide_selectors && resources.hide_selectors.size > 0) {
+        // Handle both Set and Array from JSON.parse
+        const selectors = Array.from(resources.hide_selectors);
+        if (selectors.length > 0) {
+          additionalCSS = `
+            ${selectors.join(",\n")} {
+              display: none !important;
+              visibility: hidden !important;
+              height: 0 !important;
+              width: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+              opacity: 0 !important;
+              pointer-events: none !important;
+            }
+          `;
+        }
+      }
+
       const style = document.createElement("style");
       style.id = "lykon-adblock-cosmetic-style";
       style.textContent = `
@@ -204,16 +229,22 @@ export class ShieldIntegration {
         ins.adsbygoogle, .ads, .ad, .ad-box, .ad-container, .ad-wrapper,
         .ad-slot, .ad-unit, .ad-banner, .advertisement, .sponsored-post,
         .ads__slot, [class*="ads__slot"], [class*="ads__"],
+        [class*="adslot"], [id*="adslot"], [class*="ad_slot"], [id*="ad_slot"],
+        .adslot300x250ATF, .adslot728x90ATF, .adslot300x600ATF,
         [id*="asw-"], [id*="aswift_"], [id*="google_ads_"], [id*="gpt_unit"],
         [id*="div-gpt-ad"], [id^="ad_"], [id^="ad-"], [id*="-ad-"],
         [class*="adsbygoogle"], [class*="gpt-ad"], [class*="ad-slot"],
-        [class*="adslot"], [id*="adslot"], [class*="ad_slot"], [id*="ad_slot"],
         [class*="ad-unit"], [class*="ad-banner"], [class*="advertisement"],
         [data-ad-slot], [data-ad-format], [data-ad-client], [data-google-query-id],
         [data-adunit], [data-adslot], [data-gpt-slot],
         iframe[id*="google_ads_iframe"], iframe[id*="ad-slot"], iframe[id*="adslot"],
         
-        /* YouTube Specific Ad Hiding */
+        /* Specific empty placeholders requested by user */
+        .adslot300x250ATF, .ads__slot, .ads, .ad,
+        
+        /* Brave-style dynamic placeholders */
+        [class^="ad-placeholder"], [id^="ad-placeholder"],
+        [class*="ad-placeholder"], [id*="ad-placeholder"],
         ytd-companion-slot-renderer, 
         ytd-ad-slot-renderer, 
         ytd-promoted-sparkles-web-renderer,
@@ -237,7 +268,11 @@ export class ShieldIntegration {
         iframe[src*="doubleclick.net"], iframe[src*="googlesyndication"],
         iframe[src*="googleadservices"], iframe[src*="ads.google"],
         iframe[src*="amazon-adsystem"], iframe[src*="taboola.com"],
-        iframe[src*="outbrain.com"], iframe[src*="adnxs.com"] {
+        iframe[src*="outbrain.com"], iframe[src*="adnxs.com"],
+        iframe[src*="smartadserver.com"], iframe[src*="openx.net"],
+        iframe[src*="pubmatic.com"], iframe[src*="rubiconproject.com"],
+        iframe[src*="adtech.de"], iframe[src*="yieldmo.com"],
+        iframe[src*="media.net"], iframe[src*="advertising.com"] {
           display: none !important;
           visibility: hidden !important;
           width: 0 !important; height: 0 !important;
@@ -248,8 +283,29 @@ export class ShieldIntegration {
           opacity: 0 !important;
         }
 
-        /* Collapse empty containers that might have ad-like classes */
-        [class*="ad-"]:empty, [class*="ads-"]:empty, [id*="ad-"]:empty {
+        /* Hide parents of blocked iframes using :has() */
+        div:has(> iframe[src*="doubleclick.net"]),
+        div:has(> iframe[src*="googlesyndication"]),
+        div:has(> iframe[src*="googleadservices"]),
+        div:has(> iframe[src*="ads.google"]),
+        div:has(> iframe[src*="amazon-adsystem"]),
+        div:has(> iframe[src*="taboola.com"]),
+        div:has(> iframe[src*="outbrain.com"]),
+        div:has(> iframe[src*="adnxs.com"]),
+        div:has(> iframe[id*="google_ads_iframe"]),
+        div:has(> iframe[id*="ad-slot"]) {
+          display: none !important;
+        }
+
+        /* Site-specific rules from Adblock engine */
+        ${additionalCSS}
+
+        /* Collapse empty containers that might have ad-like classes or IDs */
+        .ads:empty, .ad:empty, .ad-box:empty, .ad-container:empty,
+        .ad-slot:empty, .ad-unit:empty, .ad-wrapper:empty,
+        [class*="ad-"]:empty, [class*="ads-"]:empty, [id*="ad-"]:empty,
+        [class*="adslot"]:empty, [id*="adslot"]:empty,
+        [class*="ad_slot"]:empty, [id*="ad_slot"]:empty {
           display: none !important;
         }
       `;

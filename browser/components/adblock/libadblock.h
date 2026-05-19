@@ -46,6 +46,27 @@ bool adblock_engine_check_network_url(AdblockEngine engine, const char* url,
                                        const char* source_url, const char* resource_type);
 
 /**
+ * Get cosmetic filtering resources for a given URL
+ * @param engine Pointer to the engine
+ * @param url The URL to get resources for
+ * @return JSON string containing cosmetic resources, must be freed with adblock_free_string()
+ */
+char* adblock_engine_get_cosmetic_resources(AdblockEngine engine, const char* url);
+
+/**
+ * Get CSS selectors to hide based on classes and IDs found on the page
+ * @param engine Pointer to the engine
+ * @param classes JSON array of class names
+ * @param ids JSON array of ID names
+ * @param exceptions JSON array of selectors to except
+ * @return JSON array of CSS selectors to hide, must be freed with adblock_free_string()
+ */
+char* adblock_engine_get_hidden_class_id_selectors(AdblockEngine engine,
+                                                    const char* classes,
+                                                    const char* ids,
+                                                    const char* exceptions);
+
+/**
  * Free a string allocated by the adblock engine
  * @param s Pointer to the string to free
  */

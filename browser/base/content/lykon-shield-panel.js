@@ -42,6 +42,10 @@ var LykonShield = {
       total:      $("lykon-shield-total-count"),
       trackers:   $("lykon-shield-tracker-count"),
       bandwidth:  $("lykon-shield-bandwidth"),
+      nerdHeader: $("lykon-shield-nerd-header"),
+      nerdPanel:  $("lykon-shield-nerd-panel"),
+      nerdArrow:  $("lykon-shield-nerd-arrow"),
+      blockedList: $("lykon-shield-blocked-list"),
     };
 
     console.log("[LykonShield] Elements found:", this._el.count ? "count OK" : "NO count", this._el.toggle ? "toggle OK" : "NO toggle");
@@ -58,6 +62,9 @@ var LykonShield = {
       }
       if (this._el.advHeader) {
         this._el.advHeader.addEventListener("click", () => this._toggleAdvanced());
+      }
+      if (this._el.nerdHeader) {
+        this._el.nerdHeader.addEventListener("click", () => this._toggleNerdView());
       }
       this._bound = true;
     }
@@ -137,6 +144,16 @@ var LykonShield = {
     this._el.advArrow.classList.toggle("open", !open);
   },
 
+  _toggleNerdView() {
+    if (!this._el.nerdPanel || !this._el.nerdArrow) return;
+    const open = this._el.nerdPanel.style.display !== "none";
+    this._el.nerdPanel.style.display = open ? "none" : "block";
+    this._el.nerdArrow.classList.toggle("open", !open);
+    if (!open) {
+      this._updateBlockedList();
+    }
+  },
+
   setTrackerMode(val)  { try { Services.prefs.setStringPref("lykon.shield.tracker.mode", val); } catch (e) {} },
   setHttpsMode(val)    { try { Services.prefs.setStringPref("lykon.shield.https.mode", val);   } catch (e) {} },
   setCookieMode(val)   { try { Services.prefs.setStringPref("lykon.shield.cookie.mode", val);  } catch (e) {} },
@@ -178,13 +195,14 @@ var LykonShield = {
 
   _updateStats() {
     try {
-      const session = Services.prefs.getIntPref("lykon.shield.stats.session",  0);
-      const total   = Services.prefs.getIntPref("lykon.shield.stats.total",    0);
-      const tracker = Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
-      const bytes   = Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
+      const stats = this._latestStats || {};
+      const session = stats.session  || Services.prefs.getIntPref("lykon.shield.stats.session",  0);
+      const total   = stats.total    || Services.prefs.getIntPref("lykon.shield.stats.total",    0);
+      const tracker = stats.trackers || Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
+      const bytes   = stats.bytes    || Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
 
       // Count shows ONLY website-specific blocked ads, never session total
-      const adsBlockedThisSite = this._latestStats?.page?.blocked || 0;
+      const adsBlockedThisSite = stats.page?.blocked || 0;
 
       console.log("[LykonShield] _updateStats: latestStats=", JSON.stringify(this._latestStats), 
                   "adsBlockedThisSite=", adsBlockedThisSite);
@@ -201,8 +219,41 @@ var LykonShield = {
       if (this._el.bandwidth) {
         this._el.bandwidth.textContent = this._fmtBytes(bytes);
       }
+      
+      this._updateBlockedList();
     } catch (e) {
       console.error("[LykonShield] _updateStats error:", e);
+    }
+  },
+
+  _updateBlockedList() {
+    if (!this._el.blockedList || !this._latestStats?.page?.blockedList) return;
+    
+    const list = this._el.blockedList;
+    const items = this._latestStats.page.blockedList;
+    
+    if (items.length === 0) {
+      list.innerHTML = '<div class="lks-blocked-empty">No elements blocked yet.</div>';
+      return;
+    }
+
+    list.innerHTML = "";
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "lks-blocked-item";
+      
+      const urlSpan = document.createElement("span");
+      urlSpan.className = "lks-blocked-url";
+      urlSpan.textContent = item.url;
+      urlSpan.title = item.url;
+      
+      const typeSpan = document.createElement("span");
+      typeSpan.className = "lks-blocked-type" + (item.isTracker ? " tracker" : "");
+      typeSpan.textContent = item.type;
+      
+      row.appendChild(urlSpan);
+      row.appendChild(typeSpan);
+      list.appendChild(row);
     }
   },
 
