@@ -53,8 +53,62 @@ export class AboutNewTabChild extends RemotePageChild {
     } else if (event.type == "load") {
       this.sendAsyncMessage("Load");
     } else if (event.type == "DOMContentLoaded") {
-      if (!this.contentWindow.document.body.firstElementChild) {
+      if (
+        !this.contentWindow.document.body ||
+        !this.contentWindow.document.body.firstElementChild
+      ) {
         return; // about:newtab is a blank page
+      }
+
+      if (this.contentWindow.document.getElementById("clock-container")) {
+        this.contentWindow.addEventListener(
+          "LykonHome:RequestData",
+          async () => {
+            try {
+              const res = await this.sendQuery("LykonHome:GetStatsAndTopSites");
+              if (res) {
+                const detail = Cu.cloneInto(res, this.contentWindow);
+                this.contentWindow.dispatchEvent(
+                  new this.contentWindow.CustomEvent("LykonHome:ResponseData", {
+                    detail,
+                  })
+                );
+              }
+            } catch (e) {
+              Cu.reportError(e);
+            }
+          },
+          { wantsUntrusted: true }
+        );
+
+        this.contentWindow.addEventListener(
+          "LykonHome:SaveState",
+          e => {
+            if (e.detail) {
+              try {
+                let data =
+                  typeof e.detail === "string"
+                    ? JSON.parse(e.detail)
+                    : e.detail;
+                this.sendAsyncMessage("LykonHome:SaveState", {
+                  searchEngine: data.searchEngine,
+                  autoChange: data.autoChange,
+                  changeInterval: data.changeInterval,
+                  showStats: data.showStats,
+                  showClock: data.showClock,
+                  showShortcuts: data.showShortcuts,
+                  wallpaperMode: data.wallpaperMode,
+                  customShortcuts: data.customShortcuts,
+                  deletedShortcuts: data.deletedShortcuts,
+                });
+              } catch (ex) {
+                Cu.reportError(ex);
+              }
+            }
+          },
+          { wantsUntrusted: true }
+        );
+        return;
       }
 
       if (lazy.NEWTAB_REMOTE_RENDERER_ENABLED) {

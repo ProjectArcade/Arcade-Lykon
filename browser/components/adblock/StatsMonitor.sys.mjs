@@ -55,7 +55,6 @@ export class StatsMonitor {
 
   _persistToPrefs() {
     try {
-      const total = Services.prefs.getIntPref("lykon.shield.stats.total", 0);
       Services.prefs.setIntPref(
         "lykon.shield.stats.session",
         this.session.blocked
@@ -65,7 +64,10 @@ export class StatsMonitor {
         this.session.trackers
       );
       Services.prefs.setIntPref("lykon.shield.stats.bytes", this.session.bytes);
-      Services.prefs.setIntPref("lykon.shield.stats.total", total + 1); // increment total
+      Services.prefs.setIntPref(
+        "lykon.shield.stats.total",
+        this.session.blocked
+      );
     } catch (e) {}
   }
 

@@ -28,6 +28,7 @@ browser.jar:
 #endif
   builtin-addons/newtab/prerendered/activity-stream-noscripts.html (./prerendered/activity-stream-noscripts.html)
   builtin-addons/newtab/prerendered/lykon-home.html (./prerendered/lykon-home.html)
+  builtin-addons/newtab/prerendered/wallpaper.json (./prerendered/wallpaper.json)
 
 # The following are resources that exist in other component folders that are
 # included in the newtab resources at build time. Specifically, these are for

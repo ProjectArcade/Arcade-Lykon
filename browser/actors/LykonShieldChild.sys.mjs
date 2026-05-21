@@ -177,74 +177,124 @@ export class LykonShieldChild extends JSWindowActorChild {
               const isUserActivated = win.navigator?.userActivation?.isActive;
 
               const isLegitimate = (() => {
-                const keywords = [
-                  "oauth",
-                  "auth",
-                  "login",
-                  "signin",
-                  "sign-in",
-                  "log-in",
-                  "signup",
-                  "sign-up",
-                  "register",
-                  "authorize",
-                  "checkout",
-                  "paypal",
-                  "stripe",
-                  "pay",
-                  "billing",
-                  "subscribe",
-                  "sso",
-                  "identity",
-                  "accounts",
-                  "verification",
-                  "security",
-                  "portal",
-                  "wallet",
-                  "connect",
-                  "callback",
-                  "token",
-                  "session",
-                ];
-                if (keywords.some(kw => urlStr.includes(kw))) {
-                  return true;
+                let parsedUrl = null;
+                try {
+                  parsedUrl = new win.URL(urlParam, win.location.href);
+                } catch (e) {}
+
+                if (parsedUrl) {
+                  const sParams = parsedUrl.searchParams;
+                  const oauthKeys = [
+                    "client_id",
+                    "redirect_uri",
+                    "response_type",
+                    "state",
+                    "scope",
+                    "code",
+                    "access_token",
+                    "id_token",
+                    "samlrequest",
+                    "samlresponse",
+                    "openid",
+                    "login_hint",
+                    "nonce",
+                    "checkout_id",
+                    "payment_intent",
+                    "return_url",
+                    "cancel_url",
+                    "success_url",
+                  ];
+                  for (const key of oauthKeys) {
+                    if (sParams.has(key)) {
+                      return true;
+                    }
+                  }
                 }
 
-                const domains = [
-                  "google.com",
-                  "google.co",
-                  "github.com",
-                  "github.co",
-                  "apple.com",
-                  "microsoft.com",
-                  "microsoftonline.com",
-                  "live.com",
-                  "office.com",
-                  "facebook.com",
-                  "fb.com",
-                  "twitter.com",
-                  "x.com",
-                  "discord.com",
-                  "discordapp.com",
-                  "okta.com",
-                  "auth0.com",
-                  "stripe.com",
-                  "stripe.network",
-                  "paypal.com",
-                  "paypalobjects.com",
-                  "amazon.com",
-                  "linkedin.com",
-                  "shopify.com",
-                  "coinbase.com",
+                if (parsedUrl) {
+                  const path = parsedUrl.pathname.toLowerCase();
+                  const pathKeywords = [
+                    "/oauth",
+                    "/auth",
+                    "/login",
+                    "/signin",
+                    "/checkout",
+                    "/pay",
+                    "/sso",
+                    "/register",
+                    "/signup",
+                    "/sign-in",
+                    "/sign-up",
+                    "/log-in",
+                    "/authorize",
+                    "/billing",
+                    "/subscribe",
+                    "/identity",
+                    "/accounts",
+                    "/verification",
+                    "/security",
+                    "/portal",
+                    "/wallet",
+                    "/connect",
+                    "/callback",
+                    "/token",
+                    "/session",
+                  ];
+                  if (pathKeywords.some(kw => path.includes(kw))) {
+                    return true;
+                  }
+                } else {
+                  const pathKeywords = [
+                    "oauth",
+                    "auth",
+                    "login",
+                    "signin",
+                    "checkout",
+                    "pay",
+                    "sso",
+                    "register",
+                  ];
+                  if (pathKeywords.some(kw => urlStr.includes(kw))) {
+                    return true;
+                  }
+                }
+
+                const hostToCheck = parsedUrl
+                  ? parsedUrl.hostname.toLowerCase()
+                  : targetHost.toLowerCase();
+                const hostSegments = hostToCheck.split(".");
+                const ssoDomains = [
+                  "google",
+                  "github",
+                  "apple",
+                  "microsoft",
+                  "microsoftonline",
+                  "live",
+                  "office",
+                  "facebook",
+                  "fb",
+                  "twitter",
+                  "x",
+                  "discord",
+                  "discordapp",
                   "okta",
                   "auth0",
+                  "stripe",
+                  "paypal",
+                  "amazon",
+                  "linkedin",
+                  "shopify",
+                  "coinbase",
                   "keycloak",
                   "clerk",
                 ];
-
                 if (
-                  domains.some(
-                    dom => targetHost.includes(dom) || targetBase.includes(dom)
+                  hostSegments.some(
+                    seg =>
+                      ssoDomains.includes(seg) ||
+                      seg === "auth" ||
+                      seg === "login" ||
+                      seg === "sso"
                   )
                 ) {
                   return true;
