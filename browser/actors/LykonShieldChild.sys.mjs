@@ -142,10 +142,16 @@ export class LykonShieldChild extends JSWindowActorChild {
           ) {
             try {
               const currentHost = win.location?.hostname || "";
-              const urlStr = String(urlParam || "").toLowerCase();
+              const urlStr = String(urlParam || "")
+                .trim()
+                .toLowerCase();
               console.log(
                 `[LykonShieldChild] window.open intercepted: url=${urlStr}`
               );
+
+              if (!urlParam || urlStr === "" || urlStr === "about:blank") {
+                return originalOpen.call(waivedWin, urlParam, name, features);
+              }
 
               let targetHost = "";
               try {
@@ -168,25 +174,105 @@ export class LykonShieldChild extends JSWindowActorChild {
               const currentBase = getBaseDomain(currentHost).toLowerCase();
               const targetBase = getBaseDomain(targetHost).toLowerCase();
 
-              if (
-                !urlParam ||
-                urlStr.includes("traffic") ||
-                urlStr.includes("click") ||
-                urlStr.includes("eta") ||
-                urlStr.includes("pop") ||
-                (targetBase && currentBase && targetBase !== currentBase)
-              ) {
-                console.log(
-                  `[LykonShieldChild] BLOCKED window.open popup: ${urlStr}`
-                );
-                return new win.Proxy(
-                  {},
-                  {
-                    get() {
-                      return function () {};
-                    },
-                  }
-                );
+              const isUserActivated = win.navigator?.userActivation?.isActive;
+
+              const isLegitimate = (() => {
+                const keywords = [
+                  "oauth",
+                  "auth",
+                  "login",
+                  "signin",
+                  "sign-in",
+                  "log-in",
+                  "signup",
+                  "sign-up",
+                  "register",
+                  "authorize",
+                  "checkout",
+                  "paypal",
+                  "stripe",
+                  "pay",
+                  "billing",
+                  "subscribe",
+                  "sso",
+                  "identity",
+                  "accounts",
+                  "verification",
+                  "security",
+                  "portal",
+                  "wallet",
+                  "connect",
+                  "callback",
+                  "token",
+                  "session",
+                ];
+                if (keywords.some(kw => urlStr.includes(kw))) {
+                  return true;
+                }
+
+                const domains = [
+                  "google.com",
+                  "google.co",
+                  "github.com",
+                  "github.co",
+                  "apple.com",
+                  "microsoft.com",
+                  "microsoftonline.com",
+                  "live.com",
+                  "office.com",
+                  "facebook.com",
+                  "fb.com",
+                  "twitter.com",
+                  "x.com",
+                  "discord.com",
+                  "discordapp.com",
+                  "okta.com",
+                  "auth0.com",
+                  "stripe.com",
+                  "stripe.network",
+                  "paypal.com",
+                  "paypalobjects.com",
+                  "amazon.com",
+                  "linkedin.com",
+                  "shopify.com",
+                  "coinbase.com",
+                  "okta",
+                  "auth0",
+                  "keycloak",
+                  "clerk",
+                ];
+
+                if (
+                  domains.some(
+                    dom => targetHost.includes(dom) || targetBase.includes(dom)
+                  )
+                ) {
+                  return true;
+                }
+
+                return false;
+              })();
+
+              if (!isUserActivated && !isLegitimate) {
+                if (
+                  urlStr.includes("traffic") ||
+                  urlStr.includes("click") ||
+                  urlStr.includes("eta") ||
+                  urlStr.includes("pop") ||
+                  (targetBase && currentBase && targetBase !== currentBase)
+                ) {
+                  console.log(
+                    `[LykonShieldChild] BLOCKED window.open popup: ${urlStr}`
+                  );
+                  return new win.Proxy(
+                    {},
+                    {
+                      get() {
+                        return function () {};
+                      },
+                    }
+                  );
+                }
               }
             } catch (e) {}
             return originalOpen.call(waivedWin, urlParam, name, features);
@@ -219,7 +305,9 @@ export class LykonShieldChild extends JSWindowActorChild {
                   if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
                   if ("enumerable" in waivedDesc)
                     newDesc.enumerable = waivedDesc.enumerable;
-                  descriptor = newDesc;
+                  descriptor = Cu.cloneInto(newDesc, win, {
+                    cloneFunctions: true,
+                  });
                   console.log(
                     `[LykonShieldChild] Forced configurable: true for ${String(prop)}`
                   );
@@ -267,7 +355,9 @@ export class LykonShieldChild extends JSWindowActorChild {
                     if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
                     if ("enumerable" in waivedDesc)
                       newDesc.enumerable = waivedDesc.enumerable;
-                    newProps[key] = newDesc;
+                    newProps[key] = Cu.cloneInto(newDesc, win, {
+                      cloneFunctions: true,
+                    });
                     modified = true;
                     console.log(
                       `[LykonShieldChild] Forced configurable: true for key=${String(key)} in defineProperties`
@@ -277,7 +367,7 @@ export class LykonShieldChild extends JSWindowActorChild {
                   }
                 }
                 if (modified) {
-                  props = newProps;
+                  props = Cu.cloneInto(newProps, win, { cloneFunctions: true });
                 }
               }
             } catch (e) {}
@@ -311,7 +401,9 @@ export class LykonShieldChild extends JSWindowActorChild {
                   if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
                   if ("enumerable" in waivedDesc)
                     newDesc.enumerable = waivedDesc.enumerable;
-                  descriptor = newDesc;
+                  descriptor = Cu.cloneInto(newDesc, win, {
+                    cloneFunctions: true,
+                  });
                   console.log(
                     `[LykonShieldChild] Forced configurable: true for Reflect ${String(prop)}`
                   );

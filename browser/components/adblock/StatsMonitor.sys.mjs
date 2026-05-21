@@ -16,6 +16,9 @@ export class StatsMonitor {
   }
 
   async init() {
+    if (this.initialized) {
+      return;
+    }
     try {
       // Restore totals from prefs (survive restart)
       this._restoreFromPrefs();

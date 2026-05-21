@@ -436,6 +436,17 @@ class TabPanel extends HoverPanel {
     this.#tab?.removeEventListener("TabAttrModified", this);
     this.#tab = null;
     this.#thumbnailElement = null;
+
+    const memoryContainer = this.panelElement.querySelector(
+      ".tab-preview-memory-container"
+    );
+    if (memoryContainer) {
+      memoryContainer.setAttribute("hidden", "true");
+      const memoryEl = memoryContainer.querySelector(".tab-preview-memory");
+      if (memoryEl) {
+        memoryEl.textContent = "";
+      }
+    }
   }
 
   get hoverTargets() {
@@ -639,7 +650,84 @@ class TabPanel extends HoverPanel {
       );
     }
 
+    this.#updateMemory(this.#tab);
     this.#movePanel();
+  }
+
+  async #updateMemory(tab) {
+    if (!tab || tab !== this.#tab) {
+      return;
+    }
+    const memoryContainer = this.panelElement.querySelector(
+      ".tab-preview-memory-container"
+    );
+    if (!memoryContainer) {
+      return;
+    }
+    const memoryEl = memoryContainer.querySelector(".tab-preview-memory");
+    if (!memoryEl) {
+      return;
+    }
+
+    try {
+      const pids = this.win.gBrowser.getTabPids(tab);
+      if (!pids || !pids.length) {
+        memoryContainer.setAttribute("hidden", "true");
+        memoryEl.textContent = "";
+        return;
+      }
+
+      const procInfo = await ChromeUtils.requestProcInfo();
+      if (tab !== this.#tab) {
+        return;
+      }
+
+      let totalMemory = 0;
+      let matched = false;
+
+      if (pids.includes(procInfo.pid)) {
+        totalMemory += procInfo.memory;
+        matched = true;
+      }
+
+      if (procInfo.children) {
+        for (const child of procInfo.children) {
+          if (pids.includes(child.pid)) {
+            totalMemory += child.memory;
+            matched = true;
+          }
+        }
+      }
+
+      if (matched && totalMemory > 0) {
+        const formatted = this.#formatBytes(totalMemory);
+        memoryEl.textContent = `Memory usage: ${formatted}`;
+        memoryContainer.removeAttribute("hidden");
+      } else {
+        memoryContainer.setAttribute("hidden", "true");
+        memoryEl.textContent = "";
+      }
+    } catch (e) {
+      console.error(e);
+      memoryContainer.setAttribute("hidden", "true");
+      memoryEl.textContent = "";
+    }
+  }
+
+  #formatBytes(bytes) {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+    const kb = bytes / 1024;
+    if (kb < 1024) {
+      return `${kb.toFixed(0)} KB`;
+    }
+    const mb = kb / 1024;
+    if (mb < 1024) {
+      return `${mb.toFixed(0)} MB`;
+    }
+    const gb = mb / 1024;
+    return `${gb.toFixed(1)} GB`;
   }
 
   #movePanel() {

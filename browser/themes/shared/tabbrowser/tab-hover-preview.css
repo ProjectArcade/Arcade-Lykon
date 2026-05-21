@@ -223,3 +223,26 @@
     font-weight: var(--font-weight-semibold);
   }
 }
+
+.tab-preview-memory-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-small);
+  color: var(--text-color-deemphasized);
+  margin-top: 4px;
+}
+
+.tab-preview-memory-container[hidden] {
+  display: none;
+}
+
+.tab-preview-memory-icon {
+  width: 14px;
+  height: 14px;
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+
+.tab-preview-memory {
+  font-size: 11px;
+}
