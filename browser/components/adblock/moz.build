@@ -1,11 +1,9 @@
 EXTRA_JS_MODULES += [
     "AdblockConfig.sys.mjs",
-    "AdblockIntegration.sys.mjs",
     "AdblockService.sys.mjs",
     "FilterManager.sys.mjs",
     "ShieldIntegration.sys.mjs",
-    "ShieldToggle.sys.mjs",
-    "ShieldUIController.sys.mjs",
+    "SiteShieldSettings.sys.mjs",
     "StatsMonitor.sys.mjs",
 ]
 

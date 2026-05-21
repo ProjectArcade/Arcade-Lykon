@@ -1478,16 +1478,19 @@ export class UserCharacteristicsPageService {
     }
 
     const mozDebugExt = gl.getExtension("MOZ_debug");
-    const debugExt = gl.getExtension("WEBGL_debug_renderer_info");
+
+    const versionRaw = mozDebugExt.getParameter(gl.VERSION);
+    const vendorRaw = mozDebugExt.getParameter(gl.VENDOR);
+    const rendererRaw = mozDebugExt.getParameter(gl.RENDERER);
 
     results.debugParams = {
-      versionRaw: mozDebugExt.getParameter(gl.VERSION),
-      vendorRaw: mozDebugExt.getParameter(gl.VENDOR),
-      rendererRaw: mozDebugExt.getParameter(gl.RENDERER),
+      versionRaw,
+      vendorRaw,
+      rendererRaw,
       extensions: gl.getSupportedExtensions().join(" "),
       extensionsRaw: mozDebugExt.getParameter(mozDebugExt.EXTENSIONS),
-      vendorDebugInfo: gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL),
-      rendererDebugInfo: gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL),
+      vendorDebugInfo: vendorRaw,
+      rendererDebugInfo: rendererRaw,
       contextType: mozDebugExt.getParameter(mozDebugExt.CONTEXT_TYPE),
     };
 

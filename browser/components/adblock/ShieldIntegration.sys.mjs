@@ -5,6 +5,7 @@
 import { AdblockService } from "resource:///modules/AdblockService.sys.mjs";
 import { PREFS } from "resource:///modules/AdblockConfig.sys.mjs";
 import { statsMonitor } from "resource:///modules/StatsMonitor.sys.mjs";
+import { siteShieldSettings } from "resource:///modules/SiteShieldSettings.sys.mjs";
 
 const CONTENT_POLICY_TYPE_MAP = {
   [Ci.nsIContentPolicy.TYPE_SCRIPT]: "script",
@@ -46,38 +47,17 @@ export class ShieldIntegration {
   }
 
   _setupNetworkObservers() {
-    Services.obs.addObserver(this, "http-on-before-connect", false);
     Services.obs.addObserver(this, "http-on-modify-request", false);
     Services.obs.addObserver(this, "document-element-inserted", false);
-    Services.obs.addObserver(this, "adblock-shield-toggled", false);
   }
 
   observe(subject, topic, data) {
     switch (topic) {
-      case "http-on-before-connect":
       case "http-on-modify-request":
         this._onHttpRequest(subject);
         break;
       case "document-element-inserted":
         this._onDocumentInserted(subject);
-        break;
-      case "adblock-shield-toggled":
-        this.adblockEnabled = data === "true";
-        AdblockService.setEnabled(this.adblockEnabled);
-        try {
-          const { BrowserWindowTracker } = ChromeUtils.importESModule(
-            "resource:///modules/BrowserWindowTracker.sys.mjs"
-          );
-          for (const win of BrowserWindowTracker.orderedWindows) {
-            if (win.gBrowser) {
-              for (const browser of win.gBrowser.browsers) {
-                try {
-                  browser.reload();
-                } catch (e) {}
-              }
-            }
-          }
-        } catch (e) {}
         break;
       case PREFS.ENABLED:
         this.adblockEnabled = Services.prefs.getBoolPref(PREFS.ENABLED, true);
@@ -89,10 +69,9 @@ export class ShieldIntegration {
   _onDocumentInserted(subject) {
     if (!this.adblockEnabled || !this.initialized) return;
     try {
-      const document =
-        subject?.defaultView
-          ? subject
-          : subject?.documentElement?.ownerDocument || subject;
+      const document = subject?.defaultView
+        ? subject
+        : subject?.documentElement?.ownerDocument || subject;
       if (!document || document.nodeType !== 9) return;
       const root = document.documentElement;
       if (!root || root.localName !== "html") return;
@@ -103,16 +82,64 @@ export class ShieldIntegration {
       try {
         const pageUrl = document.documentURI || document.URL || "";
         if (pageUrl.startsWith("http://") || pageUrl.startsWith("https://")) {
-          Services.obs.notifyObservers(
-            null,
-            "adblock-page-navigated",
-            pageUrl
-          );
+          Services.obs.notifyObservers(null, "adblock-page-navigated", pageUrl);
         }
       } catch (e) {}
-
-      this._injectCosmeticCSS(document);
     } catch (error) {}
+  }
+
+  _getTopLevelUrl(channel) {
+    try {
+      const loadInfo = channel.loadInfo;
+      if (loadInfo) {
+        const bc = loadInfo.browsingContext;
+        if (bc?.top?.currentURI) {
+          return bc.top.currentURI.spec;
+        }
+        if (bc?.top?.topWindowContext?.documentURI) {
+          return bc.top.topWindowContext.documentURI.spec;
+        }
+        if (bc?.topWindowContext?.documentURI) {
+          return bc.topWindowContext.documentURI.spec;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const referrer =
+        channel.referrerInfo?.originalReferrer?.spec || channel.referrer?.spec;
+      if (referrer && referrer.startsWith("http")) {
+        return referrer;
+      }
+    } catch (e) {}
+
+    try {
+      const principal = channel.loadInfo?.loadingPrincipal;
+      if (principal && !principal.isSystemPrincipal) {
+        const origin = principal.originNoSuffix || principal.origin;
+        if (origin && origin.startsWith("http")) {
+          return origin;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      if (this._getResourceType(channel) === "document") {
+        return channel.URI.spec;
+      }
+    } catch (e) {}
+
+    return "";
+  }
+
+  _getTopLevelHost(channel) {
+    const url = this._getTopLevelUrl(channel);
+    if (!url) return "";
+    try {
+      return new URL(url).hostname || "";
+    } catch (e) {
+      return "";
+    }
   }
 
   _onHttpRequest(subject) {
@@ -126,34 +153,40 @@ export class ShieldIntegration {
       if (url.includes("live_chat") || url.includes("live_chat_replay")) return;
 
       const contentType = this._getResourceType(channel);
+      let checkHost = this._getTopLevelHost(channel);
+
+      if (!checkHost && contentType === "document") {
+        try {
+          checkHost = new URL(url).hostname;
+        } catch (e) {}
+      }
+
+      if (checkHost && !siteShieldSettings.isEnabledForSite(checkHost)) {
+        return;
+      }
 
       let referrer = "";
       try {
-        referrer = channel.referrer?.spec || "";
+        referrer = channel.referrerInfo?.originalReferrer?.spec || "";
       } catch (e) {}
       if (!referrer) {
         try {
-          referrer = channel.loadInfo?.loadingPrincipal?.URI?.spec || "";
-        } catch (e) {}
-      }
-      if (!referrer) {
-        try {
-          const hdr = channel.getRequestHeader("Referer");
-          if (hdr) referrer = hdr;
+          referrer = channel.referrer?.spec || "";
         } catch (e) {}
       }
 
       const blocked = AdblockService.shouldBlock(url, referrer, contentType);
-      
-      if (blocked || url.includes("ads.mozilla.org")) {
-        const shortUrl = url.split('?')[0].substring(0, 80);
+
+      if (blocked) {
+        const shortUrl = url.split("?")[0].substring(0, 80);
         console.log(`[Shield] BLOCKED: ${shortUrl}`);
         channel.cancel(Cr.NS_BINDING_ABORTED);
+        const topLevelUrl = this._getTopLevelUrl(channel) || referrer;
         try {
           Services.obs.notifyObservers(
             null,
             "adblock-request-blocked",
-            `${url}|${contentType}|0|${referrer}`
+            `${url}|${contentType}|0|${referrer}|${topLevelUrl}`
           );
         } catch (e) {}
       }
@@ -187,130 +220,6 @@ export class ShieldIntegration {
     if (/\.(mp4|webm|m3u8|mpd|mp3|ogg|aac|flac)(?:\?|$|#)/i.test(url))
       return "media";
     return "other";
-  }
-
-  _injectCosmeticCSS(document) {
-    try {
-      if (!document || !document.documentElement) return;
-      const existing = document.getElementById(
-        "lykon-adblock-cosmetic-style"
-      );
-      if (existing) return;
-
-      const pageUrl = document.documentURI || document.URL || "";
-      const resources = AdblockService.getCosmeticResources(pageUrl);
-      
-      let additionalCSS = "";
-      if (resources && resources.hide_selectors && resources.hide_selectors.size > 0) {
-        // Handle both Set and Array from JSON.parse
-        const selectors = Array.from(resources.hide_selectors);
-        if (selectors.length > 0) {
-          additionalCSS = `
-            ${selectors.join(",\n")} {
-              display: none !important;
-              visibility: hidden !important;
-              height: 0 !important;
-              width: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              overflow: hidden !important;
-              opacity: 0 !important;
-              pointer-events: none !important;
-            }
-          `;
-        }
-      }
-
-      const style = document.createElement("style");
-      style.id = "lykon-adblock-cosmetic-style";
-      style.textContent = `
-        /* High-specificity Generic Ad Hiding */
-        ins.adsbygoogle, .ads, .ad, .ad-box, .ad-container, .ad-wrapper,
-        .ad-slot, .ad-unit, .ad-banner, .advertisement, .sponsored-post,
-        .ads__slot, [class*="ads__slot"], [class*="ads__"],
-        [class*="adslot"], [id*="adslot"], [class*="ad_slot"], [id*="ad_slot"],
-        .adslot300x250ATF, .adslot728x90ATF, .adslot300x600ATF,
-        [id*="asw-"], [id*="aswift_"], [id*="google_ads_"], [id*="gpt_unit"],
-        [id*="div-gpt-ad"], [id^="ad_"], [id^="ad-"], [id*="-ad-"],
-        [class*="adsbygoogle"], [class*="gpt-ad"], [class*="ad-slot"],
-        [class*="ad-unit"], [class*="ad-banner"], [class*="advertisement"],
-        [data-ad-slot], [data-ad-format], [data-ad-client], [data-google-query-id],
-        [data-adunit], [data-adslot], [data-gpt-slot],
-        iframe[id*="google_ads_iframe"], iframe[id*="ad-slot"], iframe[id*="adslot"],
-        
-        /* Specific empty placeholders requested by user */
-        .adslot300x250ATF, .ads__slot, .ads, .ad,
-        
-        /* Brave-style dynamic placeholders */
-        [class^="ad-placeholder"], [id^="ad-placeholder"],
-        [class*="ad-placeholder"], [id*="ad-placeholder"],
-        ytd-companion-slot-renderer, 
-        ytd-ad-slot-renderer, 
-        ytd-promoted-sparkles-web-renderer,
-        ytd-promoted-sparkles-text-search-renderer,
-        ytd-display-ad-render,
-        ytd-statement-banner-renderer,
-        ytd-in-feed-ad-layout-renderer,
-        ytd-banner-promo-renderer,
-        .ytd-ad-slot-renderer,
-        #player-ads, #masthead-ad, #panels.ytd-watch-flexy #ad-slot,
-        .ytp-ad-progress-list, .ytp-ad-overlay-container,
-        .ytp-ad-message-container, .ytp-ad-player-overlay,
-        .ytp-ad-image-overlay, .video-ads, .ytp-ad-module,
-        
-        /* YouTube "Ad" labels */
-        [aria-label="Advertisement"], 
-        .ytd-badge-supported-renderers > .ytd-badge-supported-renderers[aria-label="Ad"],
-        yt-icon-button.ytd-ad-slot-renderer,
-        
-        /* Generic iframe hiding for ad-system sources */
-        iframe[src*="doubleclick.net"], iframe[src*="googlesyndication"],
-        iframe[src*="googleadservices"], iframe[src*="ads.google"],
-        iframe[src*="amazon-adsystem"], iframe[src*="taboola.com"],
-        iframe[src*="outbrain.com"], iframe[src*="adnxs.com"],
-        iframe[src*="smartadserver.com"], iframe[src*="openx.net"],
-        iframe[src*="pubmatic.com"], iframe[src*="rubiconproject.com"],
-        iframe[src*="adtech.de"], iframe[src*="yieldmo.com"],
-        iframe[src*="media.net"], iframe[src*="advertising.com"] {
-          display: none !important;
-          visibility: hidden !important;
-          width: 0 !important; height: 0 !important;
-          min-width: 0 !important; min-height: 0 !important;
-          margin: 0 !important; padding: 0 !important;
-          border: 0 !important; overflow: hidden !important;
-          pointer-events: none !important;
-          opacity: 0 !important;
-        }
-
-        /* Hide parents of blocked iframes using :has() */
-        div:has(> iframe[src*="doubleclick.net"]),
-        div:has(> iframe[src*="googlesyndication"]),
-        div:has(> iframe[src*="googleadservices"]),
-        div:has(> iframe[src*="ads.google"]),
-        div:has(> iframe[src*="amazon-adsystem"]),
-        div:has(> iframe[src*="taboola.com"]),
-        div:has(> iframe[src*="outbrain.com"]),
-        div:has(> iframe[src*="adnxs.com"]),
-        div:has(> iframe[id*="google_ads_iframe"]),
-        div:has(> iframe[id*="ad-slot"]) {
-          display: none !important;
-        }
-
-        /* Site-specific rules from Adblock engine */
-        ${additionalCSS}
-
-        /* Collapse empty containers that might have ad-like classes or IDs */
-        .ads:empty, .ad:empty, .ad-box:empty, .ad-container:empty,
-        .ad-slot:empty, .ad-unit:empty, .ad-wrapper:empty,
-        [class*="ad-"]:empty, [class*="ads-"]:empty, [id*="ad-"]:empty,
-        [class*="adslot"]:empty, [id*="adslot"]:empty,
-        [class*="ad_slot"]:empty, [id*="ad_slot"]:empty {
-          display: none !important;
-        }
-      `;
-      const parent = document.head || document.documentElement;
-      parent.appendChild(style);
-    } catch (error) {}
   }
 
   getStatus() {

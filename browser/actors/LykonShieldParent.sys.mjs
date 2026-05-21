@@ -11,6 +11,30 @@ export class LykonShieldParent extends JSWindowActorParent {
           message.data.ids,
           message.data.exceptions
         );
+      case "isShieldEnabled":
+        try {
+          const { siteShieldSettings } = ChromeUtils.importESModule(
+            "resource:///modules/SiteShieldSettings.sys.mjs"
+          );
+          let host = null;
+          try {
+            host = this.browsingContext.top.currentURI?.host;
+          } catch (e) {}
+          if (!host) {
+            try {
+              host =
+                this.browsingContext.top.topWindowContext?.documentURI?.host;
+            } catch (e) {}
+          }
+          if (!host) {
+            try {
+              host = new URL(message.data.url).hostname;
+            } catch (e) {}
+          }
+          return siteShieldSettings.isEnabledForSite(host);
+        } catch (e) {
+          return true;
+        }
     }
     return null;
   }

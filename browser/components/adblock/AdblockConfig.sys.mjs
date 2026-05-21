@@ -24,6 +24,7 @@ export const PREFS = {
   CUSTOM_FILTERS: "browser.adblock.customfilters",
   DEBUG: "browser.adblock.debug",
   STATS_ENABLED: "browser.adblock.stats",
+  SITE_SETTINGS: "lykon.shield.site.settings",
 };
 
 // Resource type categories used in filter matching
@@ -78,6 +79,39 @@ export const PERF_THRESHOLDS = {
   URL_CHECK_WARNING: 10,
 };
 
+export const MEDIA_ALLOWLIST_DOMAINS = new Set([
+  "googlevideo.com",
+  "youtube.com",
+  "youtu.be",
+  "ytimg.com",
+  "yt3.ggpht.com",
+  "yt3.googleusercontent.com",
+  "googleapis.com",
+  "gvt1.com",
+  "gvt2.com",
+  "gvt3.com",
+]);
+
+export const MEDIA_STREAM_PATTERNS = [
+  "videoplayback",
+  "mime=video",
+  "mime=audio",
+  "itag=",
+  "yt_live_broadcast",
+  "/api/timedtext",
+  "googlevideo.com",
+  "live_chat",
+  "live_chat_replay",
+];
+
+export const SAFE_MEDIA_TYPES = new Set([
+  "media",
+  "object",
+  "xmlhttprequest",
+  "subdocument",
+  "document",
+]);
+
 export default {
   DEFAULT_FILTER_LISTS,
   PREFS,
@@ -87,4 +121,7 @@ export default {
   CACHE_CONFIG,
   FEATURES,
   PERF_THRESHOLDS,
+  MEDIA_ALLOWLIST_DOMAINS,
+  MEDIA_STREAM_PATTERNS,
+  SAFE_MEDIA_TYPES,
 };

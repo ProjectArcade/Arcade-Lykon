@@ -1,7 +1,3 @@
-
-import { AdblockService } from "resource:///modules/AdblockService.sys.mjs"; // ✅ named
-import { filterManager } from "resource:///modules/FilterManager.sys.mjs";   // ✅ named
-
 export class StatsMonitor {
   constructor() {
     this.session = {
@@ -15,6 +11,7 @@ export class StatsMonitor {
     this.currentPageKey = null;
     this.listeners = [];
     this.initialized = false;
+    this._persistTimer = null;
   }
 
   async init() {
@@ -37,20 +34,48 @@ export class StatsMonitor {
 
   _restoreFromPrefs() {
     try {
-      this.session.blocked  = Services.prefs.getIntPref("lykon.shield.stats.session",  0);
-      this.session.trackers = Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
-      this.session.bytes    = Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
+      this.session.blocked = Services.prefs.getIntPref(
+        "lykon.shield.stats.session",
+        0
+      );
+      this.session.trackers = Services.prefs.getIntPref(
+        "lykon.shield.stats.trackers",
+        0
+      );
+      this.session.bytes = Services.prefs.getIntPref(
+        "lykon.shield.stats.bytes",
+        0
+      );
     } catch (e) {}
   }
 
   _persistToPrefs() {
     try {
       const total = Services.prefs.getIntPref("lykon.shield.stats.total", 0);
-      Services.prefs.setIntPref("lykon.shield.stats.session",  this.session.blocked);
-      Services.prefs.setIntPref("lykon.shield.stats.trackers", this.session.trackers);
-      Services.prefs.setIntPref("lykon.shield.stats.bytes",    this.session.bytes);
-      Services.prefs.setIntPref("lykon.shield.stats.total",    total + 1); // increment total
+      Services.prefs.setIntPref(
+        "lykon.shield.stats.session",
+        this.session.blocked
+      );
+      Services.prefs.setIntPref(
+        "lykon.shield.stats.trackers",
+        this.session.trackers
+      );
+      Services.prefs.setIntPref("lykon.shield.stats.bytes", this.session.bytes);
+      Services.prefs.setIntPref("lykon.shield.stats.total", total + 1); // increment total
     } catch (e) {}
+  }
+
+  _schedulePersist() {
+    if (this._persistTimer) return;
+    this._persistTimer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
+    this._persistTimer.initWithCallback(
+      () => {
+        this._persistTimer = null;
+        this._persistToPrefs();
+      },
+      5000,
+      Ci.nsITimer.TYPE_ONE_SHOT
+    );
   }
 
   _normalizePageKey(pageKey) {
@@ -82,15 +107,19 @@ export class StatsMonitor {
         "resource:///modules/BrowserWindowTracker.sys.mjs"
       );
       const win = BrowserWindowTracker.getTopWindow();
-      const selectedURI = win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
+      const selectedURI =
+        win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
       return this._normalizePageKey(selectedURI);
     } catch (e) {
       return null;
     }
   }
 
-  recordBlock(url, contentType, sizeBytes, referrer) {
-    const pageKey = this._normalizePageKey(referrer) || this.currentPageKey || this._getSelectedPageKey();
+  recordBlock(url, contentType, sizeBytes, referrer, topLevelUrl) {
+    const pageKey =
+      this._normalizePageKey(topLevelUrl) ||
+      this._normalizePageKey(referrer) ||
+      this._getSelectedPageKey();
 
     // Estimate size if not provided (blocked requests save what they would have cost)
     if (sizeBytes <= 0) {
@@ -113,76 +142,110 @@ export class StatsMonitor {
     if (isTracker) this.session.trackers++;
 
     if (pageKey) {
-      const page = this.pageStats.get(pageKey) || { blocked: 0, trackers: 0, bytes: 0, blockedList: [] };
+      const page = this.pageStats.get(pageKey) || {
+        blocked: 0,
+        trackers: 0,
+        bytes: 0,
+        blockedList: [],
+      };
       page.blocked++;
       page.bytes += sizeBytes;
       if (isTracker) page.trackers++;
-      
+
       // Store blocked items for the "nerd" view (limit to last 50)
       if (!page.blockedList) page.blockedList = [];
       page.blockedList.unshift({
         url,
         type: contentType,
         isTracker,
-        time: Date.now()
+        time: Date.now(),
       });
       if (page.blockedList.length > 50) page.blockedList.pop();
-      
+
       this.pageStats.set(pageKey, page);
     }
 
-    this._persistToPrefs();
+    this._schedulePersist();
     this._broadcast();
   }
 
   _isTracker(url) {
     const trackerDomains = [
-      "analytics", "tracker", "telemetry", "pixel", "beacon",
-      "doubleclick", "adservice", "adsystem", "adnxs", "taboola",
-      "outbrain", "facebook.com/tr", "google-analytics", "googletagmanager",
-      "scorecardresearch", "hotjar", "clarity.ms", "mixpanel"
+      "analytics",
+      "tracker",
+      "telemetry",
+      "pixel",
+      "beacon",
+      "doubleclick",
+      "adservice",
+      "adsystem",
+      "adnxs",
+      "taboola",
+      "outbrain",
+      "facebook.com/tr",
+      "google-analytics",
+      "googletagmanager",
+      "scorecardresearch",
+      "hotjar",
+      "clarity.ms",
+      "mixpanel",
     ];
     return trackerDomains.some(d => url.includes(d));
   }
 
-  recordNavigation(pageKey) {
+  recordNavigation(pageKey, reset = false) {
     const normalizedKey = this._normalizePageKey(pageKey);
     if (!normalizedKey) return;
 
     this.currentPageKey = normalizedKey;
-    if (!this.pageStats.has(normalizedKey)) {
-      this.pageStats.set(normalizedKey, { blocked: 0, trackers: 0, bytes: 0, blockedList: [] });
+    if (reset || !this.pageStats.has(normalizedKey)) {
+      this.pageStats.set(normalizedKey, {
+        blocked: 0,
+        trackers: 0,
+        bytes: 0,
+        blockedList: [],
+      });
     }
     this._broadcast();
   }
 
   getStats() {
-    const total = (() => { try { return Services.prefs.getIntPref("lykon.shield.stats.total", 0); } catch(e) { return 0; } })();
+    const total = (() => {
+      try {
+        return Services.prefs.getIntPref("lykon.shield.stats.total", 0);
+      } catch (e) {
+        return 0;
+      }
+    })();
     const currentPageKey = this._getSelectedPageKey() || this.currentPageKey;
-    const page = currentPageKey ? (this.pageStats.get(currentPageKey) || {}) : {};
+    const page = currentPageKey ? this.pageStats.get(currentPageKey) || {} : {};
     return {
-      session:  this.session.blocked,
+      session: this.session.blocked,
       total,
       trackers: this.session.trackers,
-      bytes:    this.session.bytes,
+      bytes: this.session.bytes,
       page: {
-        blocked:  page.blocked  || 0,
+        blocked: page.blocked || 0,
         trackers: page.trackers || 0,
-        bytes:    page.bytes    || 0,
+        bytes: page.bytes || 0,
         blockedList: page.blockedList || [],
       },
     };
   }
 
   fmtBytes(b) {
-    if (!b || b < 1024)    return b + " B";
-    if (b < 1048576)       return (b / 1024).toFixed(1) + " KB";
-    if (b < 1073741824)    return (b / 1048576).toFixed(1) + " MB";
+    if (!b || b < 1024) return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
     return (b / 1073741824).toFixed(2) + " GB";
   }
 
-  addListener(cb) { this.listeners.push(cb); }
-  removeListener(cb) { this.listeners = this.listeners.filter(l => l !== cb); }
+  addListener(cb) {
+    this.listeners.push(cb);
+  }
+  removeListener(cb) {
+    this.listeners = this.listeners.filter(l => l !== cb);
+  }
 
   _broadcast() {
     const stats = this.getStats();
@@ -194,7 +257,9 @@ export class StatsMonitor {
       JSON.stringify(stats)
     );
     for (const cb of this.listeners) {
-      try { cb(stats); } catch (e) {}
+      try {
+        cb(stats);
+      } catch (e) {}
     }
   }
 
@@ -207,12 +272,13 @@ export class StatsMonitor {
         const contentType = parts[1] || "other";
         const size = parseInt(parts[2]) || 0;
         const referrer = parts[3] || "";
+        const topLevelUrl = parts[4] || "";
 
-        this.recordBlock(url, contentType, size, referrer);
+        this.recordBlock(url, contentType, size, referrer, topLevelUrl);
         break;
       }
       case "adblock-page-navigated":
-        this.recordNavigation(data);
+        this.recordNavigation(data, true);
         break;
       case "browser-select-tab": {
         try {
@@ -220,7 +286,8 @@ export class StatsMonitor {
             "resource:///modules/BrowserWindowTracker.sys.mjs"
           );
           const win = BrowserWindowTracker.getTopWindow();
-          const selectedURI = win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
+          const selectedURI =
+            win?.gBrowser?.selectedBrowser?.currentURI?.spec || "";
           this.recordNavigation(selectedURI);
         } catch (e) {}
         break;
@@ -234,7 +301,10 @@ export class StatsMonitor {
     this._broadcast();
   }
 
-  QueryInterface = ChromeUtils.generateQI(["nsIObserver", "nsISupportsWeakReference"]);
+  QueryInterface = ChromeUtils.generateQI([
+    "nsIObserver",
+    "nsISupportsWeakReference",
+  ]);
 }
 
 export const statsMonitor = new StatsMonitor();

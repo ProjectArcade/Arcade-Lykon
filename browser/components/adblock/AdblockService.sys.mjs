@@ -12,37 +12,11 @@ ChromeUtils.defineESModuleGetters(lazy, {
   filterManager: "resource:///modules/FilterManager.sys.mjs",
 });
 
-// --- Native Engine Constants ---
-
-const MEDIA_ALLOWLIST_DOMAINS = new Set([
-  "youtu.be",
-  "ytimg.com",
-  "yt3.ggpht.com",
-  "yt3.googleusercontent.com",
-  "googleapis.com",
-  "gvt1.com",
-  "gvt2.com",
-  "gvt3.com",
-]);
-
-const MEDIA_STREAM_PATTERNS = [
-  "videoplayback",
-  "mime=video",
-  "mime=audio",
-  "itag=",
-  "yt_live_broadcast",
-  "/api/timedtext",
-  "live_chat",
-  "live_chat_replay",
-];
-
-const SAFE_MEDIA_TYPES = new Set([
-  "media",
-  "object",
-  "xmlhttprequest",
-  "subdocument",
-  "document",
-]);
+import {
+  MEDIA_ALLOWLIST_DOMAINS,
+  MEDIA_STREAM_PATTERNS,
+  SAFE_MEDIA_TYPES,
+} from "resource:///modules/AdblockConfig.sys.mjs";
 
 // --- Native Engine Implementation ---
 
@@ -87,7 +61,10 @@ class _NativeAdblockEngine {
         try {
           return this._lib.declare(name, abi, ret, ...args);
         } catch (e) {
-          console.warn(`[NativeAdblockEngine] Function ${name} not found in library:`, e.message);
+          console.warn(
+            `[NativeAdblockEngine] Function ${name} not found in library:`,
+            e.message
+          );
           return null;
         }
       };
@@ -137,7 +114,9 @@ class _NativeAdblockEngine {
 
       this._engine = this._fns.create();
       if (!this._engine || this._engine.isNull()) {
-        console.error("[NativeAdblockEngine] adblock_engine_create returned null");
+        console.error(
+          "[NativeAdblockEngine] adblock_engine_create returned null"
+        );
         this._cleanup();
         return false;
       }
@@ -254,7 +233,10 @@ class _NativeAdblockEngine {
           return allRules.split("\n").length;
         }
       } catch (e) {
-        console.error("[NativeAdblockEngine] Failed to load combined rules:", e);
+        console.error(
+          "[NativeAdblockEngine] Failed to load combined rules:",
+          e
+        );
       }
     }
     return 0;
@@ -280,11 +262,12 @@ class _NativeAdblockEngine {
     // Refined Media Stream Handling
     // We allow standard video content but MUST filter if it looks like an ad segment
     if (url.includes("videoplayback")) {
-      const isAdSegment = url.includes("adformat") || 
-                         url.includes("ptracking") || 
-                         url.includes("oad") ||
-                         url.includes("ov") ||
-                         url.includes("oadid");
+      const isAdSegment =
+        url.includes("adformat") ||
+        url.includes("ptracking") ||
+        url.includes("oad") ||
+        url.includes("ov") ||
+        url.includes("oadid");
       if (!isAdSegment) return false; // Allow pure video content
     }
 
@@ -340,7 +323,10 @@ class _NativeAdblockEngine {
       }
       return JSON.parse(json);
     } catch (e) {
-      console.error("[NativeAdblockEngine] getHiddenClassIdSelectors failed:", e);
+      console.error(
+        "[NativeAdblockEngine] getHiddenClassIdSelectors failed:",
+        e
+      );
       return [];
     }
   }
@@ -422,9 +408,7 @@ class _AdblockService {
           "[AdblockService] Native engine loaded 0 rules, falling back to JS"
         );
       } catch (e) {
-        console.warn(
-          "[AdblockService] Native engine filter load failed:", e
-        );
+        console.warn("[AdblockService] Native engine filter load failed:", e);
       }
     }
 
@@ -444,13 +428,9 @@ class _AdblockService {
     try {
       let blocked = false;
       if (this._useNative) {
-        blocked = NativeAdblockEngine.shouldBlock(
-          url,
-          originUrl,
-          resourceType
-        );
+        blocked = NativeAdblockEngine.shouldBlock(url, originUrl, resourceType);
       }
-      
+
       // Fallback to JS engine if native didn't block it
       if (!blocked) {
         blocked = lazy.filterManager.matches(url, originUrl, resourceType);
@@ -458,7 +438,7 @@ class _AdblockService {
           // Keep a quiet log for missed native rules
         }
       }
-      
+
       return blocked;
     } catch (e) {
       console.error("[AdblockService] shouldBlock error:", e);

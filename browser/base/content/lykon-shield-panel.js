@@ -8,7 +8,10 @@ function _lksThrottle(fn, ms) {
   let t = 0;
   return function (...args) {
     const now = Date.now();
-    if (now - t >= ms) { t = now; fn.apply(this, args); }
+    if (now - t >= ms) {
+      t = now;
+      fn.apply(this, args);
+    }
   };
 }
 
@@ -16,7 +19,6 @@ function _lksThrottle(fn, ms) {
    LYKON SHIELD UI CONTROLLER
    ════════════════════════════════════════════════════ */
 var LykonShield = {
-
   _el: {},
   _bound: false,
   _statsObserverBound: false,
@@ -25,26 +27,27 @@ var LykonShield = {
   init() {
     const $ = id => document.getElementById(id);
     this._el = {
-      button:     $("lykon-shield-button"),
-      toggle:     $("lykon-shield-toggle"),
-      content:    $("lykon-shield-panel-content"),
+      button: $("lykon-shield-button"),
+      toggle: $("lykon-shield-toggle"),
+      content: $("lykon-shield-panel-content"),
       statusText: $("lykon-shield-status-text"),
       statusHint: $("lks-status-hint"),
-      dot:        $("lks-dot"),
-      heroTitle:  $("lykon-shield-hero-title"),
-      heroSub:    $("lykon-shield-hero-sub"),
+      dot: $("lks-dot"),
+      heroTitle: $("lykon-shield-hero-title"),
+      heroSub: $("lykon-shield-hero-sub"),
       heroAction: $("lykon-shield-hero-action"),
-      advHeader:  $("lykon-shield-advanced-header"),
-      advPanel:   $("lykon-shield-advanced"),
-      advArrow:   $("lykon-shield-adv-arrow"),
-      count:      $("lykon-shield-count"),
-      total:      $("lykon-shield-total-count"),
-      trackers:   $("lykon-shield-tracker-count"),
-      bandwidth:  $("lykon-shield-bandwidth"),
+      advHeader: $("lykon-shield-advanced-header"),
+      advPanel: $("lykon-shield-advanced"),
+      advArrow: $("lykon-shield-adv-arrow"),
+      count: $("lykon-shield-count"),
+      total: $("lykon-shield-total-count"),
+      trackers: $("lykon-shield-tracker-count"),
+      bandwidth: $("lykon-shield-bandwidth"),
       nerdHeader: $("lykon-shield-nerd-header"),
-      nerdPanel:  $("lykon-shield-nerd-panel"),
-      nerdArrow:  $("lykon-shield-nerd-arrow"),
+      nerdPanel: $("lykon-shield-nerd-panel"),
+      nerdArrow: $("lykon-shield-nerd-arrow"),
       blockedList: $("lykon-shield-blocked-list"),
+      siteHost: $("lykon-shield-site-host"),
     };
 
     if (!this._el.toggle || !this._el.content) return;
@@ -58,20 +61,29 @@ var LykonShield = {
         });
       }
       if (this._el.advHeader) {
-        this._el.advHeader.addEventListener("click", () => this._toggleAdvanced());
+        this._el.advHeader.addEventListener("click", () =>
+          this._toggleAdvanced()
+        );
       }
       if (this._el.nerdHeader) {
-        this._el.nerdHeader.addEventListener("click", () => this._toggleNerdView());
+        this._el.nerdHeader.addEventListener("click", () =>
+          this._toggleNerdView()
+        );
       }
 
       // ── New: Watch for tab/navigation changes ──
       if (window.gBrowser) {
-        window.gBrowser.tabContainer.addEventListener("TabSelect", () => this._updatePanelState());
-        
+        window.gBrowser.tabContainer.addEventListener("TabSelect", () =>
+          this._updatePanelState()
+        );
+
         // Use a proper progress listener for location changes
         const progressListener = {
           onLocationChange: () => this._updatePanelState(),
-          QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
+          QueryInterface: ChromeUtils.generateQI([
+            "nsIWebProgressListener",
+            "nsISupportsWeakReference",
+          ]),
         };
         window.gBrowser.addTabsProgressListener(progressListener);
       }
@@ -94,12 +106,17 @@ var LykonShield = {
     this._applyEnabledState(this._el.toggle.checked);
     this._updatePanelState();
     this._updateStats();
+    this._currentHost = this._getCurrentHost();
   },
 
   _refreshLatestStats() {
     try {
-      const { statsMonitor } = ChromeUtils.importESModule("resource:///modules/StatsMonitor.sys.mjs");
-      this._latestStats = statsMonitor?.getStats ? statsMonitor.getStats() : null;
+      const { statsMonitor } = ChromeUtils.importESModule(
+        "resource:///modules/StatsMonitor.sys.mjs"
+      );
+      this._latestStats = statsMonitor?.getStats
+        ? statsMonitor.getStats()
+        : null;
     } catch (e) {
       console.error("[LykonShield] _refreshLatestStats error:", e);
       this._latestStats = null;
@@ -124,10 +141,16 @@ var LykonShield = {
     const on = this._el.toggle.checked;
     this._applyEnabledState(on);
     try {
-      Services.prefs.setBoolPref("browser.adblock.enabled", on);
-      Services.obs.notifyObservers(null, "adblock-shield-toggled", on ? "true" : "false");
-      const win = Services.wm.getMostRecentWindow("navigator:browser");
-      if (win?.gBrowser) win.gBrowser.selectedBrowser.reload();
+      const host = this._getCurrentHost();
+      if (host) {
+        const { siteShieldSettings } = ChromeUtils.importESModule(
+          "resource:///modules/SiteShieldSettings.sys.mjs"
+        );
+        siteShieldSettings.setEnabledForSite(host, on);
+      }
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {
       console.error("[LykonShield] Toggle error:", e);
     }
@@ -135,14 +158,32 @@ var LykonShield = {
 
   _applyEnabledState(on) {
     this._el.content?.setAttribute("data-paused", on ? "false" : "true");
-    this._el.button?.setAttribute("image",
-      on ? "chrome://browser/skin/preferences/Adblocker-on.png"
-         : "chrome://browser/skin/preferences/Adblocker-off-concer.png");
-    if (this._el.statusText)  this._el.statusText.textContent  = on ? "Blocking ads" : "Lykon Shield is Down";
-    if (this._el.statusHint)  this._el.statusHint.textContent  = on ? "You're browsing ad-free." : "You may see more ads and trackers online.";
-    if (this._el.heroTitle)   this._el.heroTitle.textContent   = on ? "You're protected!" : "Lykon Shield is Down";
-    if (this._el.heroSub)     this._el.heroSub.textContent     = on ? "Enjoy an ad-free browsing experience." : "You may see more ads and trackers online.";
-    if (this._el.heroAction)  this._el.heroAction.textContent  = on ? "Turn off Lykon Shield" : "Turn on Lykon Shield";
+    this._el.button?.setAttribute(
+      "image",
+      on
+        ? "chrome://browser/skin/preferences/Adblocker-on.png"
+        : "chrome://browser/skin/preferences/Adblocker-off-concer.png"
+    );
+    if (this._el.statusText)
+      this._el.statusText.textContent = on
+        ? "Blocking ads"
+        : "Lykon Shield is Down";
+    if (this._el.statusHint)
+      this._el.statusHint.textContent = on
+        ? "You're browsing ad-free."
+        : "You may see more ads and trackers online.";
+    if (this._el.heroTitle)
+      this._el.heroTitle.textContent = on
+        ? "You're protected!"
+        : "Lykon Shield is Down";
+    if (this._el.heroSub)
+      this._el.heroSub.textContent = on
+        ? "Enjoy an ad-free browsing experience."
+        : "You may see more ads and trackers online.";
+    if (this._el.heroAction)
+      this._el.heroAction.textContent = on
+        ? "Turn off Lykon Shield"
+        : "Turn on Lykon Shield";
   },
 
   _toggleAdvanced() {
@@ -164,14 +205,14 @@ var LykonShield = {
 
   _updatePanelState() {
     if (!window.gBrowser) return;
-    
+
     let url = "";
     try {
       url = window.gBrowser.currentURI?.spec || "";
     } catch (e) {}
 
     const isWeb = url.startsWith("http://") || url.startsWith("https://");
-    
+
     if (this._el.button) {
       if (isWeb) {
         this._el.button.removeAttribute("disabled");
@@ -183,68 +224,174 @@ var LykonShield = {
         this._el.button.style.pointerEvents = "none";
       }
     }
-    
+
+    if (this._el.siteHost) {
+      if (isWeb) {
+        try {
+          const host = new URL(url).hostname;
+          this._el.siteHost.textContent = host;
+          this._currentHost = host;
+        } catch (e) {
+          this._el.siteHost.textContent = "";
+        }
+      } else {
+        this._el.siteHost.textContent = "";
+      }
+    }
+
     if (this._el.content) {
       this._el.content.setAttribute("data-inactive", isWeb ? "false" : "true");
-      
+
       if (!isWeb) {
-        if (this._el.statusText) this._el.statusText.textContent = "Inactive on this page";
-        if (this._el.statusHint) this._el.statusHint.textContent = "Shield only works on websites.";
-        if (this._el.heroTitle)  this._el.heroTitle.textContent  = "Shield is Inactive";
-        if (this._el.heroSub)    this._el.heroSub.textContent    = "Open a website to enable protection.";
+        if (this._el.statusText)
+          this._el.statusText.textContent = "Inactive on this page";
+        if (this._el.statusHint)
+          this._el.statusHint.textContent = "Shield only works on websites.";
+        if (this._el.heroTitle)
+          this._el.heroTitle.textContent = "Shield is Inactive";
+        if (this._el.heroSub)
+          this._el.heroSub.textContent = "Open a website to enable protection.";
       } else {
-        // Restore active UI state (on/off)
-        this._applyEnabledState(this._el.toggle.checked);
+        this._loadPrefs();
+        this._refreshLatestStats();
+        this._updateStats();
       }
     }
   },
 
-  setTrackerMode(val)  { try { Services.prefs.setStringPref("lykon.shield.tracker.mode", val); } catch (e) {} },
-  setHttpsMode(val)    { try { Services.prefs.setStringPref("lykon.shield.https.mode", val);   } catch (e) {} },
-  setCookieMode(val)   { try { Services.prefs.setStringPref("lykon.shield.cookie.mode", val);  } catch (e) {} },
+  setTrackerMode(val) {
+    try {
+      Services.prefs.setStringPref("lykon.shield.tracker.mode", val);
+    } catch (e) {}
+  },
+  setHttpsMode(val) {
+    try {
+      Services.prefs.setStringPref("lykon.shield.https.mode", val);
+    } catch (e) {}
+  },
+  setCookieMode(val) {
+    try {
+      Services.prefs.setStringPref("lykon.shield.cookie.mode", val);
+    } catch (e) {}
+  },
 
   toggleScripts() {
     const el = document.getElementById("lykon-shield-scripts");
-    try { Services.prefs.setBoolPref("lykon.shield.scripts.blocked", el.checked); } catch (e) {}
+    if (!el) return;
+    try {
+      Services.prefs.setBoolPref("lykon.shield.scripts.blocked", el.checked);
+    } catch (e) {}
   },
   toggleFingerprint() {
-    const el  = document.getElementById("lykon-shield-fingerprint");
+    const el = document.getElementById("lykon-shield-fingerprint");
+    if (!el) return;
     const lbl = document.getElementById("lykon-shield-fingerprint-count");
-    try { Services.prefs.setBoolPref("lykon.shield.fingerprint.enabled", el.checked); } catch (e) {}
-    lbl.textContent = el.checked ? "Active" : "Off";
+    try {
+      Services.prefs.setBoolPref(
+        "lykon.shield.fingerprint.enabled",
+        el.checked
+      );
+    } catch (e) {}
+    if (lbl) {
+      lbl.textContent = el.checked ? "Active" : "Off";
+    }
   },
   toggleForget() {
     const el = document.getElementById("lykon-shield-forget");
-    try { Services.prefs.setBoolPref("lykon.shield.forget.onexit", el.checked); } catch (e) {}
+    if (!el) return;
+    try {
+      Services.prefs.setBoolPref("lykon.shield.forget.onexit", el.checked);
+    } catch (e) {}
   },
 
   _loadPrefs() {
     try {
-      const on = Services.prefs.getBoolPref("browser.adblock.enabled", true);
+      const host = this._getCurrentHost();
+      let on = true;
+      if (host) {
+        const { siteShieldSettings } = ChromeUtils.importESModule(
+          "resource:///modules/SiteShieldSettings.sys.mjs"
+        );
+        on = siteShieldSettings.isEnabledForSite(host);
+      }
       this._el.toggle.checked = on;
       this._applyEnabledState(on);
-      document.getElementById("lykon-shield-tracker-mode").value = Services.prefs.getStringPref("lykon.shield.tracker.mode", "standard");
-      document.getElementById("lykon-shield-https-mode").value   = Services.prefs.getStringPref("lykon.shield.https.mode",   "soft");
-      document.getElementById("lykon-shield-cookie-mode").value  = Services.prefs.getStringPref("lykon.shield.cookie.mode",  "all");
-      const sc = Services.prefs.getBoolPref("lykon.shield.scripts.blocked",      false);
-      const fp = Services.prefs.getBoolPref("lykon.shield.fingerprint.enabled",  false);
-      const fg = Services.prefs.getBoolPref("lykon.shield.forget.onexit",        false);
-      document.getElementById("lykon-shield-scripts").checked     = sc;
-      document.getElementById("lykon-shield-fingerprint").checked = fp;
-      document.getElementById("lykon-shield-fingerprint-count").textContent = fp ? "Active" : "Off";
-      document.getElementById("lykon-shield-forget").checked      = fg;
     } catch (e) {
+      console.error("[LykonShield] _loadPrefs error:", e);
       this._applyEnabledState(true);
+    }
+
+    try {
+      const trackerEl = document.getElementById("lykon-shield-tracker-mode");
+      if (trackerEl) {
+        trackerEl.value = Services.prefs.getStringPref(
+          "lykon.shield.tracker.mode",
+          "standard"
+        );
+      }
+      const httpsEl = document.getElementById("lykon-shield-https-mode");
+      if (httpsEl) {
+        httpsEl.value = Services.prefs.getStringPref(
+          "lykon.shield.https.mode",
+          "soft"
+        );
+      }
+      const cookieEl = document.getElementById("lykon-shield-cookie-mode");
+      if (cookieEl) {
+        cookieEl.value = Services.prefs.getStringPref(
+          "lykon.shield.cookie.mode",
+          "all"
+        );
+      }
+      const sc = Services.prefs.getBoolPref(
+        "lykon.shield.scripts.blocked",
+        false
+      );
+      const fp = Services.prefs.getBoolPref(
+        "lykon.shield.fingerprint.enabled",
+        false
+      );
+      const fg = Services.prefs.getBoolPref(
+        "lykon.shield.forget.onexit",
+        false
+      );
+
+      const scriptsEl = document.getElementById("lykon-shield-scripts");
+      if (scriptsEl) {
+        scriptsEl.checked = sc;
+      }
+      const fpEl = document.getElementById("lykon-shield-fingerprint");
+      if (fpEl) {
+        fpEl.checked = fp;
+      }
+      const fpCountEl = document.getElementById(
+        "lykon-shield-fingerprint-count"
+      );
+      if (fpCountEl) {
+        fpCountEl.textContent = fp ? "Active" : "Off";
+      }
+      const forgetEl = document.getElementById("lykon-shield-forget");
+      if (forgetEl) {
+        forgetEl.checked = fg;
+      }
+    } catch (e) {
+      console.error("[LykonShield] _loadPrefs optional preferences error:", e);
     }
   },
 
   _updateStats() {
     try {
       const stats = this._latestStats || {};
-      const session = stats.session  || Services.prefs.getIntPref("lykon.shield.stats.session",  0);
-      const total   = stats.total    || Services.prefs.getIntPref("lykon.shield.stats.total",    0);
-      const tracker = stats.trackers || Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
-      const bytes   = stats.bytes    || Services.prefs.getIntPref("lykon.shield.stats.bytes",    0);
+      const session =
+        stats.session ||
+        Services.prefs.getIntPref("lykon.shield.stats.session", 0);
+      const total =
+        stats.total || Services.prefs.getIntPref("lykon.shield.stats.total", 0);
+      const tracker =
+        stats.trackers ||
+        Services.prefs.getIntPref("lykon.shield.stats.trackers", 0);
+      const bytes =
+        stats.bytes || Services.prefs.getIntPref("lykon.shield.stats.bytes", 0);
 
       const adsBlockedThisSite = stats.page?.blocked || 0;
 
@@ -260,7 +407,7 @@ var LykonShield = {
       if (this._el.bandwidth) {
         this._el.bandwidth.textContent = this._fmtBytes(bytes);
       }
-      
+
       this._updateBlockedList();
     } catch (e) {
       console.error("[LykonShield] _updateStats error:", e);
@@ -269,10 +416,10 @@ var LykonShield = {
 
   _updateBlockedList() {
     if (!this._el.blockedList || !this._latestStats?.page?.blockedList) return;
-    
+
     const list = this._el.blockedList;
     const items = this._latestStats.page.blockedList;
-    
+
     if (items.length === 0) {
       list.textContent = "";
       const empty = document.createElement("div");
@@ -286,19 +433,19 @@ var LykonShield = {
     for (const item of items) {
       const row = document.createElement("div");
       row.className = "lks-blocked-item";
-      
+
       const urlSpan = document.createElement("span");
       urlSpan.className = "lks-blocked-url";
-      
+
       try {
         const url = new URL(item.url);
         const domain = url.hostname;
         const path = url.pathname + url.search;
-        
+
         const b = document.createElement("strong");
         b.textContent = domain;
         urlSpan.appendChild(b);
-        
+
         const s = document.createElement("span");
         s.style.opacity = "0.5";
         s.textContent = path;
@@ -307,11 +454,14 @@ var LykonShield = {
         urlSpan.textContent = item.url;
       }
       urlSpan.title = item.url;
-      
+
       const typeSpan = document.createElement("span");
-      typeSpan.className = "lks-blocked-type" + (item.isTracker ? " tracker" : "");
-      typeSpan.textContent = item.isTracker ? "TRACKER" : item.type.toUpperCase();
-      
+      typeSpan.className =
+        "lks-blocked-type" + (item.isTracker ? " tracker" : "");
+      typeSpan.textContent = item.isTracker
+        ? "TRACKER"
+        : item.type.toUpperCase();
+
       row.appendChild(urlSpan);
       row.appendChild(typeSpan);
       list.appendChild(row);
@@ -319,13 +469,22 @@ var LykonShield = {
   },
 
   _fmtBytes(b) {
-    if (b < 1024)       return b + " B";
-    if (b < 1048576)    return (b / 1024).toFixed(1) + " KB";
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
     if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
     return (b / 1073741824).toFixed(2) + " GB";
   },
-};
 
+  _getCurrentHost() {
+    try {
+      const uri = window.gBrowser?.currentURI;
+      if (!uri || !uri.scheme?.startsWith("http")) return null;
+      return uri.host;
+    } catch (e) {
+      return null;
+    }
+  },
+};
 
 /* ════════════════════════════════════════════════════
    LYKON COSMETIC FILTER  —  Brave-grade engine
@@ -369,13 +528,12 @@ var LykonShield = {
    • Sticky-ad eviction threshold raised: 40 → 55
    ════════════════════════════════════════════════════ */
 var LykonCosmeticFilter = {
-
-  _initialized:        false,
-  _observers:          new WeakMap(),
-  _ioObservers:        new WeakMap(),
-  _docObserverBound:   false,
-  _shieldObserverBound:false,
-  _globalSheetURI:     null,
+  _initialized: false,
+  _observers: new WeakMap(),
+  _ioObservers: new WeakMap(),
+  _docObserverBound: false,
+  _shieldObserverBound: false,
+  _globalSheetURI: null,
 
   /* ─────────────────────────────────────────────────
      ❶  SELECTOR BANKS
@@ -629,30 +787,77 @@ var LykonCosmeticFilter = {
 
   /* Tracker domains for network-layer src sniffing */
   _trackerDomains: [
-    "doubleclick.net","googlesyndication.com","googleadservices.com",
-    "googletagmanager.com","google-analytics.com","adservice.google.com",
-    "pagead2.googlesyndication.com","amazon-adsystem.com","adnxs.com",
-    "rubiconproject.com","openx.net","pubmatic.com","casalemedia.com",
-    "criteo.com","criteo.net","taboola.com","outbrain.com","mgid.com",
-    "revcontent.com","sharethrough.com","moatads.com","ib.adnxs.com",
-    "33across.com","triplelift.com","sonobi.com","smartadserver.com",
-    "bidswitch.net","spotxchange.com","spotx.tv","springserve.com",
-    "adform.net","teads.tv","yieldmo.com","mediamath.com","liveramp.com",
-    "advertising.com","media.net","servenobid.com","propellerads.com",
-    "trafficjunky.net","zedo.com","popcash.net","popads.net",
-    "facebook.com/tr","connect.facebook.net","pixel.twitter.com",
-    "bat.bing.com","px.ads.linkedin.com","ct.pinterest.com",
-    "analytics.tiktok.com","sc-static.net","applovin.com",
-    "ads.twitter.com","ads.linkedin.com","ads.pinterest.com",
+    "doubleclick.net",
+    "googlesyndication.com",
+    "googleadservices.com",
+    "googletagmanager.com",
+    "google-analytics.com",
+    "adservice.google.com",
+    "pagead2.googlesyndication.com",
+    "amazon-adsystem.com",
+    "adnxs.com",
+    "rubiconproject.com",
+    "openx.net",
+    "pubmatic.com",
+    "casalemedia.com",
+    "criteo.com",
+    "criteo.net",
+    "taboola.com",
+    "outbrain.com",
+    "mgid.com",
+    "revcontent.com",
+    "sharethrough.com",
+    "moatads.com",
+    "ib.adnxs.com",
+    "33across.com",
+    "triplelift.com",
+    "sonobi.com",
+    "smartadserver.com",
+    "bidswitch.net",
+    "spotxchange.com",
+    "spotx.tv",
+    "springserve.com",
+    "adform.net",
+    "teads.tv",
+    "yieldmo.com",
+    "mediamath.com",
+    "liveramp.com",
+    "advertising.com",
+    "media.net",
+    "servenobid.com",
+    "propellerads.com",
+    "trafficjunky.net",
+    "zedo.com",
+    "popcash.net",
+    "popads.net",
+    "facebook.com/tr",
+    "connect.facebook.net",
+    "pixel.twitter.com",
+    "bat.bing.com",
+    "px.ads.linkedin.com",
+    "ct.pinterest.com",
+    "analytics.tiktok.com",
+    "sc-static.net",
+    "applovin.com",
+    "ads.twitter.com",
+    "ads.linkedin.com",
+    "ads.pinterest.com",
   ],
 
   /* Ad-label text content signatures (exact match only — no substring) */
   _adLabelTexts: new Set([
-    "advertisement","advertisements","advertorial",
-    "sponsored content","sponsored post",
-    "paid partnership","paid post",
-    "around the web","from around the web","from the web",
-    "from our partners","more from the web",
+    "advertisement",
+    "advertisements",
+    "advertorial",
+    "sponsored content",
+    "sponsored post",
+    "paid partnership",
+    "paid post",
+    "around the web",
+    "from around the web",
+    "from the web",
+    "from our partners",
+    "more from the web",
     "content from our partners",
     /* Short single-word labels kept but only matched when the element
        contains ONLY that word and has other ad signals (scored separately) */
@@ -665,18 +870,28 @@ var LykonCosmeticFilter = {
    * accessible labels, ARIA descriptions, and button text on real content.
    */
   _weakAdLabels: new Set([
-    "ad","ads","advt","adv","sponsored","promoted","presented by",
-    "you might also like","recommended for you",
-    "you may like","you may also like",
+    "ad",
+    "ads",
+    "advt",
+    "adv",
+    "sponsored",
+    "promoted",
+    "presented by",
+    "you might also like",
+    "recommended for you",
+    "you may like",
+    "you may also like",
   ]),
 
   /* ─────────────────────────────────────────────────
      ❷  CSS RULE BUILDERS
   ───────────────────────────────────────────────── */
   get _cssRule() {
-    const hide = this._selectors.join(",\n") +
+    const hide =
+      this._selectors.join(",\n") +
       `{\n  display:none!important;\n  visibility:hidden!important;\n  pointer-events:none!important;\n  opacity:0!important;\n}`;
-    const collapse = this._collapseSelectors.join(",\n") +
+    const collapse =
+      this._collapseSelectors.join(",\n") +
       `{\n  display:none!important;\n  visibility:hidden!important;\n  pointer-events:none!important;\n  opacity:0!important;\n  height:0!important;\n  min-height:0!important;\n  max-height:0!important;\n  width:0!important;\n  min-width:0!important;\n  max-width:0!important;\n  margin:0!important;\n  padding:0!important;\n  border:0!important;\n  overflow:hidden!important;\n}`;
     return hide + "\n" + collapse;
   },
@@ -689,7 +904,9 @@ var LykonCosmeticFilter = {
      ❸  GLOBAL AGENT STYLESHEET (Layer 0)
   ───────────────────────────────────────────────── */
   _getStyleSheetService() {
-    return Cc["@mozilla.org/content/style-sheet-service;1"].getService(Ci.nsIStyleSheetService);
+    return Cc["@mozilla.org/content/style-sheet-service;1"].getService(
+      Ci.nsIStyleSheetService
+    );
   },
   _getGlobalSheetURI() {
     if (!this._globalSheetURI) {
@@ -705,7 +922,9 @@ var LykonCosmeticFilter = {
       const uri = this._getGlobalSheetURI();
       if (!sss.sheetRegistered(uri, sss.AGENT_SHEET))
         sss.loadAndRegisterSheet(uri, sss.AGENT_SHEET);
-    } catch (e) { console.error("[LykonCosmetic] register sheet:", e); }
+    } catch (e) {
+      console.error("[LykonCosmetic] register sheet:", e);
+    }
   },
   _unregisterGlobalStylesheet() {
     try {
@@ -713,18 +932,23 @@ var LykonCosmeticFilter = {
       const uri = this._getGlobalSheetURI();
       if (sss.sheetRegistered(uri, sss.AGENT_SHEET))
         sss.unregisterSheet(uri, sss.AGENT_SHEET);
-    } catch (e) { console.error("[LykonCosmetic] unregister sheet:", e); }
+    } catch (e) {
+      console.error("[LykonCosmetic] unregister sheet:", e);
+    }
   },
   _ensureGlobalStylesheetState() {
-    this._isShieldEnabled() ? this._registerGlobalStylesheet() : this._unregisterGlobalStylesheet();
+    this._unregisterGlobalStylesheet();
   },
 
   /* ─────────────────────────────────────────────────
      ❹  SHIELD STATE
   ───────────────────────────────────────────────── */
   _isShieldEnabled() {
-    try { return Services.prefs.getBoolPref("browser.adblock.enabled", true); }
-    catch (e) { return true; }
+    try {
+      return Services.prefs.getBoolPref("browser.adblock.enabled", true);
+    } catch (e) {
+      return true;
+    }
   },
 
   /* ─────────────────────────────────────────────────
@@ -743,7 +967,9 @@ var LykonCosmeticFilter = {
         const win = enumerator.getNext();
         if (win?.gBrowser) this._attachBrowserWindow(win);
       }
-    } catch (e) { console.error("[LykonCosmetic] init:", e); }
+    } catch (e) {
+      console.error("[LykonCosmetic] init:", e);
+    }
   },
 
   /* ─────────────────────────────────────────────────
@@ -751,13 +977,21 @@ var LykonCosmeticFilter = {
   ───────────────────────────────────────────────── */
   _startDocumentObserver() {
     if (this._docObserverBound) return;
-    try { Services.obs.addObserver(this, "document-element-inserted"); this._docObserverBound = true; }
-    catch (e) { console.error("[LykonCosmetic] doc observer:", e); }
+    try {
+      Services.obs.addObserver(this, "document-element-inserted");
+      this._docObserverBound = true;
+    } catch (e) {
+      console.error("[LykonCosmetic] doc observer:", e);
+    }
   },
   _startShieldObserver() {
     if (this._shieldObserverBound) return;
-    try { Services.obs.addObserver(this, "adblock-shield-toggled"); this._shieldObserverBound = true; }
-    catch (e) { console.error("[LykonCosmetic] shield observer:", e); }
+    try {
+      Services.obs.addObserver(this, "adblock-shield-toggled");
+      this._shieldObserverBound = true;
+    } catch (e) {
+      console.error("[LykonCosmetic] shield observer:", e);
+    }
   },
 
   observe(subject, topic) {
@@ -784,6 +1018,12 @@ var LykonCosmeticFilter = {
     const proto = doc.location.protocol;
     if (proto !== "http:" && proto !== "https:") return;
     if (!this._isShieldEnabled()) return;
+    try {
+      const { siteShieldSettings } = ChromeUtils.importESModule(
+        "resource:///modules/SiteShieldSettings.sys.mjs"
+      );
+      if (!siteShieldSettings.isEnabledForSite(doc.location.hostname)) return;
+    } catch (e) {}
     this._injectStylesheet(doc);
   },
 
@@ -794,10 +1034,27 @@ var LykonCosmeticFilter = {
     try {
       if (!win?.gBrowser || win.__lykonCosmeticFilterBound) return;
       win.__lykonCosmeticFilterBound = true;
-      for (const browser of win.gBrowser.browsers) this._observeBrowser(browser);
-      win.gBrowser.tabContainer.addEventListener("TabOpen",       e => { const b = e.target?.linkedBrowser; if (b) this._observeBrowser(b); }, true);
-      win.gBrowser.tabContainer.addEventListener("SSTabRestored", e => { const b = e.target?.linkedBrowser; if (b) this._observeBrowser(b); }, true);
-    } catch (e) { console.error("[LykonCosmetic] attach:", e); }
+      for (const browser of win.gBrowser.browsers)
+        this._observeBrowser(browser);
+      win.gBrowser.tabContainer.addEventListener(
+        "TabOpen",
+        e => {
+          const b = e.target?.linkedBrowser;
+          if (b) this._observeBrowser(b);
+        },
+        true
+      );
+      win.gBrowser.tabContainer.addEventListener(
+        "SSTabRestored",
+        e => {
+          const b = e.target?.linkedBrowser;
+          if (b) this._observeBrowser(b);
+        },
+        true
+      );
+    } catch (e) {
+      console.error("[LykonCosmetic] attach:", e);
+    }
   },
 
   /* ─────────────────────────────────────────────────
@@ -813,9 +1070,17 @@ var LykonCosmeticFilter = {
 
       const mutCb = _lksThrottle(() => {
         if (!this._isShieldEnabled()) return;
+        try {
+          const { siteShieldSettings } = ChromeUtils.importESModule(
+            "resource:///modules/SiteShieldSettings.sys.mjs"
+          );
+          if (!siteShieldSettings.isEnabledForSite(doc.location.hostname))
+            return;
+        } catch (e) {}
         this._jsHidePass(doc);
         this._stickyAdEviction(doc);
         this._shadowDomPierce(doc);
+        this._collapseEmptyContainers(doc);
       }, 120);
 
       const mo = new doc.defaultView.MutationObserver(mutCb);
@@ -824,23 +1089,44 @@ var LykonCosmeticFilter = {
         subtree: true,
         attributes: true,
         attributeFilter: [
-          "id","class","style","src",
-          "data-ad-slot","data-ad-format","data-ad-client",
-          "data-google-query-id","data-adunit","data-adslot",
+          "id",
+          "class",
+          "style",
+          "src",
+          "data-ad-slot",
+          "data-ad-format",
+          "data-ad-client",
+          "data-google-query-id",
+          "data-adunit",
+          "data-adslot",
         ],
       });
       this._observers.set(browser, mo);
 
       let sweepCount = 0;
       const sweepTimer = doc.defaultView.setInterval(() => {
-        if (!this._isShieldEnabled() || ++sweepCount > 10) {
+        let disabled = !this._isShieldEnabled();
+        if (!disabled) {
+          try {
+            const { siteShieldSettings } = ChromeUtils.importESModule(
+              "resource:///modules/SiteShieldSettings.sys.mjs"
+            );
+            if (!siteShieldSettings.isEnabledForSite(doc.location.hostname)) {
+              disabled = true;
+            }
+          } catch (e) {}
+        }
+        if (disabled || ++sweepCount > 10) {
           doc.defaultView?.clearInterval(sweepTimer);
           return;
         }
         this._jsHidePass(doc);
         this._stickyAdEviction(doc);
+        this._collapseEmptyContainers(doc);
       }, 1000);
-    } catch (e) { console.error("[LykonCosmetic] observe browser:", e); }
+    } catch (e) {
+      console.error("[LykonCosmetic] observe browser:", e);
+    }
   },
 
   /* ─────────────────────────────────────────────────
@@ -849,12 +1135,19 @@ var LykonCosmeticFilter = {
   run(doc) {
     if (!doc || doc.nodeType !== 9) return;
     if (!this._isShieldEnabled()) return;
+    try {
+      const { siteShieldSettings } = ChromeUtils.importESModule(
+        "resource:///modules/SiteShieldSettings.sys.mjs"
+      );
+      if (!siteShieldSettings.isEnabledForSite(doc.location.hostname)) return;
+    } catch (e) {}
     this._injectStylesheet(doc);
     this._jsHidePass(doc);
     this._iframeSrcPatrol(doc);
     this._shadowDomPierce(doc);
     this._stickyAdEviction(doc);
     this._attachIntersection(doc);
+    this._collapseEmptyContainers(doc);
   },
 
   /* ─────────────────────────────────────────────────
@@ -910,7 +1203,8 @@ var LykonCosmeticFilter = {
       }
     } catch (e) {}
 
-    if (hidden > 0) console.log(`[LykonCosmetic] JS pass hid ${hidden} elements`);
+    if (hidden > 0)
+      console.log(`[LykonCosmetic] JS pass hid ${hidden} elements`);
   },
 
   /* ─────────────────────────────────────────────────
@@ -933,30 +1227,30 @@ var LykonCosmeticFilter = {
   _scoreAdLikelihood(el) {
     let score = 0;
     try {
-      const id      = (el.id            || "").toLowerCase();
-      const cls     = (el.className     || "").toLowerCase();
-      const style   = (el.getAttribute("style") || "").toLowerCase();
-      const tag     = el.tagName.toLowerCase();
-      const text    = (el.textContent   || "").trim().toLowerCase();
-      const ariaL   = (el.getAttribute("aria-label") || "").toLowerCase();
-      const title   = (el.getAttribute("title") || "").toLowerCase();
+      const id = (el.id || "").toLowerCase();
+      const cls = (el.className || "").toLowerCase();
+      const style = (el.getAttribute("style") || "").toLowerCase();
+      const tag = el.tagName.toLowerCase();
+      const text = (el.textContent || "").trim().toLowerCase();
+      const ariaL = (el.getAttribute("aria-label") || "").toLowerCase();
+      const title = (el.getAttribute("title") || "").toLowerCase();
 
       /* ── ID signals ── */
-      if (/\bad[-_]/.test(id) || /[-_]ad\b/.test(id))       score += 30;
-      if (/advert|adsense|adslot|adunit|adspace/.test(id))   score += 35;
-      if (/taboola|outbrain|criteo|mgid|revcontent/.test(id))score += 40;
-      if (/banner|sponsor|promo|affiliat/.test(id))          score += 20;
-      if (/leaderboard|skyscraper|mrec|halfpage/.test(id))   score += 25;
-      if (/gpt[-_]|dfp[-_]|asw[-_]/.test(id))               score += 40;
-      if (/placeholder/.test(id))                            score += 10;
+      if (/\bad[-_]/.test(id) || /[-_]ad\b/.test(id)) score += 30;
+      if (/advert|adsense|adslot|adunit|adspace/.test(id)) score += 35;
+      if (/taboola|outbrain|criteo|mgid|revcontent/.test(id)) score += 40;
+      if (/banner|sponsor|promo|affiliat/.test(id)) score += 20;
+      if (/leaderboard|skyscraper|mrec|halfpage/.test(id)) score += 25;
+      if (/gpt[-_]|dfp[-_]|asw[-_]/.test(id)) score += 40;
+      if (/placeholder/.test(id)) score += 10;
 
       /* ── Class signals ── */
-      if (/\bad[-_]/.test(cls) || /[-_]ad\b/.test(cls))     score += 25;
-      if (/advert|adsense|adslot|adunit/.test(cls))          score += 35;
-      if (/taboola|outbrain|criteo|mgid/.test(cls))          score += 40;
-      if (/banner[-_]ad|ad[-_]banner/.test(cls))             score += 30;
-      if (/placeholder/.test(cls))                           score += 10;
-      if (/tpgnad_ad-wr|tpgnad/i.test(cls))                 score += 60;
+      if (/\bad[-_]/.test(cls) || /[-_]ad\b/.test(cls)) score += 25;
+      if (/advert|adsense|adslot|adunit/.test(cls)) score += 35;
+      if (/taboola|outbrain|criteo|mgid/.test(cls)) score += 40;
+      if (/banner[-_]ad|ad[-_]banner/.test(cls)) score += 30;
+      if (/placeholder/.test(cls)) score += 10;
+      if (/tpgnad_ad-wr|tpgnad/i.test(cls)) score += 60;
       /*
        * FIX: Removed broad class signal for 'sponsor|promoted|advertori'
        * which was scoring real article elements (event sponsor listings,
@@ -965,13 +1259,13 @@ var LykonCosmeticFilter = {
        */
 
       /* ── Attribute signals ── */
-      if (el.hasAttribute("data-ad-slot"))          score += 50;
-      if (el.hasAttribute("data-ad-client"))        score += 50;
-      if (el.hasAttribute("data-google-query-id"))  score += 50;
-      if (el.hasAttribute("data-adunit"))           score += 45;
-      if (el.hasAttribute("data-dfp-ad"))           score += 45;
-      if (el.hasAttribute("data-adslot"))           score += 45;
-      if (el.hasAttribute("data-sponsored"))        score += 30;
+      if (el.hasAttribute("data-ad-slot")) score += 50;
+      if (el.hasAttribute("data-ad-client")) score += 50;
+      if (el.hasAttribute("data-google-query-id")) score += 50;
+      if (el.hasAttribute("data-adunit")) score += 45;
+      if (el.hasAttribute("data-dfp-ad")) score += 45;
+      if (el.hasAttribute("data-adslot")) score += 45;
+      if (el.hasAttribute("data-sponsored")) score += 30;
 
       /* Track whether a strong ad attribute is confirmed — used below
          to decide whether weak text labels should add to the score */
@@ -981,14 +1275,29 @@ var LykonCosmeticFilter = {
       const w = el.offsetWidth;
       const h = el.offsetHeight;
       const IAB_SIZES = [
-        [728,90],[970,90],[970,250],[468,60],
-        [300,250],[300,600],[336,280],[250,250],
-        [160,600],[120,600],[300,1050],
-        [320,50],[320,100],[300,50],
-        [970,66],[980,120],[930,180],
+        [728, 90],
+        [970, 90],
+        [970, 250],
+        [468, 60],
+        [300, 250],
+        [300, 600],
+        [336, 280],
+        [250, 250],
+        [160, 600],
+        [120, 600],
+        [300, 1050],
+        [320, 50],
+        [320, 100],
+        [300, 50],
+        [970, 66],
+        [980, 120],
+        [930, 180],
       ];
       for (const [iw, ih] of IAB_SIZES) {
-        if (Math.abs(w - iw) <= 4 && Math.abs(h - ih) <= 4) { score += 40; break; }
+        if (Math.abs(w - iw) <= 4 && Math.abs(h - ih) <= 4) {
+          score += 40;
+          break;
+        }
       }
       /*
        * FIX: Removed the "empty container at ad-like size" bonus.
@@ -1003,19 +1312,20 @@ var LykonCosmeticFilter = {
        */
 
       /* ── Content / label signals ── */
-      if (this._adLabelTexts.has(text))                      score += 60;
-      if (/^advertisement$|^advertorial$/i.test(text))       score += 60;
-      if (/ad by |ads by |advert by/i.test(text))            score += 40;
+      if (this._adLabelTexts.has(text)) score += 60;
+      if (/^advertisement$|^advertorial$/i.test(text)) score += 60;
+      if (/ad by |ads by |advert by/i.test(text)) score += 40;
       /*
        * FIX: Weak text labels ("ad", "sponsored", "promoted", etc.) now
        * only contribute if there is already a confirmed ad attribute.
        * A button labelled "Sponsored" or an aside with aria-label="ad"
        * on a real content page should not be hidden on its own.
        */
-      if (hasConfirmedAdAttr && this._weakAdLabels.has(text))           score += 30;
-      if (hasConfirmedAdAttr && ariaL && /\bad\b|advertisement/i.test(ariaL)) score += 20;
-      if (ariaL && /^advertisement$|^advertorial$/i.test(ariaL))        score += 40;
-      if (title && /^advertisement$|^advertorial$/i.test(title))        score += 30;
+      if (hasConfirmedAdAttr && this._weakAdLabels.has(text)) score += 30;
+      if (hasConfirmedAdAttr && ariaL && /\bad\b|advertisement/i.test(ariaL))
+        score += 20;
+      if (ariaL && /^advertisement$|^advertorial$/i.test(ariaL)) score += 40;
+      if (title && /^advertisement$|^advertorial$/i.test(title)) score += 30;
       /*
        * FIX: Removed the role="complementary" score bonus. Too many
        * sidebars that carry useful widgets (weather, related articles,
@@ -1026,15 +1336,21 @@ var LykonCosmeticFilter = {
       try {
         for (const iframe of el.querySelectorAll("iframe[src]")) {
           const src = iframe.getAttribute("src") || "";
-          if (this._trackerDomains.some(d => src.includes(d))) { score += 55; break; }
+          if (this._trackerDomains.some(d => src.includes(d))) {
+            score += 55;
+            break;
+          }
         }
       } catch (e) {}
 
       /* ── Style signals ── */
-      if (style.includes("position:fixed") || style.includes("position: fixed")) {
+      if (
+        style.includes("position:fixed") ||
+        style.includes("position: fixed")
+      ) {
         if (score > 30) score += 20;
       }
-      if (/z-index\s*:\s*[1-9]\d{3,}/.test(style))         score += 10;
+      if (/z-index\s*:\s*[1-9]\d{3,}/.test(style)) score += 10;
     } catch (e) {}
     return Math.min(score, 100);
   },
@@ -1045,13 +1361,16 @@ var LykonCosmeticFilter = {
   _attachIntersection(doc) {
     try {
       if (!doc.defaultView?.IntersectionObserver) return;
-      const io = new doc.defaultView.IntersectionObserver(entries => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) this._hideElement(entry.target);
-        }
-      }, { rootMargin: "200px" });
+      const io = new doc.defaultView.IntersectionObserver(
+        entries => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) this._hideElement(entry.target);
+          }
+        },
+        { rootMargin: "200px" }
+      );
 
-      for (const sel of ["[data-ad-slot]","[data-ad-client]","ins.adsbygoogle","[id^='div-gpt-ad-']"]) {
+      for (const sel of this._collapseSelectors) {
         try {
           for (const el of doc.querySelectorAll(sel)) {
             if (!this._ioObservers.has(el)) {
@@ -1064,13 +1383,55 @@ var LykonCosmeticFilter = {
     } catch (e) {}
   },
 
+  _collapseEmptyContainers(doc) {
+    try {
+      const hiddenEls = doc.querySelectorAll(
+        '[style*="display: none"][style*="important"]'
+      );
+      for (const el of hiddenEls) {
+        let parent = el.parentElement;
+        if (!parent || parent === doc.body || parent === doc.documentElement)
+          continue;
+        const tag = parent.tagName?.toLowerCase();
+        if (
+          [
+            "body",
+            "html",
+            "main",
+            "nav",
+            "header",
+            "footer",
+            "article",
+            "section",
+          ].includes(tag)
+        )
+          continue;
+        const visibleChildren = Array.from(parent.children).filter(c => {
+          const cs = doc.defaultView?.getComputedStyle(c);
+          return cs && cs.display !== "none" && cs.visibility !== "hidden";
+        });
+        if (visibleChildren.length === 0 && parent.style.display !== "none") {
+          parent.style.setProperty("display", "none", "important");
+          parent.style.setProperty("height", "0", "important");
+          parent.style.setProperty("overflow", "hidden", "important");
+          parent.style.setProperty("margin", "0", "important");
+          parent.style.setProperty("padding", "0", "important");
+        }
+      }
+    } catch (e) {}
+  },
+
   /* ─────────────────────────────────────────────────
      Layer 6 – Iframe src patrol
   ───────────────────────────────────────────────── */
   _iframeSrcPatrol(doc) {
     try {
       for (const iframe of doc.querySelectorAll("iframe")) {
-        const src = (iframe.getAttribute("src") || iframe.src || "").toLowerCase();
+        const src = (
+          iframe.getAttribute("src") ||
+          iframe.src ||
+          ""
+        ).toLowerCase();
         if (!src) continue;
         if (this._trackerDomains.some(d => src.includes(d))) {
           this._hideElement(iframe);
@@ -1096,7 +1457,8 @@ var LykonCosmeticFilter = {
         }
         for (const sel of this._selectors) {
           try {
-            for (const el of shadow.querySelectorAll(sel)) this._hideElement(el);
+            for (const el of shadow.querySelectorAll(sel))
+              this._hideElement(el);
           } catch (e) {}
         }
       }
@@ -1121,10 +1483,10 @@ var LykonCosmeticFilter = {
 
       const candidates = doc.querySelectorAll(
         "div[style*='fixed'],aside[style*='fixed'],section[style*='fixed']," +
-        "div[style*='sticky'],aside[style*='sticky']," +
-        "#sticky-ad,#ad-sticky,.sticky-ad,.ad-sticky," +
-        "#floating-ad,.floating-ad,#slide-ad,.slide-ad," +
-        "#interstitial,.interstitial-ad,#adhesion,.adhesion-ad"
+          "div[style*='sticky'],aside[style*='sticky']," +
+          "#sticky-ad,#ad-sticky,.sticky-ad,.ad-sticky," +
+          "#floating-ad,.floating-ad,#slide-ad,.slide-ad," +
+          "#interstitial,.interstitial-ad,#adhesion,.adhesion-ad"
       );
 
       for (const el of candidates) {
@@ -1173,7 +1535,12 @@ var LykonCosmeticFilter = {
           const parts = cls.split(/\s+/).filter(Boolean);
           for (const p of parts) if (p.startsWith("ads_")) return false;
 
-          if (iid === "ignorediv" || iid === "ndpl-iframe" || iid === "videoembed") return false;
+          if (
+            iid === "ignorediv" ||
+            iid === "ndpl-iframe" ||
+            iid === "videoembed"
+          )
+            return false;
           if (
             cls.includes("ins_instory_dv") ||
             cls.includes("art-exp_wr") ||
@@ -1181,7 +1548,8 @@ var LykonCosmeticFilter = {
             cls.includes("sp-hd") ||
             cls.includes("stp-wr") ||
             cls.includes("js-ad-section")
-          ) return false;
+          )
+            return false;
         }
       } catch (_e) {}
 
@@ -1192,8 +1560,21 @@ var LykonCosmeticFilter = {
        * the hide target.
        */
       const STRUCTURAL_TAGS = new Set([
-        "body","html","main","nav","header","footer",
-        "article","section","ul","ol","li","table","tbody","tr","td",
+        "body",
+        "html",
+        "main",
+        "nav",
+        "header",
+        "footer",
+        "article",
+        "section",
+        "ul",
+        "ol",
+        "li",
+        "table",
+        "tbody",
+        "tr",
+        "td",
       ]);
 
       for (let i = 0; i < 3 && parent; i++) {
@@ -1209,22 +1590,30 @@ var LykonCosmeticFilter = {
 
       if (target.style.display === "none") return false;
 
-      target.style.setProperty("display",        "none",    "important");
-      target.style.setProperty("visibility",     "hidden",  "important");
-      target.style.setProperty("pointer-events", "none",    "important");
-      target.style.setProperty("opacity",        "0",       "important");
+      target.style.setProperty("display", "none", "important");
+      target.style.setProperty("visibility", "hidden", "important");
+      target.style.setProperty("pointer-events", "none", "important");
+      target.style.setProperty("opacity", "0", "important");
 
-      if (this._collapseSelectors.some(s => { try { return target.matches(s); } catch(e){ return false; } })) {
-        target.style.setProperty("height",     "0", "important");
+      if (
+        this._collapseSelectors.some(s => {
+          try {
+            return target.matches(s);
+          } catch (e) {
+            return false;
+          }
+        })
+      ) {
+        target.style.setProperty("height", "0", "important");
         target.style.setProperty("min-height", "0", "important");
         target.style.setProperty("max-height", "0", "important");
-        target.style.setProperty("width",      "0", "important");
-        target.style.setProperty("min-width",  "0", "important");
-        target.style.setProperty("max-width",  "0", "important");
-        target.style.setProperty("margin",     "0", "important");
-        target.style.setProperty("padding",    "0", "important");
-        target.style.setProperty("border",     "0", "important");
-        target.style.setProperty("overflow",   "hidden", "important");
+        target.style.setProperty("width", "0", "important");
+        target.style.setProperty("min-width", "0", "important");
+        target.style.setProperty("max-width", "0", "important");
+        target.style.setProperty("margin", "0", "important");
+        target.style.setProperty("padding", "0", "important");
+        target.style.setProperty("border", "0", "important");
+        target.style.setProperty("overflow", "hidden", "important");
       }
       return true;
     } catch (e) {
@@ -1239,14 +1628,16 @@ var LykonCosmeticFilter = {
   },
 };
 
-
 /* ════════════════════════════════════════════════════
    BOOT
    ════════════════════════════════════════════════════ */
 (function () {
   function startCosmeticFiltering() {
-    try { LykonCosmeticFilter.init(); }
-    catch (e) { console.error("[LykonCosmetic] start error:", e); }
+    try {
+      LykonCosmeticFilter.init();
+    } catch (e) {
+      console.error("[LykonCosmetic] start error:", e);
+    }
   }
 
   function bindPopup() {
@@ -1259,7 +1650,11 @@ var LykonCosmeticFilter = {
   startCosmeticFiltering();
   bindPopup();
   // Ensure the button state is updated immediately
-  window.addEventListener("DOMContentLoaded", () => {
-    LykonShield.init();
-  }, { once: true });
+  window.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      LykonShield.init();
+    },
+    { once: true }
+  );
 })();
