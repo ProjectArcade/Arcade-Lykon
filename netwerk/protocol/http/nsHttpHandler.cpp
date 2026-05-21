@@ -1066,7 +1066,7 @@ void nsHttpHandler::BuildUserAgent() {
     mUserAgent += ' ';
     mUserAgent += mCompatFirefox;
   }
-  if (!isFirefox) {
+  if (!isFirefox && !mCompatFirefoxEnabled) {
     // App portion
     mUserAgent += ' ';
     mUserAgent += mAppName;
