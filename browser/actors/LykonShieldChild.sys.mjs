@@ -65,7 +65,7 @@ export class LykonShieldChild extends JSWindowActorChild {
     }
   }
 
-  async init() {
+  init() {
     if (this._destroyed) return;
     const url = this.document?.location?.href;
     if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
@@ -75,7 +75,16 @@ export class LykonShieldChild extends JSWindowActorChild {
     if (this._initialized) return;
     this._initialized = true;
 
-    // Dynamic User-Agent spoofing to prevent compatibility breakage on standard sites (e.g. Hotstar, Google Auth)
+    this.setupSynchronousHooks(url);
+
+    this.initAsync(url).catch(e => {
+      if (!this._isBenignError(e)) {
+        console.error("[LykonShieldChild] Error in initAsync:", e);
+      }
+    });
+  }
+
+  setupSynchronousHooks(url) {
     try {
       const win = this.contentWindow;
       const waivedNavigator = Cu.waiveXrays(win.navigator);
@@ -116,7 +125,214 @@ export class LykonShieldChild extends JSWindowActorChild {
       console.error("[LykonShieldChild] Failed to spoof User-Agent:", e);
     }
 
-    // Spoof prefers-color-scheme to match system color scheme
+    try {
+      const win = this.contentWindow;
+      const waivedWin = Cu.waiveXrays(win);
+      if (waivedWin && waivedWin.Object) {
+        console.log(
+          `[LykonShieldChild] Registering Object/Reflect hooks for ${url}`
+        );
+
+        const originalOpen = waivedWin.open;
+        if (originalOpen) {
+          waivedWin.open = Cu.exportFunction(function (
+            urlParam,
+            name,
+            features
+          ) {
+            try {
+              const currentHost = win.location?.hostname || "";
+              const urlStr = String(urlParam || "").toLowerCase();
+              console.log(
+                `[LykonShieldChild] window.open intercepted: url=${urlStr}`
+              );
+
+              let targetHost = "";
+              try {
+                targetHost = new win.URL(
+                  urlParam,
+                  win.location.href
+                ).hostname.toLowerCase();
+              } catch (e) {
+                targetHost = urlStr;
+              }
+
+              const getBaseDomain = host => {
+                const parts = host.split(".");
+                if (parts.length >= 2) {
+                  return parts.slice(-2).join(".");
+                }
+                return host;
+              };
+
+              const currentBase = getBaseDomain(currentHost).toLowerCase();
+              const targetBase = getBaseDomain(targetHost).toLowerCase();
+
+              if (
+                !urlParam ||
+                urlStr.includes("traffic") ||
+                urlStr.includes("click") ||
+                urlStr.includes("eta") ||
+                urlStr.includes("pop") ||
+                (targetBase && currentBase && targetBase !== currentBase)
+              ) {
+                console.log(
+                  `[LykonShieldChild] BLOCKED window.open popup: ${urlStr}`
+                );
+                return new win.Proxy(
+                  {},
+                  {
+                    get() {
+                      return function () {};
+                    },
+                  }
+                );
+              }
+            } catch (e) {}
+            return originalOpen.call(waivedWin, urlParam, name, features);
+          }, win);
+        }
+
+        const originalDefineProperty = waivedWin.Object.defineProperty;
+        if (originalDefineProperty) {
+          waivedWin.Object.defineProperty = Cu.exportFunction(function (
+            obj,
+            prop,
+            descriptor
+          ) {
+            try {
+              console.log(
+                `[LykonShieldChild] Object.defineProperty: prop=${String(prop)} obj=${String(obj)}`
+              );
+              if (
+                obj === win ||
+                obj === waivedWin ||
+                prop === "VueComponents"
+              ) {
+                if (descriptor && typeof descriptor === "object") {
+                  const waivedDesc = Cu.waiveXrays(descriptor);
+                  const newDesc = { configurable: true };
+                  if ("value" in waivedDesc) newDesc.value = waivedDesc.value;
+                  if ("writable" in waivedDesc)
+                    newDesc.writable = waivedDesc.writable;
+                  if ("get" in waivedDesc) newDesc.get = waivedDesc.get;
+                  if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
+                  if ("enumerable" in waivedDesc)
+                    newDesc.enumerable = waivedDesc.enumerable;
+                  descriptor = newDesc;
+                  console.log(
+                    `[LykonShieldChild] Forced configurable: true for ${String(prop)}`
+                  );
+                }
+              }
+            } catch (e) {}
+            return originalDefineProperty.call(
+              waivedWin.Object,
+              obj,
+              prop,
+              descriptor
+            );
+          }, win);
+        }
+
+        const originalDefineProperties = waivedWin.Object.defineProperties;
+        if (originalDefineProperties) {
+          waivedWin.Object.defineProperties = Cu.exportFunction(function (
+            obj,
+            props
+          ) {
+            try {
+              console.log(
+                `[LykonShieldChild] Object.defineProperties: keys=${Object.keys(Cu.waiveXrays(props || {})).join(",")} obj=${String(obj)}`
+              );
+              if (props && typeof props === "object") {
+                const waivedProps = Cu.waiveXrays(props);
+                const newProps = {};
+                let modified = false;
+                for (const key of Object.keys(waivedProps)) {
+                  const desc = waivedProps[key];
+                  if (
+                    desc &&
+                    typeof desc === "object" &&
+                    (obj === win ||
+                      obj === waivedWin ||
+                      key === "VueComponents")
+                  ) {
+                    const waivedDesc = Cu.waiveXrays(desc);
+                    const newDesc = { configurable: true };
+                    if ("value" in waivedDesc) newDesc.value = waivedDesc.value;
+                    if ("writable" in waivedDesc)
+                      newDesc.writable = waivedDesc.writable;
+                    if ("get" in waivedDesc) newDesc.get = waivedDesc.get;
+                    if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
+                    if ("enumerable" in waivedDesc)
+                      newDesc.enumerable = waivedDesc.enumerable;
+                    newProps[key] = newDesc;
+                    modified = true;
+                    console.log(
+                      `[LykonShieldChild] Forced configurable: true for key=${String(key)} in defineProperties`
+                    );
+                  } else {
+                    newProps[key] = desc;
+                  }
+                }
+                if (modified) {
+                  props = newProps;
+                }
+              }
+            } catch (e) {}
+            return originalDefineProperties.call(waivedWin.Object, obj, props);
+          }, win);
+        }
+
+        const originalReflectDefineProperty = waivedWin.Reflect?.defineProperty;
+        if (originalReflectDefineProperty) {
+          waivedWin.Reflect.defineProperty = Cu.exportFunction(function (
+            obj,
+            prop,
+            descriptor
+          ) {
+            try {
+              console.log(
+                `[LykonShieldChild] Reflect.defineProperty: prop=${String(prop)} obj=${String(obj)}`
+              );
+              if (
+                obj === win ||
+                obj === waivedWin ||
+                prop === "VueComponents"
+              ) {
+                if (descriptor && typeof descriptor === "object") {
+                  const waivedDesc = Cu.waiveXrays(descriptor);
+                  const newDesc = { configurable: true };
+                  if ("value" in waivedDesc) newDesc.value = waivedDesc.value;
+                  if ("writable" in waivedDesc)
+                    newDesc.writable = waivedDesc.writable;
+                  if ("get" in waivedDesc) newDesc.get = waivedDesc.get;
+                  if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
+                  if ("enumerable" in waivedDesc)
+                    newDesc.enumerable = waivedDesc.enumerable;
+                  descriptor = newDesc;
+                  console.log(
+                    `[LykonShieldChild] Forced configurable: true for Reflect ${String(prop)}`
+                  );
+                }
+              }
+            } catch (e) {}
+            return originalReflectDefineProperty.call(
+              waivedWin.Reflect,
+              obj,
+              prop,
+              descriptor
+            );
+          }, win);
+        }
+      }
+    } catch (e) {
+      console.error("[LykonShieldChild] Failed to setup hooks:", e);
+    }
+  }
+
+  async initAsync(url) {
     try {
       const isSystemDark = await this.sendQuery("isSystemDarkTheme");
       if (this._destroyed) return;
@@ -161,7 +377,6 @@ export class LykonShieldChild extends JSWindowActorChild {
       }
     }
 
-    // 1. Verify if shields are enabled for this site
     let isEnabled = true;
     try {
       isEnabled = await this.sendQuery("isShieldEnabled", { url });
@@ -184,7 +399,6 @@ export class LykonShieldChild extends JSWindowActorChild {
 
     if (this._destroyed) return;
 
-    // 2. YouTube Specific Injections
     if (
       url.includes("youtube.com") &&
       !url.includes("live_chat") &&
@@ -194,7 +408,6 @@ export class LykonShieldChild extends JSWindowActorChild {
       this.startPlayerObserver();
     }
 
-    // 3. Fetch Cosmetic Resources from Parent
     try {
       this._cosmeticResources = await this.sendQuery("getCosmeticResources", {
         url,
@@ -211,7 +424,6 @@ export class LykonShieldChild extends JSWindowActorChild {
 
     if (this._destroyed) return;
 
-    // 4. Global Cosmetic Observer (Advanced)
     if (!url.includes("youtube.com")) {
       this.startAdvancedCosmeticObserver();
     }
@@ -781,10 +993,8 @@ export class LykonShieldChild extends JSWindowActorChild {
       }
       if (hasAddedElements) {
         this.queryGenericFilters();
+        this.scheduleDimensionHiding();
       }
-
-      // Debounce the layout-heavy dimension checks to prevent thrashing
-      this.scheduleDimensionHiding();
     });
     this._observer = observer;
 
@@ -804,10 +1014,14 @@ export class LykonShieldChild extends JSWindowActorChild {
         this._seenIds.add(el.id);
         newFound = true;
       }
-      for (const cls of el.classList) {
-        if (!this._seenClasses.has(cls)) {
-          this._seenClasses.add(cls);
-          newFound = true;
+      const className = el.className;
+      if (className && typeof className === "string") {
+        const classes = className.split(/\s+/);
+        for (const cls of classes) {
+          if (cls && !this._seenClasses.has(cls)) {
+            this._seenClasses.add(cls);
+            newFound = true;
+          }
         }
       }
     };
@@ -838,10 +1052,14 @@ export class LykonShieldChild extends JSWindowActorChild {
           this._seenIds.add(el.id);
           changed = true;
         }
-        for (const cls of el.classList) {
-          if (!this._seenClasses.has(cls)) {
-            this._seenClasses.add(cls);
-            changed = true;
+        const className = el.className;
+        if (className && typeof className === "string") {
+          const classes = className.split(/\s+/);
+          for (const cls of classes) {
+            if (cls && !this._seenClasses.has(cls)) {
+              this._seenClasses.add(cls);
+              changed = true;
+            }
           }
         }
       };
@@ -898,7 +1116,7 @@ export class LykonShieldChild extends JSWindowActorChild {
   }
 
   applyHardcodedDimensionRules() {
-    if (this._destroyed || !this.document || !this.document.defaultView) return;
+    if (this._destroyed || !this.document) return;
     try {
       const AD_DIMENSIONS = [
         { w: 300, h: 250 },
@@ -915,13 +1133,22 @@ export class LykonShieldChild extends JSWindowActorChild {
       for (const div of divs) {
         if (div.style.display === "none") continue;
 
+        const childrenCount = div.children.length;
+        if (childrenCount > 1) {
+          continue;
+        }
+
+        const hasIframe =
+          childrenCount === 1 && div.children[0].tagName === "IFRAME";
+        if (childrenCount === 1 && !hasIframe) {
+          continue;
+        }
+
         const hasInlineDimensions = div.style.width || div.style.height;
         const isInsOrAside = div.tagName === "INS" || div.tagName === "ASIDE";
         const hasAdKeywords = /ad|sponsor|promo/i.test(
           div.className + " " + div.id
         );
-        const hasIframe =
-          div.children.length === 1 && div.children[0].tagName === "IFRAME";
 
         if (
           !hasInlineDimensions &&
@@ -932,20 +1159,15 @@ export class LykonShieldChild extends JSWindowActorChild {
           continue;
         }
 
-        if (
-          div.children.length === 0 ||
-          (div.children.length === 1 && div.children[0].tagName === "IFRAME")
-        ) {
-          const style = this.document.defaultView.getComputedStyle(div);
-          const w = parseInt(style.width);
-          const h = parseInt(style.height);
+        const w = div.offsetWidth;
+        const h = div.offsetHeight;
+        if (w === 0 && h === 0) continue;
 
-          for (const dim of AD_DIMENSIONS) {
-            if (Math.abs(w - dim.w) < 5 && Math.abs(h - dim.h) < 5) {
-              div.style.setProperty("display", "none", "important");
-              hiddenCount++;
-              break;
-            }
+        for (const dim of AD_DIMENSIONS) {
+          if (Math.abs(w - dim.w) < 5 && Math.abs(h - dim.h) < 5) {
+            div.style.setProperty("display", "none", "important");
+            hiddenCount++;
+            break;
           }
         }
       }

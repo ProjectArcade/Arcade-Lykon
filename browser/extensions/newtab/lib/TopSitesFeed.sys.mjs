@@ -98,13 +98,7 @@ const DEFAULT_SOV_SLOT_COUNT = 3;
 
 // Search experiment stuff
 const FILTER_DEFAULT_SEARCH_PREF = "improvesearch.noDefaultSearchTile";
-const SEARCH_FILTERS = [
-  "google",
-  "search.yahoo",
-  "yahoo",
-  "ask",
-  "duckduckgo",
-];
+const SEARCH_FILTERS = ["google", "search.yahoo", "yahoo", "ask", "duckduckgo"];
 
 const REMOTE_SETTING_DEFAULTS_PREF = "browser.topsites.useRemoteSetting";
 const DEFAULT_SITES_OVERRIDE_PREF =
@@ -328,7 +322,9 @@ class TopSitesTelemetry {
         for (let i = 1; i <= this.sponsoredTilesConfigured; i++) {
           if (!tilePositionsAssigned.includes(i)) {
             let tileProperty = tilesMissingPosition.shift();
-            this.allSponsoredTiles[tileProperty].display_position = i;
+            if (tileProperty && this.allSponsoredTiles[tileProperty]) {
+              this.allSponsoredTiles[tileProperty].display_position = i;
+            }
           }
         }
       }
