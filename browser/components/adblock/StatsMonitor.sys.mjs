@@ -5,6 +5,7 @@ export class StatsMonitor {
       trackers: 0,
       bytes: 0,
       startTime: Date.now(),
+      domains: new Set(),
     };
     // Per-tab: key = browsingContextID or url, value = { blocked, trackers, bytes }
     this.pageStats = new Map();
@@ -141,6 +142,13 @@ export class StatsMonitor {
     const isTracker = this._isTracker(url);
     if (isTracker) this.session.trackers++;
 
+    try {
+      const hostname = new URL(url).hostname;
+      if (hostname) {
+        this.session.domains.add(hostname);
+      }
+    } catch (e) {}
+
     if (pageKey) {
       const page = this.pageStats.get(pageKey) || {
         blocked: 0,
@@ -224,6 +232,7 @@ export class StatsMonitor {
       total,
       trackers: this.session.trackers,
       bytes: this.session.bytes,
+      domains: this.session.domains ? this.session.domains.size : 0,
       page: {
         blocked: page.blocked || 0,
         trackers: page.trackers || 0,
@@ -296,7 +305,13 @@ export class StatsMonitor {
   }
 
   resetSession() {
-    this.session = { blocked: 0, trackers: 0, bytes: 0, startTime: Date.now() };
+    this.session = {
+      blocked: 0,
+      trackers: 0,
+      bytes: 0,
+      startTime: Date.now(),
+      domains: new Set(),
+    };
     this._persistToPrefs();
     this._broadcast();
   }

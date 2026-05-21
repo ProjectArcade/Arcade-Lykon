@@ -26,6 +26,7 @@ var LykonShield = {
 
   init() {
     const $ = id => document.getElementById(id);
+    this._currentFilter = "blocked-only";
     this._el = {
       button: $("lykon-shield-button"),
       toggle: $("lykon-shield-toggle"),
@@ -43,10 +44,15 @@ var LykonShield = {
       total: $("lykon-shield-total-count"),
       trackers: $("lykon-shield-tracker-count"),
       bandwidth: $("lykon-shield-bandwidth"),
-      nerdHeader: $("lykon-shield-nerd-header"),
-      nerdPanel: $("lykon-shield-nerd-panel"),
-      nerdArrow: $("lykon-shield-nerd-arrow"),
-      blockedList: $("lykon-shield-blocked-list"),
+      disabledAdsCount: $("lykon-shield-disabled-ads-count"),
+      disabledTrackersCount: $("lykon-shield-disabled-trackers-count"),
+      blockedListTable: $("lykon-shield-blocked-list-table"),
+      footerTotal: $("lykon-shield-footer-total"),
+      footerRequests: $("lykon-shield-footer-requests"),
+      footerDomains: $("lykon-shield-footer-domains"),
+      filterBlockedOnly: $("lykon-filter-blocked-only"),
+      filterAllAttempts: $("lykon-filter-all-attempts"),
+      viewDetailsBtn: $("lykon-shield-view-details-btn"),
       siteHost: $("lykon-shield-site-host"),
     };
 
@@ -65,10 +71,26 @@ var LykonShield = {
           this._toggleAdvanced()
         );
       }
-      if (this._el.nerdHeader) {
-        this._el.nerdHeader.addEventListener("click", () =>
-          this._toggleNerdView()
-        );
+      if (this._el.filterBlockedOnly) {
+        this._el.filterBlockedOnly.addEventListener("click", () => {
+          this._el.filterBlockedOnly.classList.add("active");
+          this._el.filterAllAttempts?.classList.remove("active");
+          this._currentFilter = "blocked-only";
+          this._updateBlockedList();
+        });
+      }
+      if (this._el.filterAllAttempts) {
+        this._el.filterAllAttempts.addEventListener("click", () => {
+          this._el.filterAllAttempts.classList.add("active");
+          this._el.filterBlockedOnly?.classList.remove("active");
+          this._currentFilter = "all";
+          this._updateBlockedList();
+        });
+      }
+      if (this._el.viewDetailsBtn) {
+        this._el.viewDetailsBtn.addEventListener("click", () => {
+          console.log("[LykonShield] View details clicked");
+        });
       }
 
       // ── New: Watch for tab/navigation changes ──
@@ -191,16 +213,6 @@ var LykonShield = {
     const open = this._el.advPanel.style.display !== "none";
     this._el.advPanel.style.display = open ? "none" : "block";
     this._el.advArrow.classList.toggle("open", !open);
-  },
-
-  _toggleNerdView() {
-    if (!this._el.nerdPanel || !this._el.nerdArrow) return;
-    const open = this._el.nerdPanel.style.display !== "none";
-    this._el.nerdPanel.style.display = open ? "none" : "block";
-    this._el.nerdArrow.classList.toggle("open", !open);
-    if (!open) {
-      this._updateBlockedList();
-    }
   },
 
   _updatePanelState() {
@@ -408,6 +420,27 @@ var LykonShield = {
         this._el.bandwidth.textContent = this._fmtBytes(bytes);
       }
 
+      if (this._el.footerTotal) {
+        this._el.footerTotal.textContent = session.toLocaleString();
+      }
+      if (this._el.footerRequests) {
+        this._el.footerRequests.textContent = Math.max(
+          0,
+          session - tracker
+        ).toLocaleString();
+      }
+      if (this._el.footerDomains) {
+        this._el.footerDomains.textContent = (
+          stats.domains || 0
+        ).toLocaleString();
+      }
+      if (this._el.disabledAdsCount) {
+        this._el.disabledAdsCount.textContent = "0";
+      }
+      if (this._el.disabledTrackersCount) {
+        this._el.disabledTrackersCount.textContent = "0";
+      }
+
       this._updateBlockedList();
     } catch (e) {
       console.error("[LykonShield] _updateStats error:", e);
@@ -415,9 +448,10 @@ var LykonShield = {
   },
 
   _updateBlockedList() {
-    if (!this._el.blockedList || !this._latestStats?.page?.blockedList) return;
+    if (!this._el.blockedListTable || !this._latestStats?.page?.blockedList)
+      return;
 
-    const list = this._el.blockedList;
+    const list = this._el.blockedListTable;
     const items = this._latestStats.page.blockedList;
 
     if (items.length === 0) {
@@ -432,38 +466,112 @@ var LykonShield = {
     list.textContent = "";
     for (const item of items) {
       const row = document.createElement("div");
-      row.className = "lks-blocked-item";
+      row.className = "lks-table-row";
 
-      const urlSpan = document.createElement("span");
-      urlSpan.className = "lks-blocked-url";
+      // Item Column (Icon + Domain + Path)
+      const colItem = document.createElement("div");
+      colItem.className = "lks-tr-item";
 
+      const icon = document.createElement("div");
+      icon.className = "lks-tr-icon";
+
+      let domain = "";
+      let path = "";
       try {
         const url = new URL(item.url);
-        const domain = url.hostname;
-        const path = url.pathname + url.search;
-
-        const b = document.createElement("strong");
-        b.textContent = domain;
-        urlSpan.appendChild(b);
-
-        const s = document.createElement("span");
-        s.style.opacity = "0.5";
-        s.textContent = path;
-        urlSpan.appendChild(s);
+        domain = url.hostname;
+        path = url.pathname + url.search;
       } catch (e) {
-        urlSpan.textContent = item.url;
+        domain = item.url;
+        path = "";
       }
-      urlSpan.title = item.url;
 
-      const typeSpan = document.createElement("span");
-      typeSpan.className =
-        "lks-blocked-type" + (item.isTracker ? " tracker" : "");
-      typeSpan.textContent = item.isTracker
-        ? "TRACKER"
-        : item.type.toUpperCase();
+      if (item.isTracker) {
+        if (domain.includes("facebook.com")) {
+          icon.className += " tracker-blue-bg";
+          icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>`;
+        } else {
+          icon.className += " tracker-purple-bg";
+          icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"/>
+          </svg>`;
+        }
+      } else {
+        icon.className += " ad-red-bg";
+        icon.textContent = "AD";
+      }
 
-      row.appendChild(urlSpan);
-      row.appendChild(typeSpan);
+      const details = document.createElement("div");
+      details.className = "lks-tr-details";
+
+      const hostSpan = document.createElement("span");
+      hostSpan.className = "lks-tr-host";
+      hostSpan.textContent = domain;
+      details.appendChild(hostSpan);
+
+      if (path) {
+        const pathSpan = document.createElement("span");
+        pathSpan.className = "lks-tr-path";
+        pathSpan.textContent = path;
+        details.appendChild(pathSpan);
+      }
+
+      colItem.appendChild(icon);
+      colItem.appendChild(details);
+
+      // Type Column
+      const colType = document.createElement("div");
+      colType.className = "lks-tr-type";
+      colType.textContent = item.isTracker ? "Tracker" : "Ad";
+
+      // Blocked (Time) Column
+      const colBlocked = document.createElement("div");
+      colBlocked.className = "lks-tr-blocked";
+      const secs = Math.max(1, Math.round((Date.now() - item.time) / 1000));
+      if (secs < 60) {
+        colBlocked.textContent = secs + "s ago";
+      } else if (secs < 3600) {
+        colBlocked.textContent = Math.floor(secs / 60) + "m ago";
+      } else {
+        colBlocked.textContent = Math.floor(secs / 3600) + "h ago";
+      }
+
+      // Action Column (Toggle switch + ⋮ button)
+      const colAction = document.createElement("div");
+      colAction.className = "lks-tr-action";
+
+      const toggleLbl = document.createElement("label");
+      toggleLbl.className = "lks-row-toggle";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.addEventListener("change", () => {
+        row.style.opacity = checkbox.checked ? "1" : "0.4";
+      });
+
+      const slider = document.createElement("span");
+      slider.className = "lks-row-slider";
+
+      toggleLbl.appendChild(checkbox);
+      toggleLbl.appendChild(slider);
+
+      const moreBtn = document.createElement("button");
+      moreBtn.className = "lks-row-more";
+      moreBtn.textContent = "⋮";
+      moreBtn.title = "Actions";
+
+      colAction.appendChild(toggleLbl);
+      colAction.appendChild(moreBtn);
+
+      row.appendChild(colItem);
+      row.appendChild(colType);
+      row.appendChild(colBlocked);
+      row.appendChild(colAction);
+
       list.appendChild(row);
     }
   },
