@@ -249,16 +249,6 @@ class _NativeAdblockEngine {
       return false;
     }
 
-    try {
-      const hostname = new URL(url).hostname;
-      if (
-        SAFE_MEDIA_TYPES.has(resourceType) &&
-        this._isMediaAllowlisted(hostname, url)
-      ) {
-        return false;
-      }
-    } catch (e) {}
-
     // Refined Media Stream Handling
     // We allow standard video content but MUST filter if it looks like an ad segment
     if (url.includes("videoplayback")) {
@@ -276,6 +266,21 @@ class _NativeAdblockEngine {
     for (const pattern of SAFE_PATTERNS) {
       if (url.includes(pattern)) return false;
     }
+
+    try {
+      const hostname = new URL(url).hostname;
+      const safeTypesForAllowlist = new Set([
+        "document",
+        "subdocument",
+        "object",
+      ]);
+      if (
+        safeTypesForAllowlist.has(resourceType) &&
+        this._isMediaAllowlisted(hostname, url)
+      ) {
+        return false;
+      }
+    } catch (e) {}
 
     try {
       const result = this._fns.checkNetworkUrl(
@@ -402,6 +407,8 @@ class _AdblockService {
           console.log(
             `[AdblockService] Native engine initialized with ${count} rules`
           );
+          // Initialize fallback JS engine asynchronously so it is ready if needed
+          lazy.filterManager.init().catch(e => {});
           return;
         }
         console.warn(
@@ -425,6 +432,13 @@ class _AdblockService {
 
   shouldBlock(url, originUrl, resourceType) {
     if (!this.enabled || !this._initialized) return false;
+    if (
+      url.includes("generate_204") ||
+      url.includes("/api/stats/qoe") ||
+      url.includes("/youtubei/v1/log_event")
+    ) {
+      return false;
+    }
     try {
       let blocked = false;
       if (this._useNative) {

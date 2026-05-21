@@ -316,17 +316,38 @@ export class FilterManager {
         else return false;
       }
 
-      if (url.includes("live_chat") || url.includes("live_chat_replay"))
+      if (url.includes("live_chat") || url.includes("live_chat_replay")) {
         return false;
+      }
 
+      // Refined Media Stream Handling
+      // We allow standard video content but MUST filter if it looks like an ad segment
+      if (url.includes("videoplayback")) {
+        const isAdSegment =
+          url.includes("adformat") ||
+          url.includes("ptracking") ||
+          url.includes("oad") ||
+          url.includes("ov") ||
+          url.includes("oadid");
+        if (!isAdSegment) return false; // Allow pure video content
+      }
+
+      // Other media patterns that are safe to allow (e.g. live chat)
+      const SAFE_PATTERNS = ["live_chat", "live_chat_replay", "/api/timedtext"];
+      for (const pattern of SAFE_PATTERNS) {
+        if (url.includes(pattern)) return false;
+      }
+
+      const safeTypesForAllowlist = new Set([
+        "document",
+        "subdocument",
+        "object",
+      ]);
       if (
-        SAFE_MEDIA_TYPES.has(resourceType) &&
+        safeTypesForAllowlist.has(resourceType) &&
         this._isYouTubeMediaRequest(hostname, url, resourceType)
       ) {
         return false;
-      }
-      for (const pattern of MEDIA_STREAM_PATTERNS) {
-        if (url.includes(pattern)) return false;
       }
 
       let originHostname = "";

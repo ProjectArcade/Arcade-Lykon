@@ -1,4 +1,9 @@
-import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
+import {
+  setTimeout,
+  clearTimeout,
+  setInterval,
+  clearInterval,
+} from "resource://gre/modules/Timer.sys.mjs";
 
 export class LykonShieldChild extends JSWindowActorChild {
   constructor() {
@@ -13,6 +18,7 @@ export class LykonShieldChild extends JSWindowActorChild {
     this._pendingNodes = [];
     this._firstGenericRunDone = false;
     this._observer = null;
+    this._playerInterval = null;
   }
 
   didDestroy() {
@@ -30,6 +36,12 @@ export class LykonShieldChild extends JSWindowActorChild {
     if (this._pendingHardcodedQuery) {
       clearTimeout(this._pendingHardcodedQuery);
       this._pendingHardcodedQuery = null;
+    }
+    if (this._playerInterval) {
+      try {
+        clearInterval(this._playerInterval);
+      } catch (e) {}
+      this._playerInterval = null;
     }
   }
 
@@ -51,25 +63,34 @@ export class LykonShieldChild extends JSWindowActorChild {
     this._initialized = true;
 
     // 1. Verify if shields are enabled for this site
+    let isEnabled = true;
     try {
-      const isEnabled = await this.sendQuery("isShieldEnabled", { url });
-      if (this._destroyed) return;
-      if (!isEnabled) {
-        console.log(
-          `[LykonShieldChild] Shields are disabled for ${url}. Skipping cosmetic injection.`
-        );
-        return;
-      }
+      isEnabled = await this.sendQuery("isShieldEnabled", { url });
     } catch (e) {
-      console.error("[LykonShieldChild] Failed to verify shield status:", e);
+      console.warn(
+        "[LykonShieldChild] Failed to verify shield status, defaulting to true:",
+        e
+      );
+    }
+
+    if (this._destroyed) return;
+    if (!isEnabled) {
+      console.log(
+        `[LykonShieldChild] Shields are disabled for ${url}. Skipping cosmetic injection.`
+      );
       return;
     }
 
     if (this._destroyed) return;
 
     // 2. YouTube Specific Injections
-    if (url.includes("youtube.com")) {
+    if (
+      url.includes("youtube.com") &&
+      !url.includes("live_chat") &&
+      !url.includes("live_chat_replay")
+    ) {
       this.injectYouTubeShield();
+      this.startPlayerObserver();
     }
 
     // 3. Fetch Cosmetic Resources from Parent
@@ -92,28 +113,440 @@ export class LykonShieldChild extends JSWindowActorChild {
   }
 
   injectYouTubeShield() {
-    if (this._destroyed || !this.document || !this.document.documentElement)
+    if (this._destroyed || !this.document || !this.document.documentElement) {
       return;
-    // Overwrite JSON.parse to intercept and strip ads from player response
-    const script = this.document.createElement("script");
-    script.textContent = `
-      (function() {
-        const originalParse = JSON.parse;
-        JSON.parse = function() {
-          const result = originalParse.apply(this, arguments);
-          if (result && result.adPlacements) {
-            delete result.adPlacements;
-          }
-          if (result && result.playerAds) {
-            delete result.playerAds;
-          }
-          return result;
-        };
-        console.log("[LykonShield] YouTube Ad-stripping active");
-      })();
+    }
+
+    const win = this.contentWindow;
+
+    const adStyle = this.document.createElement("style");
+    adStyle.id = "lykon-yt-ad-css";
+    adStyle.textContent = `
+      .video-ads,
+      .ytp-ad-module,
+      .ytp-ad-overlay-container,
+      .ytp-ad-text-overlay,
+      .ytp-ad-overlay-close-container,
+      .ytp-ad-overlay-slot,
+      .ytp-ad-image-overlay,
+      .ad-showing .ytp-ad-player-overlay,
+      .ad-showing .ytp-ad-player-overlay-instream-info,
+      .ytp-ad-skip-button-container,
+      .ytp-ad-preview-container,
+      .ytp-ad-message-container,
+      .ytp-ad-persistent-progress-bar-container,
+      .ytp-ad-visit-advertiser-button,
+      #player-ads,
+      #masthead-ad,
+      ytd-ad-slot-renderer,
+      ytd-banner-promo-renderer,
+      ytd-statement-banner-renderer,
+      ytd-in-feed-ad-layout-renderer,
+      ytd-promoted-sparkles-web-renderer,
+      ytd-display-ad-renderer,
+      ytd-promoted-video-renderer,
+      ytd-compact-promoted-video-renderer,
+      ytd-action-companion-ad-renderer,
+      ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"],
+      #related ytd-promoted-sparkles-web-renderer,
+      tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
+      ytd-popup-container:has(ytd-enforcement-message-view-model),
+      ytd-mealbar-promo-renderer,
+      .ytd-merch-shelf-renderer,
+      ytd-merch-shelf-renderer {
+        display: none !important;
+      }
     `;
-    this.document.documentElement.appendChild(script);
-    script.remove();
+    this.document.documentElement.appendChild(adStyle);
+
+    const xrayedWin = Cu.waiveXrays(win);
+
+    const AD_PROPERTIES = [
+      "adPlacements",
+      "playerAds",
+      "adSlots",
+      "adBreakHeartbeatParams",
+      "adBreakParams",
+      "adModule",
+      "adInfoRenderer",
+      "instreamVideoAdRenderer",
+      "linearAdSequenceRenderer",
+      "adPlacementRenderer",
+      "adLayoutLoggingData",
+      "actionCompanionAdRenderer",
+      "adPlacementConfig",
+      "adVideoId",
+      "advertisedVideo",
+      "promotedSparklesWebRenderer",
+      "adInfoDialogEndpoint",
+      "adHoverTextButtonRenderer",
+      "aboutThisAdRenderer",
+      "adFeedbackEndpoint",
+      "adLayoutMetadata",
+      "adInstrumentation",
+      "instreamAdPlayerOverlayRenderer",
+      "linearAdSequenceRenderer",
+      "playerLegacyDesktopWatchAdsRenderer",
+      "remoteSlotsToImpression",
+    ];
+
+    const AD_RENDERERS = [
+      "adSlotRenderer",
+      "promotedSparklesWebRenderer",
+      "compactPromotedVideoRenderer",
+      "mastheadAd",
+      "bannerPromoRenderer",
+      "statementBannerRenderer",
+      "inFeedAdLayoutRenderer",
+      "displayAdRenderer",
+      "promotedVideoRenderer",
+      "compactPromotedVideoRenderer",
+      "actionCompanionAdRenderer",
+      "merchShelfRenderer",
+    ];
+
+    const cleanObject = rawObj => {
+      try {
+        if (!rawObj || typeof rawObj !== "object") {
+          return rawObj;
+        }
+        const obj = Cu.waiveXrays(rawObj);
+
+        if (Array.isArray(obj)) {
+          for (let i = obj.length - 1; i >= 0; i--) {
+            const item = obj[i];
+            if (item && typeof item === "object") {
+              const waivedItem = Cu.waiveXrays(item);
+              const shouldRemove = AD_RENDERERS.some(key => key in waivedItem);
+              if (shouldRemove) {
+                obj.splice(i, 1);
+              } else {
+                cleanObject(waivedItem);
+              }
+            }
+          }
+          return obj;
+        }
+
+        if (obj.playabilityStatus) {
+          const playabilityStatus = Cu.waiveXrays(obj.playabilityStatus);
+          if (
+            playabilityStatus.status === "ERROR" ||
+            playabilityStatus.status === "LOGIN_REQUIRED"
+          ) {
+            // Leave legitimate errors alone
+          } else if (playabilityStatus.errorScreen) {
+            try {
+              const errorScreen = Cu.waiveXrays(playabilityStatus.errorScreen);
+              const errStr = JSON.stringify(errorScreen);
+              if (
+                errStr.includes("enforcement") ||
+                errStr.includes("adblock") ||
+                errStr.includes("block")
+              ) {
+                delete playabilityStatus.errorScreen;
+                playabilityStatus.status = "OK";
+              }
+            } catch (e) {}
+          }
+        }
+
+        for (const key of AD_PROPERTIES) {
+          if (key in obj) {
+            delete obj[key];
+          }
+        }
+        for (const key of AD_RENDERERS) {
+          if (key in obj) {
+            delete obj[key];
+          }
+        }
+
+        for (const key in obj) {
+          try {
+            const val = obj[key];
+            if (val && typeof val === "object") {
+              cleanObject(val);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+      return rawObj;
+    };
+
+    const getterPlayer = Cu.exportFunction(function () {
+      return win.__lykon_ytInitialPlayerResponse;
+    }, win);
+    const setterPlayer = Cu.exportFunction(function (val) {
+      try {
+        if (val) {
+          cleanObject(val);
+        }
+      } catch (e) {}
+      win.__lykon_ytInitialPlayerResponse = val;
+    }, win);
+
+    Object.defineProperty(xrayedWin, "ytInitialPlayerResponse", {
+      get: getterPlayer,
+      set: setterPlayer,
+      configurable: true,
+      enumerable: true,
+    });
+
+    if (win.ytInitialPlayerResponse) {
+      try {
+        cleanObject(win.ytInitialPlayerResponse);
+      } catch (e) {}
+      win.__lykon_ytInitialPlayerResponse = win.ytInitialPlayerResponse;
+    }
+
+    const getterData = Cu.exportFunction(function () {
+      return win.__lykon_ytInitialData;
+    }, win);
+    const setterData = Cu.exportFunction(function (val) {
+      try {
+        if (val) {
+          cleanObject(val);
+        }
+      } catch (e) {}
+      win.__lykon_ytInitialData = val;
+    }, win);
+
+    Object.defineProperty(xrayedWin, "ytInitialData", {
+      get: getterData,
+      set: setterData,
+      configurable: true,
+      enumerable: true,
+    });
+
+    if (win.ytInitialData) {
+      try {
+        cleanObject(win.ytInitialData);
+      } catch (e) {}
+      win.__lykon_ytInitialData = win.ytInitialData;
+    }
+
+    const getterReel = Cu.exportFunction(function () {
+      return win.__lykon_ytInitialReelResponse;
+    }, win);
+    const setterReel = Cu.exportFunction(function (val) {
+      try {
+        if (val) {
+          cleanObject(val);
+        }
+      } catch (e) {}
+      win.__lykon_ytInitialReelResponse = val;
+    }, win);
+
+    Object.defineProperty(xrayedWin, "ytInitialReelResponse", {
+      get: getterReel,
+      set: setterReel,
+      configurable: true,
+      enumerable: true,
+    });
+
+    if (win.ytInitialReelResponse) {
+      try {
+        cleanObject(win.ytInitialReelResponse);
+      } catch (e) {}
+      win.__lykon_ytInitialReelResponse = win.ytInitialReelResponse;
+    }
+
+    Object.defineProperty(win, "__lykon_originalParse", {
+      value: win.JSON.parse,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+    Object.defineProperty(win, "__lykon_originalFetch", {
+      value: win.fetch,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+    Object.defineProperty(win, "__lykon_originalXhrOpen", {
+      value: win.XMLHttpRequest.prototype.open,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+    Object.defineProperty(win, "__lykon_originalXhrSend", {
+      value: win.XMLHttpRequest.prototype.send,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+
+    const customParse = Cu.exportFunction(function (text, reviver) {
+      try {
+        let result = win.__lykon_originalParse.call(win.JSON, text, reviver);
+        if (result && typeof result === "object") {
+          cleanObject(result);
+        }
+        return result;
+      } catch (e) {
+        return win.__lykon_originalParse.call(win.JSON, text, reviver);
+      }
+    }, win);
+    xrayedWin.JSON.parse = customParse;
+
+    const customFetch = Cu.exportFunction(function (input, init) {
+      let url = "";
+      if (typeof input === "string") {
+        url = input;
+      } else if (input) {
+        try {
+          url = Cu.waiveXrays(input).url || "";
+        } catch (e) {}
+      }
+      const promise = win.__lykon_originalFetch.call(win, input, init);
+
+      const cleanFetchCallback = Cu.exportFunction(function (response) {
+        try {
+          if (url.includes("/youtubei/") || url.includes("/api/")) {
+            const ct = response.headers.get("content-type") || "";
+            if (ct.includes("application/json")) {
+              const textPromise = response.clone().text();
+              const textCallback = Cu.exportFunction(function (text) {
+                try {
+                  let data = win.__lykon_originalParse(text);
+                  cleanObject(data);
+                  const headersObj = {};
+                  for (const [k, v] of response.headers.entries()) {
+                    headersObj[k] = v;
+                  }
+                  const newResponse = new xrayedWin.Response(
+                    JSON.stringify(data),
+                    Cu.cloneInto(
+                      {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: headersObj,
+                      },
+                      win
+                    )
+                  );
+                  return newResponse;
+                } catch (e) {
+                  return response;
+                }
+              }, win);
+              return textPromise.then(textCallback).catch(() => response);
+            }
+          }
+        } catch (e) {}
+        return response;
+      }, win);
+
+      return promise.then(cleanFetchCallback);
+    }, win);
+    xrayedWin.fetch = customFetch;
+
+    const originalXhrOpen = win.XMLHttpRequest.prototype.open;
+    const originalXhrSend = win.XMLHttpRequest.prototype.send;
+
+    const customXhrOpen = Cu.exportFunction(function (
+      method,
+      url,
+      async,
+      user,
+      password
+    ) {
+      try {
+        this._lykonUrl = url || "";
+      } catch (e) {}
+      return win.__lykon_originalXhrOpen.call(
+        this,
+        method,
+        url,
+        async,
+        user,
+        password
+      );
+    }, win);
+
+    const customXhrSend = Cu.exportFunction(function (body) {
+      try {
+        if (this._lykonUrl && this._lykonUrl.includes("/youtubei/")) {
+          const onReadyStateCallback = Cu.exportFunction(function () {
+            try {
+              if (this.readyState === 4) {
+                const ct = this.getResponseHeader("content-type") || "";
+                if (ct.includes("application/json") && this.responseText) {
+                  let data = win.__lykon_originalParse(this.responseText);
+                  cleanObject(data);
+                  Object.defineProperty(
+                    this,
+                    "responseText",
+                    Cu.cloneInto(
+                      {
+                        writable: true,
+                        value: JSON.stringify(data),
+                      },
+                      win
+                    )
+                  );
+                  Object.defineProperty(
+                    this,
+                    "response",
+                    Cu.cloneInto(
+                      {
+                        writable: true,
+                        value: JSON.stringify(data),
+                      },
+                      win
+                    )
+                  );
+                }
+              }
+            } catch (e) {}
+          }, win);
+          this.addEventListener("readystatechange", onReadyStateCallback);
+        }
+      } catch (e) {}
+      return win.__lykon_originalXhrSend.call(this, body);
+    }, win);
+
+    xrayedWin.XMLHttpRequest.prototype.open = customXhrOpen;
+    xrayedWin.XMLHttpRequest.prototype.send = customXhrSend;
+  }
+
+  startPlayerObserver() {
+    if (this._destroyed || !this.document) return;
+
+    const checkAd = () => {
+      if (this._destroyed || !this.document) return;
+      const player = this.document.querySelector("#movie_player");
+      if (!player) return;
+
+      // Skip ad button
+      const skipBtn = player.querySelector(
+        '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, [class*="skip-button"]'
+      );
+      if (skipBtn) {
+        try {
+          skipBtn.click();
+        } catch (e) {}
+        return;
+      }
+
+      // If ad is playing, try to fast-forward and mute
+      const video = player.querySelector("video");
+      if (video && player.classList.contains("ad-showing")) {
+        try {
+          video.muted = true;
+          video.currentTime = video.duration || 999;
+          video.playbackRate = 16;
+        } catch (e) {}
+      }
+    };
+
+    if (this._playerInterval) {
+      try {
+        clearInterval(this._playerInterval);
+      } catch (e) {}
+    }
+    this._playerInterval = setInterval(checkAd, 300);
   }
 
   applyCosmeticResources(resources) {
@@ -179,27 +612,16 @@ export class LykonShieldChild extends JSWindowActorChild {
       ".ad-unit",
       ".ad-container",
       ".ad-slot",
-      "[class*='ad-slot']",
-      "[id*='ad-container']",
       ".sponsored-post",
       ".trc_rbox",
       "#dfp-ad-top",
-      ".video-ads",
-      ".ytp-ad-module",
       ".aljazeera-ad",
       ".adsbygoogle",
       ".ad-wrapper",
       ".ads",
       ".ads__slot",
-      "[class*='adslot']",
-      "[id*='adslot']",
-      "[class*='ad_slot']",
-      "[id*='ad_slot']",
-      "[class*='ads__']",
       "iframe[id*='google_ads_iframe']",
       "iframe[id*='ad-slot']",
-      "div[class*='-ad-']",
-      "div[id*='-ad-']",
       ".adslot300x250ATF",
       ".adslot728x90ATF",
       ".adslot300x600ATF",
