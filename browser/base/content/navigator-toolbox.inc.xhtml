@@ -604,15 +604,19 @@
       </html:div>
 
       <!-- ═══ NERDS VIEW Redesign ═══ -->
-      <html:div class="lks-nerds-container">
-        <html:div class="lks-nerds-header">
+      <html:div class="lks-nerds-container collapsed" id="lykon-shield-nerds-container">
+        <html:div class="lks-nerds-header" id="lykon-shield-nerds-header" style="cursor: pointer;">
           <html:div class="lks-nerds-header-left">
             <html:span class="lks-nerds-icon-code">&lt;/&gt;</html:span>
             <html:span class="lks-nerds-title">Nerds view</html:span>
+            <html:svg class="lks-nerds-arrow" id="lykon-shield-nerds-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <html:polyline points="6 9 12 15 18 9"></html:polyline>
+            </html:svg>
           </html:div>
           <html:button class="lks-nerds-view-details" id="lykon-shield-view-details-btn">View details</html:button>
         </html:div>
 
+        <html:div id="lykon-shield-nerds-content">
         <!-- Disabled state panel -->
         <html:div id="lykon-shield-nerds-disabled" class="lks-nerds-disabled-view">
           <html:div class="lks-nerd-summary-row" id="lks-nerd-sum-ads">
@@ -646,61 +650,32 @@
               <html:span class="lks-ns-arrow">&gt;</html:span>
             </html:div>
           </html:div>
-
-          <html:div class="lks-nerds-warning-banner">
-            <html:div class="lks-wb-icon">i</html:div>
-            <html:div class="lks-wb-text">With Adblocker OFF, you're more exposed to ads, trackers and slower websites.</html:div>
-          </html:div>
         </html:div>
 
         <!-- Enabled state panel -->
         <html:div id="lykon-shield-nerds-enabled" class="lks-nerds-enabled-view">
-          <html:div class="lks-nerds-filters">
-            <html:button class="lks-nerds-filter-pill active" id="lykon-filter-blocked-only">Blocked Only</html:button>
-            <html:button class="lks-nerds-filter-pill" id="lykon-filter-all-attempts">All Attempts</html:button>
-          </html:div>
-
           <html:div class="lks-nerds-table-container">
             <html:div class="lks-table-header">
               <html:div class="lks-th col-item">Item</html:div>
               <html:div class="lks-th col-type">Type</html:div>
               <html:div class="lks-th col-blocked">Blocked</html:div>
-              <html:div class="lks-th col-action">Action</html:div>
             </html:div>
             <html:div id="lykon-shield-blocked-list-table" class="lks-table-body">
               <html:div class="lks-blocked-empty">No elements blocked yet.</html:div>
             </html:div>
           </html:div>
+        </html:div>
+        </html:div>
 
-          <html:div class="lks-nerds-footer-grid">
-            <html:div class="lks-footer-card">
-              <html:div class="lks-fc-left">
-                <html:div class="lks-fc-icon">
-                  <html:svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="2">
-                    <html:path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  </html:svg>
-                </html:div>
-                <html:div class="lks-fc-text">
-                  <html:div class="lks-fc-title">Total blocked</html:div>
-                  <html:div class="lks-fc-value green-text" id="lykon-shield-footer-total">0</html:div>
-                  <html:div class="lks-fc-sub">This session</html:div>
-                </html:div>
-              </html:div>
-            </html:div>
-            <html:div class="lks-footer-card">
-              <html:div class="lks-fc-text-only">
-                <html:div class="lks-fc-title">Requests blocked</html:div>
-                <html:div class="lks-fc-value" id="lykon-shield-footer-requests">0</html:div>
-                <html:div class="lks-fc-sub">This session</html:div>
-              </html:div>
-            </html:div>
-            <html:div class="lks-footer-card">
-              <html:div class="lks-fc-text-only">
-                <html:div class="lks-fc-title">Domains blocked</html:div>
-                <html:div class="lks-fc-value" id="lykon-shield-footer-domains">0</html:div>
-                <html:div class="lks-fc-sub">This session</html:div>
-              </html:div>
-            </html:div>
+        <!-- Warning container: outside collapsible content, always visible -->
+        <html:div id="lykon-shield-nerds-warning-container">
+          <html:div class="lks-nerds-warning-banner lks-wb-disabled-state">
+            <html:div class="lks-wb-icon">i</html:div>
+            <html:div class="lks-wb-text">Adblocker is off. You're more likely to see ads and your data may be shared with advertisers and trackers.</html:div>
+          </html:div>
+          <html:div class="lks-nerds-warning-banner lks-wb-enabled-state">
+            <html:div class="lks-wb-icon">i</html:div>
+            <html:div class="lks-wb-text">Adblocker is on. Some websites might break due to blocked content. You can temporarily disable it for any site.</html:div>
           </html:div>
         </html:div>
       </html:div>

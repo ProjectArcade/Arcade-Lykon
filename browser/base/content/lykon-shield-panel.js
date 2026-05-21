@@ -26,7 +26,6 @@ var LykonShield = {
 
   init() {
     const $ = id => document.getElementById(id);
-    this._currentFilter = "blocked-only";
     this._el = {
       button: $("lykon-shield-button"),
       toggle: $("lykon-shield-toggle"),
@@ -47,13 +46,10 @@ var LykonShield = {
       disabledAdsCount: $("lykon-shield-disabled-ads-count"),
       disabledTrackersCount: $("lykon-shield-disabled-trackers-count"),
       blockedListTable: $("lykon-shield-blocked-list-table"),
-      footerTotal: $("lykon-shield-footer-total"),
-      footerRequests: $("lykon-shield-footer-requests"),
-      footerDomains: $("lykon-shield-footer-domains"),
-      filterBlockedOnly: $("lykon-filter-blocked-only"),
-      filterAllAttempts: $("lykon-filter-all-attempts"),
       viewDetailsBtn: $("lykon-shield-view-details-btn"),
       siteHost: $("lykon-shield-site-host"),
+      nerdsHeader: $("lykon-shield-nerds-header"),
+      nerdsContainer: $("lykon-shield-nerds-container"),
     };
 
     if (!this._el.toggle || !this._el.content) return;
@@ -71,25 +67,15 @@ var LykonShield = {
           this._toggleAdvanced()
         );
       }
-      if (this._el.filterBlockedOnly) {
-        this._el.filterBlockedOnly.addEventListener("click", () => {
-          this._el.filterBlockedOnly.classList.add("active");
-          this._el.filterAllAttempts?.classList.remove("active");
-          this._currentFilter = "blocked-only";
-          this._updateBlockedList();
-        });
-      }
-      if (this._el.filterAllAttempts) {
-        this._el.filterAllAttempts.addEventListener("click", () => {
-          this._el.filterAllAttempts.classList.add("active");
-          this._el.filterBlockedOnly?.classList.remove("active");
-          this._currentFilter = "all";
-          this._updateBlockedList();
-        });
-      }
       if (this._el.viewDetailsBtn) {
-        this._el.viewDetailsBtn.addEventListener("click", () => {
-          console.log("[LykonShield] View details clicked");
+        this._el.viewDetailsBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          this._toggleNerds();
+        });
+      }
+      if (this._el.nerdsHeader) {
+        this._el.nerdsHeader.addEventListener("click", () => {
+          this._toggleNerds();
         });
       }
 
@@ -213,6 +199,19 @@ var LykonShield = {
     const open = this._el.advPanel.style.display !== "none";
     this._el.advPanel.style.display = open ? "none" : "block";
     this._el.advArrow.classList.toggle("open", !open);
+  },
+
+  _toggleNerds() {
+    if (!this._el.nerdsContainer) return;
+    const collapsed = this._el.nerdsContainer.classList.toggle("collapsed");
+    if (this._el.viewDetailsBtn) {
+      this._el.viewDetailsBtn.textContent = collapsed
+        ? "View details"
+        : "Hide details";
+    }
+    if (!collapsed) {
+      this._updateBlockedList();
+    }
   },
 
   _updatePanelState() {
@@ -420,20 +419,6 @@ var LykonShield = {
         this._el.bandwidth.textContent = this._fmtBytes(bytes);
       }
 
-      if (this._el.footerTotal) {
-        this._el.footerTotal.textContent = session.toLocaleString();
-      }
-      if (this._el.footerRequests) {
-        this._el.footerRequests.textContent = Math.max(
-          0,
-          session - tracker
-        ).toLocaleString();
-      }
-      if (this._el.footerDomains) {
-        this._el.footerDomains.textContent = (
-          stats.domains || 0
-        ).toLocaleString();
-      }
       if (this._el.disabledAdsCount) {
         this._el.disabledAdsCount.textContent = "0";
       }
@@ -539,38 +524,9 @@ var LykonShield = {
         colBlocked.textContent = Math.floor(secs / 3600) + "h ago";
       }
 
-      // Action Column (Toggle switch + ⋮ button)
-      const colAction = document.createElement("div");
-      colAction.className = "lks-tr-action";
-
-      const toggleLbl = document.createElement("label");
-      toggleLbl.className = "lks-row-toggle";
-
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = true;
-      checkbox.addEventListener("change", () => {
-        row.style.opacity = checkbox.checked ? "1" : "0.4";
-      });
-
-      const slider = document.createElement("span");
-      slider.className = "lks-row-slider";
-
-      toggleLbl.appendChild(checkbox);
-      toggleLbl.appendChild(slider);
-
-      const moreBtn = document.createElement("button");
-      moreBtn.className = "lks-row-more";
-      moreBtn.textContent = "⋮";
-      moreBtn.title = "Actions";
-
-      colAction.appendChild(toggleLbl);
-      colAction.appendChild(moreBtn);
-
       row.appendChild(colItem);
       row.appendChild(colType);
       row.appendChild(colBlocked);
-      row.appendChild(colAction);
 
       list.appendChild(row);
     }
