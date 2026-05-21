@@ -109,7 +109,9 @@ export class LykonShieldChild extends JSWindowActorChild {
     if (this._destroyed) return;
 
     // 4. Global Cosmetic Observer (Advanced)
-    this.startAdvancedCosmeticObserver();
+    if (!url.includes("youtube.com")) {
+      this.startAdvancedCosmeticObserver();
+    }
   }
 
   injectYouTubeShield() {
@@ -160,6 +162,11 @@ export class LykonShieldChild extends JSWindowActorChild {
     this.document.documentElement.appendChild(adStyle);
 
     const xrayedWin = Cu.waiveXrays(win);
+
+    const nativeFetch = xrayedWin.fetch;
+    const nativeXhrOpen = xrayedWin.XMLHttpRequest.prototype.open;
+    const nativeXhrSend = xrayedWin.XMLHttpRequest.prototype.send;
+    const nativeParse = xrayedWin.JSON.parse;
 
     const AD_PROPERTIES = [
       "adPlacements",
@@ -352,40 +359,15 @@ export class LykonShieldChild extends JSWindowActorChild {
       win.__lykon_ytInitialReelResponse = win.ytInitialReelResponse;
     }
 
-    Object.defineProperty(win, "__lykon_originalParse", {
-      value: win.JSON.parse,
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-    Object.defineProperty(win, "__lykon_originalFetch", {
-      value: win.fetch,
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-    Object.defineProperty(win, "__lykon_originalXhrOpen", {
-      value: win.XMLHttpRequest.prototype.open,
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-    Object.defineProperty(win, "__lykon_originalXhrSend", {
-      value: win.XMLHttpRequest.prototype.send,
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-
     const customParse = Cu.exportFunction(function (text, reviver) {
       try {
-        let result = win.__lykon_originalParse.call(win.JSON, text, reviver);
+        let result = nativeParse(text, reviver);
         if (result && typeof result === "object") {
           cleanObject(result);
         }
         return result;
       } catch (e) {
-        return win.__lykon_originalParse.call(win.JSON, text, reviver);
+        return nativeParse(text, reviver);
       }
     }, win);
     xrayedWin.JSON.parse = customParse;
@@ -399,39 +381,91 @@ export class LykonShieldChild extends JSWindowActorChild {
           url = Cu.waiveXrays(input).url || "";
         } catch (e) {}
       }
-      const promise = win.__lykon_originalFetch.call(win, input, init);
+
+      let promise = nativeFetch(input, init);
 
       const cleanFetchCallback = Cu.exportFunction(function (response) {
         try {
           if (url.includes("/youtubei/") || url.includes("/api/")) {
             const ct = response.headers.get("content-type") || "";
             if (ct.includes("application/json")) {
-              const textPromise = response.clone().text();
-              const textCallback = Cu.exportFunction(function (text) {
+              const waivedResponse = Cu.waiveXrays(response);
+              const originalText = waivedResponse.text;
+              const originalJson = waivedResponse.json;
+              const originalClone = waivedResponse.clone;
+
+              const customJson = Cu.exportFunction(function () {
                 try {
-                  let data = win.__lykon_originalParse(text);
-                  cleanObject(data);
-                  const headersObj = {};
-                  for (const [k, v] of response.headers.entries()) {
-                    headersObj[k] = v;
-                  }
-                  const newResponse = new xrayedWin.Response(
-                    JSON.stringify(data),
-                    Cu.cloneInto(
-                      {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: headersObj,
-                      },
-                      win
-                    )
+                  return originalJson.call(waivedResponse).then(
+                    Cu.exportFunction(function (data) {
+                      try {
+                        if (data && typeof data === "object") {
+                          cleanObject(data);
+                        }
+                      } catch (e) {}
+                      return data;
+                    }, win)
                   );
-                  return newResponse;
-                } catch (e) {
-                  return response;
+                } catch (err) {
+                  return originalJson.call(waivedResponse);
                 }
               }, win);
-              return textPromise.then(textCallback).catch(() => response);
+
+              const customText = Cu.exportFunction(function () {
+                try {
+                  return originalText.call(waivedResponse).then(
+                    Cu.exportFunction(function (text) {
+                      try {
+                        let data = nativeParse(text);
+                        cleanObject(data);
+                        return JSON.stringify(data);
+                      } catch (e) {
+                        return text;
+                      }
+                    }, win)
+                  );
+                } catch (err) {
+                  return originalText.call(waivedResponse);
+                }
+              }, win);
+
+              const customClone = Cu.exportFunction(function () {
+                try {
+                  const cloned = originalClone.call(waivedResponse);
+                  return cleanFetchCallback(cloned);
+                } catch (err) {
+                  return originalClone.call(waivedResponse);
+                }
+              }, win);
+
+              const handler = Cu.cloneInto(
+                {
+                  get(target, prop) {
+                    if (prop === "json") {
+                      return customJson;
+                    }
+                    if (prop === "text") {
+                      return customText;
+                    }
+                    if (prop === "clone") {
+                      return customClone;
+                    }
+                    try {
+                      let val = target[prop];
+                      if (typeof val === "function" && prop !== "constructor") {
+                        return val.bind(target);
+                      }
+                      return val;
+                    } catch (e) {
+                      return undefined;
+                    }
+                  },
+                },
+                win,
+                { cloneFunctions: true }
+              );
+
+              return new win.Proxy(waivedResponse, handler);
             }
           }
         } catch (e) {}
@@ -441,9 +475,6 @@ export class LykonShieldChild extends JSWindowActorChild {
       return promise.then(cleanFetchCallback);
     }, win);
     xrayedWin.fetch = customFetch;
-
-    const originalXhrOpen = win.XMLHttpRequest.prototype.open;
-    const originalXhrSend = win.XMLHttpRequest.prototype.send;
 
     const customXhrOpen = Cu.exportFunction(function (
       method,
@@ -455,14 +486,7 @@ export class LykonShieldChild extends JSWindowActorChild {
       try {
         this._lykonUrl = url || "";
       } catch (e) {}
-      return win.__lykon_originalXhrOpen.call(
-        this,
-        method,
-        url,
-        async,
-        user,
-        password
-      );
+      return nativeXhrOpen.call(this, method, url, async, user, password);
     }, win);
 
     const customXhrSend = Cu.exportFunction(function (body) {
@@ -473,7 +497,7 @@ export class LykonShieldChild extends JSWindowActorChild {
               if (this.readyState === 4) {
                 const ct = this.getResponseHeader("content-type") || "";
                 if (ct.includes("application/json") && this.responseText) {
-                  let data = win.__lykon_originalParse(this.responseText);
+                  let data = nativeParse(this.responseText);
                   cleanObject(data);
                   Object.defineProperty(
                     this,
@@ -504,7 +528,7 @@ export class LykonShieldChild extends JSWindowActorChild {
           this.addEventListener("readystatechange", onReadyStateCallback);
         }
       } catch (e) {}
-      return win.__lykon_originalXhrSend.call(this, body);
+      return nativeXhrSend.call(this, body);
     }, win);
 
     xrayedWin.XMLHttpRequest.prototype.open = customXhrOpen;

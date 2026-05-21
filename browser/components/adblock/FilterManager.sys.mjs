@@ -304,8 +304,52 @@ export class FilterManager {
     return url.includes(rule.pattern);
   }
 
+  _isFirstPartyLegitimate(url, originUrl) {
+    if (!originUrl) return false;
+    try {
+      const urlObj = new URL(url);
+      const originObj = new URL(originUrl);
+      let urlBase = urlObj.hostname;
+      let originBase = originObj.hostname;
+      try {
+        urlBase = Services.eTLD.getBaseDomainFromHost(urlObj.hostname);
+      } catch (e) {}
+      try {
+        originBase = Services.eTLD.getBaseDomainFromHost(originObj.hostname);
+      } catch (e) {}
+      if (urlBase && originBase && urlBase === originBase) {
+        const adKeywords = [
+          "ads",
+          "ad-",
+          "-ad",
+          "/ad",
+          "tracker",
+          "tracking",
+          "telemetry",
+          "analytics",
+          "advertis",
+          "doubleclick",
+          "trafficjunky",
+          "popunder",
+          "pop-under",
+          "banner",
+          "sponsor",
+          "promot",
+          "favicon",
+          "beacon",
+        ];
+        const urlLower = url.toLowerCase();
+        return !adKeywords.some(kw => urlLower.includes(kw));
+      }
+    } catch (e) {}
+    return false;
+  }
+
   matches(url, originUrl, resourceType) {
     if (!this.initialized || !url) return false;
+    if (this._isFirstPartyLegitimate(url, originUrl)) {
+      return false;
+    }
     try {
       let hostname = "";
       try {

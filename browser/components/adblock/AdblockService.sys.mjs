@@ -430,6 +430,47 @@ class _AdblockService {
     }
   }
 
+  _isFirstPartyLegitimate(url, originUrl) {
+    if (!originUrl) return false;
+    try {
+      const urlObj = new URL(url);
+      const originObj = new URL(originUrl);
+      let urlBase = urlObj.hostname;
+      let originBase = originObj.hostname;
+      try {
+        urlBase = Services.eTLD.getBaseDomainFromHost(urlObj.hostname);
+      } catch (e) {}
+      try {
+        originBase = Services.eTLD.getBaseDomainFromHost(originObj.hostname);
+      } catch (e) {}
+      if (urlBase && originBase && urlBase === originBase) {
+        const adKeywords = [
+          "ads",
+          "ad-",
+          "-ad",
+          "/ad",
+          "tracker",
+          "tracking",
+          "telemetry",
+          "analytics",
+          "advertis",
+          "doubleclick",
+          "trafficjunky",
+          "popunder",
+          "pop-under",
+          "banner",
+          "sponsor",
+          "promot",
+          "favicon",
+          "beacon",
+        ];
+        const urlLower = url.toLowerCase();
+        return !adKeywords.some(kw => urlLower.includes(kw));
+      }
+    } catch (e) {}
+    return false;
+  }
+
   shouldBlock(url, originUrl, resourceType) {
     if (!this.enabled || !this._initialized) return false;
     if (
@@ -437,6 +478,9 @@ class _AdblockService {
       url.includes("/api/stats/qoe") ||
       url.includes("/youtubei/v1/log_event")
     ) {
+      return false;
+    }
+    if (this._isFirstPartyLegitimate(url, originUrl)) {
       return false;
     }
     try {
