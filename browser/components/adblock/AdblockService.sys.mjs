@@ -463,6 +463,11 @@ class _AdblockService {
           "promot",
           "favicon",
           "beacon",
+          "logs",
+          "log.",
+          "log-",
+          "bifrost",
+          "hesads",
         ];
         const urlLower = url.toLowerCase();
         return !adKeywords.some(kw => urlLower.includes(kw));

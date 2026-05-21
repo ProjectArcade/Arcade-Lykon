@@ -337,6 +337,11 @@ export class FilterManager {
           "promot",
           "favicon",
           "beacon",
+          "logs",
+          "log.",
+          "log-",
+          "bifrost",
+          "hesads",
         ];
         const urlLower = url.toLowerCase();
         return !adKeywords.some(kw => urlLower.includes(kw));

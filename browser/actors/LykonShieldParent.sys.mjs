@@ -3,6 +3,22 @@ import { AdblockService } from "resource:///modules/AdblockService.sys.mjs";
 export class LykonShieldParent extends JSWindowActorParent {
   receiveMessage(message) {
     switch (message.name) {
+      case "isSystemDarkTheme":
+        try {
+          const contentOverride = Services.prefs.getIntPref(
+            "layout.css.prefers-color-scheme.content-override",
+            2
+          );
+          if (contentOverride === 0) {
+            return true;
+          }
+          if (contentOverride === 1) {
+            return false;
+          }
+          return Services.appinfo.contentThemeDerivedColorSchemeIsDark;
+        } catch (e) {
+          return false;
+        }
       case "getCosmeticResources":
         return AdblockService.getCosmeticResources(message.data.url);
       case "getHiddenClassIdSelectors":

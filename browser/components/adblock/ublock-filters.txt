@@ -11086,3 +11086,11 @@ techdracula.com##ins.adsbygoogle
 !#if env_mobile
 !#include filters-mobile.txt
 !#endif
+
+! Hotstar Ad and Tracking Blocks
+||hesads.akamaized.net^
+||videoads.hotstar.com^
+||ads.hotstar.com^
+||service.hotstar.com/v1/ad
+||logs.hotstar.com^
+||bifrost-api.hotstar.com/v1/track

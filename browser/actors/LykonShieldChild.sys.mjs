@@ -21,6 +21,19 @@ export class LykonShieldChild extends JSWindowActorChild {
     this._playerInterval = null;
   }
 
+  _isBenignError(e) {
+    if (this._destroyed) return true;
+    const errMsg = (e?.message || String(e) || "").toLowerCase();
+    const errName = (e?.name || "").toLowerCase();
+    return (
+      errName.includes("abort") ||
+      errName.includes("invalidstate") ||
+      errMsg.includes("destroyed") ||
+      errMsg.includes("cannot send") ||
+      errMsg.includes("not available")
+    );
+  }
+
   didDestroy() {
     this._destroyed = true;
     if (this._observer) {
@@ -62,15 +75,103 @@ export class LykonShieldChild extends JSWindowActorChild {
     if (this._initialized) return;
     this._initialized = true;
 
+    // Dynamic User-Agent spoofing to prevent compatibility breakage on standard sites (e.g. Hotstar, Google Auth)
+    try {
+      const win = this.contentWindow;
+      const waivedNavigator = Cu.waiveXrays(win.navigator);
+      const originalUA = waivedNavigator.userAgent || "";
+      if (
+        originalUA.includes("Lykon") ||
+        originalUA.includes("Firefox/115.0")
+      ) {
+        let targetUA = originalUA.replace(/Lykon\/[0-9.]+/gi, "").trim();
+        if (targetUA.includes("Firefox/")) {
+          targetUA = targetUA.replace(/rv:109\.0/gi, "rv:130.0");
+          targetUA = targetUA.replace(/Firefox\/115\.0/gi, "Firefox/130.0");
+        } else {
+          targetUA = targetUA + " Firefox/130.0";
+        }
+        let targetAppVersion = waivedNavigator.appVersion || "";
+        if (targetAppVersion.includes("Lykon")) {
+          targetAppVersion = targetAppVersion
+            .replace(/Lykon\/[0-9.]+/gi, "")
+            .trim();
+        }
+        Object.defineProperty(waivedNavigator, "userAgent", {
+          get: Cu.exportFunction(function () {
+            return targetUA;
+          }, win),
+          configurable: true,
+          enumerable: true,
+        });
+        Object.defineProperty(waivedNavigator, "appVersion", {
+          get: Cu.exportFunction(function () {
+            return targetAppVersion;
+          }, win),
+          configurable: true,
+          enumerable: true,
+        });
+      }
+    } catch (e) {
+      console.error("[LykonShieldChild] Failed to spoof User-Agent:", e);
+    }
+
+    // Spoof prefers-color-scheme to match system color scheme
+    try {
+      const isSystemDark = await this.sendQuery("isSystemDarkTheme");
+      if (this._destroyed) return;
+      const win = this.contentWindow;
+      if (win && win.matchMedia) {
+        const originalMatchMedia = win.matchMedia;
+        win.matchMedia = Cu.exportFunction(function (query) {
+          const mql = originalMatchMedia.call(win, query);
+          if (
+            typeof query === "string" &&
+            query.includes("prefers-color-scheme")
+          ) {
+            const lowerQuery = query.toLowerCase();
+            let matches = mql.matches;
+            if (lowerQuery.includes("dark")) {
+              matches = isSystemDark;
+            } else if (lowerQuery.includes("light")) {
+              matches = !isSystemDark;
+            }
+            return new win.Proxy(mql, {
+              get(target, prop, receiver) {
+                if (prop === "matches") {
+                  return matches;
+                }
+                const val = target[prop];
+                if (typeof val === "function") {
+                  return val.bind(target);
+                }
+                return val;
+              },
+            });
+          }
+          return mql;
+        }, win);
+      }
+    } catch (e) {
+      if (!this._isBenignError(e)) {
+        console.error(
+          "[LykonShieldChild] Failed to setup prefers-color-scheme spoofing:",
+          e
+        );
+      }
+    }
+
     // 1. Verify if shields are enabled for this site
     let isEnabled = true;
     try {
       isEnabled = await this.sendQuery("isShieldEnabled", { url });
     } catch (e) {
-      console.warn(
-        "[LykonShieldChild] Failed to verify shield status, defaulting to true:",
-        e
-      );
+      if (!this._isBenignError(e)) {
+        console.warn(
+          "[LykonShieldChild] Failed to verify shield status, defaulting to true:",
+          e
+        );
+      }
     }
 
     if (this._destroyed) return;
@@ -103,7 +204,9 @@ export class LykonShieldChild extends JSWindowActorChild {
         this.applyCosmeticResources(this._cosmeticResources);
       }
     } catch (e) {
-      console.error("[LykonShield] Failed to get cosmetic resources:", e);
+      if (!this._isBenignError(e)) {
+        console.error("[LykonShield] Failed to get cosmetic resources:", e);
+      }
     }
 
     if (this._destroyed) return;
@@ -649,6 +752,14 @@ export class LykonShieldChild extends JSWindowActorChild {
       ".adslot300x250ATF",
       ".adslot728x90ATF",
       ".adslot300x600ATF",
+      "div[data-testid^='bbtype-']",
+      "div[class*='ad-container']",
+      "div[class*='ad-slot']",
+      "[id*='ad-unit']",
+      "[id*='ad-slot']",
+      ".ad-banner",
+      ".video-ad-container",
+      ".ads-container",
     ];
     this.injectStyle(selectors.join(",\n"), "hardcoded");
 
@@ -769,7 +880,9 @@ export class LykonShieldChild extends JSWindowActorChild {
           this.injectStyle(selectors.join(",\n"), "generic");
         }
       } catch (e) {
-        console.error("[LykonShield] Generic filter query failed:", e);
+        if (!this._isBenignError(e)) {
+          console.error("[LykonShield] Generic filter query failed:", e);
+        }
       }
     }, 250);
   }
