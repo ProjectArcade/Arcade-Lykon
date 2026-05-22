@@ -86,391 +86,287 @@ export class LykonShieldChild extends JSWindowActorChild {
 
   setupSynchronousHooks(url) {
     try {
-      const win = this.contentWindow;
-      const waivedNavigator = Cu.waiveXrays(win.navigator);
-      const originalUA = waivedNavigator.userAgent || "";
-      if (
-        originalUA.includes("Lykon") ||
-        originalUA.includes("Firefox/115.0")
-      ) {
-        let targetUA = originalUA.replace(/Lykon\/[0-9.]+/gi, "").trim();
-        if (targetUA.includes("Firefox/")) {
-          targetUA = targetUA.replace(/rv:109\.0/gi, "rv:130.0");
-          targetUA = targetUA.replace(/Firefox\/115\.0/gi, "Firefox/130.0");
-        } else {
-          targetUA = targetUA + " Firefox/130.0";
-        }
-        let targetAppVersion = waivedNavigator.appVersion || "";
-        if (targetAppVersion.includes("Lykon")) {
-          targetAppVersion = targetAppVersion
-            .replace(/Lykon\/[0-9.]+/gi, "")
-            .trim();
-        }
-        Object.defineProperty(waivedNavigator, "userAgent", {
-          get: Cu.exportFunction(function () {
-            return targetUA;
-          }, win),
-          configurable: true,
-          enumerable: true,
-        });
-        Object.defineProperty(waivedNavigator, "appVersion", {
-          get: Cu.exportFunction(function () {
-            return targetAppVersion;
-          }, win),
-          configurable: true,
-          enumerable: true,
-        });
+      const doc = this.document;
+      if (!doc || !doc.documentElement) {
+        return;
       }
-    } catch (e) {
-      console.error("[LykonShieldChild] Failed to spoof User-Agent:", e);
-    }
 
-    try {
-      const win = this.contentWindow;
-      const waivedWin = Cu.waiveXrays(win);
-      if (waivedWin && waivedWin.Object) {
-        console.log(
-          `[LykonShieldChild] Registering Object/Reflect hooks for ${url}`
-        );
-
-        const originalOpen = waivedWin.open;
-        if (originalOpen) {
-          waivedWin.open = Cu.exportFunction(function (
-            urlParam,
-            name,
-            features
-          ) {
+      const scriptText = `(function() {
+        const checkAndBlockUrl = function(urlStr) {
+          try {
+            if (!urlStr || urlStr === "" || urlStr === "about:blank") {
+              return false;
+            }
+            
+            const currentHost = window.location?.hostname || "";
+            let targetHost = "";
             try {
-              const currentHost = win.location?.hostname || "";
-              const urlStr = String(urlParam || "")
-                .trim()
-                .toLowerCase();
-              console.log(
-                `[LykonShieldChild] window.open intercepted: url=${urlStr}`
-              );
+              targetHost = new URL(urlStr, window.location.href).hostname.toLowerCase();
+            } catch (e) {
+              targetHost = urlStr;
+            }
 
-              if (!urlParam || urlStr === "" || urlStr === "about:blank") {
-                return originalOpen.call(waivedWin, urlParam, name, features);
+            const getBaseDomain = host => {
+              const parts = host.split(".");
+              if (parts.length >= 2) {
+                return parts.slice(-2).join(".");
               }
+              return host;
+            };
 
-              let targetHost = "";
+            const currentBase = getBaseDomain(currentHost).toLowerCase();
+            const targetBase = getBaseDomain(targetHost).toLowerCase();
+
+            const isUserActivated = navigator?.userActivation?.isActive;
+
+            const isLegitimate = (() => {
+              let parsedUrl = null;
               try {
-                targetHost = new win.URL(
-                  urlParam,
-                  win.location.href
-                ).hostname.toLowerCase();
-              } catch (e) {
-                targetHost = urlStr;
+                parsedUrl = new URL(urlStr, window.location.href);
+              } catch (e) {}
+
+              if (parsedUrl) {
+                const sParams = parsedUrl.searchParams;
+                const oauthKeys = [
+                  "client_id", "redirect_uri", "response_type", "state", "scope",
+                  "code", "access_token", "id_token", "samlrequest", "samlresponse",
+                  "openid", "login_hint", "nonce", "checkout_id", "payment_intent",
+                  "return_url", "cancel_url", "success_url"
+                ];
+                for (const key of oauthKeys) {
+                  if (sParams.has(key)) return true;
+                }
               }
 
-              const getBaseDomain = host => {
-                const parts = host.split(".");
-                if (parts.length >= 2) {
-                  return parts.slice(-2).join(".");
-                }
-                return host;
-              };
-
-              const currentBase = getBaseDomain(currentHost).toLowerCase();
-              const targetBase = getBaseDomain(targetHost).toLowerCase();
-
-              const isUserActivated = win.navigator?.userActivation?.isActive;
-
-              const isLegitimate = (() => {
-                let parsedUrl = null;
-                try {
-                  parsedUrl = new win.URL(urlParam, win.location.href);
-                } catch (e) {}
-
-                if (parsedUrl) {
-                  const sParams = parsedUrl.searchParams;
-                  const oauthKeys = [
-                    "client_id",
-                    "redirect_uri",
-                    "response_type",
-                    "state",
-                    "scope",
-                    "code",
-                    "access_token",
-                    "id_token",
-                    "samlrequest",
-                    "samlresponse",
-                    "openid",
-                    "login_hint",
-                    "nonce",
-                    "checkout_id",
-                    "payment_intent",
-                    "return_url",
-                    "cancel_url",
-                    "success_url",
-                  ];
-                  for (const key of oauthKeys) {
-                    if (sParams.has(key)) {
-                      return true;
-                    }
-                  }
-                }
-
-                if (parsedUrl) {
-                  const path = parsedUrl.pathname.toLowerCase();
-                  const pathKeywords = [
-                    "/oauth",
-                    "/auth",
-                    "/login",
-                    "/signin",
-                    "/checkout",
-                    "/pay",
-                    "/sso",
-                    "/register",
-                    "/signup",
-                    "/sign-in",
-                    "/sign-up",
-                    "/log-in",
-                    "/authorize",
-                    "/billing",
-                    "/subscribe",
-                    "/identity",
-                    "/accounts",
-                    "/verification",
-                    "/security",
-                    "/portal",
-                    "/wallet",
-                    "/connect",
-                    "/callback",
-                    "/token",
-                    "/session",
-                  ];
-                  if (pathKeywords.some(kw => path.includes(kw))) {
-                    return true;
-                  }
-                } else {
-                  const pathKeywords = [
-                    "oauth",
-                    "auth",
-                    "login",
-                    "signin",
-                    "checkout",
-                    "pay",
-                    "sso",
-                    "register",
-                  ];
-                  if (pathKeywords.some(kw => urlStr.includes(kw))) {
-                    return true;
-                  }
-                }
-
-                const hostToCheck = parsedUrl
-                  ? parsedUrl.hostname.toLowerCase()
-                  : targetHost.toLowerCase();
-                const hostSegments = hostToCheck.split(".");
-                const ssoDomains = [
-                  "google",
-                  "github",
-                  "apple",
-                  "microsoft",
-                  "microsoftonline",
-                  "live",
-                  "office",
-                  "facebook",
-                  "fb",
-                  "twitter",
-                  "x",
-                  "discord",
-                  "discordapp",
-                  "okta",
-                  "auth0",
-                  "stripe",
-                  "paypal",
-                  "amazon",
-                  "linkedin",
-                  "shopify",
-                  "coinbase",
-                  "keycloak",
-                  "clerk",
+              if (parsedUrl) {
+                const path = parsedUrl.pathname.toLowerCase();
+                const pathKeywords = [
+                  "/oauth", "/auth", "/login", "/signin", "/checkout", "/pay",
+                  "/sso", "/register", "/signup", "/sign-in", "/sign-up", "/log-in",
+                  "/authorize", "/billing", "/subscribe", "/identity", "/accounts",
+                  "/verification", "/security", "/portal", "/wallet", "/connect",
+                  "/callback", "/token", "/session"
                 ];
-                if (
-                  hostSegments.some(
-                    seg =>
-                      ssoDomains.includes(seg) ||
-                      seg === "auth" ||
-                      seg === "login" ||
-                      seg === "sso"
-                  )
-                ) {
+                if (pathKeywords.some(kw => path.includes(kw))) return true;
+              } else {
+                const pathKeywords = [
+                  "oauth", "auth", "login", "signin", "checkout", "pay", "sso", "register"
+                ];
+                if (pathKeywords.some(kw => urlStr.includes(kw))) return true;
+              }
+
+              const hostToCheck = parsedUrl ? parsedUrl.hostname.toLowerCase() : targetHost.toLowerCase();
+              const hostSegments = hostToCheck.split(".");
+              const ssoDomains = [
+                "google", "github", "apple", "microsoft", "microsoftonline", "live",
+                "office", "facebook", "fb", "twitter", "x", "discord", "discordapp",
+                "okta", "auth0", "stripe", "paypal", "amazon", "linkedin", "shopify",
+                "coinbase", "keycloak", "clerk"
+              ];
+              if (hostSegments.some(seg => ssoDomains.includes(seg) || seg === "auth" || seg === "login" || seg === "sso")) {
+                return true;
+              }
+              return false;
+            })();
+
+            const isAdUrl =
+              urlStr.includes("traffic") ||
+              urlStr.includes("click") ||
+              urlStr.includes("eta") ||
+              urlStr.includes("pop") ||
+              urlStr.includes("adserver") ||
+              urlStr.includes("adsystem") ||
+              urlStr.includes("adservices") ||
+              urlStr.includes("popunder") ||
+              urlStr.includes("redirect=") ||
+              urlStr.includes("klrtspet") ||
+              urlStr.includes("etahub") ||
+              urlStr.includes("adsterra") ||
+              urlStr.includes("exoclick") ||
+              urlStr.includes("onclickads") ||
+              urlStr.includes("juicyads") ||
+              urlStr.includes("condles-temark") ||
+              urlStr.includes("tentedienat") ||
+              urlStr.includes("bodegashunlike") ||
+              urlStr.includes("statlytic") ||
+              urlStr.includes("ssp=adcash") ||
+              urlStr.includes("adcash") ||
+              urlStr.includes("cost=");
+
+            if (!isLegitimate) {
+              if (!isUserActivated || isAdUrl) {
+                return true;
+              } else if (targetBase && currentBase && targetBase !== currentBase) {
+                const isSuspicious =
+                  urlStr.includes("zone_id=") ||
+                  urlStr.includes("zoneid=") ||
+                  urlStr.includes("popup") ||
+                  urlStr.includes("popunder") ||
+                  urlStr.includes("banner") ||
+                  urlStr.includes("ad_id") ||
+                  urlStr.includes("adid=") ||
+                  urlStr.includes("ssp=") ||
+                  urlStr.includes("cost=");
+                if (isSuspicious) {
                   return true;
                 }
+              }
+            }
+          } catch (e) {}
+          return false;
+        };
 
-                return false;
-              })();
+        try {
+          const originalUA = navigator.userAgent || "";
+          if (originalUA.includes("Lykon") || originalUA.includes("Firefox/115.0")) {
+            let targetUA = originalUA.replace(/Lykon\\/[0-9.]+/gi, "").trim();
+            if (targetUA.includes("Firefox/")) {
+              targetUA = targetUA.replace(/rv:109\\.0/gi, "rv:130.0");
+              targetUA = targetUA.replace(/Firefox\\/115\\.0/gi, "Firefox/130.0");
+            } else {
+              targetUA = targetUA + " Firefox/130.0";
+            }
+            let targetAppVersion = navigator.appVersion || "";
+            if (targetAppVersion.includes("Lykon")) {
+              targetAppVersion = targetAppVersion.replace(/Lykon\\/[0-9.]+/gi, "").trim();
+            }
+            
+            Object.defineProperty(navigator, "userAgent", {
+              get() { return targetUA; },
+              configurable: true,
+              enumerable: true
+            });
+            Object.defineProperty(navigator, "appVersion", {
+              get() { return targetAppVersion; },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {}
 
-              if (!isUserActivated && !isLegitimate) {
-                if (
-                  urlStr.includes("traffic") ||
-                  urlStr.includes("click") ||
-                  urlStr.includes("eta") ||
-                  urlStr.includes("pop") ||
-                  (targetBase && currentBase && targetBase !== currentBase)
-                ) {
-                  console.log(
-                    `[LykonShieldChild] BLOCKED window.open popup: ${urlStr}`
-                  );
-                  return new win.Proxy(
-                    {},
-                    {
-                      get() {
-                        return function () {};
-                      },
+        try {
+          const originalOpen = window.open;
+          if (originalOpen) {
+            window.open = function(urlParam, name, features) {
+              try {
+                const urlStr = String(urlParam || "").trim().toLowerCase();
+                if (checkAndBlockUrl(urlStr)) {
+                  return new Proxy({}, {
+                    get() {
+                      return function() {};
                     }
-                  );
-                }
-              }
-            } catch (e) {}
-            return originalOpen.call(waivedWin, urlParam, name, features);
-          }, win);
-        }
-
-        const originalDefineProperty = waivedWin.Object.defineProperty;
-        if (originalDefineProperty) {
-          waivedWin.Object.defineProperty = Cu.exportFunction(function (
-            obj,
-            prop,
-            descriptor
-          ) {
-            try {
-              console.log(
-                `[LykonShieldChild] Object.defineProperty: prop=${String(prop)} obj=${String(obj)}`
-              );
-              if (
-                obj === win ||
-                obj === waivedWin ||
-                prop === "VueComponents"
-              ) {
-                if (descriptor && typeof descriptor === "object") {
-                  const waivedDesc = Cu.waiveXrays(descriptor);
-                  const newDesc = { configurable: true };
-                  if ("value" in waivedDesc) newDesc.value = waivedDesc.value;
-                  if ("writable" in waivedDesc)
-                    newDesc.writable = waivedDesc.writable;
-                  if ("get" in waivedDesc) newDesc.get = waivedDesc.get;
-                  if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
-                  if ("enumerable" in waivedDesc)
-                    newDesc.enumerable = waivedDesc.enumerable;
-                  descriptor = Cu.cloneInto(newDesc, win, {
-                    cloneFunctions: true,
                   });
-                  console.log(
-                    `[LykonShieldChild] Forced configurable: true for ${String(prop)}`
-                  );
+                }
+              } catch (e) {}
+              return originalOpen.call(window, urlParam, name, features);
+            };
+          }
+        } catch (e) {}
+
+        try {
+          document.addEventListener("click", function(event) {
+            try {
+              let target = event.target;
+              while (target && target.tagName !== "A") {
+                target = target.parentNode;
+              }
+              if (target && target.href) {
+                const urlStr = String(target.href).trim().toLowerCase();
+                if (checkAndBlockUrl(urlStr)) {
+                  event.preventDefault();
+                  event.stopPropagation();
                 }
               }
             } catch (e) {}
-            return originalDefineProperty.call(
-              waivedWin.Object,
-              obj,
-              prop,
-              descriptor
-            );
-          }, win);
-        }
+          }, true);
+        } catch (e) {}
 
-        const originalDefineProperties = waivedWin.Object.defineProperties;
-        if (originalDefineProperties) {
-          waivedWin.Object.defineProperties = Cu.exportFunction(function (
-            obj,
-            props
-          ) {
-            try {
-              console.log(
-                `[LykonShieldChild] Object.defineProperties: keys=${Object.keys(Cu.waiveXrays(props || {})).join(",")} obj=${String(obj)}`
-              );
-              if (props && typeof props === "object") {
-                const waivedProps = Cu.waiveXrays(props);
-                const newProps = {};
-                let modified = false;
-                for (const key of Object.keys(waivedProps)) {
-                  const desc = waivedProps[key];
-                  if (
-                    desc &&
-                    typeof desc === "object" &&
-                    (obj === win ||
-                      obj === waivedWin ||
-                      key === "VueComponents")
-                  ) {
-                    const waivedDesc = Cu.waiveXrays(desc);
-                    const newDesc = { configurable: true };
-                    if ("value" in waivedDesc) newDesc.value = waivedDesc.value;
-                    if ("writable" in waivedDesc)
-                      newDesc.writable = waivedDesc.writable;
-                    if ("get" in waivedDesc) newDesc.get = waivedDesc.get;
-                    if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
-                    if ("enumerable" in waivedDesc)
-                      newDesc.enumerable = waivedDesc.enumerable;
-                    newProps[key] = Cu.cloneInto(newDesc, win, {
-                      cloneFunctions: true,
-                    });
-                    modified = true;
-                    console.log(
-                      `[LykonShieldChild] Forced configurable: true for key=${String(key)} in defineProperties`
-                    );
-                  } else {
-                    newProps[key] = desc;
+        try {
+          if (window.HTMLAnchorElement) {
+            const originalClick = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function() {
+              try {
+                if (this.href) {
+                  const urlStr = String(this.href).trim().toLowerCase();
+                  if (checkAndBlockUrl(urlStr)) {
+                    return;
                   }
                 }
-                if (modified) {
-                  props = Cu.cloneInto(newProps, win, { cloneFunctions: true });
-                }
-              }
-            } catch (e) {}
-            return originalDefineProperties.call(waivedWin.Object, obj, props);
-          }, win);
-        }
+              } catch (e) {}
+              return originalClick.call(this);
+            };
+          }
+        } catch (e) {}
 
-        const originalReflectDefineProperty = waivedWin.Reflect?.defineProperty;
-        if (originalReflectDefineProperty) {
-          waivedWin.Reflect.defineProperty = Cu.exportFunction(function (
-            obj,
-            prop,
-            descriptor
-          ) {
-            try {
-              console.log(
-                `[LykonShieldChild] Reflect.defineProperty: prop=${String(prop)} obj=${String(obj)}`
-              );
-              if (
-                obj === win ||
-                obj === waivedWin ||
-                prop === "VueComponents"
-              ) {
-                if (descriptor && typeof descriptor === "object") {
-                  const waivedDesc = Cu.waiveXrays(descriptor);
-                  const newDesc = { configurable: true };
-                  if ("value" in waivedDesc) newDesc.value = waivedDesc.value;
-                  if ("writable" in waivedDesc)
-                    newDesc.writable = waivedDesc.writable;
-                  if ("get" in waivedDesc) newDesc.get = waivedDesc.get;
-                  if ("set" in waivedDesc) newDesc.set = waivedDesc.set;
-                  if ("enumerable" in waivedDesc)
-                    newDesc.enumerable = waivedDesc.enumerable;
-                  descriptor = Cu.cloneInto(newDesc, win, {
-                    cloneFunctions: true,
-                  });
-                  console.log(
-                    `[LykonShieldChild] Forced configurable: true for Reflect ${String(prop)}`
-                  );
+        try {
+          const originalDefineProperty = Object.defineProperty;
+          if (originalDefineProperty) {
+            Object.defineProperty = function(obj, prop, descriptor) {
+              try {
+                if (obj === window || prop === "VueComponents") {
+                  if (descriptor && typeof descriptor === "object") {
+                    try {
+                      descriptor.configurable = true;
+                    } catch (e) {
+                      descriptor = Object.assign({}, descriptor, { configurable: true });
+                    }
+                  }
                 }
-              }
-            } catch (e) {}
-            return originalReflectDefineProperty.call(
-              waivedWin.Reflect,
-              obj,
-              prop,
-              descriptor
-            );
-          }, win);
-        }
-      }
+              } catch (e) {}
+              return originalDefineProperty.call(Object, obj, prop, descriptor);
+            };
+          }
+
+          const originalDefineProperties = Object.defineProperties;
+          if (originalDefineProperties) {
+            Object.defineProperties = function(obj, props) {
+              try {
+                if (props && typeof props === "object") {
+                  for (const key of Object.keys(props)) {
+                    const desc = props[key];
+                    if (desc && typeof desc === "object" && (obj === window || key === "VueComponents")) {
+                      try {
+                        desc.configurable = true;
+                      } catch (e) {
+                        props[key] = Object.assign({}, desc, { configurable: true });
+                      }
+                    }
+                  }
+                }
+              } catch (e) {}
+              return originalDefineProperties.call(Object, obj, props);
+            };
+          }
+
+          const originalReflectDefineProperty = Reflect?.defineProperty;
+          if (originalReflectDefineProperty) {
+            Reflect.defineProperty = function(obj, prop, descriptor) {
+              try {
+                if (obj === window || prop === "VueComponents") {
+                  if (descriptor && typeof descriptor === "object") {
+                    try {
+                      descriptor.configurable = true;
+                    } catch (e) {
+                      descriptor = Object.assign({}, descriptor, { configurable: true });
+                    }
+                  }
+                }
+              } catch (e) {}
+              return originalReflectDefineProperty.call(Reflect, obj, prop, descriptor);
+            };
+          }
+        } catch (e) {}
+      })();`;
+
+      const script = doc.createElementNS(
+        "http://www.w3.org/1999/xhtml",
+        "script"
+      );
+      script.textContent = scriptText;
+      doc.documentElement.appendChild(script);
+      script.remove();
     } catch (e) {
-      console.error("[LykonShieldChild] Failed to setup hooks:", e);
+      console.error("[LykonShieldChild] Failed to setup native hooks:", e);
     }
   }
 
@@ -816,11 +712,54 @@ export class LykonShieldChild extends JSWindowActorChild {
       win.__lykon_ytInitialReelResponse = win.ytInitialReelResponse;
     }
 
+    const adKeywords = [
+      "adPlacements",
+      "playerAds",
+      "adSlots",
+      "adBreakHeartbeatParams",
+      "adBreakParams",
+      "adModule",
+      "adInfoRenderer",
+      "instreamVideoAdRenderer",
+      "linearAdSequenceRenderer",
+      "adPlacementRenderer",
+      "adLayoutLoggingData",
+      "actionCompanionAdRenderer",
+      "adPlacementConfig",
+      "adVideoId",
+      "advertisedVideo",
+      "promotedSparklesWebRenderer",
+      "adInfoDialogEndpoint",
+      "adHoverTextButtonRenderer",
+      "aboutThisAdRenderer",
+      "adFeedbackEndpoint",
+      "adLayoutMetadata",
+      "adInstrumentation",
+      "instreamAdPlayerOverlayRenderer",
+      "playerLegacyDesktopWatchAdsRenderer",
+      "remoteSlotsToImpression",
+      "adSlotRenderer",
+      "compactPromotedVideoRenderer",
+      "mastheadAd",
+      "bannerPromoRenderer",
+      "statementBannerRenderer",
+      "inFeedAdLayoutRenderer",
+      "displayAdRenderer",
+      "promotedVideoRenderer",
+      "merchShelfRenderer",
+      "enforcement",
+      "adblock",
+      "ytd-enforcement",
+    ];
+
     const customParse = Cu.exportFunction(function (text, reviver) {
       try {
         let result = nativeParse(text, reviver);
-        if (result && typeof result === "object") {
-          cleanObject(result);
+        if (result && typeof result === "object" && typeof text === "string") {
+          const hasAd = adKeywords.some(kw => text.includes(kw));
+          if (hasAd) {
+            cleanObject(result);
+          }
         }
         return result;
       } catch (e) {
@@ -843,7 +782,12 @@ export class LykonShieldChild extends JSWindowActorChild {
 
       const cleanFetchCallback = Cu.exportFunction(function (response) {
         try {
-          if (url.includes("/youtubei/") || url.includes("/api/")) {
+          const isTarget =
+            url.includes("/youtubei/v1/player") ||
+            url.includes("/youtubei/v1/next") ||
+            url.includes("/youtubei/v1/browse") ||
+            url.includes("/youtubei/v1/search");
+          if (isTarget) {
             const ct = response.headers.get("content-type") || "";
             if (ct.includes("application/json")) {
               const waivedResponse = Cu.waiveXrays(response);
@@ -873,6 +817,10 @@ export class LykonShieldChild extends JSWindowActorChild {
                   return originalText.call(waivedResponse).then(
                     Cu.exportFunction(function (text) {
                       try {
+                        const hasAd = adKeywords.some(kw => text.includes(kw));
+                        if (!hasAd) {
+                          return text;
+                        }
                         let data = nativeParse(text);
                         cleanObject(data);
                         return JSON.stringify(data);
@@ -948,36 +896,46 @@ export class LykonShieldChild extends JSWindowActorChild {
 
     const customXhrSend = Cu.exportFunction(function (body) {
       try {
-        if (this._lykonUrl && this._lykonUrl.includes("/youtubei/")) {
+        const isTarget =
+          this._lykonUrl &&
+          (this._lykonUrl.includes("/youtubei/v1/player") ||
+            this._lykonUrl.includes("/youtubei/v1/next") ||
+            this._lykonUrl.includes("/youtubei/v1/browse") ||
+            this._lykonUrl.includes("/youtubei/v1/search"));
+        if (isTarget) {
           const onReadyStateCallback = Cu.exportFunction(function () {
             try {
               if (this.readyState === 4) {
                 const ct = this.getResponseHeader("content-type") || "";
                 if (ct.includes("application/json") && this.responseText) {
-                  let data = nativeParse(this.responseText);
-                  cleanObject(data);
-                  Object.defineProperty(
-                    this,
-                    "responseText",
-                    Cu.cloneInto(
-                      {
-                        writable: true,
-                        value: JSON.stringify(data),
-                      },
-                      win
-                    )
-                  );
-                  Object.defineProperty(
-                    this,
-                    "response",
-                    Cu.cloneInto(
-                      {
-                        writable: true,
-                        value: JSON.stringify(data),
-                      },
-                      win
-                    )
-                  );
+                  const text = this.responseText;
+                  const hasAd = adKeywords.some(kw => text.includes(kw));
+                  if (hasAd) {
+                    let data = nativeParse(text);
+                    cleanObject(data);
+                    Object.defineProperty(
+                      this,
+                      "responseText",
+                      Cu.cloneInto(
+                        {
+                          writable: true,
+                          value: JSON.stringify(data),
+                        },
+                        win
+                      )
+                    );
+                    Object.defineProperty(
+                      this,
+                      "response",
+                      Cu.cloneInto(
+                        {
+                          writable: true,
+                          value: JSON.stringify(data),
+                        },
+                        win
+                      )
+                    );
+                  }
                 }
               }
             } catch (e) {}

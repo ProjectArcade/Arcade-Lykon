@@ -485,6 +485,25 @@ class _AdblockService {
     ) {
       return false;
     }
+
+    const blockedHosts = [
+      "tentedienat.com",
+      "condles-temark.com",
+      "bodegashunlike.com",
+      "statlytic.net",
+      "klrtspet.net",
+    ];
+    try {
+      const targetHost = new URL(url).hostname.toLowerCase();
+      if (
+        blockedHosts.some(
+          host => targetHost === host || targetHost.endsWith("." + host)
+        )
+      ) {
+        return true;
+      }
+    } catch (e) {}
+
     if (this._isFirstPartyLegitimate(url, originUrl)) {
       return false;
     }

@@ -494,7 +494,59 @@
                   </hbox>
       </toolbarbutton>
 
+<toolbarbutton id="lykon-optimise-button"
+               class="toolbarbutton-1 chromeclass-toolbar-additional"
+               image="chrome://global/skin/icons/performance.svg"
+               removable="false"
+               tooltiptext="Optimise RAM"
+               type="menu">
+  <menupopup id="lykon-optimise-popup"
+             class="panel-subview-body">
+    <html:div id="lykon-optimise-panel-content">
+      <html:div class="lko-section-header">
+        <html:div class="lko-header">
+          <html:div class="lko-header-left">
+            <html:div class="lko-icon-wrap">
+              <html:img class="lko-icon" src="chrome://global/skin/icons/performance.svg" role="presentation"/>
+            </html:div>
+            <html:div class="lko-title-container">
+              <html:span class="lko-title">Lykon Optimiser</html:span>
+              <html:span class="lko-subtitle">Keep your browser fast &amp; light</html:span>
+            </html:div>
+          </html:div>
+        </html:div>
+      </html:div>
 
+      <html:div class="lko-card">
+        <html:div class="lko-card-title">Active Tab RAM</html:div>
+        <html:div class="lko-card-metric" id="lko-active-memory">Calculating...</html:div>
+      </html:div>
+
+      <html:div class="lko-stats-grid">
+        <html:div class="lko-stat-card">
+          <html:div class="lko-stat-title">Total Tabs RAM</html:div>
+          <html:div class="lko-stat-value" id="lko-total-memory">Calculating...</html:div>
+        </html:div>
+        <html:div class="lko-stat-card">
+          <html:div class="lko-stat-title">Optimised Tabs</html:div>
+          <html:div class="lko-stat-value" id="lko-optimised-count">0</html:div>
+        </html:div>
+      </html:div>
+
+      <html:div class="lko-toggle-row">
+        <html:div class="lko-toggle-label-container">
+          <html:div class="lko-toggle-label">Auto-Optimise RAM</html:div>
+          <html:div class="lko-toggle-sub">Auto-unload heavy background tabs</html:div>
+        </html:div>
+        <html:input type="checkbox" id="lykon-optimise-auto-toggle" class="lko-switch-checkbox"/>
+      </html:div>
+
+      <html:button class="lko-action-button" id="lykon-optimise-now-btn">
+        <html:span class="lko-btn-text">Optimise Now</html:span>
+      </html:button>
+    </html:div>
+  </menupopup>
+</toolbarbutton>
 
 <toolbarbutton id="lykon-shield-button"
                class="toolbarbutton-1 chromeclass-toolbar-additional"

@@ -147,30 +147,48 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
-        .toggle {
-            appearance: none;
-            width: 44px;
-            height: 24px;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 12px;
+        .lks-toggle-label {
             position: relative;
+            display: inline-flex;
+            align-items: center;
             cursor: pointer;
-            transition: background 0.2s ease;
+            flex-shrink: 0;
+            user-select: none;
         }
-        .toggle::after {
-            content: '';
+        .lks-toggle-input {
             position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 20px;
-            height: 20px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.2s ease;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
         }
-        .toggle:checked { background: #8B5CF6; }
-        .toggle:checked::after { transform: translateX(20px); }
+        .lks-toggle-track {
+            display: block;
+            width: 50px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            position: relative;
+            transition: background 0.22s ease;
+            cursor: pointer;
+        }
+        .lks-toggle-thumb {
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: #FFFFFF;
+            border-radius: 11px;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.22s ease;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+        }
+        .lks-toggle-input:checked + .lks-toggle-track {
+            background: #30d158;
+        }
+        .lks-toggle-input:checked + .lks-toggle-track .lks-toggle-thumb {
+            transform: translateX(22px);
+        }
 
         .custom-select {
             appearance: none;
@@ -187,6 +205,57 @@
         .custom-select:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); }
         .custom-select:focus { outline: none; border-color: rgba(139, 92, 246, 0.5); }
         .custom-select option { background: #1a1f2e; color: white; }
+
+        .ios-group {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .ios-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .ios-row:last-child {
+            border-bottom: none;
+        }
+        .ios-row-hover:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+        .ios-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
+            flex-shrink: 0;
+        }
+        .ios-select {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            text-align: right;
+            padding-right: 20px;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba%28255,255,255,0.4%29' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8.25 4.5l7.5 7.5-7.5 7.5'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right center;
+            background-size: 12px;
+        }
+        .ios-select:focus {
+            outline: none;
+        }
+        .ios-select option {
+            background: #10141e;
+            color: white;
+        }
 
         .sparkline { width: 100%; height: 40px; }
 
@@ -303,7 +372,7 @@
                 <div id="clock-time" class="text-4xl md:text-5xl font-light tracking-tight text-white/95">--:--</div>
                 <div id="clock-date" class="text-sm md:text-base text-white/70 mt-1 font-light">Loading...</div>
             </div>
-            <button id="settings-btn" class="p-3 rounded-2xl panel-solid hover:bg-white/10 transition-all duration-200 group" aria-label="Settings">
+            <button id="settings-btn" class="ml-auto p-3 rounded-2xl panel-solid hover:bg-white/10 transition-all duration-200 group" aria-label="Settings">
                 <i data-lucide="settings" class="icon-unified text-white/70 group-hover:text-white group-hover:rotate-90 transition-all duration-300"></i>
             </button>
         </div>
@@ -402,32 +471,28 @@
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#10141e]">
             <h2 class="text-base font-semibold text-white">Customize New Tab Page</h2>
-            <button id="close-settings" class="w-7 h-7 rounded-full border border-purple-500/50 flex items-center justify-center text-purple-400 hover:bg-purple-500/10 transition-colors focus:outline-none cursor-pointer">
+            <button id="close-settings" class="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all focus:outline-none cursor-pointer">
                 <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
         <!-- Body (Sidebar + Content) -->
         <div class="flex flex-row flex-1 overflow-hidden">
             <!-- Sidebar -->
-            <div class="w-52 border-r border-white/5 p-4 flex flex-col gap-1.5 bg-[#10141e]">
-                <button id="tab-btn-background" class="tab-btn active px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors relative w-full text-left">
-                    <span class="active-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-500 rounded-r-md"></span>
-                    <i data-lucide="image" class="w-4 h-4 text-purple-400"></i>
-                    <span class="text-white">Background Image</span>
+            <div class="w-52 border-r border-white/5 p-4 flex flex-col gap-1 bg-[#10141e]">
+                <button id="tab-btn-background" class="tab-btn active px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-3 transition-all relative w-full text-left bg-[#007AFF] text-white">
+                    <i data-lucide="image" class="w-4 h-4"></i>
+                    <span>Background</span>
                 </button>
-                <button id="tab-btn-search" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors relative w-full text-left text-white/60 hover:text-white hover:bg-white/5">
-                    <span class="active-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-500 rounded-r-md hidden"></span>
-                    <i data-lucide="search" class="w-4 h-4 text-white/50"></i>
+                <button id="tab-btn-search" class="tab-btn px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-3 transition-all relative w-full text-left text-white/70 hover:text-white hover:bg-white/5">
+                    <i data-lucide="search" class="w-4 h-4"></i>
                     <span>Search Engine</span>
                 </button>
-                <button id="tab-btn-layout" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors relative w-full text-left text-white/60 hover:text-white hover:bg-white/5">
-                    <span class="active-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-500 rounded-r-md hidden"></span>
-                    <i data-lucide="layout-grid" class="w-4 h-4 text-white/50"></i>
+                <button id="tab-btn-layout" class="tab-btn px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-3 transition-all relative w-full text-left text-white/70 hover:text-white hover:bg-white/5">
+                    <i data-lucide="layout-grid" class="w-4 h-4"></i>
                     <span>Widgets &amp; Layout</span>
                 </button>
-                <button id="tab-btn-system" class="tab-btn px-4 py-2.5 rounded-xl text-sm font-medium flex items-center gap-3 transition-colors relative w-full text-left text-white/60 hover:text-white hover:bg-white/5">
-                    <span class="active-indicator absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-purple-500 rounded-r-md hidden"></span>
-                    <i data-lucide="settings" class="w-4 h-4 text-white/50"></i>
+                <button id="tab-btn-system" class="tab-btn px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-3 transition-all relative w-full text-left text-white/70 hover:text-white hover:bg-white/5">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
                     <span>System</span>
                 </button>
             </div>
@@ -435,47 +500,75 @@
             <div class="flex-1 p-6 overflow-y-auto bg-[#121622] text-white">
                 <!-- Background Tab -->
                 <div id="tab-content-background" class="tab-content space-y-5">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="text-sm font-medium text-white/90">Show Background Images</div>
-                            <div class="text-xs text-white/40 mt-0.5">Toggle beautiful background wallpapers</div>
-                        </div>
-                        <input type="checkbox" id="auto-change-toggle" class="toggle" />
-                    </div>
-                    
-                    <div class="space-y-2 transition-all duration-200" id="interval-container" style="opacity: 0.4; pointer-events: none;">
-                        <label class="text-xs font-semibold text-white/50 uppercase tracking-wider block">Change Interval</label>
-                        <select id="interval-select" class="custom-select">
-                            <option value="60000">1 minute</option>
-                            <option value="300000" selected="selected">5 minutes</option>
-                            <option value="3600000">1 hour</option>
-                        </select>
-                    </div>
-
-                    <div class="pt-4 border-t border-white/5 space-y-3">
-                        <label class="text-xs font-semibold text-white/50 uppercase tracking-wider block">Select Background Mode</label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div id="custom-wallpaper-btn" class="relative rounded-xl border border-white/10 p-3 bg-white/5 flex flex-col justify-center items-center h-28 cursor-pointer overflow-hidden group">
-                                <div id="custom-wallpaper-preview" class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105 hidden" style="opacity: 0.7;"></div>
-                                <div id="custom-wallpaper-overlay" class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent hidden"></div>
-                                <button id="custom-wallpaper-change-btn" class="absolute bottom-2 left-2 px-2 py-1 rounded bg-black/60 hover:bg-black/80 text-[10px] text-white/90 z-20 border border-white/10 hidden transition-all duration-200">
-                                    Change
-                                </button>
-                                <div id="custom-wallpaper-check" class="absolute top-2 right-2 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-white hidden">
-                                    <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <div class="ios-group">
+                        <div class="ios-row">
+                            <div class="flex items-center gap-3">
+                                <div class="ios-badge bg-[#AF52DE]">
+                                    <i data-lucide="image" class="w-4 h-4 text-white"></i>
                                 </div>
-                                <div id="custom-wallpaper-empty" class="flex flex-col items-center relative z-10 text-center">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="text-white/40 mb-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                                    <span class="text-xs text-white/60">Upload custom</span>
+                                <div>
+                                    <div class="text-sm font-medium text-white/90">Show Background Images</div>
+                                    <div class="text-xs text-white/40 mt-0.5">Toggle beautiful background wallpapers</div>
                                 </div>
                             </div>
-                            <div id="pack-wallpaper-btn" class="relative rounded-xl border border-white/10 p-3 bg-white/5 flex flex-col justify-end h-28 overflow-hidden group cursor-pointer">
+                            <label class="lks-toggle-label">
+                                <input type="checkbox" id="auto-change-toggle" class="lks-toggle-input" />
+                                <span class="lks-toggle-track">
+                                    <span class="lks-toggle-thumb"></span>
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <div class="ios-row transition-all duration-200" id="interval-container" style="display: none;">
+                            <div class="flex items-center gap-3">
+                                <div class="ios-badge bg-[#007AFF]">
+                                    <i data-lucide="clock" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-white/90">Change Interval</div>
+                                    <div class="text-xs text-white/40 mt-0.5">How often to change background image</div>
+                                </div>
+                            </div>
+                            <select id="interval-select" class="ios-select">
+                                <option value="60000">1 minute</option>
+                                <option value="300000" selected="selected">5 minutes</option>
+                                <option value="3600000">1 hour</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-semibold text-white/40 uppercase tracking-wider block px-1">Select Background Mode</label>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div id="pack-wallpaper-btn" class="relative rounded-xl border border-white/10 p-3 bg-white/5 flex flex-col justify-end h-24 overflow-hidden group cursor-pointer">
                                 <div class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105" style="background-image: url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80'); opacity: 0.7;"></div>
                                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                                <div id="pack-wallpaper-check" class="absolute top-2 right-2 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-white hidden">
-                                    <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <div id="pack-wallpaper-check" class="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#007AFF] flex items-center justify-center text-white hidden">
+                                    <svg viewBox="0 0 24 24" width="8" height="8" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                 </div>
-                                <span class="relative z-10 text-xs font-medium text-white">Lykon Backgrounds</span>
+                                <span class="relative z-10 text-[11px] font-semibold text-white">Dynamic</span>
+                            </div>
+                            <div id="custom-wallpaper-btn" class="relative rounded-xl border border-white/10 p-3 bg-white/5 flex flex-col justify-end h-24 cursor-pointer overflow-hidden group">
+                                <div id="custom-wallpaper-preview" class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105 hidden" style="opacity: 0.7;"></div>
+                                <div id="custom-wallpaper-overlay" class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent hidden"></div>
+                                <button id="custom-wallpaper-change-btn" class="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-black/60 hover:bg-black/80 text-[8px] text-white/90 z-20 border border-white/10 hidden transition-all duration-200">
+                                    Change
+                                </button>
+                                <div id="custom-wallpaper-check" class="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#007AFF] flex items-center justify-center text-white hidden">
+                                    <svg viewBox="0 0 24 24" width="8" height="8" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <div id="custom-wallpaper-empty" class="absolute inset-0 flex flex-col items-center justify-center relative z-10 text-center">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="text-white/40 mb-1"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                    <span class="text-[11px] text-white/60 font-medium">Custom</span>
+                                </div>
+                            </div>
+                            <div id="gradient-wallpaper-btn" class="relative rounded-xl border border-white/10 p-3 bg-white/5 flex flex-col justify-end h-24 overflow-hidden group cursor-pointer">
+                                <div id="gradient-wallpaper-preview" class="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105" style="background-image: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80'); opacity: 0.7;"></div>
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                                <div id="gradient-wallpaper-check" class="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#007AFF] flex items-center justify-center text-white hidden">
+                                    <svg viewBox="0 0 24 24" width="8" height="8" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <span class="relative z-10 text-[11px] font-semibold text-white">Gradient</span>
                             </div>
                         </div>
                         <input type="file" id="custom-wallpaper-input" accept="image/*" class="hidden" />
@@ -484,11 +577,18 @@
 
                 <!-- Search Tab -->
                 <div id="tab-content-search" class="tab-content space-y-4 hidden">
-                    <div>
-                        <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Default Search Engine</h3>
-                        <div class="space-y-3">
-                            <label class="text-sm text-white/70">Select the search engine used inside the home page</label>
-                            <select id="search-engine-select" class="custom-select">
+                    <div class="ios-group">
+                        <div class="ios-row">
+                            <div class="flex items-center gap-3">
+                                <div class="ios-badge bg-[#34C759]">
+                                    <i data-lucide="search" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-white/90">Default Search Engine</div>
+                                    <div class="text-xs text-white/40 mt-0.5">Search queries will use this engine</div>
+                                </div>
+                            </div>
+                            <select id="search-engine-select" class="ios-select">
                                 <option value="google">Google</option>
                                 <option value="duckduckgo" selected="selected">DuckDuckGo</option>
                                 <option value="brave">Brave</option>
@@ -500,41 +600,72 @@
 
                 <!-- Layout Tab -->
                 <div id="tab-content-layout" class="tab-content space-y-4 hidden">
-                    <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Toggle Widgets</h3>
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <div class="text-sm text-white/70">Show Privacy Stats</div>
-                                <div class="text-xs text-white/40 mt-0.5">Real-time trackers blocked, bandwidth &amp; time saved</div>
+                    <div class="ios-group">
+                        <div class="ios-row">
+                            <div class="flex items-center gap-3">
+                                <div class="ios-badge bg-[#FF9500]">
+                                    <i data-lucide="shield" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-white/90">Privacy Stats</div>
+                                    <div class="text-xs text-white/40 mt-0.5">Show blocked trackers &amp; saved bandwidth</div>
+                                </div>
                             </div>
-                            <input type="checkbox" id="show-stats-toggle" class="toggle" checked="checked" />
+                            <label class="lks-toggle-label">
+                                <input type="checkbox" id="show-stats-toggle" class="lks-toggle-input" checked="checked" />
+                                <span class="lks-toggle-track">
+                                    <span class="lks-toggle-thumb"></span>
+                                </span>
+                            </label>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <div class="text-sm text-white/70">Show Clock</div>
-                                <div class="text-xs text-white/40 mt-0.5">Display local time and date widget</div>
+                        <div class="ios-row">
+                            <div class="flex items-center gap-3">
+                                <div class="ios-badge bg-[#55BEF9]">
+                                    <i data-lucide="clock" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-white/90">Clock Widget</div>
+                                    <div class="text-xs text-white/40 mt-0.5">Display local time and date at the top</div>
+                                </div>
                             </div>
-                            <input type="checkbox" id="show-clock-toggle" class="toggle" checked="checked" />
+                            <label class="lks-toggle-label">
+                                <input type="checkbox" id="show-clock-toggle" class="lks-toggle-input" checked="checked" />
+                                <span class="lks-toggle-track">
+                                    <span class="lks-toggle-thumb"></span>
+                                </span>
+                            </label>
                         </div>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <div class="text-sm text-white/70">Show Shortcuts Grid</div>
-                                <div class="text-xs text-white/40 mt-0.5">Quick access shortcuts to your top sites</div>
+                        <div class="ios-row">
+                            <div class="flex items-center gap-3">
+                                <div class="ios-badge bg-[#FF2D55]">
+                                    <i data-lucide="layout-grid" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium text-white/90">Shortcuts Grid</div>
+                                    <div class="text-xs text-white/40 mt-0.5">Quick access grid for your top sites</div>
+                                </div>
                             </div>
-                            <input type="checkbox" id="show-shortcuts-toggle" class="toggle" checked="checked" />
+                            <label class="lks-toggle-label">
+                                <input type="checkbox" id="show-shortcuts-toggle" class="lks-toggle-input" checked="checked" />
+                                <span class="lks-toggle-track">
+                                    <span class="lks-toggle-thumb"></span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>
 
                 <!-- System Tab -->
                 <div id="tab-content-system" class="tab-content space-y-4 hidden">
-                    <h3 class="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">System Controls</h3>
-                    <div class="space-y-3">
-                        <p class="text-sm text-white/60">Reset all configuration settings, layout visibility, and search options back to the original default state.</p>
-                        <button id="reset-defaults" class="w-full py-2.5 rounded-xl bg-[#ef4444]/15 hover:bg-[#ef4444]/25 border border-[#ef4444]/30 text-sm font-semibold text-red-400 hover:text-red-300 transition-all duration-200">
-                            Reset all to defaults
+                    <div class="ios-group">
+                        <button id="reset-defaults" class="w-full ios-row ios-row-hover flex items-center justify-center cursor-pointer p-3.5 text-center focus:outline-none bg-transparent border-none">
+                            <span class="flex items-center gap-2 text-[#FF3B30] font-semibold text-sm">
+                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                                <span>Reset all to defaults</span>
+                            </span>
                         </button>
                     </div>
+                    <p class="text-xs text-white/40 text-center px-4">This will immediately reset all configuration settings, wallpapers, widgets, and layout options to default values.</p>
                 </div>
             </div>
         </div>
@@ -568,6 +699,27 @@
     <script>
         //<![CDATA[
 
+        function saveCustomWallpaper(dataUrl, callback) {
+            try {
+                localStorage.setItem('lykonCustomWallpaper', dataUrl);
+                state.customWallpaper = dataUrl;
+                if (callback) callback(true);
+            } catch (e) {
+                state.customWallpaper = true;
+                if (callback) callback(true);
+            }
+        }
+
+        function loadCustomWallpaper(callback) {
+            var val = state.customWallpaper || null;
+            if (!val || val === true || val === "true") {
+                try {
+                    val = localStorage.getItem('lykonCustomWallpaper');
+                } catch (e) {}
+            }
+            if (callback) callback(val);
+        }
+
         var DEFAULTS = {
             searchEngine: 'duckduckgo',
             autoChange: true,
@@ -575,9 +727,10 @@
             showStats: true,
             showClock: true,
             showShortcuts: true,
-            wallpaperMode: 'pack',
+            wallpaperMode: 'gradient',
             customShortcuts: [],
             deletedShortcuts: [],
+            customWallpaper: null,
         };
 
         var SEARCH_ENGINES = {
@@ -634,14 +787,12 @@
             }
         }
 
-        function saveState(userInitiated) {
+        function saveState() {
             try {
                 localStorage.setItem('lykonHomepageState', JSON.stringify(state));
                 localStorage.setItem('lykonLastWallpaperIndex', String(currentWallpaperIndex));
             } catch (e) {}
-            if (stateLoadedFromParent || userInitiated) {
-                window.dispatchEvent(new CustomEvent('LykonHome:SaveState', { detail: JSON.stringify(state) }));
-            }
+            window.dispatchEvent(new CustomEvent('LykonHome:SaveState', { detail: JSON.stringify(state) }));
         }
 
         function loadCachedStats() {
@@ -679,6 +830,22 @@
         // ============================================
         // WALLPAPER
         // ============================================
+        function getPhotographicWallpapers() {
+            var all = [];
+            var cats = ['space', 'nature', 'minimal', 'architecture', 'abstract'];
+            for (var i = 0; i < cats.length; i++) {
+                var c = cats[i];
+                if (WALLPAPERS[c]) all = all.concat(WALLPAPERS[c]);
+            }
+            return all.filter(function(url) {
+                return url !== 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&q=80';
+            });
+        }
+
+        function getGradientWallpapers() {
+            return WALLPAPERS['gradients'] || [];
+        }
+
         function getAllWallpapers() {
             var all = [];
             for (var k in WALLPAPERS) {
@@ -688,7 +855,7 @@
         }
 
         function pickRandom(exclude) {
-            var all = getAllWallpapers();
+            var all = getPhotographicWallpapers();
             if (!all.length) return -1;
             if (all.length === 1) return 0;
             var idx;
@@ -703,7 +870,7 @@
             var inact = activeBgLayer === 1 ? l2 : l1;
             var img = new Image();
             img.onload = function() {
-                inact.style.backgroundImage = 'url(' + url + ')';
+                inact.style.backgroundImage = 'url("' + url + '")';
                 inact.classList.remove('inactive');
                 inact.classList.add('active');
                 act.classList.remove('active');
@@ -715,10 +882,23 @@
 
         function cycleWallpaper() {
             if (state.wallpaperMode === 'custom') return;
-            var all = getAllWallpapers();
+            if (state.wallpaperMode === 'gradient') {
+                var grads = getGradientWallpapers();
+                if (!grads.length) return;
+                var last = 0;
+                try { var r = localStorage.getItem('lykonLastGradientIndex'); if (r !== null) last = parseInt(r, 10); } catch (e) {}
+                var idx = last;
+                if (grads.length > 1) {
+                    do { idx = Math.floor(Math.random() * grads.length); } while (idx === last);
+                }
+                setWallpaper(grads[idx]);
+                try { localStorage.setItem('lykonLastGradientIndex', String(idx)); } catch (e) {}
+                return;
+            }
+            var all = getPhotographicWallpapers();
             if (!all.length) return;
             currentWallpaperIndex = pickRandom(currentWallpaperIndex);
-            if (currentWallpaperIndex >= 0) { setWallpaper(all[currentWallpaperIndex]); saveState(); }
+            if (currentWallpaperIndex >= 0) { setWallpaper(all[currentWallpaperIndex]); }
         }
 
         function startAutoChange() {
@@ -731,19 +911,56 @@
         }
 
         function initWallpaper() {
-            if (state.wallpaperMode === 'custom') {
-                var cust = null;
-                try {
-                    cust = localStorage.getItem('lykonCustomWallpaper');
-                } catch (e) {}
-                if (cust) {
-                    document.getElementById('bg-layer-1').style.backgroundImage = 'url(' + cust + ')';
-                    saveState();
-                    startAutoChange();
-                    return;
-                }
+            var l1 = document.getElementById('bg-layer-1');
+            var l2 = document.getElementById('bg-layer-2');
+            l1.classList.remove('inactive');
+            l1.classList.add('active');
+            l2.classList.remove('active');
+            l2.classList.add('inactive');
+            l2.style.backgroundImage = '';
+            activeBgLayer = 1;
+
+            if (!state.autoChange) {
+                l1.style.backgroundImage = 'none';
+                l2.style.backgroundImage = 'none';
+                startAutoChange();
+                return;
             }
-            var all = getAllWallpapers();
+
+            if (state.wallpaperMode === 'custom') {
+                var cust = state.customWallpaper;
+                if (typeof cust === 'string' && cust.startsWith('data:')) {
+                    l1.style.backgroundImage = 'url("' + cust + '")';
+                } else {
+                    var localCust = null;
+                    try { localCust = localStorage.getItem('lykonCustomWallpaper'); } catch (e) {}
+                    if (localCust) {
+                        l1.style.backgroundImage = 'url("' + localCust + '")';
+                    }
+                }
+                startAutoChange();
+                return;
+            }
+            if (state.wallpaperMode === 'gradient') {
+                var grads = getGradientWallpapers();
+                if (grads.length) {
+                    var last = -1;
+                    try { var r = localStorage.getItem('lykonLastGradientIndex'); if (r !== null) last = parseInt(r, 10); } catch (e) {}
+                    var idx = 0;
+                    if (last >= 0 && last < grads.length) {
+                        idx = last;
+                    } else {
+                        var defaultUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&q=80';
+                        var dIdx = grads.indexOf(defaultUrl);
+                        if (dIdx >= 0) idx = dIdx;
+                    }
+                    l1.style.backgroundImage = 'url("' + grads[idx] + '")';
+                    try { localStorage.setItem('lykonLastGradientIndex', String(idx)); } catch (e) {}
+                }
+                startAutoChange();
+                return;
+            }
+            var all = getPhotographicWallpapers();
             if (!all.length) return;
             var last = -1;
             try { var r = localStorage.getItem('lykonLastWallpaperIndex'); if (r !== null) last = parseInt(r, 10); } catch (e) {}
@@ -753,9 +970,8 @@
                 currentWallpaperIndex = Math.floor(Math.random() * all.length);
             }
             if (currentWallpaperIndex >= 0) {
-                document.getElementById('bg-layer-1').style.backgroundImage = 'url(' + all[currentWallpaperIndex] + ')';
+                l1.style.backgroundImage = 'url("' + all[currentWallpaperIndex] + '")';
             }
-            saveState();
             startAutoChange();
         }
 
@@ -1028,9 +1244,7 @@
                 
                 syncUI();
                 startAutoChange();
-                if (modeChanged) {
-                    initWallpaper();
-                }
+                initWallpaper();
                 refreshShortcutsUI();
             }
 
@@ -1076,13 +1290,13 @@
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(function(btn) {
                 if (btn.id === 'tab-btn-' + tabId) {
-                    btn.classList.add('active', 'text-white', 'bg-white/5', 'font-semibold');
-                    btn.classList.remove('text-white/60', 'hover:bg-white/5');
+                    btn.classList.add('active', 'text-white', 'bg-[#007AFF]');
+                    btn.classList.remove('text-white/70', 'hover:bg-white/5');
                     var ind = btn.querySelector('.active-indicator');
                     if (ind) ind.classList.remove('hidden');
                 } else {
-                    btn.classList.remove('active', 'text-white', 'bg-white/5', 'font-semibold');
-                    btn.classList.add('text-white/60', 'hover:bg-white/5');
+                    btn.classList.remove('active', 'text-white', 'bg-[#007AFF]');
+                    btn.classList.add('text-white/70', 'hover:bg-white/5');
                     var ind = btn.querySelector('.active-indicator');
                     if (ind) ind.classList.add('hidden');
                 }
@@ -1121,6 +1335,7 @@
             document.getElementById('show-shortcuts-toggle').checked = state.showShortcuts;
 
             var ic = document.getElementById('interval-container');
+            ic.style.display = 'none';
             ic.style.opacity = state.autoChange ? '1' : '0.4';
             ic.style.pointerEvents = state.autoChange ? 'auto' : 'none';
 
@@ -1137,6 +1352,10 @@
             
             var packCheck = document.getElementById('pack-wallpaper-check');
             var packCard = document.getElementById('pack-wallpaper-btn');
+
+            var gradientCard = document.getElementById('gradient-wallpaper-btn');
+            var gradientCheck = document.getElementById('gradient-wallpaper-check');
+            var gradientPreview = document.getElementById('gradient-wallpaper-preview');
             
             var localCust = null;
             try {
@@ -1144,7 +1363,7 @@
             } catch (e) {}
             
             if (localCust) {
-                customPreview.style.backgroundImage = 'url(' + localCust + ')';
+                customPreview.style.backgroundImage = 'url("' + localCust + '")';
                 customPreview.classList.remove('hidden');
                 customOverlay.classList.remove('hidden');
                 customEmpty.classList.add('hidden');
@@ -1155,23 +1374,52 @@
                 customEmpty.classList.remove('hidden');
                 if (customChangeBtn) customChangeBtn.classList.add('hidden');
             }
+
+            var grads = getGradientWallpapers();
+            if (grads.length) {
+                var lastGrad = 0;
+                try { var r = localStorage.getItem('lykonLastGradientIndex'); if (r !== null) lastGrad = parseInt(r, 10); } catch (e) {}
+                if (lastGrad >= 0 && lastGrad < grads.length) {
+                    gradientPreview.style.backgroundImage = 'url("' + grads[lastGrad] + '")';
+                }
+            }
             
             if (state.wallpaperMode === 'custom') {
                 customCheck.classList.remove('hidden');
-                customCard.classList.add('border-purple-500/50', 'bg-purple-500/10');
+                customCard.classList.add('border-[#007AFF]/50', 'bg-[#007AFF]/10');
                 customCard.classList.remove('border-white/10', 'bg-white/5');
                 
                 packCheck.classList.add('hidden');
-                packCard.classList.remove('border-purple-500/50', 'bg-purple-500/10');
+                packCard.classList.remove('border-[#007AFF]/50', 'bg-[#007AFF]/10');
                 packCard.classList.add('border-white/10', 'bg-white/5');
-            } else {
+
+                gradientCheck.classList.add('hidden');
+                gradientCard.classList.remove('border-[#007AFF]/50', 'bg-[#007AFF]/10');
+                gradientCard.classList.add('border-white/10', 'bg-white/5');
+            } else if (state.wallpaperMode === 'pack') {
                 customCheck.classList.add('hidden');
-                customCard.classList.remove('border-purple-500/50', 'bg-purple-500/10');
+                customCard.classList.remove('border-[#007AFF]/50', 'bg-[#007AFF]/10');
                 customCard.classList.add('border-white/10', 'bg-white/5');
                 
                 packCheck.classList.remove('hidden');
-                packCard.classList.add('border-purple-500/50', 'bg-purple-500/10');
+                packCard.classList.add('border-[#007AFF]/50', 'bg-[#007AFF]/10');
                 packCard.classList.remove('border-white/10', 'bg-white/5');
+
+                gradientCheck.classList.add('hidden');
+                gradientCard.classList.remove('border-[#007AFF]/50', 'bg-[#007AFF]/10');
+                gradientCard.classList.add('border-white/10', 'bg-white/5');
+            } else if (state.wallpaperMode === 'gradient') {
+                customCheck.classList.add('hidden');
+                customCard.classList.remove('border-[#007AFF]/50', 'bg-[#007AFF]/10');
+                customCard.classList.add('border-white/10', 'bg-white/5');
+                
+                packCheck.classList.add('hidden');
+                packCard.classList.remove('border-[#007AFF]/50', 'bg-[#007AFF]/10');
+                packCard.classList.add('border-white/10', 'bg-white/5');
+
+                gradientCheck.classList.remove('hidden');
+                gradientCard.classList.add('border-[#007AFF]/50', 'bg-[#007AFF]/10');
+                gradientCard.classList.remove('border-white/10', 'bg-white/5');
             }
         }
 
@@ -1187,6 +1435,8 @@
 
             document.getElementById('pack-wallpaper-btn').addEventListener('click', function() {
                 state.wallpaperMode = 'pack';
+                state.autoChange = true;
+                try { localStorage.removeItem('lykonLastWallpaperIndex'); } catch (e) {}
                 saveState();
                 syncUI();
                 initWallpaper();
@@ -1199,12 +1449,31 @@
                 } catch (e) {}
                 if (localCust) {
                     state.wallpaperMode = 'custom';
+                    state.autoChange = true;
                     saveState();
                     syncUI();
                     initWallpaper();
                 } else {
                     document.getElementById('custom-wallpaper-input').click();
                 }
+            });
+
+            document.getElementById('gradient-wallpaper-btn').addEventListener('click', function() {
+                state.autoChange = true;
+                if (state.wallpaperMode !== 'gradient') {
+                    state.wallpaperMode = 'gradient';
+                } else {
+                    var grads = getGradientWallpapers();
+                    if (grads.length) {
+                        var last = 0;
+                        try { var r = localStorage.getItem('lykonLastGradientIndex'); if (r !== null) last = parseInt(r, 10); } catch (e) {}
+                        var nextIdx = (last + 1) % grads.length;
+                        try { localStorage.setItem('lykonLastGradientIndex', String(nextIdx)); } catch (e) {}
+                    }
+                }
+                saveState();
+                syncUI();
+                initWallpaper();
             });
 
             var changeBtn = document.getElementById('custom-wallpaper-change-btn');
@@ -1220,16 +1489,36 @@
                 if (!file) return;
                 var reader = new FileReader();
                 reader.onload = function(evt) {
-                    var dataUrl = evt.target.result;
-                    try {
-                        localStorage.setItem('lykonCustomWallpaper', dataUrl);
-                        state.wallpaperMode = 'custom';
-                        saveState();
-                        syncUI();
-                        initWallpaper();
-                    } catch (err) {
-                        alert('Failed to save wallpaper: image is too large for storage.');
-                    }
+                    var img = new Image();
+                    img.onload = function() {
+                        var canvas = document.createElement('canvas');
+                        var ctx = canvas.getContext('2d');
+                        var maxW = 1920;
+                        var maxH = 1080;
+                        var w = img.width;
+                        var h = img.height;
+                        if (w > maxW || h > maxH) {
+                            var r = Math.min(maxW / w, maxH / h);
+                            w = Math.round(w * r);
+                            h = Math.round(h * r);
+                        }
+                        canvas.width = w;
+                        canvas.height = h;
+                        ctx.drawImage(img, 0, 0, w, h);
+                        var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                        saveCustomWallpaper(dataUrl, function(success) {
+                            if (success) {
+                                state.wallpaperMode = 'custom';
+                                state.autoChange = true;
+                                saveState();
+                                syncUI();
+                                initWallpaper();
+                            } else {
+                                alert('Failed to save wallpaper.');
+                            }
+                        });
+                    };
+                    img.src = evt.target.result;
                 };
                 reader.readAsDataURL(file);
             });
@@ -1244,6 +1533,7 @@
                 state.autoChange = e.target.checked;
                 startAutoChange();
                 syncUI();
+                initWallpaper();
                 saveState();
             });
 
@@ -1291,6 +1581,10 @@
 
             document.getElementById('reset-defaults').addEventListener('click', function() {
                 state = Object.assign({}, DEFAULTS);
+                try {
+                    localStorage.removeItem('lykonLastWallpaperIndex');
+                    localStorage.removeItem('lykonCustomWallpaper');
+                } catch (e) {}
                 loadShortcutsState();
                 initWallpaper();
                 syncUI();

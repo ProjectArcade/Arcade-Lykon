@@ -100,6 +100,7 @@ export class AboutNewTabChild extends RemotePageChild {
                   wallpaperMode: data.wallpaperMode,
                   customShortcuts: data.customShortcuts,
                   deletedShortcuts: data.deletedShortcuts,
+                  customWallpaper: data.customWallpaper ? true : null,
                 });
               } catch (ex) {
                 Cu.reportError(ex);
