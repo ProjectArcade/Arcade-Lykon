@@ -748,6 +748,7 @@
         };
 
         var WALLPAPERS = {};
+        var initDone = false;
 
         function loadWallpapersFromJson(callback) {
             fetch('wallpaper.json')
@@ -762,6 +763,10 @@
                             'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
                             'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1920&q=80',
                             'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80'
+                        ],
+                        gradients: [
+                            'linear-gradient(135deg, #0f172a 0%, #1f2937 50%, #0b1220 100%)',
+                            'linear-gradient(140deg, #111827 0%, #0f172a 45%, #1e293b 100%)'
                         ]
                     };
                     if (callback) callback();
@@ -956,6 +961,8 @@
                     }
                     l1.style.backgroundImage = 'url("' + grads[idx] + '")';
                     try { localStorage.setItem('lykonLastGradientIndex', String(idx)); } catch (e) {}
+                } else {
+                    l1.style.backgroundImage = 'linear-gradient(135deg, #0f172a 0%, #1f2937 50%, #0b1220 100%)';
                 }
                 startAutoChange();
                 return;
@@ -1080,9 +1087,18 @@
         function refreshShortcutsUI() {
             loadShortcutsState();
 
-            // Filter out deleted top sites
+            // Filter out deleted top sites and known unwanted/affiliate trackers
             var filteredBrowserSites = browserTopSites.filter(function(s) {
-                return deletedShortcuts.indexOf(s.url) === -1;
+                if (!s || !s.url) return false;
+                try {
+                    var u = String(s.url).toLowerCase();
+                    // ignore explicitly deleted shortcuts
+                    if (deletedShortcuts.indexOf(s.url) !== -1) return false;
+                    // filter known affiliate/tracker domains or query params
+                    if (u.indexOf('trip.prf.hn') !== -1) return false;
+                    if (u.indexOf('mfadid=adm') !== -1) return false;
+                } catch (e) {}
+                return true;
             });
 
             // Map custom shortcuts
@@ -1610,6 +1626,8 @@
         // INIT
         // ============================================
         function init() {
+            if (initDone) return;
+            initDone = true;
             loadState();
             loadShortcutsState();
             loadWallpapersFromJson(function() {

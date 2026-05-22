@@ -3610,3 +3610,41 @@ pref("browser.contentsharing.newBadge.enabled", true);
 
 // When enabled, Firefox ignores the distribution.ini file if global.id is MozillaOnline.
 pref("distribution.mozillaonline.ignore", false);
+
+// Disable all Firefox/Mozilla updates, telemetry, studies, and data collection
+pref("app.update.enabled", false);
+pref("app.update.auto", false);
+pref("app.update.service.enabled", false);
+pref("app.update.BITS.enabled", false);
+pref("app.update.langpack.enabled", false);
+pref("app.update.background.allowUpdatesForUnelevatedInstallations", false);
+
+pref("toolkit.telemetry.enabled", false);
+pref("toolkit.telemetry.unified", false);
+pref("toolkit.telemetry.archive.enabled", false);
+pref("toolkit.telemetry.server", "");
+pref("toolkit.telemetry.shutdownPingSender.enabled", false);
+pref("toolkit.telemetry.firstShutdownPing.enabled", false);
+pref("toolkit.telemetry.newProfilePing.enabled", false);
+pref("toolkit.telemetry.updatePing.enabled", false);
+pref("toolkit.telemetry.bhrPing.enabled", false);
+pref("toolkit.telemetry.dap_enabled", false);
+
+pref("datareporting.policy.dataSubmissionEnabled", false);
+pref("datareporting.healthreport.uploadEnabled", false);
+pref("datareporting.usage.uploadEnabled", false);
+
+pref("toolkit.crashreporter.enabled", false);
+pref("app.update.crashreporter.enabled", false);
+
+pref("app.normandy.enabled", false);
+pref("app.normandy.api_url", "");
+pref("app.shield.optoutstudies.enabled", false);
+pref("experiments.supported", false);
+pref("experiments.enabled", false);
+pref("experiments.activeExperiment", false);
+
+pref("browser.ping-centre.telemetry", false);
+pref("browser.newtabpage.activity-stream.telemetry", false);
+pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
+

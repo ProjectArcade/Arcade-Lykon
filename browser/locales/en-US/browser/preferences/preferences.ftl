@@ -739,7 +739,7 @@ update-application-updates-managed-by-os =
 
 # Variables:
 # $version (string) - Firefox version
-update-application-version = Version { $version } <a data-l10n-name="learn-more">What’s new</a>
+update-application-version = 1.0.0-alpha (2026-22-03) <a data-l10n-name="learn-more">What’s new</a>
 
 update-history-2 =
     .label = Show update history

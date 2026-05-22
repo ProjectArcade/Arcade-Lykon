@@ -90,24 +90,24 @@ bottom-links-privacy = Privacy Notice
 # Variables:
 #   $version (String): version of Firefox, e.g. 66.0.1
 #   $bits (Number): bits of the architecture (32 or 64)
-aboutDialog-version = { $version } ({ $bits }-bit)
+aboutDialog-version = 1.0.0-alpha (2026-22-03)
 
 # Example of resulting string: 66.0a1 (2019-01-16) (64-bit)
 # Variables:
 #   $version (String): version of Firefox for Nightly builds, e.g. 66.0a1
 #   $isodate (String): date in ISO format, e.g. 2019-01-16
 #   $bits (Number): bits of the architecture (32 or 64)
-aboutDialog-version-nightly = { $version } ({ $isodate }) ({ $bits }-bit)
+aboutDialog-version-nightly = 1.0.0-alpha (2026-22-03)
 
 # Example of resulting string: 131.0a1 (aarch64)
 # Variables:
 #   $version (String): version of Firefox, e.g. 66.0.1
 #   $arch (String): name of the architecture (arm, aarch64, etc.)
-aboutdialog-version-arch = { $version } ({ $arch })
+aboutdialog-version-arch = 1.0.0-alpha (2026-22-03)
 
 # Example of resulting string: 131.0a1 (2024-08-27) (aarch64)
 # Variables:
 #   $version (String): version of Firefox for Nightly builds, e.g. 66.0a1
 #   $isodate (String): date in ISO format, e.g. 2019-01-16
 #   $arch (String): name of the architecture (arm, aarch64, etc.)
-aboutdialog-version-arch-nightly = { $version } ({ $isodate }) ({ $arch })
+aboutdialog-version-arch-nightly = 1.0.0-alpha (2026-22-03)

@@ -2210,3 +2210,86 @@
 .lko-btn-text {
   letter-spacing: 0.5px;
 }
+
+/* Pulsing active dot in optimizer icon wrap */
+.lko-icon-wrap {
+  position: relative;
+}
+
+.lko-pulse-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  border: 1.5px solid var(--panel-background);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.lko-pulse-dot.active {
+  opacity: 1;
+  transform: scale(1);
+  animation: lko-pulse 2s infinite ease-in-out;
+}
+
+@keyframes lko-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* Custom premium dropdown select */
+.lko-select {
+  appearance: none !important;
+  -moz-appearance: none !important;
+  background: rgba(30, 41, 59, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  padding: 6px 24px 6px 12px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: all 0.2s ease !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 10px !important;
+}
+
+.lko-select:hover {
+  border-color: rgba(99, 102, 241, 0.4) !important;
+  background-color: rgba(30, 41, 59, 0.7) !important;
+}
+
+.lko-select:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+}
+
+.lko-select option {
+  background-color: #0b0f19 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+}
+
+/* Saved memory highlight */
+.lko-saved-highlight {
+  color: #10b981 !important;
+  background: linear-gradient(135deg, #10b981, #34d399) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: 0 2px 8px rgba(16, 185, 129, 0.15) !important;
+}

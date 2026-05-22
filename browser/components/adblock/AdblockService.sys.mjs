@@ -430,6 +430,74 @@ class _AdblockService {
     }
   }
 
+  _getEntityForHost(hostname) {
+    if (!hostname || typeof hostname !== "string") {
+      return null;
+    }
+    const entities = [
+      [
+        "google.com",
+        "gstatic.com",
+        "googleapis.com",
+        "googleusercontent.com",
+        "youtube.com",
+        "ytimg.com",
+        "ggpht.com",
+        "googlevideo.com",
+        "gvt1.com",
+        "gvt2.com",
+        "google-analytics.com",
+        "googletagmanager.com",
+        "googleadservices.com",
+        "googlesyndication.com",
+      ],
+      [
+        "microsoft.com",
+        "microsoftonline.com",
+        "live.com",
+        "outlook.com",
+        "office.com",
+        "office365.com",
+        "sharepoint.com",
+        "azure.com",
+        "msn.com",
+        "bing.com",
+        "msecnd.net",
+        "msftauth.net",
+        "msauth.net",
+      ],
+      [
+        "facebook.com",
+        "fbcdn.net",
+        "facebook.net",
+        "fb.com",
+        "instagram.com",
+        "cdninstagram.com",
+      ],
+      ["twitter.com", "x.com", "twimg.com"],
+      ["apple.com", "icloud.com", "mzstatic.com", "cdn-apple.com"],
+      [
+        "amazon.com",
+        "amazonaws.com",
+        "cloudfront.net",
+        "ssl-images-amazon.com",
+      ],
+      ["netflix.com", "nflximg.net", "nflxvideo.net", "nflxext.com"],
+      ["spotify.com", "scdn.co", "spotifycdn.com"],
+      ["discord.com", "discordapp.com", "discord.gg", "discordapp.net"],
+    ];
+    let base = hostname;
+    try {
+      base = Services.eTLD.getBaseDomainFromHost(hostname);
+    } catch (e) {}
+    for (const group of entities) {
+      if (group.some(d => base === d || hostname.endsWith("." + d))) {
+        return group;
+      }
+    }
+    return null;
+  }
+
   _isFirstPartyLegitimate(url, originUrl) {
     if (!originUrl) return false;
     try {
@@ -443,7 +511,19 @@ class _AdblockService {
       try {
         originBase = Services.eTLD.getBaseDomainFromHost(originObj.hostname);
       } catch (e) {}
-      if (urlBase && originBase && urlBase === originBase) {
+
+      const sameEntity = (() => {
+        if (urlBase && originBase && urlBase === originBase) return true;
+        const originEntity = this._getEntityForHost(originObj.hostname);
+        if (originEntity) {
+          return originEntity.some(
+            d => urlBase === d || urlObj.hostname.endsWith("." + d)
+          );
+        }
+        return false;
+      })();
+
+      if (sameEntity) {
         const adKeywords = [
           "ads",
           "ad-",
@@ -476,8 +556,89 @@ class _AdblockService {
     return false;
   }
 
+  _isTrustedSsoOrIdentity(url, originUrl) {
+    if (!url || typeof url !== "string") {
+      url = "";
+    }
+    if (originUrl && typeof originUrl !== "string") {
+      originUrl = "";
+    }
+
+    const ssoDomains = [
+      "login.microsoftonline.com",
+      "login.live.com",
+      "appleid.apple.com",
+      "auth.discord.com",
+      "okta.com",
+      "auth0.com",
+      "clerk.com",
+    ];
+
+    const isSsoHost = hostname => {
+      if (!hostname || typeof hostname !== "string") {
+        return false;
+      }
+      const lower = hostname.toLowerCase();
+      if (ssoDomains.some(d => lower === d || lower.endsWith("." + d))) {
+        return true;
+      }
+      if (
+        lower.startsWith("accounts.google.") ||
+        lower === "accounts.google.com" ||
+        lower.endsWith(".accounts.google.com")
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    try {
+      const isSsoUrl = uStr => {
+        if (!uStr || typeof uStr !== "string") {
+          return false;
+        }
+        let u;
+        try {
+          u = new URL(uStr);
+        } catch (e) {
+          return false;
+        }
+        const host = (u.hostname || "").toLowerCase();
+        if (isSsoHost(host)) {
+          return true;
+        }
+
+        const path = (u.pathname || "").toLowerCase();
+        if (
+          (host.endsWith("github.com") &&
+            (path.startsWith("/login") || path.startsWith("/session"))) ||
+          (host.endsWith("facebook.com") &&
+            (path.includes("/oauth") || path.includes("/login"))) ||
+          (host.endsWith("twitter.com") && path.includes("/oauth")) ||
+          (host.endsWith("x.com") && path.includes("/oauth"))
+        ) {
+          return true;
+        }
+        return false;
+      };
+
+      if (originUrl && isSsoUrl(originUrl)) {
+        return true;
+      }
+      if (url && isSsoUrl(url)) {
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   shouldBlock(url, originUrl, resourceType) {
     if (!this.enabled || !this._initialized) return false;
+
+    if (this._isTrustedSsoOrIdentity(url, originUrl)) {
+      return false;
+    }
+
     if (
       url.includes("generate_204") ||
       url.includes("/api/stats/qoe") ||

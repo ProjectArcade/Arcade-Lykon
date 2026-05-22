@@ -508,6 +508,7 @@
           <html:div class="lko-header-left">
             <html:div class="lko-icon-wrap">
               <html:img class="lko-icon" src="chrome://global/skin/icons/performance.svg" role="presentation"/>
+              <html:div id="lko-status-dot" class="lko-pulse-dot"></html:div>
             </html:div>
             <html:div class="lko-title-container">
               <html:span class="lko-title">Lykon Optimiser</html:span>
@@ -517,15 +518,18 @@
         </html:div>
       </html:div>
 
-      <html:div class="lko-card">
-        <html:div class="lko-card-title">Active Tab RAM</html:div>
-        <html:div class="lko-card-metric" id="lko-active-memory">Calculating...</html:div>
-      </html:div>
-
       <html:div class="lko-stats-grid">
+        <html:div class="lko-stat-card">
+          <html:div class="lko-stat-title">Active Tab RAM</html:div>
+          <html:div class="lko-stat-value" id="lko-active-memory">Calculating...</html:div>
+        </html:div>
         <html:div class="lko-stat-card">
           <html:div class="lko-stat-title">Total Tabs RAM</html:div>
           <html:div class="lko-stat-value" id="lko-total-memory">Calculating...</html:div>
+        </html:div>
+        <html:div class="lko-stat-card">
+          <html:div class="lko-stat-title">Total Saved</html:div>
+          <html:div class="lko-stat-value lko-saved-highlight" id="lko-saved-memory">0 MB</html:div>
         </html:div>
         <html:div class="lko-stat-card">
           <html:div class="lko-stat-title">Optimised Tabs</html:div>
@@ -539,6 +543,18 @@
           <html:div class="lko-toggle-sub">Auto-unload heavy background tabs</html:div>
         </html:div>
         <html:input type="checkbox" id="lykon-optimise-auto-toggle" class="lko-switch-checkbox"/>
+      </html:div>
+
+      <html:div class="lko-toggle-row">
+        <html:div class="lko-toggle-label-container">
+          <html:div class="lko-toggle-label">Optimisation Level</html:div>
+          <html:div class="lko-toggle-sub">Aggressiveness of auto-unloads</html:div>
+        </html:div>
+        <html:select id="lykon-optimise-aggressiveness" class="lko-select">
+          <html:option value="0">Conservative</html:option>
+          <html:option value="1">Balanced</html:option>
+          <html:option value="2">Aggressive</html:option>
+        </html:select>
       </html:div>
 
       <html:button class="lko-action-button" id="lykon-optimise-now-btn">

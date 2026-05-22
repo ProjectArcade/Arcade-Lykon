@@ -61,13 +61,34 @@ export class LykonShieldChild extends JSWindowActorChild {
   handleEvent(event) {
     if (this._destroyed) return;
     if (event.type === "DOMDocElementInserted") {
-      this.init();
+      const doc = event.originalTarget;
+      if (doc && doc.defaultView === this.contentWindow) {
+        this.init();
+      }
     }
   }
 
   init() {
     if (this._destroyed) return;
-    const url = this.document?.location?.href;
+    const doc = this.document;
+    if (
+      !doc ||
+      !doc.documentElement ||
+      doc.defaultView !== this.contentWindow
+    ) {
+      return;
+    }
+    if (doc.defaultView.closed) {
+      return;
+    }
+    if (
+      doc.contentType !== "text/html" &&
+      doc.contentType !== "application/xhtml+xml"
+    ) {
+      return;
+    }
+
+    const url = doc.location?.href;
     if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
       return;
     }
@@ -75,23 +96,137 @@ export class LykonShieldChild extends JSWindowActorChild {
     if (this._initialized) return;
     this._initialized = true;
 
-    this.setupSynchronousHooks(url);
+    if (this._needsPageHooks(url)) {
+      this.setupSynchronousHooks(url);
+    }
 
-    this.initAsync(url).catch(e => {
-      if (!this._isBenignError(e)) {
-        console.error("[LykonShieldChild] Error in initAsync:", e);
-      }
-    });
+    if (this._needsAsyncInit(url)) {
+      this.initAsync(url).catch(e => {
+        if (!this._isBenignError(e)) {
+          console.error("[LykonShieldChild] Error in initAsync:", e);
+        }
+      });
+    }
+  }
+
+  _isYouTubeContent(url) {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      return (
+        hostname === "www.youtube.com" ||
+        hostname === "m.youtube.com" ||
+        hostname === "youtube.com"
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _needsPageHooks(url) {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      const hookDomains = [
+        "hianime.ms",
+        "pornhub.com",
+        "pornhub.org",
+        "klrtspet.net",
+        "xvideos.com",
+        "xnxx.com",
+        "xhamster.com",
+        "spankbang.com",
+        "fmovies.to",
+        "123movies.ai",
+        "putlocker.vip",
+        "soap2day.to",
+        "gomovies.sx",
+        "solarmovie.pe",
+        "1337x.to",
+        "nyaa.si",
+        "rarbg.to",
+        "yts.mx",
+        "piratebay.org",
+        "thepiratebay.org",
+      ];
+      return hookDomains.some(
+        domain => hostname === domain || hostname.endsWith("." + domain)
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  _needsAsyncInit(url) {
+    if (this._isYouTubeContent(url)) {
+      return true;
+    }
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      const skipDomains = [
+        [/google\.[a-z.]{2,6}$/, true],
+        [/gstatic\.com$/, true],
+        [/googleapis\.com$/, true],
+        [/googleusercontent\.com$/, true],
+        [/microsoft\.com$/, true],
+        [/microsoftonline\.com$/, true],
+        [/live\.com$/, true],
+        [/outlook\.com$/, true],
+        [/office\.com$/, true],
+        [/office365\.com$/, true],
+        [/apple\.com$/, true],
+        [/icloud\.com$/, true],
+        [/github\.com$/, true],
+        [/githubusercontent\.com$/, true],
+        [/amazon\.[a-z.]{2,6}$/, true],
+        [/amazonaws\.com$/, true],
+        [/facebook\.com$/, true],
+        [/instagram\.com$/, true],
+        [/twitter\.com$/, true],
+        [/x\.com$/, true],
+        [/discord\.com$/, true],
+        [/netflix\.com$/, true],
+        [/spotify\.com$/, true],
+        [/wikipedia\.org$/, true],
+        [/youtube\.com$/, true],
+        [/ytimg\.com$/, true],
+        [/cloudflare\.com$/, true],
+        [/mozilla\.(org|com)$/, true],
+      ];
+      return !skipDomains.some(([regex]) => regex.test(hostname));
+    } catch (e) {
+      return false;
+    }
   }
 
   setupSynchronousHooks(url) {
     try {
       const doc = this.document;
-      if (!doc || !doc.documentElement) {
+      if (
+        !doc ||
+        !doc.documentElement ||
+        doc.defaultView !== this.contentWindow
+      ) {
+        return;
+      }
+      const win = this.contentWindow;
+      if (!win || win.closed) {
         return;
       }
 
-      const scriptText = `(function() {
+      let enablePropertyHooks = false;
+      try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        const antiAdblockDomains = [
+          "hianime.ms",
+          "pornhub.com",
+          "pornhub.org",
+          "klrtspet.net",
+        ];
+        enablePropertyHooks = antiAdblockDomains.some(
+          domain => hostname === domain || hostname.endsWith("." + domain)
+        );
+      } catch (e) {}
+
+      const scriptText = `(function(enablePropertyHooks) {
         const checkAndBlockUrl = function(urlStr) {
           try {
             if (!urlStr || urlStr === "" || urlStr === "about:blank") {
@@ -298,65 +433,67 @@ export class LykonShieldChild extends JSWindowActorChild {
           }
         } catch (e) {}
 
-        try {
-          const originalDefineProperty = Object.defineProperty;
-          if (originalDefineProperty) {
-            Object.defineProperty = function(obj, prop, descriptor) {
-              try {
-                if (obj === window || prop === "VueComponents") {
-                  if (descriptor && typeof descriptor === "object") {
-                    try {
-                      descriptor.configurable = true;
-                    } catch (e) {
-                      descriptor = Object.assign({}, descriptor, { configurable: true });
-                    }
-                  }
-                }
-              } catch (e) {}
-              return originalDefineProperty.call(Object, obj, prop, descriptor);
-            };
-          }
-
-          const originalDefineProperties = Object.defineProperties;
-          if (originalDefineProperties) {
-            Object.defineProperties = function(obj, props) {
-              try {
-                if (props && typeof props === "object") {
-                  for (const key of Object.keys(props)) {
-                    const desc = props[key];
-                    if (desc && typeof desc === "object" && (obj === window || key === "VueComponents")) {
+        if (enablePropertyHooks) {
+          try {
+            const originalDefineProperty = Object.defineProperty;
+            if (originalDefineProperty) {
+              Object.defineProperty = function(obj, prop, descriptor) {
+                try {
+                  if (obj === window || prop === "VueComponents") {
+                    if (descriptor && typeof descriptor === "object") {
                       try {
-                        desc.configurable = true;
+                        descriptor.configurable = true;
                       } catch (e) {
-                        props[key] = Object.assign({}, desc, { configurable: true });
+                        descriptor = Object.assign({}, descriptor, { configurable: true });
                       }
                     }
                   }
-                }
-              } catch (e) {}
-              return originalDefineProperties.call(Object, obj, props);
-            };
-          }
+                } catch (e) {}
+                return originalDefineProperty.call(Object, obj, prop, descriptor);
+              };
+            }
 
-          const originalReflectDefineProperty = Reflect?.defineProperty;
-          if (originalReflectDefineProperty) {
-            Reflect.defineProperty = function(obj, prop, descriptor) {
-              try {
-                if (obj === window || prop === "VueComponents") {
-                  if (descriptor && typeof descriptor === "object") {
-                    try {
-                      descriptor.configurable = true;
-                    } catch (e) {
-                      descriptor = Object.assign({}, descriptor, { configurable: true });
+            const originalDefineProperties = Object.defineProperties;
+            if (originalDefineProperties) {
+              Object.defineProperties = function(obj, props) {
+                try {
+                  if (props && typeof props === "object") {
+                    for (const key of Object.keys(props)) {
+                      const desc = props[key];
+                      if (desc && typeof desc === "object" && (obj === window || key === "VueComponents")) {
+                        try {
+                          desc.configurable = true;
+                        } catch (e) {
+                          props[key] = Object.assign({}, desc, { configurable: true });
+                        }
+                      }
                     }
                   }
-                }
-              } catch (e) {}
-              return originalReflectDefineProperty.call(Reflect, obj, prop, descriptor);
-            };
-          }
-        } catch (e) {}
-      })();`;
+                } catch (e) {}
+                return originalDefineProperties.call(Object, obj, props);
+              };
+            }
+
+            const originalReflectDefineProperty = Reflect?.defineProperty;
+            if (originalReflectDefineProperty) {
+              Reflect.defineProperty = function(obj, prop, descriptor) {
+                try {
+                  if (obj === window || prop === "VueComponents") {
+                    if (descriptor && typeof descriptor === "object") {
+                      try {
+                        descriptor.configurable = true;
+                      } catch (e) {
+                        descriptor = Object.assign({}, descriptor, { configurable: true });
+                      }
+                    }
+                  }
+                } catch (e) {}
+                return originalReflectDefineProperty.call(Reflect, obj, prop, descriptor);
+              };
+            }
+          } catch (e) {}
+        }
+      })(${enablePropertyHooks});`;
 
       const script = doc.createElementNS(
         "http://www.w3.org/1999/xhtml",
@@ -373,9 +510,10 @@ export class LykonShieldChild extends JSWindowActorChild {
   async initAsync(url) {
     try {
       const isSystemDark = await this.sendQuery("isSystemDarkTheme");
-      if (this._destroyed) return;
+      if (this._destroyed || !this.contentWindow || this.contentWindow.closed)
+        return;
       const win = this.contentWindow;
-      if (win && win.matchMedia) {
+      if (win && win.matchMedia && !this._isYouTubeContent(url)) {
         const originalMatchMedia = win.matchMedia;
         win.matchMedia = Cu.exportFunction(function (query) {
           const mql = originalMatchMedia.call(win, query);
@@ -427,7 +565,8 @@ export class LykonShieldChild extends JSWindowActorChild {
       }
     }
 
-    if (this._destroyed) return;
+    if (this._destroyed || !this.contentWindow || this.contentWindow.closed)
+      return;
     if (!isEnabled) {
       console.log(
         `[LykonShieldChild] Shields are disabled for ${url}. Skipping cosmetic injection.`
@@ -435,10 +574,11 @@ export class LykonShieldChild extends JSWindowActorChild {
       return;
     }
 
-    if (this._destroyed) return;
+    if (this._destroyed || !this.contentWindow || this.contentWindow.closed)
+      return;
 
     if (
-      url.includes("youtube.com") &&
+      this._isYouTubeContent(url) &&
       !url.includes("live_chat") &&
       !url.includes("live_chat_replay")
     ) {
@@ -450,7 +590,8 @@ export class LykonShieldChild extends JSWindowActorChild {
       this._cosmeticResources = await this.sendQuery("getCosmeticResources", {
         url,
       });
-      if (this._destroyed) return;
+      if (this._destroyed || !this.contentWindow || this.contentWindow.closed)
+        return;
       if (this._cosmeticResources) {
         this.applyCosmeticResources(this._cosmeticResources);
       }
@@ -460,9 +601,10 @@ export class LykonShieldChild extends JSWindowActorChild {
       }
     }
 
-    if (this._destroyed) return;
+    if (this._destroyed || !this.contentWindow || this.contentWindow.closed)
+      return;
 
-    if (!url.includes("youtube.com")) {
+    if (!this._isYouTubeContent(url)) {
       this.startAdvancedCosmeticObserver();
     }
   }
@@ -473,6 +615,9 @@ export class LykonShieldChild extends JSWindowActorChild {
     }
 
     const win = this.contentWindow;
+    if (!win || win.closed) {
+      return;
+    }
 
     const adStyle = this.document.createElement("style");
     adStyle.id = "lykon-yt-ad-css";
@@ -990,6 +1135,10 @@ export class LykonShieldChild extends JSWindowActorChild {
 
   applyCosmeticResources(resources) {
     if (this._destroyed || !resources) return;
+    const doc = this.document;
+    if (!doc || !doc.documentElement) return;
+    const win = this.contentWindow;
+    if (!win || win.closed) return;
 
     if (resources.hide_selectors && resources.hide_selectors.length > 0) {
       this.injectStyle(resources.hide_selectors.join(",\n"), "site-specific");
@@ -1216,7 +1365,10 @@ export class LykonShieldChild extends JSWindowActorChild {
   }
 
   applyHardcodedDimensionRules() {
-    if (this._destroyed || !this.document) return;
+    if (this._destroyed || !this.document || !this.document.documentElement)
+      return;
+    const win = this.contentWindow;
+    if (!win || win.closed) return;
     try {
       const AD_DIMENSIONS = [
         { w: 300, h: 250 },
