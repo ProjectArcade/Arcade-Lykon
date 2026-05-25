@@ -561,6 +561,12 @@ CrashManager.prototype = Object.freeze({
 
   async sendGeneralCrashTelemetry(processType, crashType, id, date, metadata) {
     try {
+      let token =
+        Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
+      if (!token) {
+        return;
+      }
+
       let os = "Unknown OS";
       let buildID = "Unknown BuildID";
       let arch = "Unknown Arch";
@@ -640,7 +646,7 @@ CrashManager.prototype = Object.freeze({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer xaat-51a1cd68-ddd9-4459-8dec-47937a3adb04",
+          Authorization: "Bearer " + token,
         },
         body: JSON.stringify([eventData]),
       });

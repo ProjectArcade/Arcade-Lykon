@@ -755,6 +755,12 @@ export var TabCrashHandler = {
 
   async sendTabCrashTelemetry(browser, childID, restartRequired) {
     try {
+      let token =
+        Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
+      if (!token) {
+        return;
+      }
+
       let url = "Unknown URL";
       try {
         if (browser.currentURI) {
@@ -861,7 +867,7 @@ export var TabCrashHandler = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: "Bearer xaat-51a1cd68-ddd9-4459-8dec-47937a3adb04",
+          Authorization: "Bearer " + token,
         },
         body: JSON.stringify([eventData]),
       });
