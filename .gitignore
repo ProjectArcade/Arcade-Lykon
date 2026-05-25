@@ -81,6 +81,7 @@ testing/web-platform/tests/tools/third_party/pywebsocket3/build
 /.clang_complete
 /machrc
 /.machrc
+/.env
 
 # mach manifest skip-fails cache
 /.skip_fails_cache

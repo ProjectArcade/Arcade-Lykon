@@ -112,6 +112,7 @@ BROWSER_CHROME_MANIFESTS += [
 XPCSHELL_TESTS_MANIFESTS += ["test/unit/xpcshell.toml"]
 
 EXTRA_JS_MODULES += [
+    "!TelemetryConfig.sys.mjs",
     "AboutNewTab.sys.mjs",
     "BrowserDOMWindow.sys.mjs",
     "BrowserUIUtils.sys.mjs",
@@ -146,6 +147,10 @@ EXTRA_JS_MODULES += [
     "webrtcUI.sys.mjs",
     "ZoomUI.sys.mjs",
 ]
+
+GENERATED_FILES += ["TelemetryConfig.sys.mjs"]
+TelemetryConfig = GENERATED_FILES["TelemetryConfig.sys.mjs"]
+TelemetryConfig.script = "generate_telemetry_config.py"
 
 MOZ_SRC_FILES += [
     "CanvasPermissionPromptHelper.sys.mjs",

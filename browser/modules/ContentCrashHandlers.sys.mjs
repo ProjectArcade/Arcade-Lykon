@@ -758,6 +758,58 @@ export var TabCrashHandler = {
       let token =
         Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
       if (!token) {
+        try {
+          let { TelemetryConfig } = ChromeUtils.importESModule(
+            "resource:///modules/TelemetryConfig.sys.mjs"
+          );
+          if (TelemetryConfig && TelemetryConfig.token) {
+            token = TelemetryConfig.token;
+          }
+        } catch (e) {}
+      }
+      if (!token) {
+        try {
+          let dirs = [];
+          try {
+            dirs.push(Services.dirsvc.get("CurWorkD", Ci.nsIFile).path);
+          } catch (e) {}
+          try {
+            dirs.push(Services.dirsvc.get("GreD", Ci.nsIFile).path);
+          } catch (e) {}
+          for (let dir of dirs) {
+            let envPath = PathUtils.join(dir, ".env");
+            if (await IOUtils.exists(envPath)) {
+              let content = await IOUtils.readUTF8(envPath);
+              let lines = content.split(/\r?\n/);
+              for (let line of lines) {
+                line = line.trim();
+                if (!line || line.startsWith("#")) {
+                  continue;
+                }
+                let parts = line.split("=");
+                if (parts.length >= 2) {
+                  let key = parts[0].trim();
+                  let value = parts.slice(1).join("=").trim();
+                  if (
+                    (value.startsWith('"') && value.endsWith('"')) ||
+                    (value.startsWith("'") && value.endsWith("'"))
+                  ) {
+                    value = value.slice(1, -1);
+                  }
+                  if (key === "AXIOM_TOKEN" || key === "AXIOM_API_KEY") {
+                    token = value;
+                    break;
+                  }
+                }
+              }
+            }
+            if (token) {
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+      if (!token) {
         return;
       }
 
