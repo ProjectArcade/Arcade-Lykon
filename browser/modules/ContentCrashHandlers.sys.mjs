@@ -246,6 +246,8 @@ export var TabCrashHandler = {
 
     let childID = browser.frameLoader.childID;
 
+    this.sendTabCrashTelemetry(browser, childID, restartRequired);
+
     let browserQueue = this.crashedBrowserQueues.get(childID);
     if (!browserQueue) {
       browserQueue = [];
@@ -284,6 +286,12 @@ export var TabCrashHandler = {
    *        Whether or not a browser restart is required to recover.
    */
   onBackgroundBrowserCrash(browser, restartRequired) {
+    let childID = browser.frameLoader ? browser.frameLoader.childID : null;
+    if (!childID) {
+      childID = this.browserMap.get(browser);
+    }
+    this.sendTabCrashTelemetry(browser, childID, restartRequired);
+
     if (restartRequired) {
       this.restartRequiredBrowsers.add(browser);
     }
@@ -743,6 +751,123 @@ export var TabCrashHandler = {
    */
   get queuedCrashedBrowsers() {
     return this.crashedBrowserQueues.size;
+  },
+
+  async sendTabCrashTelemetry(browser, childID, restartRequired) {
+    try {
+      let url = "Unknown URL";
+      try {
+        if (browser.currentURI) {
+          url = browser.currentURI.spec;
+        } else if (browser.docShell && browser.docShell.currentURI) {
+          url = browser.docShell.currentURI.spec;
+        }
+      } catch (e) {}
+
+      let title = "Unknown Title";
+      try {
+        if (browser.contentTitle) {
+          title = browser.contentTitle;
+        } else if (browser.hasAttribute("crashedPageTitle")) {
+          title = browser.getAttribute("crashedPageTitle");
+        }
+      } catch (e) {}
+
+      let dumpID = null;
+      try {
+        if (childID) {
+          dumpID = this.childMap.get(childID) || null;
+        }
+      } catch (e) {}
+
+      let os = "Unknown OS";
+      let version = "Unknown Version";
+      let buildID = "Unknown BuildID";
+      let arch = "Unknown Arch";
+
+      try {
+        if (Services.appinfo) {
+          os = Services.appinfo.OS || "Unknown OS";
+          version = Services.appinfo.version || "Unknown Version";
+          buildID = Services.appinfo.appBuildID || "Unknown BuildID";
+          arch = Services.appinfo.XPCOMABI || "Unknown Arch";
+        }
+      } catch (e) {}
+
+      let logs = [];
+      try {
+        let rawMessages = Services.console.getMessageArray() || [];
+        let limit = 500;
+        let start = Math.max(0, rawMessages.length - limit);
+        for (let i = start; i < rawMessages.length; i++) {
+          let msg = rawMessages[i];
+          if (!msg) {
+            continue;
+          }
+          let logObj = {
+            message: msg.message || String(msg),
+            timeStamp: msg.timeStamp,
+          };
+          if (msg instanceof Ci.nsIScriptError) {
+            logObj.errorMessage = msg.errorMessage;
+            logObj.sourceName = msg.sourceName;
+            logObj.lineNumber = msg.lineNumber;
+            logObj.columnNumber = msg.columnNumber;
+            logObj.category = msg.category;
+            logObj.logLevel = msg.logLevel;
+          }
+          logs.push(logObj);
+        }
+      } catch (e) {}
+
+      let lykonVersion = "Unknown";
+      try {
+        let workDir = Services.dirsvc.get("CurWorkD", Ci.nsIFile).path;
+        let versionPath = PathUtils.join(
+          workDir,
+          "browser",
+          "config",
+          "version.txt"
+        );
+        let content = await IOUtils.readUTF8(versionPath);
+        lykonVersion = content.trim();
+      } catch (e) {
+        lykonVersion = Services.appinfo?.version || "1.0.0";
+      }
+
+      let eventData = {
+        timestamp: new Date().toISOString(),
+        event_type: "tab_crash",
+        url,
+        title,
+        child_id: childID,
+        dump_id: dumpID,
+        os,
+        version,
+        build_id: buildID,
+        architecture: arch,
+        restart_required: restartRequired,
+        logs,
+        lykon_version: lykonVersion,
+        platform: AppConstants.platform,
+        process: "content",
+        type: "crash",
+        is_top_frame: true,
+        error_code: null,
+        is_oom: null,
+      };
+
+      await fetch("https://api.axiom.co/v1/datasets/lykon-crashes/ingest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer xaat-51a1cd68-ddd9-4459-8dec-47937a3adb04",
+        },
+        body: JSON.stringify([eventData]),
+      });
+    } catch (e) {
+      console.error(e);
+    }
   },
 };
 

@@ -536,6 +536,14 @@ CrashManager.prototype = Object.freeze({
         this._sendCrashPing(store, id, "crash", processType, date, metadata);
       }
 
+      this.sendGeneralCrashTelemetry(
+        processType,
+        crashType,
+        id,
+        date,
+        metadata
+      );
+
       if (needSave) {
         await store.save();
       }
@@ -549,6 +557,96 @@ CrashManager.prototype = Object.freeze({
     })();
 
     return promise;
+  },
+
+  async sendGeneralCrashTelemetry(processType, crashType, id, date, metadata) {
+    try {
+      let os = "Unknown OS";
+      let buildID = "Unknown BuildID";
+      let arch = "Unknown Arch";
+      try {
+        if (Services.appinfo) {
+          os = Services.appinfo.OS || "Unknown OS";
+          buildID = Services.appinfo.appBuildID || "Unknown BuildID";
+          arch = Services.appinfo.XPCOMABI || "Unknown Arch";
+        }
+      } catch (e) {}
+
+      let logs = [];
+      try {
+        let rawMessages = Services.console.getMessageArray() || [];
+        let limit = 100;
+        let start = Math.max(0, rawMessages.length - limit);
+        for (let i = start; i < rawMessages.length; i++) {
+          let msg = rawMessages[i];
+          if (!msg) {
+            continue;
+          }
+          let logObj = {
+            message: msg.message || String(msg),
+            timeStamp: msg.timeStamp,
+          };
+          if (msg instanceof Ci.nsIScriptError) {
+            logObj.errorMessage = msg.errorMessage;
+            logObj.sourceName = msg.sourceName;
+            logObj.lineNumber = msg.lineNumber;
+            logObj.columnNumber = msg.columnNumber;
+            logObj.category = msg.category;
+            logObj.logLevel = msg.logLevel;
+          }
+          logs.push(logObj);
+        }
+      } catch (e) {}
+
+      let lykonVersion = "Unknown";
+      try {
+        let workDir = Services.dirsvc.get("CurWorkD", Ci.nsIFile).path;
+        let versionPath = PathUtils.join(
+          workDir,
+          "browser",
+          "config",
+          "version.txt"
+        );
+        let content = await IOUtils.readUTF8(versionPath);
+        lykonVersion = content.trim();
+      } catch (e) {
+        lykonVersion = Services.appinfo?.version || "1.0.0";
+      }
+
+      let eventData = {
+        timestamp: date
+          ? new Date(date).toISOString()
+          : new Date().toISOString(),
+        event_type: "process_crash",
+        process_type: processType,
+        crash_type: crashType,
+        crash_id: id,
+        version: Services.appinfo?.version || "Unknown",
+        os,
+        build_id: buildID,
+        architecture: arch,
+        metadata: metadata || {},
+        logs,
+        lykon_version: lykonVersion,
+        platform: AppConstants.platform,
+        process: processType,
+        type: crashType,
+        is_top_frame: null,
+        error_code: null,
+        is_oom: !!(metadata && metadata.OOMAllocationSize),
+      };
+
+      await fetch("https://api.axiom.co/v1/datasets/lykon-crashes/ingest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer xaat-51a1cd68-ddd9-4459-8dec-47937a3adb04",
+        },
+        body: JSON.stringify([eventData]),
+      });
+    } catch (e) {
+      console.error(e);
+    }
   },
 
   /**
