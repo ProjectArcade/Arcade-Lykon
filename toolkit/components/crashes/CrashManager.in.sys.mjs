@@ -567,6 +567,7 @@ CrashManager.prototype = Object.freeze({
         return;
       }
 
+      
       let os = "Unknown OS";
       let buildID = "Unknown BuildID";
       let arch = "Unknown Arch";
