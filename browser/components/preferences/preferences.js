@@ -579,7 +579,7 @@ function init_all() {
 
       const refreshList = () => {
         listContainer.textContent = "";
-        const sites = siteShieldSettings.getDisabledSites();
+        const sites = siteShieldSettings.getExceptions();
 
         const getRuleMeta = rule => {
           if (/^https?:\/\//i.test(rule) || rule.includes("/")) {
@@ -611,7 +611,7 @@ function init_all() {
         }
 
         for (const site of sites) {
-          const ruleMeta = getRuleMeta(site);
+          const ruleMeta = getRuleMeta(site.rule);
 
           const row = document.createElement("hbox");
           row.setAttribute("align", "center");
@@ -635,6 +635,20 @@ function init_all() {
           typeLabel.className = "lks-allowed-site-type";
           typeCell.appendChild(typeLabel);
 
+          const enabledCell = document.createElement("hbox");
+          enabledCell.className = "lks-table-col-enabled";
+          enabledCell.setAttribute("align", "center");
+
+          const enabledToggle = document.createElement("moz-toggle");
+          enabledToggle.className = "lks-exception-toggle";
+          enabledToggle.pressed = site.active !== false;
+          enabledToggle.setAttribute("aria-label", "Enable exception");
+          enabledToggle.addEventListener("toggle", () => {
+            siteShieldSettings.setExceptionActive(site.rule, enabledToggle.pressed);
+            refreshList();
+          });
+          enabledCell.appendChild(enabledToggle);
+
           const actionCell = document.createElement("hbox");
           actionCell.className = "lks-table-col-action";
           actionCell.setAttribute("align", "center");
@@ -645,15 +659,18 @@ function init_all() {
           removeBtn.setAttribute("aria-label", "Remove exception");
 
           removeBtn.addEventListener("click", () => {
-            siteShieldSettings.setEnabledForSite(site, true);
+            siteShieldSettings.removeException(site.rule);
             refreshList();
           });
 
           actionCell.appendChild(removeBtn);
           row.appendChild(urlCell);
           row.appendChild(typeCell);
+          row.appendChild(enabledCell);
           row.appendChild(actionCell);
           listContainer.appendChild(row);
+
+          row.classList.toggle("is-inactive", !enabledToggle.pressed);
         }
       };
 

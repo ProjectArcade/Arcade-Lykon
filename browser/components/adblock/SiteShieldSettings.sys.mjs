@@ -7,7 +7,7 @@ const PREF_KEY = "lykon.shield.site.settings";
 
 class _SiteShieldSettings {
   constructor() {
-    this._disabledSites = new Set();
+    this._exceptions = new Map();
     this._loaded = false;
     Services.prefs.addObserver(PREF_KEY, () => {
       this._loaded = false;
@@ -19,20 +19,44 @@ class _SiteShieldSettings {
     try {
       const json = Services.prefs.getStringPref(PREF_KEY, "[]");
       const arr = JSON.parse(json);
-      this._disabledSites = new Set(arr);
+      this._exceptions = new Map();
+      if (Array.isArray(arr)) {
+        for (const entry of arr) {
+          if (typeof entry === "string") {
+            this._exceptions.set(entry, true);
+            continue;
+          }
+          if (entry && typeof entry.rule === "string") {
+            this._exceptions.set(entry.rule, entry.active !== false);
+          }
+        }
+      }
     } catch (e) {
-      this._disabledSites = new Set();
+      this._exceptions = new Map();
     }
     this._loaded = true;
   }
 
   _persist() {
     try {
-      const arr = Array.from(this._disabledSites);
+      const arr = Array.from(this._exceptions, ([rule, active]) => ({
+        rule,
+        active,
+      }));
       Services.prefs.setStringPref(PREF_KEY, JSON.stringify(arr));
     } catch (e) {
       console.error("[SiteShieldSettings] persist error:", e);
     }
+  }
+
+  _isRuleActive(rule) {
+    return this._exceptions.get(rule) === true;
+  }
+
+  _getActiveRules() {
+    return Array.from(this._exceptions.entries())
+      .filter(([, active]) => active)
+      .map(([rule]) => rule);
   }
 
   _getETLD1(hostname) {
@@ -79,23 +103,24 @@ class _SiteShieldSettings {
     if (!hostname) return true;
 
     // Check exact hostname match
-    if (this._disabledSites.has(hostname)) {
+    if (this._isRuleActive(hostname)) {
       return false;
     }
 
     // Check base domain match
     const site = this._getETLD1(hostname);
-    if (site && this._disabledSites.has(site)) {
+    if (site && this._isRuleActive(site)) {
       return false;
     }
 
     // Check wildcard matches (e.g. *.indiatimes.com matches timesofindia.indiatimes.com)
-    for (const pattern of this._disabledSites) {
-      if (pattern.startsWith("*.")) {
-        const suffix = pattern.substring(2);
-        if (hostname === suffix || hostname.endsWith("." + suffix)) {
-          return false;
-        }
+    for (const [pattern, active] of this._exceptions.entries()) {
+      if (!active || !pattern.startsWith("*.")) {
+        continue;
+      }
+      const suffix = pattern.substring(2);
+      if (hostname === suffix || hostname.endsWith("." + suffix)) {
+        return false;
       }
     }
 
@@ -107,8 +132,8 @@ class _SiteShieldSettings {
 
     const normalizedNoScheme = this._normalizeUrlRuleNoScheme(url);
     if (normalizedNoScheme) {
-      for (const rule of this._disabledSites) {
-        if (!this._isUrlRule(rule)) {
+      for (const [rule, active] of this._exceptions.entries()) {
+        if (!active || !this._isUrlRule(rule)) {
           continue;
         }
         if (this._normalizeUrlRuleNoScheme(rule) === normalizedNoScheme) {
@@ -133,31 +158,61 @@ class _SiteShieldSettings {
     const normalizedUrlRule = this._normalizeUrlRule(hostname);
     if (normalizedUrlRule) {
       if (enabled) {
-        this._disabledSites.delete(normalizedUrlRule);
+        this._exceptions.delete(normalizedUrlRule);
       } else {
-        this._disabledSites.add(normalizedUrlRule);
+        this._exceptions.set(normalizedUrlRule, true);
       }
       this._persist();
       return;
     }
 
     if (enabled) {
-      this._disabledSites.delete(hostname);
+      this._exceptions.delete(hostname);
       // Clean up both exact and possible base/wildcard matches
       const site = this._getETLD1(hostname);
       if (site) {
-        this._disabledSites.delete(site);
-        this._disabledSites.delete("*." + site);
+        this._exceptions.delete(site);
+        this._exceptions.delete("*." + site);
       }
     } else {
-      this._disabledSites.add(hostname);
+      this._exceptions.set(hostname, true);
+    }
+    this._persist();
+  }
+
+  setExceptionActive(rule, active) {
+    this._ensureLoaded();
+    if (!rule) return;
+    if (!this._exceptions.has(rule) && !active) {
+      return;
+    }
+    this._exceptions.set(rule, !!active);
+    this._persist();
+  }
+
+  removeException(rule) {
+    this._ensureLoaded();
+    if (!rule) return;
+    const normalizedUrlRule = this._normalizeUrlRule(rule);
+    if (normalizedUrlRule) {
+      this._exceptions.delete(normalizedUrlRule);
+    } else {
+      this._exceptions.delete(rule);
     }
     this._persist();
   }
 
   getDisabledSites() {
     this._ensureLoaded();
-    return Array.from(this._disabledSites);
+    return this._getActiveRules();
+  }
+
+  getExceptions() {
+    this._ensureLoaded();
+    return Array.from(this._exceptions, ([rule, active]) => ({
+      rule,
+      active,
+    }));
   }
 
   resetSite(hostname) {
@@ -165,7 +220,7 @@ class _SiteShieldSettings {
   }
 
   resetAll() {
-    this._disabledSites.clear();
+    this._exceptions.clear();
     this._persist();
   }
 }
