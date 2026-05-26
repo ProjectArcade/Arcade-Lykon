@@ -614,22 +614,33 @@ function init_all() {
           const ruleMeta = getRuleMeta(site);
 
           const row = document.createElement("hbox");
-          row.setAttribute("align", "start");
+          row.setAttribute("align", "center");
+          row.setAttribute("flex", "1");
           row.className = "lks-allowed-site-row";
+
+          const urlCell = document.createElement("vbox");
+          urlCell.className = "lks-table-col-url";
+          urlCell.setAttribute("flex", "1");
 
           const urlLabel = document.createElement("description");
           urlLabel.textContent = ruleMeta.displayUrl;
-          urlLabel.className = "lks-allowed-site-label lks-table-col-url";
-          urlLabel.setAttribute("flex", "4");
+          urlLabel.className = "lks-allowed-site-label";
+          urlCell.appendChild(urlLabel);
+
+          const typeCell = document.createElement("vbox");
+          typeCell.className = "lks-table-col-type";
 
           const typeLabel = document.createElement("label");
           typeLabel.textContent = ruleMeta.typeLabel;
-          typeLabel.className = "lks-allowed-site-type lks-table-col-type";
-          typeLabel.setAttribute("flex", "2");
+          typeLabel.className = "lks-allowed-site-type";
+          typeCell.appendChild(typeLabel);
+
+          const actionCell = document.createElement("hbox");
+          actionCell.className = "lks-table-col-action";
+          actionCell.setAttribute("align", "center");
 
           const removeBtn = document.createElement("button");
-          removeBtn.className =
-            "accessory-button lks-remove-site-button lks-table-col-action";
+          removeBtn.className = "accessory-button lks-remove-site-button";
           removeBtn.setAttribute("title", "Remove exception");
           removeBtn.setAttribute("aria-label", "Remove exception");
 
@@ -638,9 +649,10 @@ function init_all() {
             refreshList();
           });
 
-          row.appendChild(urlLabel);
-          row.appendChild(typeLabel);
-          row.appendChild(removeBtn);
+          actionCell.appendChild(removeBtn);
+          row.appendChild(urlCell);
+          row.appendChild(typeCell);
+          row.appendChild(actionCell);
           listContainer.appendChild(row);
         }
       };
@@ -686,7 +698,9 @@ function init_all() {
 
         return {
           host,
-          specificUrl: `${parsedUrl.protocol}//${host}${parsedUrl.pathname || "/"}`,
+          specificUrl: `${parsedUrl.protocol}//${host}${parsedUrl.pathname || "/"}${
+            parsedUrl.search || ""
+          }`,
           parentDomain,
           wildcard: "*." + parentDomain,
           isSubdomain,

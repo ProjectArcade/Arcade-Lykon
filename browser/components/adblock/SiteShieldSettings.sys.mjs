@@ -53,7 +53,7 @@ class _SiteShieldSettings {
       }
       return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${
         parsed.pathname || "/"
-      }`;
+      }${parsed.search || ""}`;
     } catch (e) {
       return null;
     }
@@ -64,7 +64,7 @@ class _SiteShieldSettings {
     if (!normalized) return null;
     try {
       const parsed = new URL(normalized);
-      return `${parsed.hostname}${parsed.pathname || "/"}`;
+      return `${parsed.hostname}${parsed.pathname || "/"}${parsed.search || ""}`;
     } catch (e) {
       return null;
     }

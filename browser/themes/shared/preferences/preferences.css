@@ -243,18 +243,47 @@ radio {
   padding: 6px 0;
   border: none;
   border-radius: 0;
-  gap: 8px;
-  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 32px;
+  column-gap: 12px;
+  align-items: start;
 }
 
 #lksAllowedSitesTableHeader {
   padding: 0 0 6px;
   border-bottom: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 32px;
+  column-gap: 12px;
+  align-items: center;
+}
+
+.lks-allowed-sites-table-header {
+  gap: 0;
+}
+
+#lksAllowedSitesList {
+  width: 100%;
 }
 
 .lks-table-col-url,
 .lks-table-col-type {
   margin: 0;
+}
+
+.lks-table-col-url {
+  min-width: 0;
+}
+
+.lks-table-col-type {
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
+  align-self: start;
 }
 
 #lksAllowedSitesTableHeader .lks-table-col-url,
@@ -265,8 +294,11 @@ radio {
 }
 
 .lks-table-col-action {
-  width: 28px;
-  min-width: 28px;
+  width: 32px;
+  min-width: 32px;
+  max-width: 32px;
+  align-self: start;
+  justify-self: center;
 }
 
 .lks-allowed-site-label {
@@ -298,11 +330,11 @@ radio {
   background-size: 14px;
   -moz-context-properties: fill;
   fill: currentColor;
-  color: var(--text-color-deemphasized);
+  color: var(--text-color-error);
 }
 
 .accessory-button.lks-remove-site-button:hover {
-  color: var(--text-color);
+  color: var(--text-color-error);
   background-color: color-mix(in srgb, currentColor 8%, transparent);
 }
 
