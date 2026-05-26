@@ -41,6 +41,7 @@ export default class MozPageNav extends MozLitElement {
     headingEl: "#page-nav-heading",
     primaryNavGroupSlot: ".primary-nav-group slot",
     secondaryNavGroupSlot: "#secondary-nav-group slot",
+    footerNavGroupSlot: "#footer-nav-group slot",
   };
 
   constructor() {
@@ -50,6 +51,7 @@ export default class MozPageNav extends MozLitElement {
      */
     this.type = "default";
     this.allowNoSelection = false;
+    this.hasFooterNav = false;
   }
 
   get pageNavButtons() {
@@ -58,6 +60,10 @@ export default class MozPageNav extends MozLitElement {
 
   get secondaryNavButtons() {
     return this.getVisibleSlottedChildren(this.secondaryNavGroupSlot);
+  }
+
+  get footerNavButtons() {
+    return this.getVisibleSlottedChildren(this.footerNavGroupSlot);
   }
 
   getVisibleSlottedChildren(el) {
@@ -123,6 +129,12 @@ export default class MozPageNav extends MozLitElement {
     this.hasSecondaryNav = !!secondaryNavElements.length;
   }
 
+  onFooterNavChange(event) {
+    let footerNavElements = event.target.assignedElements();
+    this.hasFooterNav = !!footerNavElements.length;
+    this.requestUpdate();
+  }
+
   updated() {
     this.updateNavButtonsState();
   }
@@ -131,6 +143,16 @@ export default class MozPageNav extends MozLitElement {
     let isViewSelected = false;
     let assignedPageNavButtons = this.pageNavButtons;
     for (let button of assignedPageNavButtons) {
+      button.selected = button.view == this.currentView;
+      isViewSelected = isViewSelected || button.selected;
+    }
+    let assignedSecondaryButtons = this.secondaryNavButtons;
+    for (let button of assignedSecondaryButtons) {
+      button.selected = button.view == this.currentView;
+      isViewSelected = isViewSelected || button.selected;
+    }
+    let assignedFooterButtons = this.footerNavButtons;
+    for (let button of assignedFooterButtons) {
       button.selected = button.view == this.currentView;
       isViewSelected = isViewSelected || button.selected;
     }
@@ -182,6 +204,15 @@ export default class MozPageNav extends MozLitElement {
             name="secondary-nav"
             @slotchange=${this.onSecondaryNavChange}
           ></slot>
+        </div>
+        <div id="footer-nav-group-container">
+          ${when(this.hasFooterNav, () => html`<hr />`)}
+          <div id="footer-nav-group" role="group">
+            <slot
+              name="footer-nav"
+              @slotchange=${this.onFooterNavChange}
+            ></slot>
+          </div>
         </div>
       </nav>
     `;

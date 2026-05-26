@@ -3648,3 +3648,9 @@ pref("browser.ping-centre.telemetry", false);
 pref("browser.newtabpage.activity-stream.telemetry", false);
 pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
 
+// Lykon Crash Telemetry Preference Mode:
+// 0 = No send crash report
+// 1 = Ask me each time (manual send)
+// 2 = Auto send tab report
+pref("lykon.telemetry.crash_report_mode", 1);
+

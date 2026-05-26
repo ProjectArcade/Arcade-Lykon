@@ -561,6 +561,22 @@ CrashManager.prototype = Object.freeze({
 
   async sendGeneralCrashTelemetry(processType, crashType, id, date, metadata) {
     try {
+      let mode = Services.prefs.getIntPref("lykon.telemetry.crash_report_mode", 1);
+      if (mode === 0) {
+        return;
+      }
+      if (mode === 1) {
+        let win = Services.wm.getMostRecentWindow("navigator:browser");
+        let confirmed = Services.prompt.confirm(
+          win,
+          "Send General Crash Report",
+          "Lykon has detected a general crash (" + processType + " " + crashType + "). Would you like to send a crash report to Lykon?"
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+
       let token =
         Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
       if (!token) {

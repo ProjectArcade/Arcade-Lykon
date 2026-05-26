@@ -82,6 +82,30 @@ category-ai-controls =
 pane-about-firefox-title = About { -brand-short-name }
   .title = { pane-about-firefox-title }
 
+aboutDialog-version = { $version }
+
+pane-lykon-shield-title = Lykon Shield
+  .tooltiptext = { pane-lykon-shield-title }
+category-lykon-shield =
+  .tooltiptext = { pane-lykon-shield-title }
+pane-lykon-shield-section =
+    .heading = Lykon Shield
+
+# Lykon Shield settings group
+lykon-shield-features-heading = Shield Options
+lykon-shield-enable-label = Enable Lykon Shield
+lykon-shield-stats-label = Track Shield blocking statistics
+lykon-shield-scripts-label = Block scripts
+lykon-shield-fingerprinting-label = Block fingerprinting attempts
+lykon-shield-forget-label = Forget site shield settings on exit
+
+# Telemetry settings group
+lykon-telemetry-heading = Lykon Telemetry Settings
+lykon-telemetry-desc = Configure how Lykon handles crash reports and telemetry data.
+lykon-telemetry-option-auto = Auto send tab report
+lykon-telemetry-option-ask = Ask me each time (manual send)
+lykon-telemetry-option-none = No send crash report
+
 pane-accessibility-title = Accessibility
   .title = { pane-accessibility-title }
 
@@ -739,7 +763,7 @@ update-application-updates-managed-by-os =
 
 # Variables:
 # $version (string) - Firefox version
-update-application-version = 1.0.0-alpha (2026-22-03) <a data-l10n-name="learn-more">What’s new</a>
+update-application-version = { $version } <a data-l10n-name="learn-more">What’s new</a>
 
 update-history-2 =
     .label = Show update history
@@ -1781,7 +1805,15 @@ history-remember-description4 =
     .aria-label = { history-group.label }
     .description = { -brand-short-name } will remember your browsing, download, form, and search history.
 
+history-remember-description3 =
+    .aria-label = { history-group.label }
+    .description = { -brand-short-name } will remember your browsing, download, form, and search history.
+
 history-dontremember-description4 =
+    .aria-label = { history-group.label }
+    .description = { -brand-short-name } will use the same settings as private browsing, and will not remember any history as you browse the Web.
+
+history-dontremember-description3 =
     .aria-label = { history-group.label }
     .description = { -brand-short-name } will use the same settings as private browsing, and will not remember any history as you browse the Web.
 

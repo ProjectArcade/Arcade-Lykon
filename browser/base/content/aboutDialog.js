@@ -55,6 +55,14 @@ function init() {
     version: AppConstants.MOZ_APP_VERSION_DISPLAY,
   };
 
+  // Add the platform milestone (Mozilla major version) for display.
+  try {
+    let platformVersion = Services.appinfo.platformVersion || "";
+    versionAttributes.mozilla = platformVersion.split(".")[0] || "";
+  } catch (e) {
+    versionAttributes.mozilla = "";
+  }
+
   let arch = Services.sysinfo.get("arch");
   if (["x86", "x86-64"].includes(arch)) {
     versionAttributes.bits = Services.appinfo.is64Bit ? 64 : 32;
@@ -84,6 +92,12 @@ function init() {
     versionIdMap.get(versionIdKey),
     versionAttributes
   );
+
+  // Set the localized Mozilla milestone below the version label.
+  let mozillaField = document.getElementById("mozillaVersion");
+  if (mozillaField) {
+    document.l10n.setAttributes(mozillaField, "aboutDialog-mozilla-version", { mozilla: versionAttributes.mozilla });
+  }
 
   // Show a release notes link if we have a URL.
   let relNotesLink = document.getElementById("releasenotes");

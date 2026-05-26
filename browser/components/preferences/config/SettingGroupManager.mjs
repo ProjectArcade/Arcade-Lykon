@@ -24,7 +24,8 @@ export const SettingGroupManager = {
    */
   registerGroup(id, config) {
     if (this._data.has(id)) {
-      throw new Error(`Setting group "${id}" already registered`);
+      console.warn(`Setting group "${id}" already registered`);
+      return this._data.get(id);
     }
     this._data.set(id, config);
   },

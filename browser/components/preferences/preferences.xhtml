@@ -171,16 +171,11 @@
         iconsrc="chrome://browser/skin/labs-16.svg"
         data-l10n-id="settings-pane-labs-title">
       </html:moz-page-nav-button>
-      <html:moz-page-nav-button id="category-about-firefox"
-        view="paneAbout"
-        iconsrc="chrome://browser/skin/sidebar/firefox.svg"
-        data-l10n-id="pane-about-firefox-title">
-      </html:moz-page-nav-button>
-      <html:moz-page-nav-button id="category-more-from-mozilla"
-        hidden="true"
-        view="paneMoreFromMozilla"
-        iconsrc="chrome://browser/skin/preferences/mozilla-16.svg"
-        data-l10n-id="more-from-moz-title">
+
+      <html:moz-page-nav-button id="category-lykon-shield"
+        view="paneLykonShield"
+        iconsrc="chrome://browser/skin/tracking-protection.svg"
+        data-l10n-id="pane-lykon-shield-title">
       </html:moz-page-nav-button>
 
       <!-- Hidden sub-page entries (CSS display:none via .hidden-category).
@@ -191,6 +186,15 @@
       <html:moz-page-nav-button class="hidden-category" view="paneTranslations"/>
 
       <!-- Footer links -->
+      <html:moz-page-nav-button id="category-about-firefox"
+        slot="footer-nav"
+        view="paneAbout"
+        iconsrc="chrome://branding/content/about-logo.png">
+        <html:div style="display: flex; flex-direction: column; text-align: start;">
+          <html:span data-l10n-id="pane-about-firefox-title"></html:span>
+          <html:span id="lykon-version-display" style="font-size: 0.85em; opacity: 0.7;"></html:span>
+        </html:div>
+      </html:moz-page-nav-button>
       <html:moz-page-nav-button id="addonsButton"
         slot="secondary-nav"
         iconsrc="chrome://mozapps/skin/extensions/extension.svg"
@@ -234,7 +238,6 @@
 #include privacy.inc.xhtml
 #include containers.inc.xhtml
 #include sync.inc.xhtml
-#include moreFromMozilla.inc.xhtml
         </vbox>
       </vbox>
     </vbox>

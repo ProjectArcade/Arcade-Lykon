@@ -74,7 +74,8 @@ nav {
 }
 
 .primary-nav-group,
-#secondary-nav-group {
+#secondary-nav-group,
+#footer-nav-group {
   display: grid;
   grid-template-columns: 1fr;
   grid-auto-rows: min-content;
@@ -87,6 +88,13 @@ nav {
   &:not(:has(slot:has-slotted)) {
     display: none;
   }
+}
+
+#footer-nav-group-container {
+  margin-block-start: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-nav-gap);
 }
 
 hr {

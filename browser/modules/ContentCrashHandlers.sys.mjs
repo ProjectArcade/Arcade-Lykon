@@ -755,6 +755,22 @@ export var TabCrashHandler = {
 
   async sendTabCrashTelemetry(browser, childID, restartRequired) {
     try {
+      let mode = Services.prefs.getIntPref("lykon.telemetry.crash_report_mode", 1);
+      if (mode === 0) {
+        return;
+      }
+      if (mode === 1) {
+        let win = Services.wm.getMostRecentWindow("navigator:browser");
+        let confirmed = Services.prompt.confirm(
+          win,
+          "Send Tab Crash Report",
+          "A tab has crashed. Would you like to send a crash report to Lykon?"
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+
       let token =
         Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
       if (!token) {

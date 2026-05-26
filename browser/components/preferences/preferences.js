@@ -362,6 +362,15 @@ const CONFIG_PANES = Object.freeze({
     module: "chrome://browser/content/preferences/config/privacy.mjs",
     replaces: "privacy",
   },
+  lykonShield: {
+    l10nId: "pane-lykon-shield-section",
+    iconSrc: "chrome://browser/skin/tracking-protection.svg",
+    groupIds: [
+      "lykonShieldSettingsGroup",
+      "lykonTelemetryGroup",
+    ],
+    module: "chrome://browser/content/preferences/config/lykonShield.mjs",
+  },
   sync: {
     l10nId: "account-sync-section",
     iconSrc: "chrome://browser/skin/fxa/avatar-empty.svg",
@@ -381,7 +390,7 @@ const CONFIG_PANES = Object.freeze({
     iconSrc: "chrome://browser/skin/preferences/mozilla-16.svg",
     groupIds: ["moreFromMozillaPromo", "moreFromMozillaProducts"],
     module: "chrome://browser/content/preferences/config/moreFromMozilla.mjs",
-    visible: () => NimbusFeatures.moreFromMozilla.getVariable("enabled"),
+    visible: () => false,
     replaces: "moreFromMozilla",
   },
   translations: {
@@ -439,6 +448,18 @@ document.addEventListener("DOMContentLoaded", init_all, { once: true });
 function init_all() {
   Preferences.forceEnableInstantApply();
 
+  // Set the dynamic version from version_display.txt in the About Lykon button
+  try {
+    let verDisplay = document.getElementById("lykon-version-display");
+    if (verDisplay) {
+      document.l10n.setAttributes(verDisplay, "aboutDialog-version", {
+        version: AppConstants.MOZ_APP_VERSION_DISPLAY,
+      });
+    }
+  } catch (e) {
+    console.error("Failed to set dynamic version:", e);
+  }
+
   // Asks Preferences to queue an update of the attribute values of
   // the entire document.
   Preferences.queueUpdateOfAllElements();
@@ -491,12 +512,15 @@ function init_all() {
       module: "chrome://browser/content/preferences/config/home-startup.mjs",
     });
   } else {
-    NimbusFeatures.moreFromMozilla.recordExposureEvent({ once: true });
-    if (NimbusFeatures.moreFromMozilla.getVariable("enabled")) {
-      document.getElementById("category-more-from-mozilla").hidden = false;
-      gMoreFromMozillaPane.option =
-        NimbusFeatures.moreFromMozilla.getVariable("template");
-      register_module("paneMoreFromMozilla", gMoreFromMozillaPane);
+    let categoryMoreElement = document.getElementById("category-more-from-mozilla");
+    if (categoryMoreElement) {
+      NimbusFeatures.moreFromMozilla.recordExposureEvent({ once: true });
+      if (NimbusFeatures.moreFromMozilla.getVariable("enabled")) {
+        categoryMoreElement.hidden = false;
+        gMoreFromMozillaPane.option =
+          NimbusFeatures.moreFromMozilla.getVariable("template");
+        register_module("paneMoreFromMozilla", gMoreFromMozillaPane);
+      }
     }
   }
 

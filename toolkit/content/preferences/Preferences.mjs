@@ -45,7 +45,8 @@ export const Preferences = {
    */
   _add(prefInfo) {
     if (this._all[prefInfo.id]) {
-      throw new Error(`preference with id '${prefInfo.id}' already added`);
+      console.warn(`preference with id '${prefInfo.id}' already added`);
+      return this._all[prefInfo.id];
     }
     const pref = new Preference(prefInfo);
     this._all[pref.id] = pref;
