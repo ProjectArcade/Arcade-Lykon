@@ -91,20 +91,76 @@ category-lykon-shield =
 pane-lykon-shield-section =
     .heading = Lykon Shield
 
+pane-lykon-telemetry-title = Lykon Telemetry
+  .tooltiptext = { pane-lykon-telemetry-title }
+pane-lykon-telemetry-section =
+    .heading = Lykon Telemetry
+
 # Lykon Shield settings group
-lykon-shield-features-heading = Shield Options
-lykon-shield-enable-label = Enable Lykon Shield
-lykon-shield-stats-label = Track Shield blocking statistics
-lykon-shield-scripts-label = Block scripts
-lykon-shield-fingerprinting-label = Block fingerprinting attempts
-lykon-shield-forget-label = Forget site shield settings on exit
+lykon-shield-features-heading = Blocker & Privacy Options
+  .description = Control the built-in Lykon Shield content blocker and advanced privacy controls.
+lykon-shield-enable-label =
+  .label = Enable Lykon Shield Content Blocker
+  .description = Automatically block ads, trackers, and malicious scripts on all web pages.
+lykon-shield-stats-label =
+  .label = Track Shield Blocking Statistics
+  .description = Display total blocked ads and trackers in your toolbar shield popup.
+lykon-shield-scripts-label =
+  .label = Block Scripts
+  .description = Prevent websites from running third-party JavaScript scripts (may break some sites).
+lykon-shield-fingerprinting-label =
+  .label = Block Fingerprinting Attempts
+  .description = Mask your browser and system details to prevent tracker profiling and identification.
+lykon-shield-forget-label =
+  .label = Forget Site Shield Settings on Exit
+  .description = Automatically reset all custom site shield exceptions and cookies when you close the browser.
 
 # Telemetry settings group
-lykon-telemetry-heading = Lykon Telemetry Settings
-lykon-telemetry-desc = Configure how Lykon handles crash reports and telemetry data.
-lykon-telemetry-option-auto = Auto send tab report
-lykon-telemetry-option-ask = Ask me each time (manual send)
-lykon-telemetry-option-none = No send crash report
+lykon-telemetry-heading = Crash Telemetry & Reports
+  .description = Manage how Lykon reports system crashes to help us improve performance and stability.
+lykon-telemetry-desc = Tell Lykon how to share diagnostic crash reports when a tab or application crashes.
+lykon-telemetry-privacy-note = We only collect the domain of the crashed tab (e.g. example.com), never the full URL, path, or any personal data. No browsing history is ever sent.
+lykon-telemetry-option-auto =
+    .label = Auto send tab report (recommended)
+lykon-telemetry-option-ask =
+    .label = Ask me each time
+lykon-telemetry-option-none =
+    .label = Do not send crash reports
+
+# Lykon Data Collection settings group
+lykon-data-collection-heading = Lykon data collection and use
+  .description = We strive to provide you with choices and collect only the minimal data necessary to improve Lykon for everyone.
+lykon-data-collection-desc = We strive to provide you with choices and collect only the minimal data necessary to improve Lykon for everyone.
+lykon-data-collection-link = View Privacy Notice
+
+lykon-data-collection-health-report =
+  .label = Send technical and interaction data to Lykon
+  .description = This helps us improve Lykon features, performance, and stability.
+lykon-data-collection-health-report-disabled =
+  .label = Send technical and interaction data to Lykon
+  .description = Data reporting is disabled for this build configuration.
+
+lykon-addon-recommendations =
+  .label = Allow personalized extension recommendations
+  .description = Get extension recommendations to improve your browsing experience.
+
+lykon-data-collection-run-studies =
+  .label = Allow Lykon to run feature studies
+  .description = Lykon randomly selects users to test features, which helps improve quality for everyone.
+lykon-data-collection-studies-link =
+  .label = View Lykon studies
+
+lykon-nimbus-rollouts =
+  .label = Allow Lykon to improve features, performance, and stability between updates
+  .description = Changes will be rolled out remotely.
+
+lykon-data-collection-usage-ping =
+  .label = Send daily usage ping to Lykon
+  .description = This helps Lykon to estimate active users.
+
+lykon-data-collection-backlogged-crash-reports =
+  .label = Automatically send crash reports
+  .description = This helps Lykon diagnose and fix issues with the browser. Reports may include personal or sensitive data.
 
 pane-accessibility-title = Accessibility
   .title = { pane-accessibility-title }
@@ -764,6 +820,8 @@ update-application-updates-managed-by-os =
 # Variables:
 # $version (string) - Firefox version
 update-application-version = { $version } <a data-l10n-name="learn-more">What’s new</a>
+
+update-application-mozilla-version = Mozilla version: { $mozilla }
 
 update-history-2 =
     .label = Show update history
@@ -2716,3 +2774,6 @@ security-privacy-issue-warning-ech =
 security-privacy-issue-warning-proxy-autodetection =
   .label = Proxy auto-configuration is enabled
   .description = Proxy auto-configuration could let untrusted networks to monitor your activity.
+lykon-data-collection-crashes-link =
+  .label = View Crash Reports
+

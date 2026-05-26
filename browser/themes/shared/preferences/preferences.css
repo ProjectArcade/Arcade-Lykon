@@ -988,6 +988,56 @@ dialog > .sync-engines-list + hbox {
   margin-top: 0.3em;
 }
 
+.lykon-telemetry-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-large);
+}
+
+.lykon-telemetry-card {
+  background-color: var(--background-color-box);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--border-radius-medium);
+  box-shadow: var(--card-box-shadow);
+  padding: var(--space-large);
+}
+
+.lykon-telemetry-card-header {
+  display: flex;
+  gap: var(--space-medium);
+  margin-block-end: var(--space-medium);
+}
+
+.lykon-telemetry-card-icon {
+  width: 16px;
+  height: 16px;
+  margin-block-start: 2px;
+  -moz-context-properties: fill;
+  fill: var(--in-content-accent-color);
+  flex-shrink: 0;
+}
+
+.lykon-telemetry-card-title {
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--space-xxsmall) 0;
+}
+
+.lykon-telemetry-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+}
+
+.lykon-telemetry-option > radio,
+.lykon-telemetry-option > checkbox {
+  margin: 0;
+}
+
+.lykon-telemetry-card-link {
+  display: inline-flex;
+  margin-block-start: var(--space-xxsmall);
+}
+
 #search-tooltip-container {
   position: relative;
   top: 0;

@@ -1527,7 +1527,7 @@ pref("browser.zoom.full", true);
 pref("browser.zoom.updateBackgroundTabs", true);
 
 // The breakpad report server to link to in about:crashes
-pref("breakpad.reportURL", "https://crash-stats.mozilla.org/report/index/");
+pref("breakpad.reportURL", "https://api.axiom.co/v1/datasets/lykon-crashes/ingest");
 
 // URL for "Learn More" for DataCollection
 pref("toolkit.datacollection.infoURL",
@@ -3622,7 +3622,7 @@ pref("app.update.background.allowUpdatesForUnelevatedInstallations", false);
 pref("toolkit.telemetry.enabled", false);
 pref("toolkit.telemetry.unified", false);
 pref("toolkit.telemetry.archive.enabled", false);
-pref("toolkit.telemetry.server", "");
+pref("toolkit.telemetry.server", "https://api.axiom.co/v1/datasets/lykon-crashes/ingest?api_token=xaat-db3fbe6e-5759-4a01-a708-9d761a6f7b71");
 pref("toolkit.telemetry.shutdownPingSender.enabled", false);
 pref("toolkit.telemetry.firstShutdownPing.enabled", false);
 pref("toolkit.telemetry.newProfilePing.enabled", false);
@@ -3652,5 +3652,5 @@ pref("browser.newtabpage.activity-stream.feeds.telemetry", false);
 // 0 = No send crash report
 // 1 = Ask me each time (manual send)
 // 2 = Auto send tab report
-pref("lykon.telemetry.crash_report_mode", 1);
+pref("lykon.telemetry.crash_report_mode", 2);
 

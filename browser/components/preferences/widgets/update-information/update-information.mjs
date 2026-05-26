@@ -11,6 +11,7 @@ class UpdateInformation extends MozLitElement {
     distribution: { type: String },
     distributionId: { type: String },
     releaseNotesURL: { type: String },
+    mozilla: { type: String },
   };
 
   constructor() {
@@ -27,6 +28,19 @@ class UpdateInformation extends MozLitElement {
 
     /** @type {string} */
     this.releaseNotesURL = "";
+
+    /** @type {string} */
+    this.mozilla = "";
+
+    // Try to populate the Mozilla platform milestone (major version).
+    try {
+      if (Services && Services.appinfo && Services.appinfo.platformVersion) {
+        this.mozilla =
+          (Services.appinfo.platformVersion || "").split(".")[0] || "";
+      }
+    } catch (e) {
+      this.mozilla = "";
+    }
   }
 
   labelTemplate() {
@@ -50,6 +64,14 @@ class UpdateInformation extends MozLitElement {
           ?hidden=${!this.releaseNotesURL}
         ></a>
       </span>
+      ${this.mozilla
+        ? html`<span
+            class="label mozilla"
+            id="mozillaLabel"
+            data-l10n-id="update-application-mozilla-version"
+            data-l10n-args=${JSON.stringify({ mozilla: this.mozilla })}
+          ></span>`
+        : ""}
     </div>`;
   }
 

@@ -178,6 +178,12 @@
         data-l10n-id="pane-lykon-shield-title">
       </html:moz-page-nav-button>
 
+      <html:moz-page-nav-button id="category-lykon-telemetry"
+        view="paneLykonTelemetry"
+        iconsrc="chrome://global/skin/icons/info.svg"
+        data-l10n-id="pane-lykon-telemetry-title">
+      </html:moz-page-nav-button>
+
       <!-- Hidden sub-page entries (CSS display:none via .hidden-category).
            These keep gotoPref() routing working for sub-pages that are
            navigated to from within other panes. -->
@@ -238,6 +244,7 @@
 #include privacy.inc.xhtml
 #include containers.inc.xhtml
 #include sync.inc.xhtml
+#include lykon.inc.xhtml
         </vbox>
       </vbox>
     </vbox>

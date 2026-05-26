@@ -1,0 +1,113 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+<!-- Lykon preferences panes -->
+
+<html:template id="template-paneLykonShield">
+  <hbox id="lykonShieldCategory" class="subcategory" hidden="true" data-category="paneLykonShield">
+    <html:h1 data-l10n-id="pane-lykon-shield-section"/>
+  </hbox>
+  <html:setting-group groupid="lykonShieldSettingsGroup" data-category="paneLykonShield" hidden="true"/>
+</html:template>
+
+<html:template id="template-paneLykonTelemetry">
+  <hbox id="lykonTelemetryCategory" class="subcategory" hidden="true" data-category="paneLykonTelemetry">
+    <html:h1 data-l10n-id="pane-lykon-telemetry-section"/>
+  </hbox>
+
+  <vbox id="lykonTelemetryControls" data-category="paneLykonTelemetry" hidden="true">
+
+    <!-- What is Telemetry info card -->
+    <groupbox class="card card-no-hover" data-category="paneLykonTelemetry"
+              style="margin-block-end: 8px;">
+      <hbox align="center" style="margin-block-end: 8px;">
+        <image src="chrome://global/skin/icons/info.svg"
+               style="-moz-context-properties: fill; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
+        <label style="font-weight: 600; font-size: 1em;">What is telemetry?</label>
+      </hbox>
+      <description style="margin-block-end: 6px;">
+        Telemetry is anonymous diagnostic data that Lykon collects when something goes wrong —
+        like a tab crash. It helps us understand what caused the problem and fix it faster.
+      </description>
+      <!-- <description data-l10n-id="lykon-telemetry-privacy-note"/> -->
+      <description class="description-deemphasized">
+        You are always in control. You can choose to be asked before each report is sent,
+        send them automatically, or turn it off entirely.
+      </description>
+    </groupbox>
+
+    <!-- Crash Reporting Card -->
+    <groupbox class="card card-no-hover" data-category="paneLykonTelemetry">
+      <hbox align="center" style="margin-block-end: 6px;">
+        <image src="chrome://global/skin/icons/info.svg"
+               style="-moz-context-properties: fill; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
+        <label style="font-weight: 600; font-size: 1em;" data-l10n-id="lykon-telemetry-heading"/>
+      </hbox>
+      <description class="description-deemphasized" style="margin-block-end: 12px;"
+                   data-l10n-id="lykon-telemetry-desc"/>
+
+      <radiogroup id="lykonTelemetryRadio" style="display: flex; flex-direction: column; gap: 8px;">
+        <radio value="2" data-l10n-id="lykon-telemetry-option-auto"/>
+        <radio value="1" data-l10n-id="lykon-telemetry-option-ask"/>
+        <radio value="0" data-l10n-id="lykon-telemetry-option-none"/>
+      </radiogroup>
+
+      <!-- Shown when user disables telemetry -->
+      <hbox id="lykonTelemetryDisabledNotice"
+            hidden="true"
+            align="end"
+            style="margin-block-start: 12px;
+                   background-color: rgba(0, 144, 237, 0.12);
+                   border: 1px solid rgba(0, 144, 237, 0.4);
+                   border-radius: 4px;
+                   padding: 12px 16px;">
+        <html:img src="chrome://global/skin/illustrations/kit-happy.svg"
+                  style="width: 64px; height: 64px; min-width: 64px; flex-shrink: 0; margin-inline-end: 14px;"/>
+        <vbox flex="1">
+          <description style="color: var(--in-content-text-color); font-weight: 600; margin-block-end: 4px;">
+            Your privacy is respected.
+          </description>
+          <description style="color: var(--in-content-deemphasized-text-color);">
+            Crash reporting is disabled — Lykon will not send any diagnostic data.
+            You can enable it again at any time.
+          </description>
+          <hbox style="margin-block-start: 8px;">
+            <html:a href="https://lykon.vercel.app/privacy/telemetry"
+                    target="_blank"
+                    class="text-link">Learn what data we collect</html:a>
+          </hbox>
+        </vbox>
+      </hbox>
+    </groupbox>
+
+    <!-- Data Collection Card (disabled until Lykon-native prefs are wired)
+    <groupbox class="card card-no-hover" data-category="paneLykonTelemetry">
+      <hbox align="center" style="margin-block-end: 6px;">
+        <image src="chrome://global/skin/icons/info.svg"
+               style="-moz-context-properties: fill; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
+        <label style="font-weight: 600; font-size: 1em;" data-l10n-id="lykon-data-collection-heading"/>
+      </hbox>
+      <description class="description-deemphasized" style="margin-block-end: 12px;">
+        We strive to collect only the minimal data necessary to improve Lykon for everyone.
+        <html:a id="lykonDataCollectionPrivacyNoticeLink" data-l10n-id="lykon-data-collection-link"
+                href="https://lykon.example/privacy" target="_blank"/>
+      </description>
+      <vbox class="indent">
+        <checkbox id="lykonSubmitHealthReportCheckbox" preference="datareporting.healthreport.uploadEnabled"
+                  data-l10n-id="lykon-data-collection-health-report"/>
+        <checkbox id="lykonNimbusRolloutsCheckbox" preference="nimbus.rollouts.enabled"
+                  data-l10n-id="lykon-nimbus-rollouts"/>
+        <checkbox id="lykonSubmitUsagePingCheckbox" preference="datareporting.usage.uploadEnabled"
+                  data-l10n-id="lykon-data-collection-usage-ping"/>
+        <checkbox id="lykonAutomaticallySubmitCrashesCheckbox"
+                  preference="browser.crashReports.unsubmittedCheck.autoSubmit2"
+                  data-l10n-id="lykon-data-collection-backlogged-crash-reports"/>
+        <hbox style="margin-block-start: 8px;">
+          <html:a href="about:crashes" class="text-link" data-l10n-id="lykon-data-collection-crashes-link"/>
+        </hbox>
+      </vbox>
+    </groupbox> -->
+
+  </vbox>
+</html:template>

@@ -354,22 +354,12 @@ const CONFIG_PANES = Object.freeze({
       // Bug 1968118: move these elsewhere
       "permissions",
       // Bug 1968118: move these elsewhere
-      "dataCollection",
       "nonTechnicalPrivacy2",
       "dnsOverHttps",
       "connectionLink",
     ],
     module: "chrome://browser/content/preferences/config/privacy.mjs",
     replaces: "privacy",
-  },
-  lykonShield: {
-    l10nId: "pane-lykon-shield-section",
-    iconSrc: "chrome://browser/skin/tracking-protection.svg",
-    groupIds: [
-      "lykonShieldSettingsGroup",
-      "lykonTelemetryGroup",
-    ],
-    module: "chrome://browser/content/preferences/config/lykonShield.mjs",
   },
   sync: {
     l10nId: "account-sync-section",
@@ -408,6 +398,20 @@ const CONFIG_PANES = Object.freeze({
 
 var gLastCategory = { category: undefined, subcategory: undefined };
 const gXULDOMParser = new DOMParser();
+
+var LykonTelemetryPane = {
+  onCrashModeChange(value) {
+    let notice = document.getElementById("lykonTelemetryDisabledNotice");
+    if (notice) {
+      notice.hidden = parseInt(value) !== 0;
+    }
+    // Persist immediately
+    Services.prefs.setIntPref(
+      "lykon.telemetry.crash_report_mode",
+      parseInt(value)
+    );
+  },
+};
 var gCategoryModules = new Map();
 var gCategoryInits = new Map();
 
@@ -460,6 +464,22 @@ function init_all() {
     console.error("Failed to set dynamic version:", e);
   }
 
+  try {
+    let privacyLink = document.getElementById(
+      "lykonDataCollectionPrivacyNoticeLink"
+    );
+    if (privacyLink) {
+      let url = Services.urlFormatter.formatURLPref(
+        "toolkit.datacollection.infoURL"
+      );
+      if (url) {
+        privacyLink.setAttribute("href", url);
+      }
+    }
+  } catch (e) {
+    console.error("Failed to set telemetry privacy link:", e);
+  }
+
   // Asks Preferences to queue an update of the attribute values of
   // the entire document.
   Preferences.queueUpdateOfAllElements();
@@ -469,6 +489,32 @@ function init_all() {
   register_module("paneSearch", gSearchPane);
   register_module("panePrivacy", gPrivacyPane);
   register_module("paneContainers", gContainersPane);
+  register_module("paneLykonShield", {
+    init() {},
+  });
+  register_module("paneLykonTelemetry", {
+    init() {
+      // Manually register pref so XUL radiogroup binding works
+      Preferences.addAll([
+        { id: "lykon.telemetry.crash_report_mode", type: "int" },
+      ]);
+
+      let radio = document.getElementById("lykonTelemetryRadio");
+      if (radio) {
+        // Set initial value
+        let mode = Services.prefs.getIntPref(
+          "lykon.telemetry.crash_report_mode",
+          1
+        );
+        radio.value = mode;
+        LykonTelemetryPane.onCrashModeChange(mode);
+
+        radio.addEventListener("command", e => {
+          LykonTelemetryPane.onCrashModeChange(radio.value);
+        });
+      }
+    },
+  });
 
   // Restore the cached Firefox Labs nav button visibility so it shows
   // immediately when recipes are expected to be available, before
@@ -512,7 +558,9 @@ function init_all() {
       module: "chrome://browser/content/preferences/config/home-startup.mjs",
     });
   } else {
-    let categoryMoreElement = document.getElementById("category-more-from-mozilla");
+    let categoryMoreElement = document.getElementById(
+      "category-more-from-mozilla"
+    );
     if (categoryMoreElement) {
       NimbusFeatures.moreFromMozilla.recordExposureEvent({ once: true });
       if (NimbusFeatures.moreFromMozilla.getVariable("enabled")) {

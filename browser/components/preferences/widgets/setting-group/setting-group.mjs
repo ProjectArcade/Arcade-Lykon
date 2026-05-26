@@ -8,6 +8,8 @@ import {
   spread,
 } from "chrome://browser/content/preferences/widgets/setting-element.mjs";
 import { SettingControl } from "chrome://browser/content/preferences/widgets/setting-control.mjs";
+import { Preferences } from "chrome://global/content/preferences/Preferences.mjs";
+import { SettingGroupManager } from "chrome://browser/content/preferences/config/SettingGroupManager.mjs";
 
 /**
  * @import { SettingElementConfig } from "chrome://browser/content/preferences/widgets/setting-element.mjs"
@@ -110,7 +112,27 @@ export class SettingGroup extends SettingElement {
     return this;
   }
 
-  willUpdate() {
+  willUpdate(changedProperties) {
+    super.willUpdate(changedProperties);
+    if (changedProperties.has("groupId") && this.groupId) {
+      if (!this.config) {
+        try {
+          const config = SettingGroupManager.get(this.groupId);
+          if (config) {
+            this.config = config;
+            this.getSetting = Preferences.getSetting.bind(Preferences);
+            this.srdEnabled =
+              globalThis.Services?.prefs?.getBoolPref(
+                "browser.settings-redesign.enabled",
+                false
+              ) || false;
+          }
+        } catch (e) {
+          // Ignore if group not registered yet.
+        }
+      }
+    }
+
     if (!this.srdEnabled) {
       this.classList.toggle("subcategory", this.config?.headingLevel == 1);
     }

@@ -831,10 +831,13 @@ export var TabCrashHandler = {
 
       let url = "Unknown URL";
       try {
-        if (browser.currentURI) {
-          url = browser.currentURI.spec;
-        } else if (browser.docShell && browser.docShell.currentURI) {
-          url = browser.docShell.currentURI.spec;
+        let uri = browser.currentURI;
+        if (!uri && browser.docShell) {
+          uri = browser.docShell.currentURI;
+        }
+        if (uri) {
+          let host = uri.host || "unknown";
+          url = `${uri.scheme}://${host}`;
         }
       } catch (e) {}
 
