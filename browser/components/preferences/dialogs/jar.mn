@@ -23,6 +23,9 @@ browser.jar:
    content/browser/preferences/dialogs/sitePermissions.xhtml
    content/browser/preferences/dialogs/sitePermissions.js
    content/browser/preferences/dialogs/sitePermissions.css
+   content/browser/preferences/dialogs/reportProblem.xhtml
+   content/browser/preferences/dialogs/reportProblem.js
+   content/browser/preferences/dialogs/reportProblem.css
    content/browser/preferences/dialogs/containers.xhtml
    content/browser/preferences/dialogs/containers.js
    content/browser/preferences/dialogs/permissions.js

@@ -449,6 +449,42 @@ function register_module(categoryName, categoryObject) {
 
 document.addEventListener("DOMContentLoaded", init_all, { once: true });
 
+async function sendUserProblemReport(reportData) {
+  try {
+    let TelemetryConfig = null;
+    try {
+      let module = ChromeUtils.importESModule(
+        "resource:///modules/TelemetryConfig.sys.mjs"
+      );
+      TelemetryConfig = module.TelemetryConfig;
+    } catch (e) {}
+
+    if (
+      !TelemetryConfig ||
+      !TelemetryConfig.token ||
+      !TelemetryConfig.sendReport
+    ) {
+      return false;
+    }
+
+    let eventData = {
+      timestamp: new Date().toISOString(),
+      event_type: "user_custom_report",
+      type: "user_dialog",
+      title: "user_dialog_report",
+      problem_type: reportData.problemType,
+      user_Custom_rpeor: reportData.details || "",
+      lykon_version: AppConstants.MOZ_APP_VERSION_DISPLAY,
+      diagnostics: reportData.diagnostics || {},
+    };
+
+    return await TelemetryConfig.sendReport(eventData);
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
 function init_all() {
   Preferences.forceEnableInstantApply();
 
@@ -511,6 +547,40 @@ function init_all() {
 
         radio.addEventListener("command", e => {
           LykonTelemetryPane.onCrashModeChange(radio.value);
+        });
+      }
+
+      let manualReportButton = document.getElementById(
+        "lykonManualReportButton"
+      );
+      if (manualReportButton) {
+        manualReportButton.addEventListener("click", () => {
+          let params = {
+            sendReport: sendUserProblemReport,
+          };
+          gSubDialog.open(
+            "chrome://browser/content/preferences/dialogs/reportProblem.xhtml",
+            {
+              closingCallback: () => {
+                if (!params.accepted) {
+                  return;
+                }
+
+                let reportData = params.reportData;
+                if (!reportData) {
+                  return;
+                }
+
+                if (
+                  reportData.problemType == "browser-crash" ||
+                  reportData.problemType == "tab-crash"
+                ) {
+                  openTrustedLinkIn("about:crashes", "tab");
+                }
+              },
+            },
+            params
+          );
         });
       }
     },
@@ -845,6 +915,9 @@ function scrollAndHighlight(subcategory) {
 
 // This function is duplicated inside of utilityOverlay.js's openPreferences.
 function internalPrefCategoryNameToFriendlyName(aName) {
+  if (aName === "paneLykonTelemetry") {
+    return "crashreporting";
+  }
   return (aName || "").replace(/^pane./, function (toReplace) {
     return toReplace[4].toLowerCase();
   });

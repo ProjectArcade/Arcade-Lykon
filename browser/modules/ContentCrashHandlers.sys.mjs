@@ -755,7 +755,10 @@ export var TabCrashHandler = {
 
   async sendTabCrashTelemetry(browser, childID, restartRequired) {
     try {
-      let mode = Services.prefs.getIntPref("lykon.telemetry.crash_report_mode", 1);
+      let mode = Services.prefs.getIntPref(
+        "lykon.telemetry.crash_report_mode",
+        1
+      );
       if (mode === 0) {
         return;
       }
@@ -773,17 +776,25 @@ export var TabCrashHandler = {
 
       let token =
         Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
-      if (!token) {
+      let axiomUrl =
+        Services.env.get("AXIOM_URL") || Services.env.get("AXIOM_ENDPOINT");
+
+      if (!token || !axiomUrl) {
         try {
           let { TelemetryConfig } = ChromeUtils.importESModule(
             "resource:///modules/TelemetryConfig.sys.mjs"
           );
-          if (TelemetryConfig && TelemetryConfig.token) {
-            token = TelemetryConfig.token;
+          if (TelemetryConfig) {
+            if (!token) {
+              token = TelemetryConfig.token;
+            }
+            if (!axiomUrl) {
+              axiomUrl = TelemetryConfig.url;
+            }
           }
         } catch (e) {}
       }
-      if (!token) {
+      if (!token || !axiomUrl) {
         try {
           let dirs = [];
           try {
@@ -812,18 +823,28 @@ export var TabCrashHandler = {
                   ) {
                     value = value.slice(1, -1);
                   }
-                  if (key === "AXIOM_TOKEN" || key === "AXIOM_API_KEY") {
+                  if (
+                    (key === "AXIOM_TOKEN" || key === "AXIOM_API_KEY") &&
+                    !token
+                  ) {
                     token = value;
-                    break;
+                  } else if (
+                    (key === "AXIOM_URL" || key === "AXIOM_ENDPOINT") &&
+                    !axiomUrl
+                  ) {
+                    axiomUrl = value;
                   }
                 }
               }
             }
-            if (token) {
+            if (token && axiomUrl) {
               break;
             }
           }
         } catch (e) {}
+      }
+      if (!axiomUrl) {
+        axiomUrl = "https://api.axiom.co/v1/datasets/lykon-crashes/ingest";
       }
       if (!token) {
         return;
@@ -904,7 +925,7 @@ export var TabCrashHandler = {
           workDir,
           "browser",
           "config",
-          "version.txt"
+          "version.txt",
         );
         let content = await IOUtils.readUTF8(versionPath);
         lykonVersion = content.trim();
@@ -934,7 +955,7 @@ export var TabCrashHandler = {
         is_oom: null,
       };
 
-      await fetch("https://api.axiom.co/v1/datasets/lykon-crashes/ingest", {
+      await fetch(axiomUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -561,7 +561,10 @@ CrashManager.prototype = Object.freeze({
 
   async sendGeneralCrashTelemetry(processType, crashType, id, date, metadata) {
     try {
-      let mode = Services.prefs.getIntPref("lykon.telemetry.crash_report_mode", 1);
+      let mode = Services.prefs.getIntPref(
+        "lykon.telemetry.crash_report_mode",
+        1
+      );
       if (mode === 0) {
         return;
       }
@@ -570,7 +573,11 @@ CrashManager.prototype = Object.freeze({
         let confirmed = Services.prompt.confirm(
           win,
           "Send General Crash Report",
-          "Lykon has detected a general crash (" + processType + " " + crashType + "). Would you like to send a crash report to Lykon?"
+          "Lykon has detected a general crash (" +
+            processType +
+            " " +
+            crashType +
+            "). Would you like to send a crash report to Lykon?"
         );
         if (!confirmed) {
           return;
@@ -579,17 +586,25 @@ CrashManager.prototype = Object.freeze({
 
       let token =
         Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
-      if (!token) {
+      let url =
+        Services.env.get("AXIOM_URL") || Services.env.get("AXIOM_ENDPOINT");
+
+      if (!token || !url) {
         try {
           let { TelemetryConfig } = ChromeUtils.importESModule(
             "resource:///modules/TelemetryConfig.sys.mjs"
           );
-          if (TelemetryConfig && TelemetryConfig.token) {
-            token = TelemetryConfig.token;
+          if (TelemetryConfig) {
+            if (!token) {
+              token = TelemetryConfig.token;
+            }
+            if (!url) {
+              url = TelemetryConfig.url;
+            }
           }
         } catch (e) {}
       }
-      if (!token) {
+      if (!token || !url) {
         try {
           let dirs = [];
           try {
@@ -618,18 +633,28 @@ CrashManager.prototype = Object.freeze({
                   ) {
                     value = value.slice(1, -1);
                   }
-                  if (key === "AXIOM_TOKEN" || key === "AXIOM_API_KEY") {
+                  if (
+                    (key === "AXIOM_TOKEN" || key === "AXIOM_API_KEY") &&
+                    !token
+                  ) {
                     token = value;
-                    break;
+                  } else if (
+                    (key === "AXIOM_URL" || key === "AXIOM_ENDPOINT") &&
+                    !url
+                  ) {
+                    url = value;
                   }
                 }
               }
             }
-            if (token) {
+            if (token && url) {
               break;
             }
           }
         } catch (e) {}
+      }
+      if (!url) {
+        url = "https://api.axiom.co/v1/datasets/lykon-crashes/ingest";
       }
       if (!token) {
         return;
@@ -710,7 +735,7 @@ CrashManager.prototype = Object.freeze({
         is_oom: !!(metadata && metadata.OOMAllocationSize),
       };
 
-      await fetch("https://api.axiom.co/v1/datasets/lykon-crashes/ingest", {
+      await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

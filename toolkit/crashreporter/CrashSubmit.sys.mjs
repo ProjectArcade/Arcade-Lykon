@@ -2,6 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+const { AppConstants } = ChromeUtils.importESModule(
+  "resource://gre/modules/AppConstants.sys.mjs"
+);
+
 const SUCCESS = "success";
 const FAILED = "failed";
 const SUBMITTING = "submitting";
@@ -124,30 +128,38 @@ Submitter.prototype = {
     return parsedResponse;
   },
 
-  submitForm: function Submitter_submitForm() {
+  submitForm: async function Submitter_submitForm() {
     this.submittedExtraKeyVals = {};
 
-    if (!("ServerURL" in this.extraKeyVals)) {
+    let token =
+      Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
+    let url =
+      Services.env.get("AXIOM_URL") || Services.env.get("AXIOM_ENDPOINT");
+
+    if (!token || !url) {
+      try {
+        let { TelemetryConfig } = ChromeUtils.importESModule(
+          "resource:///modules/TelemetryConfig.sys.mjs"
+        );
+        if (TelemetryConfig) {
+          if (!token) {
+            token = TelemetryConfig.token;
+          }
+          if (!url) {
+            url = TelemetryConfig.url;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!url) {
+      url = "https://api.axiom.co/v1/datasets/lykon-crashes/ingest";
+    }
+
+    if (!token) {
       return false;
     }
-    let serverURL = this.extraKeyVals.ServerURL;
-    delete this.extraKeyVals.ServerURL;
 
-    // Override the submission URL from the environment
-    let envOverride = Services.env.get("MOZ_CRASHREPORTER_URL");
-    if (envOverride != "") {
-      serverURL = envOverride;
-    }
-
-    let xhr = new XMLHttpRequest();
-    xhr.open("POST", serverURL, true);
-
-    let formData = new FormData();
-
-    // tell the server not to throttle this if requested
-    this.extraKeyVals.Throttleable = this.noThrottle ? "0" : "1";
-
-    // add the data, keeping only annotations which are allowed for reports
     let payload = Object.fromEntries(
       Object.entries(this.extraKeyVals).filter(
         ([annotation, _]) =>
@@ -156,121 +168,70 @@ Submitter.prototype = {
       )
     );
     this.submittedExtraKeyVals = payload;
-    let json = new Blob([JSON.stringify(payload)], {
-      type: "application/json",
-    });
-    formData.append("extra", json);
 
-    // add the minidumps
-    let promises = [
-      File.createFromFileName(this.dump, {
-        type: "application/octet-stream",
-      }).then(file => {
-        formData.append("upload_file_minidump", file);
-      }),
-    ];
-
-    if (this.memory) {
-      promises.push(
-        File.createFromFileName(this.memory, {
-          type: "application/gzip",
-        }).then(file => {
-          formData.append("memory_report", file);
-        })
-      );
-    }
-
-    if (this.additionalDumps.length) {
-      let names = [];
-      for (let i of this.additionalDumps) {
-        names.push(i.name);
-        promises.push(
-          File.createFromFileName(i.dump, {
-            type: "application/octet-stream",
-          }).then(file => {
-            formData.append("upload_file_minidump_" + i.name, file);
-          })
-        );
-      }
-    }
+    let eventData = {
+      timestamp: new Date().toISOString(),
+      event_type: "manual_submitted_crash",
+      crash_id: this.id,
+      version: Services.appinfo?.version || "Unknown",
+      metadata: payload || {},
+      platform: AppConstants.platform,
+      process: payload.ProcessType || "Unknown",
+      type: payload.CrashType || "Unknown",
+    };
 
     let manager = Services.crashmanager;
     let submissionID = manager.generateSubmissionID();
 
-    xhr.addEventListener("readystatechange", () => {
-      if (xhr.readyState == 4) {
-        let ret =
-          xhr.status === 200 ? this.parseResponse(xhr.responseText) : {};
-        let failmsg;
-        if (xhr.status !== 200) {
-          const xhrStatus = code => {
-            switch (code) {
-              case 400:
-                return xhr.responseText;
+    if (this.recordSubmission) {
+      await manager.addSubmissionAttempt(this.id, submissionID, new Date());
+    }
 
-              case 413:
-                return "Discarded=post_body_too_large";
+    try {
+      let response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify([eventData]),
+      });
 
-              default:
-                return "Discarded=unknown_error";
-            }
-          };
-          let err = xhrStatus(xhr.status);
-          if (err.length && err.startsWith("Discarded=")) {
-            // Place the error code after, otherwise JS will complain we start
-            // with a number when dealing with the telemetry value on JS side
-            const errMsg = `${err.split("Discarded=")[1]}_${xhr.status}`;
-            Glean.crashSubmission.collectorErrors[errMsg].add();
-            failmsg = `received bad response: ${xhr.status} ${err}`;
-          }
-          if (xhr.status === 0) {
-            Glean.crashSubmission.channelStatus[xhr.channel.status].add();
-          }
-        }
-        let submitted = !!ret.CrashID;
-        let p = Promise.resolve();
+      if (response.ok) {
+        let ret = {
+          CrashID: "bp-" + this.id,
+          ViewURL: url,
+        };
 
         if (this.recordSubmission) {
-          let result = submitted
-            ? manager.SUBMISSION_RESULT_OK
-            : manager.SUBMISSION_RESULT_FAILED;
-          p = manager.addSubmissionResult(
+          await manager.addSubmissionResult(
             this.id,
             submissionID,
             new Date(),
-            result
+            manager.SUBMISSION_RESULT_OK
           );
-          if (submitted) {
-            manager.setRemoteCrashID(this.id, ret.CrashID);
-          }
+          await manager.setRemoteCrashID(this.id, ret.CrashID);
         }
 
-        p.then(() => {
-          if (submitted) {
-            this.submitSuccess(ret);
-          } else {
-            this.notifyStatus(
-              FAILED,
-              failmsg || "did not receive a crash ID in server response"
-            );
-            this.cleanup();
-          }
-        });
+        await this.submitSuccess(ret);
+        return true;
+      } else {
+        throw new Error("Bad response status: " + response.status);
       }
-    });
-
-    let p = Promise.all(promises);
-    let id = this.id;
-
-    if (this.recordSubmission) {
-      p = p.then(() => {
-        return manager.addSubmissionAttempt(id, submissionID, new Date());
-      });
+    } catch (e) {
+      console.error(e);
+      if (this.recordSubmission) {
+        await manager.addSubmissionResult(
+          this.id,
+          submissionID,
+          new Date(),
+          manager.SUBMISSION_RESULT_FAILED
+        );
+      }
+      this.notifyStatus(FAILED, e.message || e);
+      this.cleanup();
+      return true;
     }
-    p.then(() => {
-      xhr.send(formData);
-    });
-    return true;
   },
 
   // `ret` is determined based on `status`:

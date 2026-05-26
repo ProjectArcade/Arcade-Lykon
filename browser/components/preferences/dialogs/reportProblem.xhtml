@@ -1,0 +1,137 @@
+<?xml version="1.0"?>
+
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
+<?csp default-src chrome:; style-src chrome: 'unsafe-inline'; ?>
+
+<window
+  type="child"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  data-l10n-id="lykon-report-problem-dialog"
+  data-l10n-attrs="title"
+>
+  <dialog
+    id="LykonReportProblemDialog"
+    buttons="accept,cancel"
+    data-l10n-id="lykon-report-problem-dialog"
+    data-l10n-attrs="buttonlabelaccept, buttonaccesskeyaccept, buttonlabelcancel"
+  >
+    <linkset>
+      <html:link rel="stylesheet" href="chrome://global/skin/global.css" />
+      <html:link
+        rel="stylesheet"
+        href="chrome://browser/skin/preferences/preferences.css"
+      />
+      <html:link
+        rel="stylesheet"
+        href="chrome://browser/content/preferences/dialogs/reportProblem.css"
+      />
+
+      <html:link
+        rel="localization"
+        href="browser/preferences/preferences.ftl"
+      />
+    </linkset>
+
+    <script src="chrome://browser/content/preferences/dialogs/reportProblem.js" />
+
+    <vbox class="contentPane lykon-report-problem">
+      <html:h2 class="heading-medium" data-l10n-id="lykon-report-problem-heading" />
+
+      <vbox id="lykonReportForm" flex="1">
+        <description data-l10n-id="lykon-report-problem-desc" />
+
+        <separator class="thin" />
+
+        <label
+          class="lykon-report-problem-label"
+          control="lykonReportProblemType"
+          data-l10n-id="lykon-report-problem-type-label"
+        />
+        <menulist id="lykonReportProblemType">
+          <menupopup>
+            <menuitem
+              value="browser-crash"
+              data-l10n-id="lykon-report-problem-type-browser-crash"
+            />
+            <menuitem
+              value="tab-crash"
+              data-l10n-id="lykon-report-problem-type-tab-crash"
+            />
+            <menuitem
+              value="slow"
+              data-l10n-id="lykon-report-problem-type-slow"
+            />
+            <menuitem
+              value="loading"
+              data-l10n-id="lykon-report-problem-type-loading"
+            />
+            <menuitem
+              value="memory"
+              data-l10n-id="lykon-report-problem-type-memory"
+            />
+            <menuitem
+              value="extension"
+              data-l10n-id="lykon-report-problem-type-extension"
+            />
+            <menuitem
+              value="rendering"
+              data-l10n-id="lykon-report-problem-type-rendering"
+            />
+            <menuitem
+              value="media"
+              data-l10n-id="lykon-report-problem-type-media"
+            />
+            <menuitem
+              value="security"
+              data-l10n-id="lykon-report-problem-type-security"
+            />
+            <menuitem
+              value="freeze"
+              data-l10n-id="lykon-report-problem-type-freeze"
+            />
+            <menuitem
+              value="other"
+              data-l10n-id="lykon-report-problem-type-other"
+            />
+          </menupopup>
+        </menulist>
+
+        <label
+          class="lykon-report-problem-label"
+          control="lykonReportProblemDetails"
+          data-l10n-id="lykon-report-problem-details-label"
+        />
+        <html:textarea
+          id="lykonReportProblemDetails"
+          class="lykon-report-problem-textarea"
+          rows="4"
+          data-l10n-id="lykon-report-problem-details"
+          data-l10n-attrs="placeholder"
+        ></html:textarea>
+
+        <vbox class="lykon-diagnostics-section">
+          <label
+            class="lykon-report-problem-label lykon-diagnostics-header"
+            data-l10n-id="lykon-report-problem-diagnostics-label"
+          />
+          <description
+            class="lykon-diagnostics-desc"
+            data-l10n-id="lykon-report-problem-diagnostics-desc"
+          />
+          <html:div id="lykonDiagnosticsBox" class="lykon-diagnostics-box">
+            <!-- Populated dynamically via JS -->
+          </html:div>
+        </vbox>
+      </vbox>
+
+      <vbox id="lykonReportStatus" hidden="true" align="center" flex="1" style="justify-content: center; align-items: center; min-block-size: 15rem; gap: 20px; padding: 20px;">
+        <html:div id="lykonStatusIndicator" class="lykon-status-spinner"></html:div>
+        <description id="lykonStatusText" class="lykon-status-text" data-l10n-id="lykon-report-status-sending"></description>
+      </vbox>
+    </vbox>
+  </dialog>
+</window>

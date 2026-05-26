@@ -91,10 +91,10 @@ category-lykon-shield =
 pane-lykon-shield-section =
     .heading = Lykon Shield
 
-pane-lykon-telemetry-title = Lykon Telemetry
-  .tooltiptext = { pane-lykon-telemetry-title }
+pane-lykon-telemetry-title = Crash Reporting
+    .tooltiptext = { pane-lykon-telemetry-title }
 pane-lykon-telemetry-section =
-    .heading = Lykon Telemetry
+        .heading = Crash Reporting
 
 # Lykon Shield settings group
 lykon-shield-features-heading = Blocker & Privacy Options
@@ -126,7 +126,49 @@ lykon-telemetry-option-ask =
     .label = Ask me each time
 lykon-telemetry-option-none =
     .label = Do not send crash reports
+lykon-telemetry-report-button =
+    .label = Report a problem
 
+lykon-report-problem-dialog =
+    .title = Report a problem
+    .buttonlabelaccept = Send report
+    .buttonaccesskeyaccept = S
+    .buttonlabelcancel = Cancel
+
+lykon-report-problem-heading = Report a problem
+lykon-report-problem-desc = Share a few details so we can investigate and resolve the issue.
+lykon-report-problem-type-label = Problem type
+lykon-report-problem-type-browser-crash =
+    .label = Browser crash
+lykon-report-problem-type-tab-crash =
+    .label = Tab crash
+lykon-report-problem-type-slow =
+    .label = Slow performance
+lykon-report-problem-type-loading =
+    .label = Page not loading
+lykon-report-problem-type-memory =
+    .label = High memory/CPU usage
+lykon-report-problem-type-extension =
+    .label = Extension conflict/issue
+lykon-report-problem-type-rendering =
+    .label = UI or rendering glitch
+lykon-report-problem-type-media =
+    .label = Audio or video playback issue
+lykon-report-problem-type-security =
+    .label = Security or privacy concern
+lykon-report-problem-type-freeze =
+    .label = Browser freeze or hang
+lykon-report-problem-type-other =
+    .label = Other
+lykon-report-problem-details-label = What happened?
+lykon-report-problem-details =
+    .placeholder = Describe the steps to reproduce the issue, what you expected, and what you saw instead.
+lykon-report-problem-diagnostics-label = System Diagnostics (to be attached with report)
+lykon-report-problem-diagnostics-desc = Diagnostic data helps our engineering team analyze and debug crashes much faster. No personal information is included.
+lykon-report-status-sending = Sending crash and diagnostic report…
+lykon-report-status-success = Report sent successfully! Thank you for helping improve Lykon.
+lykon-report-status-error = Failed to send report. Please check your network connection and try again.
+lykon-report-button-retry = Retry
 # Lykon Data Collection settings group
 lykon-data-collection-heading = Lykon data collection and use
   .description = We strive to provide you with choices and collect only the minimal data necessary to improve Lykon for everyone.

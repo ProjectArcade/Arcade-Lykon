@@ -47,11 +47,20 @@
       <description class="description-deemphasized" style="margin-block-end: 12px;"
                    data-l10n-id="lykon-telemetry-desc"/>
 
-      <radiogroup id="lykonTelemetryRadio" style="display: flex; flex-direction: column; gap: 8px;">
+      <radiogroup id="lykonTelemetryRadio"
+                  preference="lykon.telemetry.crash_report_mode"
+                  style="display: flex; flex-direction: column; gap: 8px;">
         <radio value="2" data-l10n-id="lykon-telemetry-option-auto"/>
         <radio value="1" data-l10n-id="lykon-telemetry-option-ask"/>
         <radio value="0" data-l10n-id="lykon-telemetry-option-none"/>
       </radiogroup>
+
+      <hbox align="end" style="margin-block-start: 12px;">
+        <button id="lykonManualReportButton"
+                is="highlightable-button"
+                class="accessory-button"
+                data-l10n-id="lykon-telemetry-report-button"/>
+      </hbox>
 
       <!-- Shown when user disables telemetry -->
       <hbox id="lykonTelemetryDisabledNotice"

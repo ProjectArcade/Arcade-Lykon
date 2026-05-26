@@ -23,6 +23,9 @@ const lazy = XPCOMUtils.declareLazy({
  * @returns {string}
  */
 export function friendlyPrefCategoryNameToInternalName(categoryName) {
+  if (categoryName === "crashreporting") {
+    return "paneLykonTelemetry";
+  }
   if (categoryName.startsWith("pane")) {
     return categoryName;
   }
