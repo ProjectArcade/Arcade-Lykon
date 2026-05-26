@@ -244,7 +244,8 @@
 #include privacy.inc.xhtml
 #include containers.inc.xhtml
 #include sync.inc.xhtml
-#include lykon.inc.xhtml
+#include lykonshield.inc.xhtml
+#include crashReport.inc.xhtml
         </vbox>
       </vbox>
     </vbox>
@@ -267,6 +268,76 @@
     </vbox>
   </vbox>
   </stack>
+
+  <!-- Premium Viewport-Covering Dialog Overlay for site exception options -->
+    <vbox id="lksExceptionModal"
+      hidden="true"
+      style="position: fixed;
+         top: 0;
+         left: 0;
+         width: 100vw;
+         height: 100vh;
+         background: rgba(0, 0, 0, 0.55);
+         backdrop-filter: blur(5px);
+         z-index: 99999;
+         display: none; /* Hidden by default; JS will set to flex when opened */
+         align-items: center;
+         justify-content: center;
+         box-sizing: border-box;">
+        <vbox class="dialogBox"
+          style="padding: 24px; width: 500px; gap: 16px; box-sizing: border-box;">
+      <hbox align="center" style="gap: 8px;">
+         <image src="chrome://browser/skin/tracking-protection.svg"
+           style="-moz-context-properties: fill, fill-opacity, stroke; fill: var(--color-accent-primary); width: 22px; height: 22px;"/>
+        <label style="font-weight: 600; font-size: 1.25em; color: var(--text-color);">Add Protection Exception</label>
+      </hbox>
+
+      <description style="color: var(--text-color-deemphasized); line-height: 1.4; margin: 0; font-size: 0.95em;">
+        Enter the website URL or domain name to exclude from Lykon Shield:
+      </description>
+
+      <!-- Input Box in Popup -->
+      <html:input id="lksAddAllowedSiteInput"
+          type="text"
+          placeholder="example.com or website URL"
+          style="width: 100%; padding: 8px 12px; font-size: 1em; border: 1px solid var(--border-color); border-radius: 4px; background: var(--background-color-box); color: var(--text-color); box-sizing: border-box; outline: none;"/>
+
+      <!-- Dynamic Scoping Option Section -->
+      <vbox id="lksExceptionScopeSection" hidden="true" style="gap: 10px; margin-block-start: 4px;">
+        <description style="color: var(--text-color-deemphasized); line-height: 1.4; margin: 0; font-size: 0.95em;">
+          Select the scope of this exception:
+        </description>
+
+        <!-- Professional Options Radio Group -->
+        <radiogroup id="lksExceptionScopeRadio" style="display: flex; flex-direction: column; gap: 12px; margin-block-start: 4px;">
+          <radio id="lksScopeSubdomain" value="subdomain" label="Only specific URL" style="font-weight: 500; color: var(--text-color);"/>
+          <description id="lksScopeSubdomainDesc" class="indent description-deemphasized" style="margin-block-start: -6px; margin-inline-start: 24px; font-size: 0.88em;"></description>
+
+          <radio id="lksScopeDomain" value="domain" label="Entire domain" style="font-weight: 500; color: var(--text-color);"/>
+          <description id="lksScopeDomainDesc" class="indent description-deemphasized" style="margin-block-start: -6px; margin-inline-start: 24px; font-size: 0.88em;"></description>
+
+          <radio id="lksScopeWildcard" value="wildcard" label="Entire domain + subdomains" style="font-weight: 500; color: var(--text-color);"/>
+          <description id="lksScopeWildcardDesc" class="indent description-deemphasized" style="margin-block-start: -6px; margin-inline-start: 24px; font-size: 0.88em;"></description>
+        </radiogroup>
+      </vbox>
+
+      <hbox align="center" style="justify-content: flex-end; gap: 12px; margin-block-start: 8px;">
+        <button id="lksExceptionModalCancel"
+                is="highlightable-button"
+                class="accessory-button"
+                style="margin: 0; padding: 6px 16px; cursor: pointer;">
+          Cancel
+        </button>
+        <button id="lksExceptionModalAdd"
+                is="highlightable-button"
+                class="accessory-button"
+                disabled="true"
+                style="margin: 0; padding: 6px 20px; cursor: pointer; font-weight: 600;">
+          Add Exception
+        </button>
+      </hbox>
+    </vbox>
+  </vbox>
 
   <html:dialog id="migrationWizardDialog"></html:dialog>
 </html:body>

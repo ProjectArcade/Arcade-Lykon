@@ -44,21 +44,113 @@ class _SiteShieldSettings {
     }
   }
 
+  _normalizeUrlRule(url) {
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return null;
+      }
+      return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${
+        parsed.pathname || "/"
+      }`;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _normalizeUrlRuleNoScheme(url) {
+    const normalized = this._normalizeUrlRule(url);
+    if (!normalized) return null;
+    try {
+      const parsed = new URL(normalized);
+      return `${parsed.hostname}${parsed.pathname || "/"}`;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _isUrlRule(value) {
+    return /^https?:\/\//i.test(value);
+  }
+
   isEnabledForSite(hostname) {
     this._ensureLoaded();
+    if (!hostname) return true;
+
+    // Check exact hostname match
+    if (this._disabledSites.has(hostname)) {
+      return false;
+    }
+
+    // Check base domain match
     const site = this._getETLD1(hostname);
-    if (!site) return true;
-    return !this._disabledSites.has(site);
+    if (site && this._disabledSites.has(site)) {
+      return false;
+    }
+
+    // Check wildcard matches (e.g. *.indiatimes.com matches timesofindia.indiatimes.com)
+    for (const pattern of this._disabledSites) {
+      if (pattern.startsWith("*.")) {
+        const suffix = pattern.substring(2);
+        if (hostname === suffix || hostname.endsWith("." + suffix)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  isEnabledForUrl(url) {
+    this._ensureLoaded();
+
+    const normalizedNoScheme = this._normalizeUrlRuleNoScheme(url);
+    if (normalizedNoScheme) {
+      for (const rule of this._disabledSites) {
+        if (!this._isUrlRule(rule)) {
+          continue;
+        }
+        if (this._normalizeUrlRuleNoScheme(rule) === normalizedNoScheme) {
+          return false;
+        }
+      }
+    }
+
+    try {
+      const host = new URL(url).hostname;
+      return this.isEnabledForSite(host);
+    } catch (e) {
+      return true;
+    }
   }
 
   setEnabledForSite(hostname, enabled) {
     this._ensureLoaded();
-    const site = this._getETLD1(hostname);
-    if (!site) return;
+    if (!hostname) return;
+
+    // URL-specific exception entry, e.g. https://example.com/path
+    const normalizedUrlRule = this._normalizeUrlRule(hostname);
+    if (normalizedUrlRule) {
+      if (enabled) {
+        this._disabledSites.delete(normalizedUrlRule);
+      } else {
+        this._disabledSites.add(normalizedUrlRule);
+      }
+      this._persist();
+      return;
+    }
+
     if (enabled) {
-      this._disabledSites.delete(site);
+      this._disabledSites.delete(hostname);
+      // Clean up both exact and possible base/wildcard matches
+      const site = this._getETLD1(hostname);
+      if (site) {
+        this._disabledSites.delete(site);
+        this._disabledSites.delete("*." + site);
+      }
     } else {
-      this._disabledSites.add(site);
+      this._disabledSites.add(hostname);
     }
     this._persist();
   }

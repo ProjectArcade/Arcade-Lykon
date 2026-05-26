@@ -1,0 +1,84 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+<!-- Lykon Shield preferences pane -->
+
+<html:template id="template-paneLykonShield">
+  <hbox id="lykonShieldCategory" class="subcategory" hidden="true" data-category="paneLykonShield">
+    <html:h1>Lykon Shield Settings</html:h1>
+  </hbox>
+  <hbox align="center" style="margin-block-end: 16px; gap: 8px;">
+    <image src="chrome://browser/skin/tracking-protection.svg"
+           style="-moz-context-properties: fill, fill-opacity, stroke; fill: currentColor; width: 24px; height: 24px;"/>
+    <html:h1 style="font-size: 1.8em; font-weight: 700; margin: 0;">Lykon Shield</html:h1>
+  </hbox>
+
+  <vbox id="lykonShieldControls" data-category="paneLykonShield" hidden="true" style="gap: 16px;">
+    <!-- Introduction Card -->
+    <groupbox class="card card-no-hover" data-category="paneLykonShield">
+      <hbox align="center" style="margin-block-end: 8px;">
+        <image src="chrome://browser/skin/tracking-protection.svg"
+               style="-moz-context-properties: fill; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
+        <label style="font-weight: 600; font-size: 1.25em;">Protect your browsing with Lykon Shield</label>
+      </hbox>
+      <description style="line-height: 1.5; margin-block-end: 8px;">
+        Shields block trackers and ads that follow you across the web. These are the default Shields settings that apply to all websites unless you change them in the Shields panel on a particular site.
+      </description>
+      <description class="description-deemphasized">
+        Changing these global defaults won't affect your existing per-site overrides.
+      </description>
+    </groupbox>
+
+    <!-- Global Protection Settings Group (dynamically populated by Settings Redesign) -->
+    <html:setting-group groupid="lykonShieldSettingsGroup" data-category="paneLykonShield" hidden="true"/>
+
+    <!-- Privacy & Data Protection Group (dynamically populated by Settings Redesign) -->
+    <html:setting-group groupid="lykonShieldPrivacyGroup" data-category="paneLykonShield" hidden="true"/>
+
+    <!-- Content Filtering Group (dynamically populated by Settings Redesign) -->
+    <html:setting-group groupid="lykonShieldContentGroup" data-category="paneLykonShield" hidden="true"/>
+
+    <!-- Social Media Blocking Group (dynamically populated by Settings Redesign) -->
+    <html:setting-group groupid="lykonShieldSocialGroup" data-category="paneLykonShield" hidden="true"/>
+
+    <!-- Protection Exceptions Card -->
+    <groupbox class="card card-no-hover" data-category="paneLykonShield" style="min-height: 100px;">
+      <hbox align="center" style="margin-block-end: 8px; justify-content: space-between;">
+        <hbox align="center">
+          <image src="chrome://global/skin/icons/settings.svg"
+                 style="-moz-context-properties: fill, fill-opacity, stroke; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
+          <label style="font-weight: 600; font-size: 1.15em;">Protection Exceptions (Allowed Sites)</label>
+        </hbox>
+        <button id="lksOpenAddExceptionBtn"
+                is="highlightable-button"
+                class="accessory-button"
+                style="margin: 0; padding: 5px 14px; cursor: pointer;">
+          Add Site...
+        </button>
+      </hbox>
+      <description style="margin-block-end: 12px;" class="description-deemphasized">
+        Lykon Shield will not block ads or trackers on the following websites. You can add or remove sites from this list at any time.
+      </description>
+
+      <hbox id="lksAllowedSitesTableHeader" align="center" style="margin-block-end: 6px;">
+        <label class="lks-table-col-url" flex="4">Exception URL</label>
+        <label class="lks-table-col-type" flex="2">Type</label>
+        <label class="lks-table-col-action"/>
+      </hbox>
+
+      <!-- List of Allowed Sites -->
+      <vbox id="lksAllowedSitesList" style="gap: 8px; margin-block-end: 8px;">
+        <!-- Dynamically populated -->
+      </vbox>
+
+      <!-- Empty state notice -->
+      <hbox id="lksAllowedSitesEmptyNotice" align="center" style="padding: 12px; background: rgba(128, 128, 128, 0.05); border: 1px dashed var(--in-content-box-border-color); border-radius: 4px; justify-content: center;">
+        <description style="color: var(--in-content-deemphasized-text-color); font-style: italic; margin: 0;">
+          No exceptions added yet. All websites are currently protected by Lykon Shield.
+        </description>
+      </hbox>
+    </groupbox>
+
+  </vbox>
+</html:template>

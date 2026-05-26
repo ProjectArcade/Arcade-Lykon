@@ -526,7 +526,261 @@ function init_all() {
   register_module("panePrivacy", gPrivacyPane);
   register_module("paneContainers", gContainersPane);
   register_module("paneLykonShield", {
-    init() {},
+    init() {
+      // Register all shield preferences inside preferences.js environment so that XUL bindings find them
+      Preferences.addAll([
+        { id: "lykon.shield.tracker.mode", type: "string" },
+        { id: "lykon.shield.https.mode", type: "string" },
+        { id: "lykon.shield.fingerprinting.blocked", type: "string" },
+        { id: "lykon.shield.fingerprint.enabled", type: "bool" },
+        { id: "lykon.shield.cookie.mode", type: "string" },
+        { id: "lykon.shield.scripts.blocked", type: "bool" },
+        { id: "browser.adblock.stats", type: "bool" },
+        { id: "lykon.shield.forget.onexit", type: "bool" },
+        { id: "lykon.shield.contact_info.store", type: "bool" },
+        { id: "lykon.shield.block_element.private", type: "bool" },
+        { id: "lykon.shield.custom_filters.enabled", type: "bool" },
+        { id: "lykon.shield.adblock_only_mode", type: "bool" },
+        { id: "lykon.shield.social.facebook", type: "bool" },
+        { id: "lykon.shield.social.twitter", type: "bool" },
+        { id: "lykon.shield.social.linkedin", type: "bool" },
+      ]);
+
+      const { siteShieldSettings } = ChromeUtils.importESModule(
+        "resource:///modules/SiteShieldSettings.sys.mjs"
+      );
+
+      const listContainer = document.getElementById("lksAllowedSitesList");
+      const tableHeader = document.getElementById("lksAllowedSitesTableHeader");
+      const emptyNotice = document.getElementById("lksAllowedSitesEmptyNotice");
+      const openModalBtn = document.getElementById("lksOpenAddExceptionBtn");
+
+      // Modal Dialog elements
+      const exceptionModal = document.getElementById("lksExceptionModal");
+      const exceptionScopeSection = document.getElementById(
+        "lksExceptionScopeSection"
+      );
+      const exceptionScopeRadio = document.getElementById(
+        "lksExceptionScopeRadio"
+      );
+      const addInput = document.getElementById("lksAddAllowedSiteInput");
+      const scopeSubdomain = document.getElementById("lksScopeSubdomain");
+      const scopeSubdomainDesc = document.getElementById(
+        "lksScopeSubdomainDesc"
+      );
+      const scopeDomain = document.getElementById("lksScopeDomain");
+      const scopeDomainDesc = document.getElementById("lksScopeDomainDesc");
+      const scopeWildcard = document.getElementById("lksScopeWildcard");
+      const scopeWildcardDesc = document.getElementById("lksScopeWildcardDesc");
+      const modalCancelBtn = document.getElementById("lksExceptionModalCancel");
+      const modalAddBtn = document.getElementById("lksExceptionModalAdd");
+
+      if (!listContainer) return;
+
+      const refreshList = () => {
+        listContainer.textContent = "";
+        const sites = siteShieldSettings.getDisabledSites();
+
+        const getRuleMeta = rule => {
+          if (/^https?:\/\//i.test(rule) || rule.includes("/")) {
+            return {
+              displayUrl: rule,
+              typeLabel: "Specific URL",
+            };
+          }
+
+          if (rule.startsWith("*.")) {
+            return {
+              displayUrl: rule,
+              typeLabel: "Domain + subdomains",
+            };
+          }
+
+          return {
+            displayUrl: rule,
+            typeLabel: "Entire domain",
+          };
+        };
+
+        if (sites.length === 0) {
+          emptyNotice.removeAttribute("hidden");
+          tableHeader?.setAttribute("hidden", "true");
+        } else {
+          emptyNotice.setAttribute("hidden", "true");
+          tableHeader?.removeAttribute("hidden");
+        }
+
+        for (const site of sites) {
+          const ruleMeta = getRuleMeta(site);
+
+          const row = document.createElement("hbox");
+          row.setAttribute("align", "start");
+          row.className = "lks-allowed-site-row";
+
+          const urlLabel = document.createElement("description");
+          urlLabel.textContent = ruleMeta.displayUrl;
+          urlLabel.className = "lks-allowed-site-label lks-table-col-url";
+          urlLabel.setAttribute("flex", "4");
+
+          const typeLabel = document.createElement("label");
+          typeLabel.textContent = ruleMeta.typeLabel;
+          typeLabel.className = "lks-allowed-site-type lks-table-col-type";
+          typeLabel.setAttribute("flex", "2");
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className =
+            "accessory-button lks-remove-site-button lks-table-col-action";
+          removeBtn.setAttribute("title", "Remove exception");
+          removeBtn.setAttribute("aria-label", "Remove exception");
+
+          removeBtn.addEventListener("click", () => {
+            siteShieldSettings.setEnabledForSite(site, true);
+            refreshList();
+          });
+
+          row.appendChild(urlLabel);
+          row.appendChild(typeLabel);
+          row.appendChild(removeBtn);
+          listContainer.appendChild(row);
+        }
+      };
+
+      const getDomainInfo = input => {
+        let rawInput = input.trim();
+        // Handle accidental pasted wrapping quotes.
+        rawInput = rawInput.replace(/^['\"]+|['\"]+$/g, "");
+        if (!rawInput) return null;
+
+        let parsedUrl = null;
+        try {
+          if (rawInput.includes("://")) {
+            parsedUrl = new URL(rawInput);
+          } else {
+            parsedUrl = new URL("https://" + rawInput);
+          }
+        } catch (e) {}
+
+        if (!parsedUrl) return null;
+        if (
+          parsedUrl.protocol !== "http:" &&
+          parsedUrl.protocol !== "https:"
+        ) {
+          return null;
+        }
+
+        const host = parsedUrl.hostname.toLowerCase();
+
+        if (!host || !host.includes(".")) return null;
+
+        let parentDomain = host;
+        try {
+          parentDomain = Services.eTLD.getBaseDomainFromHost(host);
+        } catch (e) {
+          let parts = host.split(".");
+          if (parts.length > 2) {
+            parentDomain = parts.slice(-2).join(".");
+          }
+        }
+
+        const isSubdomain = host !== parentDomain;
+
+        return {
+          host,
+          specificUrl: `${parsedUrl.protocol}//${host}${parsedUrl.pathname || "/"}`,
+          parentDomain,
+          wildcard: "*." + parentDomain,
+          isSubdomain,
+        };
+      };
+
+      let pendingDomainInfo = null;
+
+      if (openModalBtn && exceptionModal && addInput) {
+        openModalBtn.addEventListener("click", () => {
+          addInput.value = "";
+          exceptionScopeSection.setAttribute("hidden", "true");
+          modalAddBtn.setAttribute("disabled", "true");
+          pendingDomainInfo = null;
+          exceptionModal.style.display = "flex";
+          exceptionModal.removeAttribute("hidden");
+          addInput.focus();
+        });
+
+        addInput.addEventListener("input", () => {
+          const info = getDomainInfo(addInput.value);
+          if (!info) {
+            exceptionScopeSection.setAttribute("hidden", "true");
+            modalAddBtn.setAttribute("disabled", "true");
+            pendingDomainInfo = null;
+            return;
+          }
+
+          const firstDetection = !pendingDomainInfo;
+          pendingDomainInfo = info;
+
+          // Set radio button values and descriptions dynamically
+          scopeSubdomain.value = info.specificUrl;
+          scopeSubdomainDesc.textContent = info.specificUrl;
+
+          scopeDomain.value = info.parentDomain;
+          scopeDomainDesc.textContent = info.parentDomain;
+
+          scopeWildcard.value = info.wildcard;
+          scopeWildcardDesc.textContent = info.wildcard;
+
+          // Default to the most specific scope (only change on first valid detection to preserve user toggling)
+          if (firstDetection) {
+            exceptionScopeRadio.value = "subdomain";
+          }
+
+          // Show scope selection section and enable add button
+          exceptionScopeSection.removeAttribute("hidden");
+          modalAddBtn.removeAttribute("disabled");
+        });
+
+        addInput.addEventListener("keypress", e => {
+          if (e.key === "Enter" && pendingDomainInfo) {
+            modalAddBtn.click();
+          }
+        });
+
+        if (modalCancelBtn) {
+          modalCancelBtn.addEventListener("click", () => {
+            exceptionModal.style.display = "none";
+            exceptionModal.setAttribute("hidden", "true");
+            pendingDomainInfo = null;
+          });
+        }
+
+        if (modalAddBtn && exceptionScopeRadio) {
+          modalAddBtn.addEventListener("click", () => {
+            const selectedScope = exceptionScopeRadio.value;
+            let chosenPattern = "";
+
+            if (selectedScope === "subdomain" && pendingDomainInfo) {
+              chosenPattern = pendingDomainInfo.specificUrl;
+            } else if (selectedScope === "domain" && pendingDomainInfo) {
+              chosenPattern = pendingDomainInfo.parentDomain;
+            } else if (selectedScope === "wildcard" && pendingDomainInfo) {
+              chosenPattern = pendingDomainInfo.wildcard;
+            } else {
+              chosenPattern = selectedScope;
+            }
+
+            if (chosenPattern) {
+              siteShieldSettings.setEnabledForSite(chosenPattern, false); // false means disabled/excepted
+              addInput.value = "";
+              exceptionModal.style.display = "none";
+              exceptionModal.setAttribute("hidden", "true");
+              pendingDomainInfo = null;
+              refreshList();
+            }
+          });
+        }
+      }
+
+      refreshList();
+    },
   });
   register_module("paneLykonTelemetry", {
     init() {

@@ -239,6 +239,82 @@ radio {
   margin: 4px 0;
 }
 
+.lks-allowed-site-row {
+  padding: 6px 0;
+  border: none;
+  border-radius: 0;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+#lksAllowedSitesTableHeader {
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.lks-table-col-url,
+.lks-table-col-type {
+  margin: 0;
+}
+
+#lksAllowedSitesTableHeader .lks-table-col-url,
+#lksAllowedSitesTableHeader .lks-table-col-type {
+  color: var(--text-color-deemphasized);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.lks-table-col-action {
+  width: 28px;
+  min-width: 28px;
+}
+
+.lks-allowed-site-label {
+  margin: 0;
+  font-weight: 500;
+  color: var(--text-color);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
+  margin-inline-end: 6px;
+}
+
+.lks-allowed-site-type {
+  margin: 0;
+  color: var(--text-color-deemphasized);
+  line-height: 1.35;
+}
+
+.accessory-button.lks-remove-site-button {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  background-image: url("chrome://global/skin/icons/delete.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px;
+  -moz-context-properties: fill;
+  fill: currentColor;
+  color: var(--text-color-deemphasized);
+}
+
+.accessory-button.lks-remove-site-button:hover {
+  color: var(--text-color);
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.accessory-button.lks-remove-site-button:active {
+  background-color: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.accessory-button.lks-remove-site-button:focus-visible {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
 .spotlight:not(setting-group:has(> moz-card)) {
   background-color: color-mix(in srgb, var(--color-accent-primary) 15%, transparent);
   outline: var(--border-color-selected) 1px dotted;
@@ -646,6 +722,34 @@ html|dialog,
       --background-color-canvas: #42414d;
     }
   }
+}
+
+/* Improve dialog contrast on dark theme */
+@media (prefers-color-scheme: dark) {
+  .dialogOverlay[topmost="true"] {
+    background-color: rgba(0, 0, 0, 0.75) !important;
+  }
+
+  .dialogBox {
+    background-color: var(--background-color-box, #2b2a33) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-color, #ffffff) !important;
+  }
+
+  /* Make input placeholder and deemphasized text readable on dark backgrounds */
+  html|input::placeholder,
+  .description-deemphasized,
+  .text-deemphasized {
+    color: rgba(255, 255, 255, 0.65) !important;
+  }
+}
+
+/* Fix transparency halo and unwanted scrollbar for Lykon Shield modal only */
+#lksExceptionModal > .dialogBox {
+  /* Ensure the dialog background covers the padded area (no transparent halo) */
+  background-clip: padding-box !important;
+  /* Prevent forced scrolling inside the dialog; allow the page to handle overflow */
+  overflow: visible !important;
 }
 
 .dialogBox[resizable="true"] {

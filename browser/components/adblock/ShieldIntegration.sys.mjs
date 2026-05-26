@@ -154,6 +154,7 @@ export class ShieldIntegration {
 
       const contentType = this._getResourceType(channel);
       let checkHost = this._getTopLevelHost(channel);
+      let checkUrl = this._getTopLevelUrl(channel);
 
       if (!checkHost && contentType === "document") {
         try {
@@ -161,7 +162,15 @@ export class ShieldIntegration {
         } catch (e) {}
       }
 
-      if (checkHost && !siteShieldSettings.isEnabledForSite(checkHost)) {
+      if (!checkUrl && contentType === "document") {
+        checkUrl = url;
+      }
+
+      if (checkUrl && !siteShieldSettings.isEnabledForUrl(checkUrl)) {
+        return;
+      }
+
+      if (!checkUrl && checkHost && !siteShieldSettings.isEnabledForSite(checkHost)) {
         return;
       }
 

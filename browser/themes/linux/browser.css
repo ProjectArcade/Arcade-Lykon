@@ -1280,7 +1280,7 @@
   border-radius: 14px;
   background:
     radial-gradient(90% 70% at 88% 0%, rgba(42, 216, 108, 0.16) 0%, rgba(42, 216, 108, 0) 60%),
-    radial-gradient(120% 90% at 4% 100%, rgba(54, 90, 164, 0.18) 0%, rgba(54, 90, 164, 0) 58%), #161b26;
+    radial-gradient(120% 90% at 4% 100%, rgba(54, 90, 164, 0.18) 0%, rgba(54, 90, 164, 0) 58%), #161b26 !important;
   color: #edf3ff;
   border: 1px solid rgba(122, 142, 181, 0.25);
   box-shadow:
@@ -1291,7 +1291,7 @@
 #lykon-shield-panel-content[data-paused="true"] {
   background:
     radial-gradient(90% 70% at 88% 0%, rgba(255, 105, 97, 0.2) 0%, rgba(255, 105, 97, 0) 60%),
-    radial-gradient(120% 90% at 4% 100%, rgba(120, 53, 50, 0.2) 0%, rgba(120, 53, 50, 0) 58%), #181b25;
+    radial-gradient(120% 90% at 4% 100%, rgba(120, 53, 50, 0.2) 0%, rgba(120, 53, 50, 0) 58%), #181b25 !important;
 }
 
 #lykon-shield-panel-content[data-inactive="true"] {
@@ -1549,9 +1549,6 @@
 .lks-sparkline,
 .lks-divider,
 .lks-stat-sep,
-.lks-actions,
-.lks-adv-toggle,
-.lks-adv-panel,
 .lks-toggle-sm,
 #lykon-shield-bridge-warning {
   display: none !important;

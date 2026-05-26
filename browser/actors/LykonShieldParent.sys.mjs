@@ -47,6 +47,10 @@ export class LykonShieldParent extends JSWindowActorParent {
               host = new URL(message.data.url).hostname;
             } catch (e) {}
           }
+          const pageUrl = message.data?.url || this.browsingContext.top.currentURI?.spec;
+          if (pageUrl && /^https?:/i.test(pageUrl)) {
+            return siteShieldSettings.isEnabledForUrl(pageUrl);
+          }
           return siteShieldSettings.isEnabledForSite(host);
         } catch (e) {
           return true;

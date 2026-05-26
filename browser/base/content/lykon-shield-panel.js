@@ -273,16 +273,25 @@ var LykonShield = {
   setTrackerMode(val) {
     try {
       Services.prefs.setStringPref("lykon.shield.tracker.mode", val);
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {}
   },
   setHttpsMode(val) {
     try {
       Services.prefs.setStringPref("lykon.shield.https.mode", val);
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {}
   },
   setCookieMode(val) {
     try {
       Services.prefs.setStringPref("lykon.shield.cookie.mode", val);
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {}
   },
 
@@ -291,6 +300,9 @@ var LykonShield = {
     if (!el) return;
     try {
       Services.prefs.setBoolPref("lykon.shield.scripts.blocked", el.checked);
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {}
   },
   toggleFingerprint() {
@@ -302,16 +314,22 @@ var LykonShield = {
         "lykon.shield.fingerprint.enabled",
         el.checked
       );
+      if (lbl) {
+        lbl.textContent = el.checked ? "Active" : "Off";
+      }
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {}
-    if (lbl) {
-      lbl.textContent = el.checked ? "Active" : "Off";
-    }
   },
   toggleForget() {
     const el = document.getElementById("lykon-shield-forget");
     if (!el) return;
     try {
       Services.prefs.setBoolPref("lykon.shield.forget.onexit", el.checked);
+      if (window.gBrowser) {
+        window.gBrowser.selectedBrowser.reload();
+      }
     } catch (e) {}
   },
 
@@ -323,7 +341,7 @@ var LykonShield = {
         const { siteShieldSettings } = ChromeUtils.importESModule(
           "resource:///modules/SiteShieldSettings.sys.mjs"
         );
-        on = siteShieldSettings.isEnabledForSite(host);
+        on = this._isEnabledForCurrentContext(siteShieldSettings);
       }
       this._el.toggle.checked = on;
       this._applyEnabledState(on);
@@ -546,6 +564,22 @@ var LykonShield = {
       return uri.host;
     } catch (e) {
       return null;
+    }
+  },
+
+  _isEnabledForCurrentContext(siteShieldSettings, doc = null) {
+    try {
+      const url = doc?.location?.href || window.gBrowser?.currentURI?.spec || "";
+      if (url && /^https?:/i.test(url)) {
+        return siteShieldSettings.isEnabledForUrl(url);
+      }
+    } catch (e) {}
+
+    try {
+      const host = doc?.location?.hostname || this._getCurrentHost();
+      return siteShieldSettings.isEnabledForSite(host);
+    } catch (e) {
+      return true;
     }
   },
 };
@@ -1015,6 +1049,21 @@ var LykonCosmeticFilter = {
     }
   },
 
+  _isEnabledForCurrentContext(siteShieldSettings, doc = null) {
+    try {
+      const url = doc?.location?.href || "";
+      if (url && /^https?:/i.test(url)) {
+        return siteShieldSettings.isEnabledForUrl(url);
+      }
+    } catch (e) {}
+
+    try {
+      return siteShieldSettings.isEnabledForSite(doc?.location?.hostname || "");
+    } catch (e) {
+      return true;
+    }
+  },
+
   /* ─────────────────────────────────────────────────
      ❺  INIT
   ───────────────────────────────────────────────── */
@@ -1086,7 +1135,7 @@ var LykonCosmeticFilter = {
       const { siteShieldSettings } = ChromeUtils.importESModule(
         "resource:///modules/SiteShieldSettings.sys.mjs"
       );
-      if (!siteShieldSettings.isEnabledForSite(doc.location.hostname)) return;
+      if (!this._isEnabledForCurrentContext(siteShieldSettings, doc)) return;
     } catch (e) {}
     this._injectStylesheet(doc);
   },
@@ -1138,7 +1187,7 @@ var LykonCosmeticFilter = {
           const { siteShieldSettings } = ChromeUtils.importESModule(
             "resource:///modules/SiteShieldSettings.sys.mjs"
           );
-          if (!siteShieldSettings.isEnabledForSite(doc.location.hostname))
+          if (!this._isEnabledForCurrentContext(siteShieldSettings, doc))
             return;
         } catch (e) {}
         this._jsHidePass(doc);
@@ -1175,7 +1224,7 @@ var LykonCosmeticFilter = {
             const { siteShieldSettings } = ChromeUtils.importESModule(
               "resource:///modules/SiteShieldSettings.sys.mjs"
             );
-            if (!siteShieldSettings.isEnabledForSite(doc.location.hostname)) {
+            if (!this._isEnabledForCurrentContext(siteShieldSettings, doc)) {
               disabled = true;
             }
           } catch (e) {}
@@ -1203,7 +1252,7 @@ var LykonCosmeticFilter = {
       const { siteShieldSettings } = ChromeUtils.importESModule(
         "resource:///modules/SiteShieldSettings.sys.mjs"
       );
-      if (!siteShieldSettings.isEnabledForSite(doc.location.hostname)) return;
+      if (!this._isEnabledForCurrentContext(siteShieldSettings, doc)) return;
     } catch (e) {}
     this._injectStylesheet(doc);
     this._jsHidePass(doc);
