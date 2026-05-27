@@ -1288,7 +1288,23 @@ export var TelemetrySendImpl = {
     const version = isV4PingFormat(ping)
       ? AppConstants.TELEMETRY_PING_FORMAT_VERSION
       : 1;
-    return this._server + this._getSubmissionPath(ping) + "?v=" + version;
+    let url = this._server + this._getSubmissionPath(ping) + "?v=" + version;
+    let token =
+      Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
+    if (!token) {
+      try {
+        let { TelemetryConfig } = ChromeUtils.importESModule(
+          "resource:///modules/TelemetryConfig.sys.mjs"
+        );
+        if (TelemetryConfig && TelemetryConfig.token) {
+          token = TelemetryConfig.token;
+        }
+      } catch (e) {}
+    }
+    if (token) {
+      url += "&api_token=" + encodeURIComponent(token);
+    }
+    return url;
   },
 
   _getSubmissionPath(ping) {
@@ -1346,6 +1362,22 @@ export var TelemetrySendImpl = {
     request.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
     request.setRequestHeader("Date", Policy.now().toUTCString());
     request.setRequestHeader("Content-Encoding", "gzip");
+
+    let token =
+      Services.env.get("AXIOM_TOKEN") || Services.env.get("AXIOM_API_KEY");
+    if (!token) {
+      try {
+        let { TelemetryConfig } = ChromeUtils.importESModule(
+          "resource:///modules/TelemetryConfig.sys.mjs"
+        );
+        if (TelemetryConfig && TelemetryConfig.token) {
+          token = TelemetryConfig.token;
+        }
+      } catch (e) {}
+    }
+    if (token) {
+      request.setRequestHeader("Authorization", "Bearer " + token);
+    }
     request.onerror = errorHandler;
     request.ontimeout = errorHandler;
     request.onabort = errorHandler;

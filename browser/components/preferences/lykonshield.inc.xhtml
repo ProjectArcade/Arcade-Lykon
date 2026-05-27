@@ -50,12 +50,20 @@
                  style="-moz-context-properties: fill, fill-opacity, stroke; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
           <label style="font-weight: 600; font-size: 1.15em;">Protection Exceptions (Allowed Sites)</label>
         </hbox>
-        <button id="lksOpenAddExceptionBtn"
-                is="highlightable-button"
-                class="accessory-button"
-                style="margin: 0; padding: 5px 14px; cursor: pointer;">
-          Add Site...
-        </button>
+        <hbox align="center" style="gap: 8px;">
+          <button id="lksRefreshExceptionsBtn"
+                  is="highlightable-button"
+                  class="accessory-button"
+                  style="margin: 0; padding: 5px 14px; cursor: pointer;">
+            Refresh List
+          </button>
+          <button id="lksOpenAddExceptionBtn"
+                  is="highlightable-button"
+                  class="accessory-button"
+                  style="margin: 0; padding: 5px 14px; cursor: pointer;">
+            Add Site...
+          </button>
+        </hbox>
       </hbox>
       <description style="margin-block-end: 12px;" class="description-deemphasized">
         Lykon Shield will not block ads or trackers on the following websites. You can add or remove sites from this list at any time.

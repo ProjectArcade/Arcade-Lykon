@@ -3622,7 +3622,7 @@ pref("app.update.background.allowUpdatesForUnelevatedInstallations", false);
 pref("toolkit.telemetry.enabled", false);
 pref("toolkit.telemetry.unified", false);
 pref("toolkit.telemetry.archive.enabled", false);
-pref("toolkit.telemetry.server", "https://api.axiom.co/v1/datasets/lykon-crashes/ingest?api_token=xaat-db3fbe6e-5759-4a01-a708-9d761a6f7b71");
+pref("toolkit.telemetry.server", "https://api.axiom.co/v1/datasets/lykon-crashes/ingest");
 pref("toolkit.telemetry.shutdownPingSender.enabled", false);
 pref("toolkit.telemetry.firstShutdownPing.enabled", false);
 pref("toolkit.telemetry.newProfilePing.enabled", false);
