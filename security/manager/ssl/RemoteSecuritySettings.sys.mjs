@@ -45,6 +45,7 @@ ChromeUtils.defineLazyGetter(lazy, "log", () => {
 ChromeUtils.defineESModuleGetters(lazy, {
   RemoteSettingsClient:
     "resource://services-settings/RemoteSettingsClient.sys.mjs",
+  Utils: "resource://services-settings/Utils.sys.mjs",
 });
 
 // Converts a JS string to an array of bytes consisting of the char code at each
@@ -470,6 +471,11 @@ class IntermediatePreloads {
   async maybeDownloadAttachment(record) {
     let result = { record, cert: null, subject: null };
 
+    if (lazy.Utils.isOffline) {
+      lazy.log.debug("Offline, skipping attachment download.");
+      return result;
+    }
+
     let dataAsString = null;
     try {
       let { buffer } = await this.client.attachments.download(record, {
@@ -481,6 +487,13 @@ class IntermediatePreloads {
     } catch (err) {
       if (err.name == "BadContentError") {
         lazy.log.debug(`Bad attachment content.`);
+      } else if (
+        lazy.Utils.isOffline ||
+        err.result == Cr.NS_ERROR_DOM_UNKNOWN_ERR
+      ) {
+        lazy.log.warn(
+          `Failed to download attachment due to network connection: ${err}`
+        );
       } else {
         lazy.log.error(`Failed to download attachment: ${err}`);
       }

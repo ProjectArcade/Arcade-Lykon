@@ -96,6 +96,17 @@ pane-lykon-telemetry-title = Crash Reporting
 pane-lykon-telemetry-section =
         .heading = Crash Reporting
 
+pane-offline-playbook-title = Offline Playbook
+    .tooltiptext = { pane-offline-playbook-title }
+pane-offline-playbook-section =
+    .heading = Offline Playbook
+
+pane-garuda-vision-title = Garuda Vision
+    .tooltiptext = { pane-garuda-vision-title }
+pane-garuda-vision-section =
+    .heading = Garuda Vision
+
+
 # Lykon Shield settings group
 lykon-shield-features-heading = Blocker & Privacy Options
   .description = Control the built-in Lykon Shield content blocker and advanced privacy controls.

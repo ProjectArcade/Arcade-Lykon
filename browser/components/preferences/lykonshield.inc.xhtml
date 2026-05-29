@@ -42,6 +42,26 @@
     <!-- Social Media Blocking Group (dynamically populated by Settings Redesign) -->
     <html:setting-group groupid="lykonShieldSocialGroup" data-category="paneLykonShield" hidden="true"/>
 
+    <!-- Filter List Updates Card -->
+    <groupbox class="card card-no-hover" data-category="paneLykonShield">
+      <hbox align="center" style="margin-block-end: 8px; justify-content: space-between;">
+        <hbox align="center">
+          <image src="chrome://global/skin/icons/sync.svg"
+                 style="-moz-context-properties: fill, fill-opacity, stroke; fill: currentColor; width: 16px; height: 16px; margin-inline-end: 8px;"/>
+          <label style="font-weight: 600; font-size: 1.15em;">Security Filter Lists</label>
+        </hbox>
+        <button id="lksUpdateSecurityListBtn"
+                is="highlightable-button"
+                class="accessory-button"
+                style="margin: 0; padding: 5px 14px; cursor: pointer;">
+          Update Security List
+        </button>
+      </hbox>
+      <description class="description-deemphasized">
+        Keep your built-in adblocking and tracker defense rules up to date. Clicking this button checks for and downloads the latest filter list updates (EasyList, EasyPrivacy, and uBlock Filters).
+      </description>
+    </groupbox>
+
     <!-- Protection Exceptions Card -->
     <groupbox class="card card-no-hover" data-category="paneLykonShield" style="min-height: 100px;">
       <hbox align="center" style="margin-block-end: 8px; justify-content: space-between;">

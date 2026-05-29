@@ -644,7 +644,10 @@ function init_all() {
           enabledToggle.pressed = site.active !== false;
           enabledToggle.setAttribute("aria-label", "Enable exception");
           enabledToggle.addEventListener("toggle", () => {
-            siteShieldSettings.setExceptionActive(site.rule, enabledToggle.pressed);
+            siteShieldSettings.setExceptionActive(
+              site.rule,
+              enabledToggle.pressed
+            );
             refreshList();
           });
           enabledCell.appendChild(enabledToggle);
@@ -690,10 +693,7 @@ function init_all() {
         } catch (e) {}
 
         if (!parsedUrl) return null;
-        if (
-          parsedUrl.protocol !== "http:" &&
-          parsedUrl.protocol !== "https:"
-        ) {
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
           return null;
         }
 
@@ -810,6 +810,15 @@ function init_all() {
         }
       }
 
+      const updateSecurityListBtn = document.getElementById(
+        "lksUpdateSecurityListBtn"
+      );
+      if (updateSecurityListBtn) {
+        updateSecurityListBtn.addEventListener("click", () => {
+          console.log("[LykonShield] Check for filter list updates requested");
+        });
+      }
+
       refreshList();
     },
   });
@@ -869,6 +878,12 @@ function init_all() {
         });
       }
     },
+  });
+  register_module("paneOfflinePlaybook", {
+    init() {},
+  });
+  register_module("paneGarudaVision", {
+    init() {},
   });
 
   // Restore the cached Firefox Labs nav button visibility so it shows

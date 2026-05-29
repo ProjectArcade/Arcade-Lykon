@@ -569,7 +569,8 @@ var LykonShield = {
 
   _isEnabledForCurrentContext(siteShieldSettings, doc = null) {
     try {
-      const url = doc?.location?.href || window.gBrowser?.currentURI?.spec || "";
+      const url =
+        doc?.location?.href || window.gBrowser?.currentURI?.spec || "";
       if (url && /^https?:/i.test(url)) {
         return siteShieldSettings.isEnabledForUrl(url);
       }
@@ -1181,7 +1182,10 @@ var LykonCosmeticFilter = {
 
       this.run(doc);
 
-      const mutCb = _lksThrottle(() => {
+      const pendingClasses = new Set();
+      const pendingIds = new Set();
+
+      const processMutations = () => {
         if (!this._isShieldEnabled()) return;
         try {
           const { siteShieldSettings } = ChromeUtils.importESModule(
@@ -1194,7 +1198,67 @@ var LykonCosmeticFilter = {
         this._stickyAdEviction(doc);
         this._shadowDomPierce(doc);
         this._collapseEmptyContainers(doc);
-      }, 120);
+
+        if (pendingClasses.size > 0 || pendingIds.size > 0) {
+          const classes = Array.from(pendingClasses);
+          const ids = Array.from(pendingIds);
+          pendingClasses.clear();
+          pendingIds.clear();
+          this._queryClassesAndIds(doc, classes, ids);
+        }
+      };
+
+      const throttledProcess = _lksThrottle(processMutations, 120);
+
+      const mutCb = mutations => {
+        if (!this._isShieldEnabled()) return;
+        try {
+          const { siteShieldSettings } = ChromeUtils.importESModule(
+            "resource:///modules/SiteShieldSettings.sys.mjs"
+          );
+          if (!this._isEnabledForCurrentContext(siteShieldSettings, doc))
+            return;
+        } catch (e) {
+          return;
+        }
+
+        // Collect newly added or modified classes/IDs
+        for (const m of mutations) {
+          if (m.type === "attributes") {
+            const target = m.target;
+            if (m.attributeName === "class" && target.classList) {
+              for (const c of target.classList) {
+                pendingClasses.add(c);
+              }
+            } else if (m.attributeName === "id" && target.id) {
+              pendingIds.add(target.id);
+            }
+          } else if (m.type === "childList") {
+            for (const node of m.addedNodes) {
+              if (node.nodeType === 1) {
+                // Element node
+                if (node.id) pendingIds.add(node.id);
+                if (node.classList) {
+                  for (const c of node.classList) {
+                    pendingClasses.add(c);
+                  }
+                }
+                const elements = node.querySelectorAll("[class], [id]");
+                for (const el of elements) {
+                  if (el.id) pendingIds.add(el.id);
+                  if (el.classList) {
+                    for (const c of el.classList) {
+                      pendingClasses.add(c);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        throttledProcess();
+      };
 
       const mo = new doc.defaultView.MutationObserver(mutCb);
       mo.observe(doc.documentElement || doc, {
@@ -1261,6 +1325,29 @@ var LykonCosmeticFilter = {
     this._stickyAdEviction(doc);
     this._attachIntersection(doc);
     this._collapseEmptyContainers(doc);
+
+    // Initial query for classes/IDs on load
+    ChromeUtils.idleDispatch(() => {
+      try {
+        if (!doc.defaultView || doc.defaultView.closed) return;
+        const initialClasses = new Set();
+        const initialIds = new Set();
+        const elements = doc.querySelectorAll("[class], [id]");
+        for (const el of elements) {
+          if (el.id) initialIds.add(el.id);
+          if (el.classList) {
+            for (const c of el.classList) {
+              initialClasses.add(c);
+            }
+          }
+        }
+        this._queryClassesAndIds(
+          doc,
+          Array.from(initialClasses),
+          Array.from(initialIds)
+        );
+      } catch (e) {}
+    });
   },
 
   /* ─────────────────────────────────────────────────
@@ -1268,14 +1355,108 @@ var LykonCosmeticFilter = {
   ───────────────────────────────────────────────── */
   _injectStylesheet(doc) {
     try {
-      if (doc.getElementById("lykon-cosmetic-filter")) return;
+      let style = doc.getElementById("lykon-cosmetic-filter");
+      let newlyCreated = false;
       const parent = doc.head || doc.documentElement;
       if (!parent) return;
-      const style = doc.createElement("style");
-      style.id = "lykon-cosmetic-filter";
-      style.textContent = this._cssRule;
-      parent.insertBefore(style, parent.firstChild);
+
+      if (!style) {
+        style = doc.createElement("style");
+        style.id = "lykon-cosmetic-filter";
+        style.textContent = this._cssRule;
+        parent.insertBefore(style, parent.firstChild);
+        newlyCreated = true;
+      }
+
+      if (newlyCreated) {
+        try {
+          const { CosmeticFilterInjector } = ChromeUtils.importESModule(
+            "resource:///modules/CosmeticFilterInjector.sys.mjs"
+          );
+          const pageUrl = doc.documentURI || doc.URL || "";
+          if (CosmeticFilterInjector.isEnabledForUrl(pageUrl)) {
+            const resources =
+              CosmeticFilterInjector.getCosmeticSelectorsForUrl(pageUrl);
+            if (resources) {
+              if (resources.generichide) {
+                doc._cosmeticGenericHide = true;
+                // If generichide is requested, clear the hardcoded generic selectors to respect the list exceptions!
+                style.textContent =
+                  "/* Generic cosmetic filters disabled via generichide */\n";
+              }
+              const nativeCss =
+                CosmeticFilterInjector.buildCssFromResources(resources);
+              if (nativeCss) {
+                style.textContent +=
+                  "\n/* Native Engine Cosmetic Rules */\n" + nativeCss;
+              }
+              if (resources.exceptions && resources.exceptions.size > 0) {
+                doc._cosmeticExceptions = resources.exceptions;
+              }
+            }
+          }
+        } catch (e) {
+          console.error(
+            "[LykonCosmetic] Error applying native cosmetic resources:",
+            e
+          );
+        }
+      }
     } catch (e) {}
+  },
+
+  _queryClassesAndIds(doc, classes, ids) {
+    if (!doc._cosmeticQueriedClasses) {
+      doc._cosmeticQueriedClasses = new Set();
+    }
+    if (!doc._cosmeticQueriedIds) {
+      doc._cosmeticQueriedIds = new Set();
+    }
+
+    const classesToQuery = [];
+    for (const c of classes) {
+      if (!doc._cosmeticQueriedClasses.has(c)) {
+        classesToQuery.push(c);
+        doc._cosmeticQueriedClasses.add(c);
+      }
+    }
+
+    const idsToQuery = [];
+    for (const id of ids) {
+      if (!doc._cosmeticQueriedIds.has(id)) {
+        idsToQuery.push(id);
+        doc._cosmeticQueriedIds.add(id);
+      }
+    }
+
+    if (classesToQuery.length === 0 && idsToQuery.length === 0) {
+      return;
+    }
+
+    try {
+      const { CosmeticFilterInjector } = ChromeUtils.importESModule(
+        "resource:///modules/CosmeticFilterInjector.sys.mjs"
+      );
+      const exceptions = doc._cosmeticExceptions
+        ? Array.from(doc._cosmeticExceptions)
+        : [];
+      const selectors = CosmeticFilterInjector.getSelectorsForClassesAndIds(
+        classesToQuery,
+        idsToQuery,
+        exceptions
+      );
+      if (selectors && selectors.length > 0) {
+        const style = doc.getElementById("lykon-cosmetic-filter");
+        if (style) {
+          const css = CosmeticFilterInjector.buildCssFromSelectors(selectors);
+          if (css) {
+            style.textContent += "\n/* Native Engine Class/ID Rules */\n" + css;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[LykonCosmetic] Error querying class/id selectors:", e);
+    }
   },
 
   /* ─────────────────────────────────────────────────
@@ -1291,12 +1472,14 @@ var LykonCosmeticFilter = {
   _jsHidePass(doc) {
     let hidden = 0;
 
-    for (const sel of this._selectors) {
-      try {
-        for (const el of doc.querySelectorAll(sel)) {
-          if (this._hideElement(el)) hidden++;
-        }
-      } catch (e) {}
+    if (!doc._cosmeticGenericHide) {
+      for (const sel of this._selectors) {
+        try {
+          for (const el of doc.querySelectorAll(sel)) {
+            if (this._hideElement(el)) hidden++;
+          }
+        } catch (e) {}
+      }
     }
 
     /*

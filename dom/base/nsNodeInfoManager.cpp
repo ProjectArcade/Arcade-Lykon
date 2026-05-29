@@ -263,15 +263,18 @@ already_AddRefed<NodeInfo> nsNodeInfoManager::GetDocumentNodeInfo() {
 void* nsNodeInfoManager::Allocate(size_t aSize) {
   if (!mHasAllocated) {
     if (!mArena) {
-      mozilla::dom::DocGroup* docGroup = GetDocument()->GetDocGroupOrCreate();
+      mozilla::dom::Document* doc = GetDocument();
+      mozilla::dom::DocGroup* docGroup =
+          doc ? doc->GetDocGroupOrCreate() : nullptr;
       if (docGroup) {
-        MOZ_ASSERT(!GetDocument()->HasChildren());
+        MOZ_ASSERT(!doc->HasChildren());
         mArena = docGroup->ArenaAllocator();
       }
     }
 #ifdef DEBUG
     else {
-      mozilla::dom::DocGroup* docGroup = GetDocument()->GetDocGroup();
+      mozilla::dom::Document* doc = GetDocument();
+      mozilla::dom::DocGroup* docGroup = doc ? doc->GetDocGroup() : nullptr;
       MOZ_ASSERT(docGroup);
       MOZ_ASSERT(mArena == docGroup->ArenaAllocator());
     }

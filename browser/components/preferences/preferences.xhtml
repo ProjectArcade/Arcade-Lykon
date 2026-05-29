@@ -180,10 +180,22 @@
         data-l10n-id="pane-lykon-shield-title">
       </html:moz-page-nav-button>
 
+      <html:moz-page-nav-button id="category-garuda-vision"
+        view="paneGarudaVision"
+        iconsrc="chrome://global/skin/icons/EagleIcon.svg"
+        data-l10n-id="pane-garuda-vision-title">
+      </html:moz-page-nav-button>
+
       <html:moz-page-nav-button id="category-lykon-telemetry"
         view="paneLykonTelemetry"
         iconsrc="chrome://global/skin/icons/info.svg"
         data-l10n-id="pane-lykon-telemetry-title">
+      </html:moz-page-nav-button>
+
+      <html:moz-page-nav-button id="category-offline-playbook"
+        view="paneOfflinePlaybook"
+        iconsrc="chrome://global/skin/icons/GameControler.svg"
+        data-l10n-id="pane-offline-playbook-title">
       </html:moz-page-nav-button>
 
       <!-- Hidden sub-page entries (CSS display:none via .hidden-category).
@@ -248,6 +260,8 @@
 #include sync.inc.xhtml
 #include lykonshield.inc.xhtml
 #include crashReport.inc.xhtml
+#include offlinePlaybook.inc.xhtml
+#include garudaVision.inc.xhtml
         </vbox>
       </vbox>
     </vbox>

@@ -1,6 +1,7 @@
 EXTRA_JS_MODULES += [
     "AdblockConfig.sys.mjs",
     "AdblockService.sys.mjs",
+    "CosmeticFilterInjector.sys.mjs",
     "FilterManager.sys.mjs",
     "ShieldIntegration.sys.mjs",
     "SiteShieldSettings.sys.mjs",

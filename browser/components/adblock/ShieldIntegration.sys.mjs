@@ -6,6 +6,7 @@ import { AdblockService } from "resource:///modules/AdblockService.sys.mjs";
 import { PREFS } from "resource:///modules/AdblockConfig.sys.mjs";
 import { statsMonitor } from "resource:///modules/StatsMonitor.sys.mjs";
 import { siteShieldSettings } from "resource:///modules/SiteShieldSettings.sys.mjs";
+import { CosmeticFilterInjector } from "resource:///modules/CosmeticFilterInjector.sys.mjs";
 
 const CONTENT_POLICY_TYPE_MAP = {
   [Ci.nsIContentPolicy.TYPE_SCRIPT]: "script",
@@ -34,6 +35,7 @@ export class ShieldIntegration {
     try {
       await AdblockService.init();
       await statsMonitor.init();
+      CosmeticFilterInjector.init();
       this.adblockEnabled = AdblockService.enabled;
       this._setupNetworkObservers();
       Services.prefs.addObserver(PREFS.ENABLED, this);
@@ -170,7 +172,11 @@ export class ShieldIntegration {
         return;
       }
 
-      if (!checkUrl && checkHost && !siteShieldSettings.isEnabledForSite(checkHost)) {
+      if (
+        !checkUrl &&
+        checkHost &&
+        !siteShieldSettings.isEnabledForSite(checkHost)
+      ) {
         return;
       }
 
