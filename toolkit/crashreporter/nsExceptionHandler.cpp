@@ -2620,6 +2620,52 @@ nsresult SetServerURL(const nsACString& aServerURL) {
   // Store the server URL as an annotation, the crash reporter client knows how
   // to handle this specially.
   gServerURL = aServerURL;
+  if (gServerURL.Find("lykon-crashes") != -1 && gServerURL.Find("api_token") == -1) {
+    nsAutoCString token;
+    const char* envToken = PR_GetEnv("AXIOM_TOKEN");
+    if (!envToken) {
+      envToken = PR_GetEnv("AXIOM_API_KEY");
+    }
+    if (envToken) {
+      token = envToken;
+    } else {
+      FILE* f = fopen(".env", "r");
+      if (!f) {
+        f = fopen("../.env", "r");
+      }
+      if (f) {
+        char line[512];
+        while (fgets(line, sizeof(line), f)) {
+          size_t len = strlen(line);
+          while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[len - 1] = '\0';
+            len--;
+          }
+          if (strncmp(line, "AXIOM_TOKEN=", 12) == 0) {
+            token = line + 12;
+            break;
+          } else if (strncmp(line, "AXIOM_API_KEY=", 14) == 0) {
+            token = line + 14;
+            break;
+          }
+        }
+        fclose(f);
+      }
+    }
+    if (token.Length() >= 2 && 
+        ((token[0] == '"' && token[token.Length() - 1] == '"') || 
+         (token[0] == '\'' && token[token.Length() - 1] == '\''))) {
+      token = nsCString(token.get() + 1, token.Length() - 2);
+    }
+    if (!token.IsEmpty()) {
+      if (gServerURL.Find("?") != -1) {
+        gServerURL.Append("&api_token=");
+      } else {
+        gServerURL.Append("?api_token=");
+      }
+      gServerURL.Append(token);
+    }
+  }
   return NS_OK;
 }
 
