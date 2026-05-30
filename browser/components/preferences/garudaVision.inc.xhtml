@@ -8,15 +8,63 @@
   </hbox>
   <hbox align="center" style="margin-block-end: 16px; gap: 8px;">
     <image src="chrome://global/skin/icons/EagleIcon.svg"
-           style="-moz-context-properties: fill, fill-opacity, stroke; fill: currentColor; width: 24px; height: 24px;"/>
+           style="width: 24px; height: 24px; filter: brightness(0) invert(0.9) sepia(1) saturate(10) hue-rotate(5deg) drop-shadow(0 2px 4px rgba(255,215,0,0.3));"/>
     <html:h1 style="font-size: 1.8em; font-weight: 700; margin: 0;" data-l10n-id="pane-garuda-vision-title">Garuda Vision</html:h1>
   </hbox>
 
   <vbox id="garudaVisionControls" data-category="paneGarudaVision" hidden="true" style="gap: 16px;">
+    <!-- What is GarudaVision Card -->
     <groupbox class="card card-no-hover" data-category="paneGarudaVision">
-      <description style="color: var(--in-content-deemphasized-text-color); font-style: italic; margin: 0;">
-        Garuda Vision content is empty for now.
+      <hbox align="center" style="margin-block-end: 8px;">
+        <image src="chrome://global/skin/icons/info.svg"
+               style="width: 16px; height: 16px; margin-inline-end: 8px; filter: brightness(0) invert(0.6) sepia(1) saturate(5) hue-rotate(190deg);"/>
+        <label style="font-weight: 600; font-size: 1.2em; color: var(--in-content-text-color);">What is GarudaVision?</label>
+      </hbox>
+      <description style="line-height: 1.5; color: var(--in-content-deemphasized-text-color); margin: 0; font-size: 1.05em;">
+        GarudaVision is a real-time, privacy-focused URL safety scanning engine built directly into the Lykon browser. It performs high-performance, sandboxed local checks on visited links to detect brand impersonation, phishing domains, subdomain abuse, and suspicious keyword patterns, keeping you safe from online scams without sharing your browsing history.
       </description>
+    </groupbox>
+
+    <!-- General Protection Card -->
+    <groupbox class="card card-no-hover" data-category="paneGarudaVision">
+      <html:h2 style="font-size: 1.25em; font-weight: 600; margin-block-start: 0; margin-block-end: 12px; color: var(--in-content-text-color);">General Protection</html:h2>
+      
+      <!-- Enable / Disable Toggle Switch -->
+      <hbox align="center" style="margin-block-end: 16px; justify-content: space-between; gap: 16px;">
+        <vbox style="gap: 4px; flex: 1;">
+          <label style="font-weight: 600; font-size: 1.05em; margin: 0;">Enable GarudaVision URL Phishing &amp; Security Detection</label>
+          <description style="color: var(--in-content-deemphasized-text-color); margin: 0; line-height: 1.4; max-width: 550px;">
+            Actively monitor page URLs and verify them against suspicious phishing heuristics. Disabling this will auto-hide the toolbar safety icon and turn off all background safety evaluations.
+          </description>
+        </vbox>
+        <hbox id="garudaVisionEnabledToggleContainer" align="center"></hbox>
+      </hbox>
+
+      <html:hr style="border: 0; border-top: 1px solid var(--in-content-box-border-color); margin-block: 16px;"/>
+
+      <!-- Disable Tab Coloring Toggle Switch -->
+      <hbox align="center" style="justify-content: space-between; gap: 16px;">
+        <vbox style="gap: 4px; flex: 1;">
+          <label style="font-weight: 600; font-size: 1.05em; margin: 0;">Disable Tab Color Coding</label>
+          <description style="color: var(--in-content-deemphasized-text-color); margin: 0; line-height: 1.4; max-width: 550px;">
+            Stop applying warning colors (red or yellow) to browser tabs when visiting dangerous or suspicious webpages. The toolbar warning indicators will still remain active.
+          </description>
+        </vbox>
+        <hbox id="garudaVisionColorCodingToggleContainer" align="center"></hbox>
+      </hbox>
+
+      <html:hr style="border: 0; border-top: 1px solid var(--in-content-box-border-color); margin-block: 16px;"/>
+
+      <!-- Enable in Private and Tor Browsing Toggle Switch -->
+      <hbox align="center" style="justify-content: space-between; gap: 16px;">
+        <vbox style="gap: 4px; flex: 1;">
+          <label style="font-weight: 600; font-size: 1.05em; margin: 0;">Enable GarudaVision in Private &amp; Tor Browsing Windows</label>
+          <description style="color: var(--in-content-deemphasized-text-color); margin: 0; line-height: 1.4; max-width: 550px;">
+            Allow security scanning and warning indicators to remain active when browsing inside private tabs or specialized Tor sessions. If disabled, all GarudaVision security scanning features will be hidden inside private browsing environments.
+          </description>
+        </vbox>
+        <hbox id="garudaVisionPrivateAndTorToggleContainer" align="center"></hbox>
+      </hbox>
     </groupbox>
   </vbox>
 </html:template>

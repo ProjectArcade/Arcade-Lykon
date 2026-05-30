@@ -882,9 +882,148 @@ function init_all() {
   register_module("paneOfflinePlaybook", {
     init() {},
   });
+
   register_module("paneGarudaVision", {
-    init() {},
+    init() {
+      const enabledContainer = document.getElementById("garudaVisionEnabledToggleContainer");
+      const colorContainer = document.getElementById("garudaVisionColorCodingToggleContainer");
+      const privateContainer = document.getElementById("garudaVisionPrivateAndTorToggleContainer");
+
+      let enabledToggle = null;
+      let colorToggle = null;
+      let privateToggle = null;
+
+      const isEnabled = Services.prefs.getBoolPref("browser.garudavision.enabled", true);
+
+      if (colorContainer) {
+        colorContainer.textContent = "";
+        colorToggle = document.createElement("moz-toggle");
+        colorToggle.id = "garudaVisionColorCodingToggle";
+        colorToggle.className = "lks-exception-toggle";
+        colorToggle.style.cursor = "pointer";
+        
+        const isColorDisabled = Services.prefs.getBoolPref("browser.garudavision.tabColoring.disabled", false);
+        colorToggle.pressed = isColorDisabled;
+        
+        colorToggle.addEventListener("toggle", () => {
+          Services.prefs.setBoolPref("browser.garudavision.tabColoring.disabled", colorToggle.pressed);
+        });
+        colorContainer.appendChild(colorToggle);
+      }
+
+      if (privateContainer) {
+        privateContainer.textContent = "";
+        privateToggle = document.createElement("moz-toggle");
+        privateToggle.id = "garudaVisionPrivateAndTorToggle";
+        privateToggle.className = "lks-exception-toggle";
+        privateToggle.style.cursor = "pointer";
+        
+        const isPrivateEnabled = Services.prefs.getBoolPref("browser.garudavision.privateAndTor.enabled", true);
+        privateToggle.pressed = isPrivateEnabled;
+        
+        privateToggle.addEventListener("toggle", () => {
+          Services.prefs.setBoolPref("browser.garudavision.privateAndTor.enabled", privateToggle.pressed);
+        });
+        privateContainer.appendChild(privateToggle);
+      }
+
+      function updateSubTogglesState(isMainEnabled) {
+        const isSubDisabled = !isMainEnabled;
+        if (colorToggle) {
+          colorToggle.disabled = isSubDisabled;
+          if (isSubDisabled) {
+            colorToggle.setAttribute("disabled", "true");
+            colorToggle.style.opacity = "0.5";
+            colorToggle.style.pointerEvents = "none";
+          } else {
+            colorToggle.removeAttribute("disabled");
+            colorToggle.style.opacity = "1";
+            colorToggle.style.pointerEvents = "auto";
+          }
+        }
+        if (privateToggle) {
+          privateToggle.disabled = isSubDisabled;
+          if (isSubDisabled) {
+            privateToggle.setAttribute("disabled", "true");
+            privateToggle.style.opacity = "0.5";
+            privateToggle.style.pointerEvents = "none";
+          } else {
+            privateToggle.removeAttribute("disabled");
+            privateToggle.style.opacity = "1";
+            privateToggle.style.pointerEvents = "auto";
+          }
+        }
+      }
+
+      if (enabledContainer) {
+        enabledContainer.textContent = "";
+        enabledToggle = document.createElement("moz-toggle");
+        enabledToggle.id = "garudaVisionEnabledToggle";
+        enabledToggle.className = "lks-exception-toggle";
+        enabledToggle.style.cursor = "pointer";
+        enabledToggle.pressed = isEnabled;
+        
+        const disableModal = document.getElementById("garudaVisionDisableModal");
+        const cancelBtn = document.getElementById("garudaVisionModalCancel");
+        const confirmBtn = document.getElementById("garudaVisionModalConfirm");
+
+        enabledToggle.addEventListener("toggle", () => {
+          const isPressed = enabledToggle.pressed;
+          if (!isPressed) {
+            if (disableModal) {
+              disableModal.style.display = "flex";
+              disableModal.removeAttribute("hidden");
+
+              const onCancel = () => {
+                disableModal.style.display = "none";
+                disableModal.setAttribute("hidden", "true");
+                enabledToggle.pressed = true;
+                updateSubTogglesState(true);
+                cleanup();
+              };
+
+              const onConfirm = () => {
+                disableModal.style.display = "none";
+                disableModal.setAttribute("hidden", "true");
+                Services.prefs.setBoolPref("browser.garudavision.enabled", false);
+                updateSubTogglesState(false);
+                cleanup();
+              };
+
+              const cleanup = () => {
+                cancelBtn?.removeEventListener("click", onCancel);
+                confirmBtn?.removeEventListener("click", onConfirm);
+              };
+
+              cancelBtn?.addEventListener("click", onCancel);
+              confirmBtn?.addEventListener("click", onConfirm);
+            } else {
+              const confirmed = Services.prompt.confirm(
+                window,
+                "Disable GarudaVision Security?",
+                "Disabling GarudaVision turns off real-time phishing and malicious URL protection. Are you sure you want to disable it?"
+              );
+              if (confirmed) {
+                Services.prefs.setBoolPref("browser.garudavision.enabled", false);
+                updateSubTogglesState(false);
+              } else {
+                enabledToggle.pressed = true;
+                updateSubTogglesState(true);
+              }
+            }
+          } else {
+            Services.prefs.setBoolPref("browser.garudavision.enabled", true);
+            updateSubTogglesState(true);
+          }
+        });
+        enabledContainer.appendChild(enabledToggle);
+      }
+
+      // Initial sub-toggles state update
+      updateSubTogglesState(isEnabled);
+    },
   });
+
 
   if (ExperimentAPI.labsEnabled) {
     let experimentalBtn = document.getElementById("category-experimental");

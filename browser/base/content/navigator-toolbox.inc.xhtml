@@ -564,6 +564,64 @@
   </menupopup>
 </toolbarbutton>
 
+<toolbarbutton id="lykon-garudavision-button"
+               class="toolbarbutton-1 chromeclass-toolbar-additional"
+               image="chrome://global/skin/icons/EagleIcon.svg"
+               removable="false"
+               tooltiptext="GarudaVision URL Safety"
+               type="menu">
+  <menupopup id="lykon-garudavision-popup"
+             class="panel-subview-body"
+             style="padding: 0; border: none; background: transparent;">
+    <html:div id="lykon-garudavision-panel-content" style="width: 320px; background: #121214; color: #e4e4e7; font-family: 'Outfit', 'Inter', -apple-system, sans-serif; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #27272a; overflow: hidden; padding: 16px;">
+      <!-- Title Header -->
+      <html:div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid #27272a; padding-bottom: 12px;">
+        <html:div style="display: flex; align-items: center; gap: 8px;">
+          <html:img src="chrome://global/skin/icons/EagleIcon.svg" style="width: 20px; height: 20px; filter: drop-shadow(0 2px 4px rgba(255,215,0,0.3));"/>
+          <html:span style="font-weight: 700; font-size: 14px; letter-spacing: 0.5px; background: linear-gradient(90deg, #FFD700, #FF8C00); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">GARUDAVISION</html:span>
+        </html:div>
+        <html:span id="garudavision-site-status" style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);">ACTIVE</html:span>
+      </html:div>
+
+      <!-- Active Domain display -->
+      <html:div id="garudavision-domain" style="font-size: 11px; opacity: 0.6; margin-bottom: 16px; text-align: center; font-family: monospace; background: #1e1e20; padding: 6px 12px; border-radius: 6px; border: 1px solid #27272a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        loading...
+      </html:div>
+
+      <!-- Warning Banner -->
+      <html:div id="garudavision-warning-banner" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 16px; display: none; align-items: flex-start; gap: 8px;">
+        <html:span style="font-size: 16px; margin-top: -2px;">⚠️</html:span>
+        <html:div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+          <html:span id="garudavision-warning-text" style="font-size: 12px; font-weight: 600; color: #ef4444; line-height: 1.4;">This is marked as a suspicious link. Navigate at your own risk.</html:span>
+          <html:button id="garudavision-dismiss-btn" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; cursor: pointer; align-self: flex-start; text-transform: uppercase; letter-spacing: 0.5px;">I understand</html:button>
+        </html:div>
+      </html:div>
+
+      <!-- Circular / Large Score Display -->
+      <html:div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 20px; position: relative;">
+        <!-- Score Circular Ring -->
+        <html:div id="garudavision-score-circle" style="width: 96px; height: 96px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid #10b981; box-shadow: 0 0 20px rgba(16,185,129,0.15); background: #18181b; transition: all 0.3s ease;">
+          <html:div id="garudavision-score-val" style="font-size: 32px; font-weight: 800; color: #10b981; line-height: 1;">0</html:div>
+          <html:div style="font-size: 9px; font-weight: 700; opacity: 0.5; margin-top: 2px; letter-spacing: 0.5px;">SCORE</html:div>
+        </html:div>
+        <!-- Verdict Text -->
+        <html:div id="garudavision-verdict" style="font-size: 16px; font-weight: 700; color: #10b981; margin-top: 12px; letter-spacing: 0.5px; text-transform: uppercase;">
+          Clean
+        </html:div>
+      </html:div>
+
+      <!-- Phishing Reasons / Heuristics Card -->
+      <html:div id="garudavision-reasons-container" style="background: #18181b; border-radius: 8px; border: 1px solid #27272a; padding: 12px; max-height: 160px; overflow-y: auto; display: none;">
+        <html:div style="font-size: 11px; font-weight: 700; opacity: 0.4; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Detected Risks</html:div>
+        <html:div id="garudavision-reasons-list" style="display: flex; flex-direction: column; gap: 8px;"></html:div>
+      </html:div>
+      <html:div id="garudavision-no-reasons" style="text-align: center; padding: 16px; background: rgba(16,185,129,0.04); border-radius: 8px; border: 1px dashed rgba(16,185,129,0.2); color: #a1a1aa; font-size: 12px; display: block;">
+        No security threats detected on this page.
+      </html:div>
+    </html:div>
+  </menupopup>
+</toolbarbutton>
+
 <toolbarbutton id="lykon-shield-button"
                class="toolbarbutton-1 chromeclass-toolbar-additional"
                image="chrome://browser/skin/preferences/Adblocker-on.png"

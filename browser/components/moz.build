@@ -30,6 +30,7 @@ DIRS += [
     "aboutwelcome",
     "aiwindow",
     "adblock",
+    "garudavision",
     "asrouter",
     "attribution",
     "backup",

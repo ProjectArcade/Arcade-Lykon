@@ -1,0 +1,7 @@
+EXTRA_JS_MODULES += [
+    "GarudaService.sys.mjs",
+]
+
+FINAL_TARGET_FILES.bin += [
+    "libgaruda_ffi.so",
+]
