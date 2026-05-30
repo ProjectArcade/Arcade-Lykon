@@ -101,6 +101,62 @@ var GarudaVisionPanel = {
         }
       });
     }
+
+    // Allowlist toggle button inside the popup
+    const allowlistBtn = document.getElementById("garudavision-allowlist-btn");
+    if (allowlistBtn) {
+      allowlistBtn.addEventListener("click", () => {
+        const currentURI = window.gBrowser?.currentURI;
+        const host = currentURI?.host;
+        if (!host) return;
+
+        const list = this.getAllowList();
+        const index = list.findIndex(item => item.host === host);
+        if (index > -1) {
+          // Remove from allow list (show warnings again)
+          list.splice(index, 1);
+        } else {
+          // Add to allow list (disable warnings)
+          list.push({ host, enabled: true });
+        }
+        this.setAllowList(list);
+
+        // Hide popup and refresh state
+        const popup = document.getElementById("lykon-garudavision-popup");
+        if (popup) {
+          popup.hidePopup();
+        }
+
+        // Trigger updates in all windows to apply styling changes immediately
+        const browser = window.gBrowser?.selectedBrowser;
+        if (browser) {
+          this.updateSecurityIndicators(browser, browser.currentURI?.spec || "");
+        }
+      });
+    }
+  },
+
+  getAllowList() {
+    try {
+      const listStr = Services.prefs.getStringPref("browser.garudavision.allowlist", "[]");
+      return JSON.parse(listStr);
+    } catch (e) {
+      return [];
+    }
+  },
+
+  setAllowList(list) {
+    try {
+      Services.prefs.setStringPref("browser.garudavision.allowlist", JSON.stringify(list));
+    } catch (e) {
+      console.error("Failed to set allowlist pref:", e);
+    }
+  },
+
+  isHostAllowed(host) {
+    if (!host) return false;
+    const list = this.getAllowList();
+    return list.some(item => item.host === host && item.enabled);
   },
 
   handleEvent(event) {
@@ -128,8 +184,34 @@ var GarudaVisionPanel = {
         domainEl.textContent = host;
       }
 
+      const allowlistBtn = document.getElementById("garudavision-allowlist-btn");
+      const allowlistText = document.getElementById("garudavision-allowlist-btn-text");
+
       if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
         this.setCleanUI("0", "Clean", "System/Local Page");
+        if (allowlistBtn) {
+          allowlistBtn.style.display = "none";
+        }
+        return;
+      }
+
+      if (allowlistBtn) {
+        allowlistBtn.style.display = "flex";
+        if (host && this.isHostAllowed(host)) {
+          allowlistText.textContent = "Show warnings for this site";
+          allowlistBtn.style.background = "rgba(239, 68, 68, 0.15)";
+          allowlistBtn.style.color = "#ef4444";
+          allowlistBtn.style.borderColor = "rgba(239, 68, 68, 0.3)";
+        } else {
+          allowlistText.textContent = "Don't show warnings for this site";
+          allowlistBtn.style.background = "#27272a";
+          allowlistBtn.style.color = "#ffffff";
+          allowlistBtn.style.borderColor = "#3f3f46";
+        }
+      }
+
+      if (host && this.isHostAllowed(host)) {
+        this.setCleanUI("0", "Allowed", "This site is in your GarudaVision allow list.");
         return;
       }
 
@@ -319,17 +401,29 @@ var GarudaVisionPanel = {
         }
       }
 
-      const { GarudaService } = ChromeUtils.importESModule(
-        "resource:///modules/GarudaService.sys.mjs"
-      );
+      let score = 0;
+      let isAllowed = false;
+      try {
+        const currentURI = Services.io.newURI(url);
+        const host = currentURI.host;
+        if (host && this.isHostAllowed(host)) {
+          isAllowed = true;
+        }
+      } catch (e) {}
 
-      if (!GarudaService.loaded) {
-        GarudaService.init();
+      if (!isAllowed) {
+        const { GarudaService } = ChromeUtils.importESModule(
+          "resource:///modules/GarudaService.sys.mjs"
+        );
+
+        if (!GarudaService.loaded) {
+          GarudaService.init();
+        }
+
+        score = (url && (url.startsWith("http://") || url.startsWith("https://")))
+          ? GarudaService.checkUrl(url)
+          : 0;
       }
-
-      const score = (url && (url.startsWith("http://") || url.startsWith("https://")))
-        ? GarudaService.checkUrl(url)
-        : 0;
 
       if (tab) {
         tab.garudaScore = score;

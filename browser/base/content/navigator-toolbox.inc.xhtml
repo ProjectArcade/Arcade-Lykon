@@ -618,6 +618,14 @@
       <html:div id="garudavision-no-reasons" style="text-align: center; padding: 16px; background: rgba(16,185,129,0.04); border-radius: 8px; border: 1px dashed rgba(16,185,129,0.2); color: #a1a1aa; font-size: 12px; display: block;">
         No security threats detected on this page.
       </html:div>
+
+      <!-- Allowlist Toggle Button -->
+      <html:button id="garudavision-allowlist-btn"
+                   onmouseover="this.style.background='#3f3f46'; this.style.borderColor='#52525b';"
+                   onmouseout="this.style.background='#27272a'; this.style.borderColor='#3f3f46';"
+                   style="width: 100%; margin-top: 16px; background: #27272a; color: #ffffff; border: 1px solid #3f3f46; border-radius: 6px; padding: 8px 12px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s ease-in-out; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <html:span id="garudavision-allowlist-btn-text">Don't show warnings for this site</html:span>
+      </html:button>
     </html:div>
   </menupopup>
 </toolbarbutton>

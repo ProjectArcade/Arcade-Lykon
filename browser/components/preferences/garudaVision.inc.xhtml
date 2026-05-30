@@ -66,5 +66,50 @@
         <hbox id="garudaVisionPrivateAndTorToggleContainer" align="center"></hbox>
       </hbox>
     </groupbox>
+
+    <!-- GarudaVision Exceptions (Allowed Sites) Card -->
+    <groupbox class="card card-no-hover" data-category="paneGarudaVision" style="min-height: 100px;">
+      <hbox align="center" style="margin-block-end: 8px; justify-content: space-between;">
+        <hbox align="center">
+          <image src="chrome://global/skin/icons/settings.svg"
+                 style="width: 16px; height: 16px; margin-inline-end: 8px; -moz-context-properties: fill, fill-opacity, stroke; fill: currentColor;"/>
+          <html:h2 style="font-size: 1.25em; font-weight: 600; margin: 0; color: var(--in-content-text-color);">Allowed Sites (Exceptions)</html:h2>
+        </hbox>
+        <hbox align="center" style="gap: 8px; display: flex !important;">
+          <button id="gvRefreshExceptionsBtn"
+                  style="margin: 0; padding: 5px 14px; cursor: pointer; border-radius: 4px; font-weight: 500; font-size: 0.9em; background: #2b2a33 !important; color: #ffffff !important; border: 1px solid #3b3a44 !important;">
+            Refresh List
+          </button>
+          <button id="gvOpenAddExceptionBtn"
+                  style="margin: 0; padding: 5px 14px; cursor: pointer; border-radius: 4px; font-weight: 600; font-size: 0.9em; background: #0284c7 !important; color: #ffffff !important; border: 1px solid #0284c7 !important;">
+            Add Site...
+          </button>
+        </hbox>
+      </hbox>
+      <description style="margin-block-end: 12px; color: var(--in-content-deemphasized-text-color); line-height: 1.4;">
+        GarudaVision safety scans and tab warning color indicators will not be applied to the following websites. You can temporarily enable/disable or permanently delete sites from this list at any time.
+      </description>
+
+      <!-- Exceptions List Header -->
+      <hbox id="gvAllowedSitesTableHeader"
+            align="center"
+            style="display: flex !important; margin-block-end: 6px; padding: 4px 0; border-bottom: 1px solid var(--in-content-box-border-color); font-weight: 600; color: var(--in-content-deemphasized-text-color); font-size: 0.9em;">
+        <label style="flex: 1; margin: 0;">Allowed Domain</label>
+        <label style="width: 100px; margin: 0; text-align: center;">Enabled</label>
+        <label style="width: 80px; margin: 0; text-align: center;">Action</label>
+      </hbox>
+
+      <!-- List of Allowed Sites -->
+      <vbox id="gvAllowedSitesList" style="display: flex !important; flex-direction: column !important; gap: 8px; margin-block-end: 8px;">
+        <!-- Dynamically populated in preferences.js -->
+      </vbox>
+
+      <!-- Empty state notice -->
+      <hbox id="gvAllowedSitesEmptyNotice" align="center" style="display: flex !important; padding: 16px; background: rgba(128, 128, 128, 0.05); border: 1px dashed var(--in-content-box-border-color); border-radius: 6px; justify-content: center;">
+        <description style="color: var(--in-content-deemphasized-text-color); font-style: italic; margin: 0;">
+          No allowed sites added yet. All visited websites are scanned by GarudaVision.
+        </description>
+      </hbox>
+    </groupbox>
   </vbox>
 </html:template>

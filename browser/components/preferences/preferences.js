@@ -1021,10 +1021,156 @@ function init_all() {
 
       // Initial sub-toggles state update
       updateSubTogglesState(isEnabled);
+
+      // Allowed Sites / Exceptions list implementation
+      const listContainer = document.getElementById("gvAllowedSitesList");
+      const tableHeader = document.getElementById("gvAllowedSitesTableHeader");
+      const emptyNotice = document.getElementById("gvAllowedSitesEmptyNotice");
+      const openModalBtn = document.getElementById("gvOpenAddExceptionBtn");
+      const refreshBtn = document.getElementById("gvRefreshExceptionsBtn");
+
+      function getAllowList() {
+        try {
+          const listStr = Services.prefs.getStringPref("browser.garudavision.allowlist", "[]");
+          return JSON.parse(listStr);
+        } catch (e) {
+          return [];
+        }
+      }
+
+      function setAllowList(list) {
+        try {
+          Services.prefs.setStringPref("browser.garudavision.allowlist", JSON.stringify(list));
+        } catch (e) {
+          console.error("Failed to set allowlist pref:", e);
+        }
+      }
+
+      const refreshList = () => {
+        if (!listContainer) return;
+        listContainer.textContent = "";
+        const list = getAllowList();
+
+        if (list.length === 0) {
+          emptyNotice?.style.setProperty("display", "flex", "important");
+          tableHeader?.style.setProperty("display", "none", "important");
+        } else {
+          emptyNotice?.style.setProperty("display", "none", "important");
+          tableHeader?.style.setProperty("display", "flex", "important");
+        }
+
+        for (const site of list) {
+          const row = document.createElement("hbox");
+          row.setAttribute("align", "center");
+          row.style.display = "flex";
+          row.style.alignItems = "center";
+          row.style.padding = "6px 8px";
+          row.style.background = "rgba(128, 128, 128, 0.03)";
+          row.style.border = "1px solid var(--in-content-box-border-color)";
+          row.style.borderRadius = "6px";
+
+          // Domain Label
+          const urlLabel = document.createElement("label");
+          urlLabel.textContent = site.host;
+          urlLabel.style.flex = "1";
+          urlLabel.style.margin = "0";
+          urlLabel.style.fontWeight = "500";
+          urlLabel.style.color = "var(--in-content-text-color)";
+          if (!site.enabled) {
+            urlLabel.style.opacity = "0.5";
+            urlLabel.style.textDecoration = "line-through";
+          }
+
+          // Enabled Switch
+          const enabledCell = document.createElement("hbox");
+          enabledCell.style.width = "100px";
+          enabledCell.style.display = "flex";
+          enabledCell.style.justifyContent = "center";
+          enabledCell.style.alignItems = "center";
+
+          const enabledToggle = document.createElement("moz-toggle");
+          enabledToggle.pressed = site.enabled;
+          enabledToggle.style.cursor = "pointer";
+          enabledToggle.addEventListener("toggle", () => {
+            site.enabled = enabledToggle.pressed;
+            setAllowList(list);
+            refreshList();
+          });
+          enabledCell.appendChild(enabledToggle);
+
+          // Delete Button
+          const actionCell = document.createElement("hbox");
+          actionCell.style.width = "80px";
+          actionCell.style.display = "flex";
+          actionCell.style.justifyContent = "center";
+          actionCell.style.alignItems = "center";
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className = "accessory-button lks-remove-site-button";
+          removeBtn.setAttribute("title", "Remove exception");
+          removeBtn.setAttribute("aria-label", "Remove exception");
+          removeBtn.style.margin = "0";
+          removeBtn.style.cursor = "pointer";
+          removeBtn.addEventListener("click", () => {
+            const index = list.indexOf(site);
+            if (index > -1) {
+              list.splice(index, 1);
+              setAllowList(list);
+              refreshList();
+            }
+          });
+          actionCell.appendChild(removeBtn);
+
+          row.appendChild(urlLabel);
+          row.appendChild(enabledCell);
+          row.appendChild(actionCell);
+          listContainer.appendChild(row);
+        }
+      };
+
+      if (openModalBtn) {
+        openModalBtn.addEventListener("click", () => {
+          let value = { value: "" };
+          const confirmed = Services.prompt.input(
+            window,
+            "Add Allowed Site",
+            "Enter the domain or hostname to allow (e.g. example.com):",
+            value,
+            null,
+            { value: false }
+          );
+          if (confirmed && value.value) {
+            let host = value.value.trim().toLowerCase();
+            try {
+              if (host.includes("://")) {
+                host = new URL(host).hostname;
+              } else if (host.includes("/")) {
+                host = host.split("/")[0];
+              }
+            } catch (e) {}
+            
+            if (host) {
+              const list = getAllowList();
+              if (!list.some(item => item.host === host)) {
+                list.push({ host, enabled: true });
+                setAllowList(list);
+                refreshList();
+              }
+            }
+          }
+        });
+      }
+
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", () => {
+          refreshList();
+        });
+      }
+
+      // Initial Allowed list refresh
+      refreshList();
     },
   });
-
-
   if (ExperimentAPI.labsEnabled) {
     let experimentalBtn = document.getElementById("category-experimental");
     if (experimentalBtn) {
