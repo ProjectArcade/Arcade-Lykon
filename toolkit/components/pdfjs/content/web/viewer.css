@@ -7443,3 +7443,950 @@ dialog :link{
     display:none;
   }
 }
+
+/* ==========================================================================
+   Arcade-Lykon Edge-Inspired Professional PDF Viewer
+   A premium, polished PDF reading experience inspired by Microsoft Edge
+   ========================================================================== */
+
+:root {
+  --arcade-font: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+
+  --toolbar-height: 48px !important;
+  --toolbar-vertical-padding: 8px !important;
+  --toolbar-horizontal-padding: 16px !important;
+
+  --main-color: light-dark(#1b1b1f, #e8eaed) !important;
+  --body-bg-color: light-dark(#f3f3f3, #151515) !important;
+
+  --toolbar-bg-color: light-dark(#ffffff, #1e1e1e) !important;
+  --toolbar-border-color: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08)) !important;
+  --toolbar-box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+  --toolbar-border-bottom: 1px solid var(--toolbar-border-color) !important;
+
+  --sidebar-narrow-bg-color: light-dark(#fafafa, #1a1a1a) !important;
+  --sidebar-toolbar-bg-color: light-dark(#ffffff, #1e1e1e) !important;
+
+  --toggled-btn-bg-color: light-dark(rgba(0, 103, 192, 0.08), rgba(96, 205, 255, 0.12)) !important;
+  --toggled-btn-color: light-dark(#0067c0, #60cdff) !important;
+
+  --field-bg-color: light-dark(#f6f6f6, #2d2d2d) !important;
+  --field-border-color: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15)) !important;
+  --field-color: light-dark(#1b1b1f, #e8eaed) !important;
+
+  --doorhanger-bg-color: light-dark(rgba(255, 255, 255, 0.95), rgba(30, 30, 30, 0.95)) !important;
+  --doorhanger-border-color: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08)) !important;
+  --doorhanger-hover-color: light-dark(#0067c0, #60cdff) !important;
+  --doorhanger-separator-color: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.06)) !important;
+
+  --dialog-button-bg-color: light-dark(#f0f0f0, #333333) !important;
+  --dialog-button-hover-bg-color: light-dark(#e0e0e0, #444444) !important;
+
+  --separator-color: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08)) !important;
+
+  --progressBar-color: light-dark(#0067c0, #60cdff) !important;
+
+  --edge-accent: light-dark(#0067c0, #60cdff) !important;
+  --edge-hover-bg: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06)) !important;
+  --edge-active-bg: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.09)) !important;
+  --edge-toggled-bg: light-dark(rgba(0, 103, 192, 0.08), rgba(96, 205, 255, 0.12)) !important;
+  --edge-focus-ring: light-dark(rgba(0, 103, 192, 0.4), rgba(96, 205, 255, 0.5)) !important;
+
+  --edge-menu-bg: light-dark(rgba(255, 255, 255, 0.95), rgba(30, 30, 30, 0.95)) !important;
+  --edge-menu-border: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08)) !important;
+  --edge-menu-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+  --edge-menu-item-hover: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06)) !important;
+  --edge-menu-item-radius: 6px !important;
+}
+
+/* ──────────────────── Typography ──────────────────── */
+
+body {
+  font-family: var(--arcade-font) !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  transition: background-color 0.25s ease !important;
+}
+
+/* ──────────────────── Toolbar Container ──────────────────── */
+
+#toolbarContainer {
+  height: var(--toolbar-height) !important;
+  padding-block: var(--toolbar-vertical-padding) !important;
+  padding-inline: var(--toolbar-horizontal-padding) !important;
+  box-shadow: var(--toolbar-box-shadow) !important;
+  border-bottom: var(--toolbar-border-bottom) !important;
+  background-color: var(--toolbar-bg-color) !important;
+  box-sizing: border-box !important;
+  font-family: var(--arcade-font) !important;
+  display: flex !important;
+  align-items: center !important;
+  z-index: 99 !important;
+}
+
+#toolbarViewer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 100% !important;
+  width: 100% !important;
+  gap: 4px !important;
+}
+
+.toolbarHorizontalGroup {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+/* ──────────────────── Toolbar Buttons (Edge Style) ──────────────────── */
+
+.toolbarButton {
+  border-radius: 6px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  background: transparent !important;
+  border: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  color: var(--main-color) !important;
+  opacity: 0.8 !important;
+  position: relative !important;
+}
+
+.toolbarButton:hover {
+  opacity: 1 !important;
+  background-color: var(--edge-hover-bg) !important;
+}
+
+.toolbarButton:active {
+  background-color: var(--edge-active-bg) !important;
+  transform: scale(0.95) !important;
+}
+
+.toolbarButton:focus-visible {
+  outline: 2px solid var(--edge-accent) !important;
+  outline-offset: -2px !important;
+}
+
+.toolbarButton.toggled {
+  background-color: var(--edge-toggled-bg) !important;
+  color: var(--toggled-btn-color) !important;
+  opacity: 1 !important;
+}
+
+.toolbarButton.toggled::after {
+  background-color: var(--toggled-btn-color) !important;
+}
+
+.toolbarButton.toggled:hover {
+  background-color: light-dark(
+    rgba(0, 103, 192, 0.12),
+    rgba(96, 205, 255, 0.16)
+  ) !important;
+}
+
+/* ──────────────────── Toolbar Button Icons ──────────────────── */
+
+.toolbarButton::before {
+  opacity: 0.95 !important;
+  transition: opacity 0.15s ease !important;
+}
+
+.toolbarButton:hover::before {
+  opacity: 1 !important;
+}
+
+/* ──────────────────── Input Fields (Edge Style) ──────────────────── */
+
+.toolbarField {
+  border-radius: 6px !important;
+  border: 1px solid var(--field-border-color) !important;
+  padding: 4px 10px !important;
+  background-color: var(--field-bg-color) !important;
+  color: var(--main-color) !important;
+  font-family: var(--arcade-font) !important;
+  font-size: 13px !important;
+  height: 32px !important;
+  line-height: 22px !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+}
+
+.toolbarField:hover {
+  border-color: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.25)) !important;
+}
+
+.toolbarField:focus {
+  border-color: var(--edge-accent) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px var(--edge-accent) !important;
+  background-color: light-dark(#ffffff, #202020) !important;
+}
+
+#pageNumber {
+  text-align: center !important;
+  width: 48px !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+#numPages.toolbarLabel {
+  font-size: 13px !important;
+  color: var(--main-color) !important;
+  opacity: 0.8 !important;
+  padding-inline-start: 4px !important;
+  font-variant-numeric: tabular-nums !important;
+  font-weight: 500 !important;
+}
+
+/* ──────────────────── Zoom Scale Dropdown ──────────────────── */
+
+#scaleSelectContainer {
+  margin-inline: 4px !important;
+}
+
+.dropdownToolbarButton {
+  border-radius: 6px !important;
+  border: 1px solid var(--field-border-color) !important;
+  background-color: var(--field-bg-color) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+  height: 32px !important;
+  min-width: 140px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+}
+
+.dropdownToolbarButton:hover {
+  border-color: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.25)) !important;
+  background-color: var(--edge-hover-bg) !important;
+}
+
+.dropdownToolbarButton:focus-within {
+  border-color: var(--edge-accent) !important;
+  box-shadow: 0 0 0 1px var(--edge-accent) !important;
+  background-color: light-dark(#ffffff, #202020) !important;
+}
+
+#scaleSelect {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  color: var(--main-color) !important;
+  font-family: var(--arcade-font) !important;
+  font-size: 13px !important;
+  padding: 0 32px 0 10px !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+
+.dropdownToolbarButton::after {
+  content: "" !important;
+  position: absolute !important;
+  inset-inline-end: 10px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 12px !important;
+  height: 12px !important;
+  background-color: var(--main-color) !important;
+  opacity: 0.8 !important;
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M5 7.5L10 12.5L15 7.5'/></svg>") !important;
+  mask-size: contain !important;
+  mask-repeat: no-repeat !important;
+  pointer-events: none !important;
+}
+
+/* ──────────────────── Separators ──────────────────── */
+
+.verticalToolbarSeparator {
+  width: 1px !important;
+  height: 20px !important;
+  background-color: var(--separator-color) !important;
+  margin-inline: 8px !important;
+  flex-shrink: 0 !important;
+  opacity: 0.8 !important;
+}
+
+.horizontalToolbarSeparator {
+  height: 1px !important;
+  background-color: var(--separator-color) !important;
+  margin-block: 6px !important;
+  margin-inline: 8px !important;
+}
+
+.splitToolbarButtonSeparator {
+  display: none !important;
+}
+
+/* ──────────────────── PDF Page Canvas ──────────────────── */
+
+.pdfViewer .page {
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.05)) !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  border-radius: 4px !important;
+  transition: box-shadow 0.25s ease !important;
+  margin-block: 20px !important;
+  overflow: hidden !important;
+  background-color: #ffffff !important;
+}
+
+.pdfViewer .page:hover {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.06) !important;
+}
+
+#viewerContainer {
+  scrollbar-width: thin !important;
+  scrollbar-color: light-dark(rgba(0,0,0,0.2), rgba(255,255,255,0.15)) transparent !important;
+}
+
+/* ──────────────────── Loading Bar ──────────────────── */
+
+#loadingBar {
+  height: 3px !important;
+  border-bottom: none !important;
+  background-color: light-dark(#e5e5e5, #333333) !important;
+}
+
+#loadingBar .progress {
+  background-color: var(--edge-accent) !important;
+  border-radius: 0 2px 2px 0 !important;
+}
+
+/* ──────────────────── Sidebar (Views Manager) ──────────────────── */
+
+#viewsManager {
+  background-color: var(--sidebar-narrow-bg-color) !important;
+  border-inline-end: 1px solid var(--toolbar-border-color) !important;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+#viewsManagerHeader {
+  background-color: var(--sidebar-toolbar-bg-color) !important;
+  border-bottom: 1px solid var(--separator-color) !important;
+  padding: 8px !important;
+}
+
+#viewsManagerContent {
+  scrollbar-width: thin !important;
+}
+
+.thumbnailsView {
+  padding: 8px !important;
+}
+
+.thumbnail {
+  border: 2px solid transparent !important;
+  border-radius: 6px !important;
+  padding: 6px !important;
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+
+.thumbnail:hover {
+  background-color: var(--edge-hover-bg) !important;
+}
+
+.thumbnail.selected {
+  background-color: var(--edge-toggled-bg) !important;
+  border-color: var(--edge-accent) !important;
+}
+
+.thumbnail.selected > .thumbnailSelectionRing {
+  outline: none !important;
+}
+
+/* ──────────────────── Findbar (Edge-Inspired Columns) ──────────────────── */
+
+.toolbarButtonWithContainer:has(#viewFindButton) {
+  position: static !important;
+}
+
+#findbar {
+  position: absolute !important;
+  display: none !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  background-color: var(--edge-menu-bg) !important;
+  border: 1px solid var(--edge-menu-border) !important;
+  box-shadow: var(--edge-menu-shadow) !important;
+  border-radius: 10px !important;
+  padding: 14px !important;
+  font-family: var(--arcade-font) !important;
+  min-width: 340px !important;
+  width: max-content !important;
+  z-index: 1000 !important;
+  right: 16px !important;
+  left: auto !important;
+  top: var(--toolbar-height) !important;
+  transform: none !important;
+  backdrop-filter: blur(20px) saturate(125%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(125%) !important;
+}
+
+#findbar:not(.hidden, [hidden]) {
+  display: flex !important;
+}
+
+#findbar::before,
+#findbar::after {
+  display: none !important;
+}
+
+#findInputContainer {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+}
+
+#findInputContainer .loadingInput {
+  flex-grow: 1 !important;
+  display: flex !important;
+}
+
+#findInput {
+  flex-grow: 1 !important;
+  width: 100% !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--field-border-color) !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  font-family: var(--arcade-font) !important;
+  height: 32px !important;
+  background-color: var(--field-bg-color) !important;
+  color: var(--main-color) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+}
+
+#findInput:focus {
+  border-color: var(--edge-accent) !important;
+  box-shadow: 0 0 0 1px var(--edge-accent) !important;
+  outline: none !important;
+  background-color: light-dark(#ffffff, #202020) !important;
+}
+
+#findInput[data-status="notFound"] {
+  border-color: #c42b1c !important;
+  box-shadow: 0 0 0 1px #c42b1c !important;
+  background-color: light-dark(#fde7e9, #442726) !important;
+}
+
+/* Option Columns */
+#findbarOptionsOneContainer,
+#findbarOptionsTwoContainer {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  margin: 0 !important;
+}
+
+.toggleButton.toolbarLabel {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  cursor: pointer !important;
+  background-color: light-dark(rgba(0, 0, 0, 0.03), rgba(255, 255, 255, 0.04)) !important;
+  color: var(--main-color) !important;
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.06)) !important;
+  transition: all 0.15s ease !important;
+  user-select: none !important;
+  margin: 0 !important;
+  font-weight: 500 !important;
+}
+
+.toggleButton.toolbarLabel:hover {
+  background-color: var(--edge-hover-bg) !important;
+  border-color: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15)) !important;
+}
+
+.toggleButton.toolbarLabel:has(> input:checked) {
+  background-color: var(--edge-toggled-bg) !important;
+  color: var(--toggled-btn-color) !important;
+  border-color: var(--edge-accent) !important;
+}
+
+.toggleButton.toolbarLabel > input {
+  position: absolute !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Results / Message */
+#findbarMessageContainer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-top: 8px !important;
+  border-top: 1px solid var(--separator-color) !important;
+  font-size: 12px !important;
+  color: var(--main-color) !important;
+  margin-top: 2px !important;
+}
+
+#findResultsCount {
+  font-weight: 600 !important;
+  color: var(--edge-accent) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+#findMsg {
+  opacity: 0.7 !important;
+}
+
+/* ──────────────────── Secondary Toolbar / Menu Dropdowns ──────────────────── */
+
+#secondaryToolbar {
+  background-color: var(--edge-menu-bg) !important;
+  border: 1px solid var(--edge-menu-border) !important;
+  box-shadow: var(--edge-menu-shadow) !important;
+  border-radius: 10px !important;
+  padding: 6px !important;
+  min-width: 240px !important;
+  backdrop-filter: blur(25px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(135%) !important;
+}
+
+#secondaryToolbarButtonContainer {
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+#secondaryToolbarButtonContainer > .toolbarButton,
+#secondaryToolbarButtonContainer > div > .toolbarButton {
+  width: 100% !important;
+  justify-content: flex-start !important;
+  border-radius: var(--edge-menu-item-radius) !important;
+  padding: 6px 12px !important;
+  height: 36px !important;
+  font-size: 13px !important;
+  gap: 10px !important;
+  opacity: 0.9 !important;
+  color: var(--main-color) !important;
+}
+
+#secondaryToolbarButtonContainer > .toolbarButton:hover,
+#secondaryToolbarButtonContainer > div > .toolbarButton:hover {
+  background-color: var(--edge-menu-item-hover) !important;
+  opacity: 1 !important;
+}
+
+#secondaryToolbarButtonContainer .toolbarButton.labeled > span {
+  display: inline !important;
+  font-size: 13px !important;
+}
+
+/* ──────────────────── Editor Mode Buttons ──────────────────── */
+
+#editorModeButtons {
+  gap: 4px !important;
+}
+
+#editorModeButtons .toolbarButton {
+  border-radius: 6px !important;
+}
+
+/* ──────────────────── Editor Params Toolbar (Doorhanger) ──────────────────── */
+
+.editorParamsToolbar {
+  background-color: var(--edge-menu-bg) !important;
+  border: 1px solid var(--edge-menu-border) !important;
+  box-shadow: var(--edge-menu-shadow) !important;
+  border-radius: 10px !important;
+  padding: 14px !important;
+  backdrop-filter: blur(20px) saturate(125%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(125%) !important;
+}
+
+.editorParamsToolbarContainer {
+  font-family: var(--arcade-font) !important;
+}
+
+.editorParamsLabel {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--main-color) !important;
+  opacity: 0.8 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+}
+
+.editorParamsSlider {
+  accent-color: var(--edge-accent) !important;
+  height: 4px !important;
+}
+
+.editorParamsColor {
+  border-radius: 6px !important;
+  border: 1px solid var(--field-border-color) !important;
+  cursor: pointer !important;
+}
+
+/* ──────────────────── Color Picker (Highlight) ──────────────────── */
+
+.colorPicker button {
+  border-radius: 50% !important;
+  width: 28px !important;
+  height: 28px !important;
+  border: 2px solid transparent !important;
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.12s ease !important;
+  cursor: pointer !important;
+}
+
+.colorPicker button:hover {
+  transform: scale(1.18) !important;
+}
+
+.colorPicker button.selected {
+  border-color: var(--edge-accent) !important;
+  box-shadow: 0 0 0 2px var(--edge-focus-ring) !important;
+}
+
+/* ──────────────────── Dialogs (Edge Style) ──────────────────── */
+
+dialog {
+  border: 1px solid var(--edge-menu-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2) !important;
+  background-color: var(--edge-menu-bg) !important;
+  color: var(--main-color) !important;
+  font-family: var(--arcade-font) !important;
+  padding: 24px !important;
+  backdrop-filter: blur(30px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(130%) !important;
+}
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(6px) !important;
+}
+
+.dialogButton {
+  border-radius: 6px !important;
+  padding: 6px 18px !important;
+  font-family: var(--arcade-font) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  height: 32px !important;
+  min-width: 80px !important;
+  border: 1px solid var(--field-border-color) !important;
+}
+
+.primaryButton {
+  background-color: var(--edge-accent) !important;
+  color: #ffffff !important;
+  border-color: var(--edge-accent) !important;
+}
+
+.primaryButton:hover {
+  background-color: light-dark(#005a9e, #4db8ff) !important;
+  border-color: light-dark(#005a9e, #4db8ff) !important;
+  box-shadow: 0 2px 8px rgba(0, 103, 192, 0.25) !important;
+}
+
+.primaryButton:active {
+  background-color: light-dark(#004578, #40a0e0) !important;
+  transform: scale(0.97) !important;
+}
+
+.secondaryButton {
+  background-color: var(--dialog-button-bg-color) !important;
+  color: var(--main-color) !important;
+  border: 1px solid var(--field-border-color) !important;
+}
+
+.secondaryButton:hover {
+  background-color: var(--dialog-button-hover-bg-color) !important;
+}
+
+.secondaryButton:active {
+  transform: scale(0.97) !important;
+}
+
+/* ──────────────────── Document Properties Dialog ──────────────────── */
+
+#documentPropertiesDialog {
+  min-width: 440px !important;
+}
+
+#documentPropertiesDialog .row {
+  margin-bottom: 10px !important;
+  font-size: 13px !important;
+}
+
+#documentPropertiesDialog .row > span {
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  opacity: 0.6 !important;
+}
+
+#documentPropertiesDialog .row > p {
+  font-size: 13px !important;
+  margin-top: 4px !important;
+}
+
+#documentPropertiesDialog .separator {
+  height: 1px !important;
+  background-color: var(--separator-color) !important;
+  margin-block: 14px !important;
+}
+
+/* ──────────────────── Password Dialog ──────────────────── */
+
+#passwordDialog .toolbarField {
+  width: 100% !important;
+  height: 36px !important;
+  font-size: 14px !important;
+}
+
+/* ──────────────────── Popup Menus (Views Manager Selector, etc.) ──────────────────── */
+
+.popupMenu {
+  background-color: var(--edge-menu-bg) !important;
+  border: 1px solid var(--edge-menu-border) !important;
+  box-shadow: var(--edge-menu-shadow) !important;
+  border-radius: 8px !important;
+  padding: 6px !important;
+  backdrop-filter: blur(20px) saturate(125%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(125%) !important;
+}
+
+.popupMenu button {
+  border-radius: var(--edge-menu-item-radius) !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  transition: all 0.12s ease !important;
+  cursor: pointer !important;
+}
+
+.popupMenu button:hover {
+  background-color: var(--edge-menu-item-hover) !important;
+}
+
+/* ──────────────────── Toggle Switches ──────────────────── */
+
+.toggle-button {
+  width: 40px !important;
+  height: 20px !important;
+  border-radius: 10px !important;
+  background-color: light-dark(#ccc, #555) !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s ease !important;
+  position: relative !important;
+}
+
+.toggle-button[aria-pressed="true"] {
+  background-color: var(--edge-accent) !important;
+}
+
+.toggle-button::before {
+  content: "" !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  background-color: #ffffff !important;
+  position: absolute !important;
+  top: 3px !important;
+  inset-inline-start: 3px !important;
+  transition: inset-inline-start 0.2s ease !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+.toggle-button[aria-pressed="true"]::before {
+  inset-inline-start: 23px !important;
+}
+
+/* ──────────────────── Signature Dialog ──────────────────── */
+
+.signatureDialog {
+  border-radius: 12px !important;
+}
+
+.signatureDialog [role="tablist"] {
+  display: flex !important;
+  gap: 0 !important;
+  border-bottom: 1px solid var(--separator-color) !important;
+  margin-bottom: 12px !important;
+}
+
+.signatureDialog [role="tab"] {
+  flex: 1 !important;
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border: none !important;
+  background: transparent !important;
+  border-bottom: 2px solid transparent !important;
+  color: var(--main-color) !important;
+  opacity: 0.6 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.signatureDialog [role="tab"]:hover {
+  opacity: 0.8 !important;
+  background-color: var(--edge-hover-bg) !important;
+}
+
+.signatureDialog [role="tab"][aria-selected="true"] {
+  opacity: 1 !important;
+  border-bottom-color: var(--edge-accent) !important;
+  color: var(--edge-accent) !important;
+}
+
+/* ──────────────────── Scrollbar styling ──────────────────── */
+
+* {
+  scrollbar-width: thin !important;
+}
+
+/* ──────────────────── Toolbar Spacer ──────────────────── */
+
+.toolbarButtonSpacer {
+  width: 16px !important;
+}
+
+/* ──────────────────── Doorhanger / Floating Panels ──────────────────── */
+
+.doorHanger,
+.doorHangerRight {
+  border-radius: 10px !important;
+  border: 1px solid var(--edge-menu-border) !important;
+  box-shadow: var(--edge-menu-shadow) !important;
+  background-color: var(--edge-menu-bg) !important;
+}
+
+.doorHanger::before,
+.doorHanger::after,
+.doorHangerRight::before,
+.doorHangerRight::after {
+  display: none !important;
+}
+
+/* ──────────────────── Outline / Tree View ──────────────────── */
+
+.treeView {
+  padding: 8px !important;
+}
+
+.treeItemToggler {
+  border-radius: 4px !important;
+  transition: background-color 0.12s ease !important;
+}
+
+.treeItemToggler:hover {
+  background-color: var(--edge-hover-bg) !important;
+}
+
+.treeItem > a {
+  font-size: 13px !important;
+  border-radius: 4px !important;
+  padding: 4px 8px !important;
+  transition: background-color 0.12s ease !important;
+}
+
+.treeItem > a:hover {
+  background-color: var(--edge-hover-bg) !important;
+}
+
+/* ──────────────────── Message Bars ──────────────────── */
+
+.messageBar {
+  border-radius: 8px !important;
+  font-family: var(--arcade-font) !important;
+}
+
+#editorUndoBar {
+  border-radius: 8px !important;
+  box-shadow: var(--edge-menu-shadow) !important;
+}
+
+/* ──────────────────── Alt Text Dialog ──────────────────── */
+
+.dialog.altText,
+.dialog.newAltText {
+  border-radius: 12px !important;
+}
+
+.dialogButtonsGroup {
+  gap: 8px !important;
+  margin-top: 16px !important;
+}
+
+/* ──────────────────── Comment Sidebar ──────────────────── */
+
+#editorCommentsSidebar {
+  background-color: var(--sidebar-narrow-bg-color) !important;
+  border-inline-start: 1px solid var(--separator-color) !important;
+}
+
+#editorCommentsSidebarHeader {
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--separator-color) !important;
+}
+
+/* ──────────────────── Sidebar Resizer ──────────────────── */
+
+.sidebarResizer {
+  width: 4px !important;
+  background-color: transparent !important;
+  transition: background-color 0.15s ease !important;
+  cursor: col-resize !important;
+}
+
+.sidebarResizer:hover {
+  background-color: var(--edge-accent) !important;
+}
+
+/* ──────────────────── Smooth Focus Ring ──────────────────── */
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--edge-accent) !important;
+  outline-offset: -2px !important;
+}
+
+/* ──────────────────── Responsive Adjustments ──────────────────── */
+
+@media all and (max-width: 840px) {
+  #viewsManager {
+    background-color: var(--sidebar-narrow-bg-color) !important;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.08) !important;
+  }
+}
+
+/* ──────────────────── Print Preparation ──────────────────── */
+
+@media print {
+  #toolbarContainer,
+  #viewsManager,
+  #loadingBar {
+    display: none !important;
+  }
+}
