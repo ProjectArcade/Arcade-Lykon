@@ -19,12 +19,34 @@
   --card-padding-inline: var(--space-xlarge);
   --card-padding-block: var(--card-padding-inline);
 
+  --background-color-canvas: #ffffff !important;
+  --background-color-sidebar: #f3f4f6 !important;
+  --border-color-sidebar: rgba(0, 0, 0, 0.06) !important;
+
   /* stylelint-disable-next-line media-query-no-invalid */
   @media -moz-pref("browser.settings-redesign.enabled") {
     --background-color-canvas: light-dark(var(--color-gray-05), var(--color-gray-90));
   }
 
   user-select: text;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root,
+  :host(.anonymous-content-host) {
+    --background-color-canvas: #141418 !important;
+    --background-color-sidebar: #0e0e11 !important;
+    --border-color-sidebar: rgba(255, 255, 255, 0.04) !important;
+    --background-color-box: #1b1b21 !important;
+    --background-color-box-info: #22222a !important;
+    --border-color: rgba(255, 255, 255, 0.06) !important;
+    --border-color-deemphasized: rgba(255, 255, 255, 0.03) !important;
+    --border-color-interactive: rgba(255, 255, 255, 0.12) !important;
+    --text-color: #f8fafc !important;
+    --text-color-deemphasized: #94a3b8 !important;
+    --card-background-color: #1b1b21 !important;
+    --background-color-list-item-hover: rgba(255, 255, 255, 0.06) !important;
+  }
 }
 
 #preferences-root {
@@ -63,35 +85,53 @@
 }
 
 #categories {
-  width: calc(var(--size-sidebar) - 42px);
+  width: var(--size-sidebar) !important;
+  margin-inline-start: 0 !important;
+  margin-top: 0 !important;
+  height: 100vh !important;
+  background-color: var(--background-color-sidebar) !important;
+  border-inline-end: 1px solid var(--border-color-sidebar) !important;
+  padding-inline-start: 36px !important;
+  padding-inline-end: 24px !important;
+  padding-block-start: 24px !important;
+  padding-block-end: 24px !important;
+  box-sizing: border-box !important;
 
   @media (max-width: 950px) {
-    width: auto;
+    width: auto !important;
+    padding-inline-start: 12px !important;
+    padding-inline-end: 12px !important;
   }
+}
+
+moz-page-nav-button {
+  --page-nav-button-border-radius: 8px !important;
+  --page-nav-button-background-color-selected: light-dark(rgba(0, 100, 250, 0.08), rgba(0, 150, 255, 0.15)) !important;
+  --page-nav-button-indicator-color: light-dark(#0066cc, #3399ff) !important;
 }
 
 #search-container {
   position: sticky;
   top: 0;
-  /* Bug 2026689 Negative margin is used here to hide the borders of setting-controls on scroll
-     as well as the shadow to the left of the searchbar */
-  margin-inline-start: -4px;
-  /* 4px of additional width to account for the -4px of margin defined above */
-  width: calc(100% + 4px);
-  /* z-index = 2 so that the search-tooltips don't appear when the user scrolls
-     up after searching. */
   z-index: 2;
   background-color: var(--background-color-canvas);
-  padding-top: 40px;
-  padding-bottom: var(--search-container-padding);
-  padding-inline: var(--focus-outline-offset);
-  /* Ensure focus indicators on elements below the search container
-     aren't obscured. */
+  padding-top: 24px;
+  padding-bottom: 24px;
+  padding-inline: 48px;
+  border-bottom: 1px solid var(--border-color-sidebar);
+  width: 100%;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   margin-bottom: var(--search-container-margin);
 }
 
 #searchInput {
   width: 100%;
+  max-width: 600px;
 }
 
 @media (max-width: 950px) {
@@ -121,8 +161,7 @@
   display: block;
   width: min(100%, 600px);
   min-width: min-content;
-  /* Used to prevent cutting off the borders of the setting-controls */
-  margin-inline-start: 1px;
+  margin-inline: auto;
 }
 
 #mainPrefPane {
@@ -773,7 +812,7 @@ html|dialog,
   @media not (forced-colors) {
     html|dialog,
     .dialogBox {
-      --background-color-canvas: #42414d;
+      --background-color-canvas: #101014 !important;
     }
   }
 }

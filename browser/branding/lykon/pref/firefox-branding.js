@@ -51,3 +51,5 @@ pref("devtools.selfxss.count", 0);
 // Set Brave Search as the default search engine
 pref("browser.search.defaultenginename", "Brave Search");
 pref("browser.search.defaultenginename.private", "Brave Search");
+// Disable Mozilla Accounts and Sync globally
+pref("identity.fxaccounts.enabled", false);

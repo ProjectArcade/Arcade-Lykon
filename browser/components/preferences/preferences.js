@@ -886,16 +886,14 @@ function init_all() {
     init() {},
   });
 
-  // Restore the cached Firefox Labs nav button visibility so it shows
-  // immediately when recipes are expected to be available, before
-  // firefoxLabs.mjs loads on first navigation. The module itself updates
-  // this cache when features are (un)available.
   if (ExperimentAPI.labsEnabled) {
-    document.getElementById("category-experimental").hidden =
-      Services.prefs.getBoolPref(
+    let experimentalBtn = document.getElementById("category-experimental");
+    if (experimentalBtn) {
+      experimentalBtn.hidden = Services.prefs.getBoolPref(
         "browser.preferences.experimental.hidden",
         false
       );
+    }
   }
 
   // The Sync category needs to be the last of the "real" categories

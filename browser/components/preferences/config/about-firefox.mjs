@@ -580,3 +580,88 @@ SettingGroupManager.registerGroups({
     ],
   },
 });
+
+function injectContributeBox() {
+  let pane = document.querySelector('setting-pane[name="paneAbout"]');
+  if (!pane) {
+    setTimeout(injectContributeBox, 100);
+    return;
+  }
+
+  if (pane.querySelector("#lykonContributeBox")) {
+    return;
+  }
+
+  let box = document.createElement("div");
+  box.id = "lykonContributeBox";
+  box.setAttribute(
+    "style",
+    `
+    margin-top: 24px;
+    padding: 16px;
+    background: color-mix(in srgb, var(--color-accent-primary, #3b82f6) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent-primary, #3b82f6) 15%, transparent);
+    border-radius: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+  `
+  );
+
+  let title = document.createElement("div");
+  title.setAttribute(
+    "style",
+    `
+    font-weight: bold;
+    color: var(--color-accent-primary, #3b82f6);
+    margin-bottom: 6px;
+    font-size: 1.15em;
+  `
+  );
+  title.textContent = "Contribute to Lykon";
+  box.appendChild(title);
+
+  let linkContainer = document.createElement("div");
+  linkContainer.setAttribute("style", "margin-bottom: 10px;");
+
+  let link = document.createElement("a");
+  link.setAttribute("href", "https://github.com/Lykon-Browser");
+  link.setAttribute("target", "_blank");
+  link.setAttribute(
+    "style",
+    `
+    font-weight: bold;
+    color: var(--color-accent-primary, #3b82f6);
+    text-decoration: underline;
+    cursor: pointer;
+  `
+  );
+  link.textContent = "Join us on GitHub";
+  linkContainer.appendChild(link);
+  box.appendChild(linkContainer);
+
+  let note = document.createElement("div");
+  note.setAttribute(
+    "style",
+    `
+    font-size: 0.95em;
+    line-height: 1.45em;
+    color: var(--text-color-deemphasized, #64748b);
+  `
+  );
+  note.textContent =
+    "Not a developer? You can still make a huge impact! Share your feedback, report crashed sessions, or simply spread the word of mouth to friends and family. Every voice counts!";
+  box.appendChild(note);
+
+  let section = pane.querySelector("section");
+  if (section) {
+    section.appendChild(box);
+  } else {
+    pane.appendChild(box);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", injectContributeBox);
+} else {
+  injectContributeBox();
+}

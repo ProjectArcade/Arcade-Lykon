@@ -171,12 +171,12 @@ content-search-handoff-ui {
 
   /* stylelint-disable-next-line media-query-no-invalid */
   @media -moz-pref("browser.privatebrowsing.felt-privacy-v1") {
-    --content-search-handoff-ui-background-color: #321c64;
+    --content-search-handoff-ui-background-color: #121214;
     --content-search-handoff-ui-color: #fbfbfe;
     --content-search-handoff-ui-fill: rgb(251, 251, 254);
     --content-search-handoff-ui-caret-color: #fbfbfe;
-    --content-search-handoff-ui-border-width: 3px;
-    --content-search-handoff-ui-unfocused-border-color: rgb(149, 43, 185);
+    --content-search-handoff-ui-border-width: 1px;
+    --content-search-handoff-ui-unfocused-border-color: rgba(255, 255, 255, 0.15);
     --content-search-handoff-ui-fakefocus-border-color: #0060df;
     --content-search-handoff-ui-fakefocus-box-shadow-inner: #0060df;
     --content-search-handoff-ui-fakefocus-box-shadow-outer: rgba(0, 96, 223, 0.3);
@@ -272,7 +272,7 @@ content-search-handoff-ui {
 
     @media not (prefers-contrast) {
       box-shadow: 0 2px 6px 0 rgba(58, 57, 68, 0.2);
-      background: rgba(149, 43, 185, 0.5);
+      background: rgba(255, 255, 255, 0.05);
     }
   }
 
@@ -285,7 +285,7 @@ content-search-handoff-ui {
     padding-block-end: 25px;
 
     @media not (prefers-contrast) {
-      background-color: #321c64;
+      background-color: #121214;
       box-shadow: 0 2px 6px 0 rgba(58, 57, 68, 0.2);
     }
   }
@@ -491,13 +491,13 @@ content-search-handoff-ui {
     margin-block: 0 25px;
 
     @media not (prefers-contrast) {
-      background-color: #321c64;
+      background-color: #121214;
     }
   }
 
   @media not (prefers-contrast) {
     html.private {
-      background: linear-gradient(45deg, #722291 0%, #45278d 50%, #393473 100%);
+      background: #000000;
     }
   }
 }

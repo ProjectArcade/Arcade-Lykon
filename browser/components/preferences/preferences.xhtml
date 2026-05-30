@@ -167,12 +167,6 @@
         iconsrc="chrome://browser/skin/preferences/category-accessibility.svg"
         data-l10n-id="pane-accessibility-title">
       </html:moz-page-nav-button>
-      <html:moz-page-nav-button id="category-experimental"
-        hidden="true"
-        view="paneExperimental"
-        iconsrc="chrome://browser/skin/labs-16.svg"
-        data-l10n-id="settings-pane-labs-title">
-      </html:moz-page-nav-button>
 
       <html:moz-page-nav-button id="category-lykon-shield"
         view="paneLykonShield"
@@ -235,21 +229,21 @@
     </keyset>
 
     <vbox class="main-content" flex="1" align="start">
+      <html:div id="search-container">
+        <html:nav-notice
+          id="policies-container-content"
+          hidden="true"
+          href="about:policies"
+          iconsrc="chrome://global/skin/icons/info.svg"
+          data-l10n-id="managed-notice-nav"
+        />
+        <html:moz-input-search
+          id="searchInput"
+          data-l10n-id="search-input-box2"
+          data-l10n-attrs="placeholder"
+        />
+      </html:div>
       <vbox class="pane-container">
-        <html:div id="search-container">
-          <html:nav-notice
-            id="policies-container-content"
-            hidden="true"
-            href="about:policies"
-            iconsrc="chrome://global/skin/icons/info.svg"
-            data-l10n-id="managed-notice-nav"
-          />
-          <html:moz-input-search
-            id="searchInput"
-            data-l10n-id="search-input-box2"
-            data-l10n-attrs="placeholder"
-          />
-        </html:div>
         <vbox id="mainPrefPane">
 #include searchResults.inc.xhtml
 #include main.inc.xhtml

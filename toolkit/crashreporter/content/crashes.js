@@ -174,6 +174,7 @@ function submitPendingReport(reportId, row, button, buttonText, dateFormatter) {
         );
         showAppropriateSections();
         dispatchCustomEvent("CrashSubmitSucceeded");
+        playSuccessAnimation();
       },
       error => {
         console.error(error);
@@ -184,11 +185,113 @@ function submitPendingReport(reportId, row, button, buttonText, dateFormatter) {
           "submit-crash-button-failure-label"
         );
         dispatchCustomEvent("CrashSubmitFailed");
+        playErrorAnimation();
       }
     )
     .finally(() => {
       document.getElementById("submitAllUnsubmittedReports").disabled = false;
     });
+}
+
+function playSuccessAnimation() {
+  const overlay = document.createElement("div");
+  overlay.id = "success-overlay";
+
+  const container = document.createElement("div");
+  container.className = "animation-container";
+  container.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" class="checkmark">
+      <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+      <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+    </svg>
+  `;
+
+  const title = document.createElement("h1");
+  title.textContent = "Report Submitted!";
+  title.style.opacity = "0";
+  title.style.transition = "opacity 500ms ease";
+
+  const msg = document.createElement("p");
+  msg.textContent = "Thank you for helping us make Arcade-Lykon better.";
+  msg.style.opacity = "0";
+  msg.style.transition = "opacity 500ms ease";
+
+  overlay.appendChild(container);
+  overlay.appendChild(title);
+  overlay.appendChild(msg);
+
+  document.body.appendChild(overlay);
+
+  // Fade in text after checkmark animation finishes (1.2s)
+  setTimeout(() => {
+    title.style.opacity = "1";
+    msg.style.opacity = "0.8";
+  }, 1200);
+
+  // Click to dismiss
+  overlay.addEventListener("click", () => {
+    overlay.style.animation = "fadeOut 250ms ease forwards";
+    setTimeout(() => overlay.remove(), 250);
+  });
+
+  // Auto-dismiss after 5.2 seconds total
+  setTimeout(() => {
+    if (overlay.parentNode) {
+      overlay.style.animation = "fadeOut 250ms ease forwards";
+      setTimeout(() => overlay.remove(), 250);
+    }
+  }, 5200);
+}
+
+function playErrorAnimation() {
+  const overlay = document.createElement("div");
+  overlay.id = "error-overlay";
+
+  const container = document.createElement("div");
+  container.className = "animation-container";
+  container.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" class="errormark">
+      <circle class="errormark__circle" cx="26" cy="26" r="25" fill="none"/>
+      <path class="errormark__line1" fill="none" d="M16 16l20 20"/>
+      <path class="errormark__line2" fill="none" d="M36 16L16 36"/>
+    </svg>
+  `;
+
+  const title = document.createElement("h1");
+  title.textContent = "Submission Failed";
+  title.style.opacity = "0";
+  title.style.transition = "opacity 500ms ease";
+
+  const msg = document.createElement("p");
+  msg.textContent = "Please check your network connection and try again.";
+  msg.style.opacity = "0";
+  msg.style.transition = "opacity 500ms ease";
+
+  overlay.appendChild(container);
+  overlay.appendChild(title);
+  overlay.appendChild(msg);
+
+  document.body.appendChild(overlay);
+
+  // Fade in text after errormark animation finishes (1.2s)
+  setTimeout(() => {
+    title.style.opacity = "1";
+    msg.style.opacity = "0.8";
+  }, 1200);
+
+  // Click to dismiss
+  overlay.addEventListener("click", () => {
+    overlay.style.animation = "fadeOut 250ms ease forwards";
+    setTimeout(() => overlay.remove(), 250);
+  });
+
+  // Auto-dismiss after 5.2 seconds total
+  setTimeout(() => {
+    if (overlay.parentNode) {
+      overlay.style.animation = "fadeOut 250ms ease forwards";
+      setTimeout(() => overlay.remove(), 250);
+    }
+  }, 5200);
 }
 
 /**

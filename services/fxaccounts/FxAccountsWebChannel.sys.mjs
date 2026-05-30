@@ -512,12 +512,6 @@ FxAccountsWebChannel.prototype = {
       this._webChannelOrigin
     );
     this._channel.listen(listener);
-    log.debug(
-      "FxAccountsWebChannel registered: " +
-        this._webChannelId +
-        " with origin " +
-        this._webChannelOrigin.prePath
-    );
   },
 };
 

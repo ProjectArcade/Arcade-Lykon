@@ -42,7 +42,8 @@ const LykonReportProblemDialog = {
   async gatherDiagnostics() {
     let info = {};
     try {
-      info["OS"] = Services.appinfo.OS + " (" + Services.sysinfo.get("arch") + ")";
+      info["OS"] =
+        Services.appinfo.OS + " (" + Services.sysinfo.get("arch") + ")";
     } catch (e) {
       info["OS"] = "Unknown";
     }
@@ -54,7 +55,8 @@ const LykonReportProblemDialog = {
     try {
       let bytes = Services.sysinfo.getProperty("memsize");
       if (bytes) {
-        info["Memory (RAM)"] = (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+        info["Memory (RAM)"] =
+          (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
       }
     } catch (e) {}
 
@@ -64,9 +66,14 @@ const LykonReportProblemDialog = {
       if (uptimeSec < 60) {
         info["Uptime"] = uptimeSec + "s";
       } else if (uptimeSec < 3600) {
-        info["Uptime"] = Math.floor(uptimeSec / 60) + "m " + (uptimeSec % 60) + "s";
+        info["Uptime"] =
+          Math.floor(uptimeSec / 60) + "m " + (uptimeSec % 60) + "s";
       } else {
-        info["Uptime"] = Math.floor(uptimeSec / 3600) + "h " + Math.floor((uptimeSec % 3600) / 60) + "m";
+        info["Uptime"] =
+          Math.floor(uptimeSec / 3600) +
+          "h " +
+          Math.floor((uptimeSec % 3600) / 60) +
+          "m";
       }
     } catch (e) {}
 
@@ -87,7 +94,9 @@ const LykonReportProblemDialog = {
         "resource://gre/modules/AddonManager.sys.mjs"
       );
       let addons = await AddonManager.getActiveAddons();
-      info["Active Extensions"] = addons.filter(a => a.type === "extension").length;
+      info["Active Extensions"] = addons.filter(
+        a => a.type === "extension"
+      ).length;
     } catch (e) {}
 
     return info;
@@ -103,7 +112,10 @@ const LykonReportProblemDialog = {
     this._form.hidden = true;
     this._status.hidden = false;
     this._statusIndicator.className = "lykon-status-spinner";
-    document.l10n.setAttributes(this._statusText, "lykon-report-status-sending");
+    document.l10n.setAttributes(
+      this._statusText,
+      "lykon-report-status-sending"
+    );
 
     this._dialog.setAttribute("buttons", "");
 
@@ -119,7 +131,11 @@ const LykonReportProblemDialog = {
         diagnostics: this._diagnosticsData || {},
       };
 
-      if (window.arguments && window.arguments[0] && window.arguments[0].sendReport) {
+      if (
+        window.arguments &&
+        window.arguments[0] &&
+        window.arguments[0].sendReport
+      ) {
         success = await window.arguments[0].sendReport(reportData);
       }
     } catch (e) {
@@ -128,7 +144,14 @@ const LykonReportProblemDialog = {
 
     if (success) {
       this._statusIndicator.className = "lykon-status-success";
-      document.l10n.setAttributes(this._statusText, "lykon-report-status-success");
+      this._statusIndicator.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" class="checkmark">
+          <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+        </svg>
+      `;
+
+      this._statusText.textContent = "";
 
       if (window.arguments && window.arguments[0]) {
         window.arguments[0].accepted = true;
@@ -138,16 +161,47 @@ const LykonReportProblemDialog = {
       }
 
       setTimeout(() => {
+        document.l10n.setAttributes(
+          this._statusText,
+          "lykon-report-status-success"
+        );
+        this._dialog.setAttribute("buttons", "cancel");
+        let cancelBtn = this._dialog.getButton("cancel");
+        if (cancelBtn) {
+          cancelBtn.disabled = false;
+          cancelBtn.setAttribute("label", "Close");
+        }
+      }, 1200);
+
+      setTimeout(() => {
         this._dialog.acceptDialog();
-      }, 2000);
+      }, 5200);
     } else {
       this._statusIndicator.className = "lykon-status-error";
-      document.l10n.setAttributes(this._statusText, "lykon-report-status-error");
+      this._statusIndicator.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" class="errormark">
+          <circle class="errormark__circle" cx="26" cy="26" r="25" fill="none"/>
+          <path class="errormark__line1" fill="none" d="M16 16l20 20"/>
+          <path class="errormark__line2" fill="none" d="M36 16L16 36"/>
+        </svg>
+      `;
+
+      this._statusText.textContent = "";
 
       this._dialog.setAttribute("buttons", "accept,cancel");
       this._dialog.getButton("accept").disabled = false;
       this._dialog.getButton("cancel").disabled = false;
-      document.l10n.setAttributes(this._dialog.getButton("accept"), "lykon-report-button-retry");
+      document.l10n.setAttributes(
+        this._dialog.getButton("accept"),
+        "lykon-report-button-retry"
+      );
+
+      setTimeout(() => {
+        document.l10n.setAttributes(
+          this._statusText,
+          "lykon-report-status-error"
+        );
+      }, 1200);
     }
   },
 };

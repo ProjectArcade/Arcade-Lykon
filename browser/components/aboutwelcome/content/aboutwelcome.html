@@ -1,7 +1,6 @@
 <!-- This Source Code Form is subject to the terms of the Mozilla Public
    - License, v. 2.0. If a copy of the MPL was not distributed with this file,
    - You can obtain one at http://mozilla.org/MPL/2.0/. -->
-
 <!doctype html>
 <html>
   <head>
@@ -11,7 +10,7 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; object-src 'none'; script-src resource: chrome:; media-src resource: chrome: https://assets.mozilla.net  https://www.mozilla.org; connect-src https:; img-src https: data: blob: chrome:; style-src resource: chrome:;"
     />
-    <title data-l10n-id="onboarding-welcome-header"></title>
+    <title>Welcome to Lykon</title>
     <link
       rel="icon"
       type="image/png"
@@ -31,11 +30,220 @@
     <link rel="localization" href="toolkit/branding/brandings.ftl" />
   </head>
   <body>
-    <div
-      id="multi-stage-message-root"
-      class="welcome-container"
-      role="presentation"
-    ></div>
+    <!-- The Animated Cosmic Background -->
+    <div class="cosmic-bg">
+      <div class="nebula-1"></div>
+      <div class="nebula-2"></div>
+      <div class="starfield"></div>
+    </div>
+
+    <div id="welcome-wrapper" class="welcome-wrapper">
+      <div class="welcome-card">
+        <!-- Interactive Sentinel Core Column -->
+        <div class="brand-panel">
+          <div class="sentinel-container">
+            <div class="sentinel-glow"></div>
+            <div class="sentinel-ring ring-outer"></div>
+            <div class="sentinel-ring ring-middle"></div>
+            <div class="sentinel-ring ring-inner"></div>
+            <div class="sentinel-core">
+              <img
+                class="brand-logo"
+                src="chrome://branding/content/about-logo.svg"
+                alt="Lykon Logo"
+              />
+            </div>
+          </div>
+          <div class="brand-info">
+            <img
+              class="brand-wordmark"
+              src="chrome://branding/content/about-wordmark.svg"
+              alt="Lykon"
+            />
+            <p class="brand-tagline">THE GATEWAY TO THE UNCHAINED WEB</p>
+          </div>
+        </div>
+
+        <!-- Dynamic Holographic Dashboard Steps -->
+        <div class="content-panel">
+          <!-- Step 1: Initialize -->
+          <div id="step-welcome" class="wizard-step active">
+            <div class="step-header">
+              <span class="step-badge">SYSTEM STAGE: 01</span>
+              <h1 class="step-title">Initialize Lykon</h1>
+            </div>
+            <p class="step-desc">
+              You are launching Lykon, a next-generation browser built for
+              uncompromised speed, absolute control, and visual superiority.
+              Welcome to the future of browsing.
+            </p>
+            <div class="welcome-stats">
+              <div class="stat-box">
+                <span class="stat-number">0.0ms</span>
+                <span class="stat-label">Page Latency</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-number">100%</span>
+                <span class="stat-label">Privacy Shield</span>
+              </div>
+            </div>
+            <div class="action-bar">
+              <button id="btn-to-shield" class="btn-primary btn-glow">
+                Engage Core
+              </button>
+              <button id="btn-skip-1" class="btn-secondary">
+                Skip Calibration
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 2: Shield Calibration -->
+          <div id="step-shield" class="wizard-step">
+            <div class="step-header">
+              <span class="step-badge">SYSTEM STAGE: 02</span>
+              <h1 class="step-title">Shield Calibration</h1>
+            </div>
+            <p class="step-desc">
+              Power up the Lykon Sentinel Shield to intercept tracking engines,
+              intrusive advertisements, and telemetry probes.
+            </p>
+
+            <div class="interactive-shield-demo">
+              <div class="demo-row active-node" id="node-adblock">
+                <div class="node-indicator"></div>
+                <div class="demo-info">
+                  <span class="demo-label">Ad Block Vector</span>
+                  <span class="demo-sub"
+                    >Intercepts scripts, banners, and video telemetry</span
+                  >
+                </div>
+                <div class="demo-toggle-wrapper">
+                  <input
+                    type="checkbox"
+                    id="toggle-adblock"
+                    class="demo-toggle"
+                    checked
+                  />
+                  <label for="toggle-adblock" class="toggle-slider"></label>
+                </div>
+              </div>
+              <div class="demo-row active-node" id="node-trackers">
+                <div class="node-indicator"></div>
+                <div class="demo-info">
+                  <span class="demo-label">Tracker Neutralizer</span>
+                  <span class="demo-sub"
+                    >Isolates social cookies and profiling engines</span
+                  >
+                </div>
+                <div class="demo-toggle-wrapper">
+                  <input
+                    type="checkbox"
+                    id="toggle-trackers"
+                    class="demo-toggle"
+                    checked
+                  />
+                  <label for="toggle-trackers" class="toggle-slider"></label>
+                </div>
+              </div>
+              <div class="demo-row active-node" id="node-fingerprint">
+                <div class="node-indicator"></div>
+                <div class="demo-info">
+                  <span class="demo-label">Anti-Fingerprint Node</span>
+                  <span class="demo-sub"
+                    >Protects browser signature uniqueness</span
+                  >
+                </div>
+                <div class="demo-toggle-wrapper">
+                  <input
+                    type="checkbox"
+                    id="toggle-fingerprint"
+                    class="demo-toggle"
+                    checked
+                  />
+                  <label for="toggle-fingerprint" class="toggle-slider"></label>
+                </div>
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button id="btn-to-theme" class="btn-primary btn-glow">
+                Calibrate Theme
+              </button>
+              <button id="btn-back-to-welcome" class="btn-secondary">
+                Back
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 3: Nexus Themes -->
+          <div id="step-theme" class="wizard-step">
+            <div class="step-header">
+              <span class="step-badge">SYSTEM STAGE: 03</span>
+              <h1 class="step-title">Choose Interface Theme</h1>
+            </div>
+            <p class="step-desc">
+              Synchronize the desktop styling. Choose an interface environment
+              below.
+            </p>
+
+            <div class="theme-selection-grid">
+              <div class="theme-option active" data-theme="dark">
+                <div class="theme-orbit">
+                  <div class="orbit-center dark-core"></div>
+                  <div class="orbit-ring"></div>
+                </div>
+                <span class="theme-label">Midnight Dark</span>
+              </div>
+              <div class="theme-option" data-theme="light">
+                <div class="theme-orbit">
+                  <div class="orbit-center light-core"></div>
+                  <div class="orbit-ring"></div>
+                </div>
+                <span class="theme-label">Pristine Light</span>
+              </div>
+              <div class="theme-option" data-theme="system">
+                <div class="theme-orbit">
+                  <div class="orbit-center system-core"></div>
+                  <div class="orbit-ring"></div>
+                </div>
+                <span class="theme-label">System Sync</span>
+              </div>
+            </div>
+
+            <div class="import-section">
+              <p class="import-text">
+                Import your archives, keychains, and records from another node?
+              </p>
+              <button id="btn-import" class="btn-secondary import-btn-cyber">
+                Import Node Data...
+              </button>
+            </div>
+
+            <div class="action-bar">
+              <button id="btn-finish" class="btn-primary btn-glow">
+                Enter Lykon
+              </button>
+              <button id="btn-back-to-shield" class="btn-secondary">
+                Back
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 4: Data Ingestion -->
+          <div id="step-migration" class="wizard-step full-height">
+            <div class="step-header">
+              <span class="step-badge">SYSTEM STAGE: 04</span>
+              <h1 class="step-title">Node Synchronization</h1>
+            </div>
+            <div
+              id="migration-wizard-container"
+              style="width: 100%; flex: 1; min-height: 350px"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="chrome://global/content/vendor/react.js"></script>
     <script src="chrome://global/content/vendor/react-dom.js"></script>
     <script src="chrome://browser/content/contentTheme.js"></script>

@@ -194,7 +194,10 @@ function renderFeatures() {
  * @param {boolean} shouldHide
  */
 function setCategoryVisibility(shouldHide) {
-  document.getElementById("category-experimental").hidden = shouldHide;
+  let el = document.getElementById("category-experimental");
+  if (el) {
+    el.hidden = shouldHide;
+  }
 
   Services.prefs.setBoolPref(
     "browser.preferences.experimental.hidden",
@@ -233,7 +236,7 @@ let renderingPromise = Promise.resolve();
 async function maybeRenderLabsRecipes() {
   firefoxLabs = await FirefoxLabs.create();
 
-  let shouldHide = firefoxLabs.count === 0;
+  let shouldHide = false;
   setCategoryVisibility(shouldHide);
 
   if (shouldHide) {

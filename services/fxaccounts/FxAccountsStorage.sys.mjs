@@ -61,39 +61,34 @@ FxAccountsStorageManager.prototype = {
   },
 
   async _initialize(accountData) {
-    log.trace("initializing new storage manager");
-    try {
-      if (accountData) {
-        // If accountData is passed we don't need to read any storage.
-        this._needToReadSecure = false;
-        // split it into the 2 parts, write it and we are done.
-        for (let [name, val] of Object.entries(accountData)) {
-          if (FXA_PWDMGR_PLAINTEXT_FIELDS.has(name)) {
-            this.cachedPlain[name] = val;
-          } else if (FXA_PWDMGR_SECURE_FIELDS.has(name)) {
-            this.cachedSecure[name] = val;
-          } else {
-            // Unknown fields are silently discarded, because there is no way
-            // for them to be read back later.
-            log.error(
-              "Unknown FxA field name in user data, it will be ignored",
-              name
-            );
-          }
+    if (accountData) {
+      // If accountData is passed we don't need to read any storage.
+      this._needToReadSecure = false;
+      // split it into the 2 parts, write it and we are done.
+      for (let [name, val] of Object.entries(accountData)) {
+        if (FXA_PWDMGR_PLAINTEXT_FIELDS.has(name)) {
+          this.cachedPlain[name] = val;
+        } else if (FXA_PWDMGR_SECURE_FIELDS.has(name)) {
+          this.cachedSecure[name] = val;
+        } else {
+          // Unknown fields are silently discarded, because there is no way
+          // for them to be read back later.
+          log.error(
+            "Unknown FxA field name in user data, it will be ignored",
+            name
+          );
         }
-        // write it out and we are done.
-        await this._write();
-        return;
       }
-      // So we were initialized without account data - that means we need to
-      // read the state from storage. We try and read plain storage first and
-      // only attempt to read secure storage if the plain storage had a user.
-      this._needToReadSecure = await this._readPlainStorage();
-      if (this._needToReadSecure && this.secureStorage) {
-        await this._doReadAndUpdateSecure();
-      }
-    } finally {
-      log.trace("initializing of new storage manager done");
+      // write it out and we are done.
+      await this._write();
+      return;
+    }
+    // So we were initialized without account data - that means we need to
+    // read the state from storage. We try and read plain storage first and
+    // only attempt to read secure storage if the plain storage had a user.
+    this._needToReadSecure = await this._readPlainStorage();
+    if (this._needToReadSecure && this.secureStorage) {
+      await this._doReadAndUpdateSecure();
     }
   },
 
@@ -457,7 +452,6 @@ JSONStorage.prototype = {
   },
 
   get() {
-    log.trace("starting fetch of json user data");
     let start = Date.now();
     return IOUtils.readJSON(this.path).then(result => {
       log.trace("finished fetch of json user data - took", Date.now() - start);
