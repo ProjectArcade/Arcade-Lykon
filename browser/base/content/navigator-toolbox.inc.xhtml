@@ -571,61 +571,624 @@
                tooltiptext="GarudaVision URL Safety"
                type="menu">
   <menupopup id="lykon-garudavision-popup"
-             class="panel-subview-body"
-             style="padding: 0; border: none; background: transparent;">
-    <html:div id="lykon-garudavision-panel-content" style="width: 320px; background: #121214; color: #e4e4e7; font-family: 'Outfit', 'Inter', -apple-system, sans-serif; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #27272a; overflow: hidden; padding: 16px;">
+             style="padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; --menu-border-color: transparent !important; --menu-background-color: transparent !important; --menu-box-shadow: none !important; --panel-border-color: transparent !important; --panel-background: transparent !important; --panel-box-shadow: none !important;">
+    <html:div id="lykon-garudavision-panel-content" data-state="safe" class="gv-animate" style="width: 360px;">
+      <html:style>
+        /* Base Reset and Variables */
+        #lykon-garudavision-panel-content {
+          box-sizing: border-box !important;
+          width: 360px !important;
+          padding: 20px !important;
+          font-family: "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif !important;
+          font-size: 14px !important;
+          font-weight: 400 !important;
+          
+          /* Default Light Theme Styles */
+          --gv-background: #F5F5F7;
+          --gv-primary-surface: #FFFFFF;
+          --gv-secondary-surface: #F2F2F7;
+          --gv-border: #E5E5EA;
+          --gv-primary-text: #1D1D1F;
+          --gv-secondary-text: #6E6E73;
+          --gv-divider: #D2D2D7;
+          
+          --gv-radius-card: 16px;
+          --gv-radius-input: 12px;
+          --gv-radius-switch: 999px;
+          
+          --gv-shadow: 0 4px 24px rgba(0,0,0,0.08);
+          --gv-blur: blur(12px);
+          --gv-backdrop-color: rgba(245, 245, 247, 0.95);
+          
+          --gv-status-accent: #30D158;
+          --gv-status-bg: rgba(48,209,88,0.10);
+          
+          background: var(--gv-backdrop-color) !important;
+          color: var(--gv-primary-text) !important;
+          border-radius: 20px !important;
+          border: 1px solid var(--gv-border) !important;
+          box-shadow: var(--gv-shadow) !important;
+          backdrop-filter: var(--gv-blur) !important;
+          
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 16px !important;
+          opacity: 1 !important;
+        }
+
+        @media (prefers-color-scheme: dark) {
+          #lykon-garudavision-panel-content {
+            /* Dark Theme Styles */
+            --gv-background: #111214;
+            --gv-primary-surface: #1C1C1E;
+            --gv-secondary-surface: #2C2C2E;
+            --gv-border: #3A3A3C;
+            --gv-primary-text: #FFFFFF;
+            --gv-secondary-text: #98989D;
+            --gv-divider: #38383A;
+            
+            --gv-shadow: 0 8px 32px rgba(0,0,0,0.35);
+            --gv-blur: blur(18px);
+            --gv-backdrop-color: rgba(17, 18, 20, 0.95);
+          }
+        }
+
+        /* Panel Open Microinteraction */
+        @keyframes panelOpen {
+          to {
+            opacity: 1 !important;
+            transform: translateY(0) !important;
+          }
+        }
+
+        /* State Custom Bindings */
+        #lykon-garudavision-panel-content[data-state="safe"] {
+          --gv-status-accent: #30D158;
+          --gv-status-bg: rgba(48,209,88,0.10);
+        }
+
+        #lykon-garudavision-panel-content[data-state="suspicious"] {
+          --gv-status-accent: #FF9F0A;
+          --gv-status-bg: rgba(255,159,10,0.12);
+        }
+
+        #lykon-garudavision-panel-content[data-state="dangerous"] {
+          --gv-status-accent: #FF453A;
+          --gv-status-bg: rgba(255,69,58,0.12);
+        }
+
+        #lykon-garudavision-panel-content[data-state="informational"] {
+          --gv-status-accent: #0A84FF;
+          --gv-status-bg: rgba(10,132,255,0.10);
+        }
+
+        /* Premium Typography */
+        .gv-title {
+          font-size: 22px !important;
+          font-weight: 600 !important;
+          color: var(--gv-primary-text) !important;
+          letter-spacing: -0.019em !important;
+          margin: 0 !important;
+        }
+
+        .gv-section-header {
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          color: var(--gv-secondary-text) !important;
+          letter-spacing: 0.06em !important;
+          text-transform: uppercase !important;
+          margin: 0 !important;
+        }
+
+        .gv-body {
+          font-size: 14px !important;
+          font-weight: 400 !important;
+          color: var(--gv-primary-text) !important;
+          line-height: 1.4 !important;
+        }
+
+        /* Cards styling */
+        .gv-card {
+          background: var(--gv-primary-surface) !important;
+          border: 1px solid var(--gv-border) !important;
+          border-radius: var(--gv-radius-card) !important;
+          padding: 16px !important;
+          box-shadow: var(--gv-shadow) !important;
+          box-sizing: border-box !important;
+          display: flex !important;
+          flex-direction: column !important;
+          opacity: 1 !important;
+        }
+
+        .gv-card:nth-child(1) { animation-delay: 40ms !important; }
+        .gv-card:nth-child(2) { animation-delay: 80ms !important; }
+        .gv-card:nth-child(3) { animation-delay: 120ms !important; }
+        .gv-card:nth-child(4) { animation-delay: 160ms !important; }
+
+        @keyframes cardFadeIn {
+          to {
+            opacity: 1 !important;
+            transform: translateY(0) !important;
+          }
+        }
+
+        /* Header styles */
+        .gv-header {
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 4px !important;
+          padding-bottom: 12px !important;
+          border-bottom: 1px solid var(--gv-divider) !important;
+        }
+
+        .gv-title-row {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+        }
+
+        .gv-badge {
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          padding: 3px 8px !important;
+          border-radius: 999px !important;
+          background: var(--gv-status-bg) !important;
+          color: var(--gv-status-accent) !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.05em !important;
+          transition: all 0.3s ease !important;
+        }
+
+        .gv-subtitle {
+          font-size: 14px !important;
+          font-weight: 400 !important;
+          color: var(--gv-secondary-text) !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          text-align: left !important;
+        }
+
+        /* Main Status Card styles */
+        .gv-status-card {
+          display: flex !important;
+          flex-direction: row !important;
+          gap: 16px !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+        }
+
+        .gv-icon-container {
+          width: 48px !important;
+          height: 48px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: var(--gv-status-bg) !important;
+          border-radius: 12px !important;
+          flex-shrink: 0 !important;
+          transition: all 0.3s ease !important;
+        }
+
+        .gv-status-icon {
+          width: 28px !important;
+          height: 28px !important;
+          display: none !important;
+          overflow: visible !important;
+          background-size: contain !important;
+          background-repeat: no-repeat !important;
+          background-position: center !important;
+          -moz-context-properties: fill, stroke !important;
+          fill: var(--gv-status-accent) !important;
+          stroke: var(--gv-status-accent) !important;
+        }
+
+        .gv-success-icon {
+          background-image: url("chrome://global/skin/icons/check.svg") !important;
+        }
+
+        .gv-suspicious-icon {
+          background-image: url("chrome://global/skin/icons/security-warning.svg") !important;
+        }
+
+        .gv-dangerous-icon {
+          background-image: url("chrome://global/skin/icons/blocked.svg") !important;
+        }
+
+        .gv-informational-icon {
+          background-image: url("chrome://global/skin/icons/info.svg") !important;
+        }
+
+        #lykon-garudavision-panel-content[data-state="safe"] .gv-success-icon { display: block !important; }
+        #lykon-garudavision-panel-content[data-state="suspicious"] .gv-suspicious-icon { display: block !important; }
+        #lykon-garudavision-panel-content[data-state="dangerous"] .gv-dangerous-icon { display: block !important; }
+        #lykon-garudavision-panel-content[data-state="informational"] .gv-informational-icon { display: block !important; }
+
+        .gv-success-icon .gv-draw-circle {
+          stroke-dasharray: 63 !important;
+          stroke-dashoffset: 63 !important;
+        }
+        .gv-animate .gv-success-icon .gv-draw-circle {
+          animation: gvDrawLine 500ms cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+        }
+
+        .gv-success-icon .gv-draw-check {
+          stroke-dasharray: 15 !important;
+          stroke-dashoffset: 15 !important;
+        }
+        .gv-animate .gv-success-icon .gv-draw-check {
+          animation: gvDrawLine 350ms cubic-bezier(0.25, 1, 0.5, 1) 250ms forwards !important;
+        }
+
+        .gv-animate .gv-success-icon {
+          transform-origin: center !important;
+          animation: gvSpringPop 550ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+        }
+
+        .gv-suspicious-icon .gv-draw-triangle {
+          stroke-dasharray: 70 !important;
+          stroke-dashoffset: 70 !important;
+        }
+        .gv-animate .gv-suspicious-icon .gv-draw-triangle {
+          animation: gvDrawLine 550ms cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+        }
+
+        .gv-suspicious-icon .gv-draw-exclamation-line {
+          stroke-dasharray: 6 !important;
+          stroke-dashoffset: 6 !important;
+        }
+        .gv-animate .gv-suspicious-icon .gv-draw-exclamation-line {
+          animation: gvDrawLine 250ms cubic-bezier(0.25, 1, 0.5, 1) 350ms forwards !important;
+        }
+
+        .gv-suspicious-icon .gv-draw-exclamation-dot {
+          transform: scale(0) !important;
+          opacity: 0 !important;
+          transform-origin: 12px 17px !important;
+        }
+        .gv-animate .gv-suspicious-icon .gv-draw-exclamation-dot {
+          animation: gvFadePop 250ms cubic-bezier(0.34, 1.56, 0.64, 1) 500ms forwards !important;
+        }
+
+        .gv-animate .gv-suspicious-icon {
+          transform-origin: center !important;
+          animation: gvSpringPop 550ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+        }
+
+        .gv-dangerous-icon .gv-draw-shield {
+          stroke-dasharray: 80 !important;
+          stroke-dashoffset: 80 !important;
+        }
+        .gv-animate .gv-dangerous-icon .gv-draw-shield {
+          animation: gvDrawLine 550ms cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+        }
+
+        .gv-dangerous-icon .gv-draw-shield-line {
+          stroke-dasharray: 6 !important;
+          stroke-dashoffset: 6 !important;
+        }
+        .gv-animate .gv-dangerous-icon .gv-draw-shield-line {
+          animation: gvDrawLine 250ms cubic-bezier(0.25, 1, 0.5, 1) 350ms forwards !important;
+        }
+
+        .gv-dangerous-icon .gv-draw-shield-dot {
+          transform: scale(0) !important;
+          opacity: 0 !important;
+          transform-origin: 12px 16px !important;
+        }
+        .gv-animate .gv-dangerous-icon .gv-draw-shield-dot {
+          animation: gvFadePop 250ms cubic-bezier(0.34, 1.56, 0.64, 1) 500ms forwards !important;
+        }
+
+        .gv-animate .gv-dangerous-icon {
+          transform-origin: center !important;
+          animation: gvShieldShake 550ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both !important;
+        }
+
+        .gv-informational-icon .gv-draw-info-circle {
+          stroke-dasharray: 63 !important;
+          stroke-dashoffset: 63 !important;
+        }
+        .gv-animate .gv-informational-icon .gv-draw-info-circle {
+          animation: gvDrawLine 500ms cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+        }
+
+        .gv-informational-icon .gv-draw-info-line {
+          stroke-dasharray: 5 !important;
+          stroke-dashoffset: 5 !important;
+        }
+        .gv-animate .gv-informational-icon .gv-draw-info-line {
+          animation: gvDrawLine 200ms cubic-bezier(0.25, 1, 0.5, 1) 300ms forwards !important;
+        }
+
+        .gv-informational-icon .gv-draw-info-dot {
+          transform: scale(0) !important;
+          opacity: 0 !important;
+          transform-origin: 12px 8px !important;
+        }
+        .gv-animate .gv-informational-icon .gv-draw-info-dot {
+          animation: gvFadePop 250ms cubic-bezier(0.34, 1.56, 0.64, 1) 450ms forwards !important;
+        }
+
+        .gv-animate .gv-informational-icon {
+          transform-origin: center !important;
+          animation: gvSpringPop 550ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+        }
+
+        @keyframes gvDrawLine {
+          to {
+            stroke-dashoffset: 0 !important;
+          }
+        }
+
+        @keyframes gvSpringPop {
+          from {
+            transform: scale(0.65) !important;
+            opacity: 0 !important;
+          }
+          to {
+            transform: scale(1) !important;
+            opacity: 1 !important;
+          }
+        }
+
+        @keyframes gvFadePop {
+          to {
+            transform: scale(1) !important;
+            opacity: 1 !important;
+          }
+        }
+
+        @keyframes gvShieldShake {
+          0%, 100% { transform: scale(1) translateX(0) !important; }
+          15% { transform: scale(1) translateX(-4px) !important; }
+          30% { transform: scale(1) translateX(3px) !important; }
+          45% { transform: scale(1) translateX(-3px) !important; }
+          60% { transform: scale(1) translateX(2px) !important; }
+          75% { transform: scale(1) translateX(-1px) !important; }
+        }
+
+        .gv-verdict-title {
+          font-size: 16px !important;
+          font-weight: 600 !important;
+          color: var(--gv-primary-text) !important;
+          text-align: left !important;
+        }
+
+        .gv-verdict-desc {
+          font-size: 13px !important;
+          color: var(--gv-secondary-text) !important;
+          line-height: 1.4 !important;
+          text-align: left !important;
+        }
+
+        .gv-score-display {
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-end !important;
+          justify-content: center !important;
+          border-left: 1px solid var(--gv-divider) !important;
+          padding-left: 16px !important;
+        }
+
+        .gv-score-val {
+          font-size: 42px !important;
+          font-weight: 700 !important;
+          color: var(--gv-status-accent) !important;
+          line-height: 1.0 !important;
+          transition: color 0.3s ease !important;
+        }
+
+        .gv-score-label {
+          font-size: 10px !important;
+          font-weight: 600 !important;
+          color: var(--gv-secondary-text) !important;
+          letter-spacing: 0.06em !important;
+          margin-top: 4px !important;
+          white-space: nowrap !important;
+        }
+
+        /* Warning Card and Alert Button */
+        .gv-warning-card {
+          border-color: var(--gv-status-accent) !important;
+        }
+
+        .gv-warning-text {
+          font-size: 13px !important;
+          color: var(--gv-primary-text) !important;
+          line-height: 1.4 !important;
+          font-weight: 500 !important;
+          text-align: left !important;
+        }
+
+        .gv-btn {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          height: 40px !important;
+          border-radius: var(--gv-radius-input) !important;
+          font-family: inherit !important;
+          font-size: 14px !important;
+          font-weight: 600 !important;
+          border: none !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1) !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+          margin: 0 !important;
+        }
+
+        .gv-alert-btn {
+          background: var(--gv-status-accent) !important;
+          color: #FFFFFF !important;
+        }
+
+        .gv-alert-btn:hover {
+          opacity: 0.9 !important;
+          transform: scale(0.98) !important;
+        }
+
+        /* Settings Card (Trust Website Switch) */
+        .gv-settings-card {
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 16px !important;
+          margin-top: 8px !important;
+        }
+
+        .gv-settings-title {
+          font-size: 14px !important;
+          font-weight: 600 !important;
+          color: var(--gv-primary-text) !important;
+          text-align: left !important;
+        }
+
+        .gv-settings-desc {
+          font-size: 12px !important;
+          color: var(--gv-secondary-text) !important;
+          text-align: left !important;
+        }
+
+        /* iOS style toggle switch */
+        .gv-switch {
+          position: relative !important;
+          width: 51px !important;
+          height: 31px !important;
+          border-radius: var(--gv-radius-switch) !important;
+          background: #8E8E93 !important; /* OFF color */
+          border: none !important;
+          cursor: pointer !important;
+          transition: background-color 0.25s ease !important;
+          padding: 0 !important;
+          flex-shrink: 0 !important;
+          box-sizing: border-box !important;
+          display: block !important;
+        }
+
+        .gv-switch-thumb {
+          position: absolute !important;
+          top: 2px !important;
+          left: 2px !important;
+          width: 27px !important;
+          height: 27px !important;
+          border-radius: 50% !important;
+          background: #FFFFFF !important; /* Thumb color */
+          box-shadow: 0 3px 8px rgba(0,0,0,0.15) !important;
+          transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1) !important;
+          pointer-events: none !important;
+          display: block !important;
+        }
+
+        /* Switch ON state */
+        .gv-switch[data-checked="true"] {
+          background: #30D158 !important; /* ON color */
+        }
+
+        .gv-switch[data-checked="true"] .gv-switch-thumb {
+          transform: translateX(20px) !important;
+        }
+
+        /* Reasons List Heuristics styles */
+        .gv-reason-item {
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          gap: 8px !important;
+          padding: 8px 12px !important;
+          background: var(--gv-secondary-surface) !important;
+          border: 1px solid var(--gv-border) !important;
+          border-radius: 10px !important;
+          font-size: 13px !important;
+          color: var(--gv-primary-text) !important;
+          font-weight: 500 !important;
+        }
+
+        .gv-reason-dot {
+          width: 6px !important;
+          height: 6px !important;
+          border-radius: 50% !important;
+          background: var(--gv-status-accent) !important;
+          flex-shrink: 0 !important;
+        }
+      </html:style>
+
       <!-- Title Header -->
-      <html:div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid #27272a; padding-bottom: 12px;">
-        <html:div style="display: flex; align-items: center; gap: 8px;">
-          <html:img src="chrome://global/skin/icons/EagleIcon.svg" style="width: 20px; height: 20px; filter: drop-shadow(0 2px 4px rgba(255,215,0,0.3));"/>
-          <html:span style="font-weight: 700; font-size: 14px; letter-spacing: 0.5px; background: linear-gradient(90deg, #FFD700, #FF8C00); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">GARUDAVISION</html:span>
+      <html:div class="gv-header">
+        <html:div class="gv-title-row">
+          <html:span class="gv-title">GarudaVision</html:span>
+          <html:span id="garudavision-site-status" class="gv-badge">SECURE</html:span>
         </html:div>
-        <html:span id="garudavision-site-status" style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);">ACTIVE</html:span>
+        <html:div id="garudavision-domain" class="gv-subtitle">loading...</html:div>
       </html:div>
 
-      <!-- Active Domain display -->
-      <html:div id="garudavision-domain" style="font-size: 11px; opacity: 0.6; margin-bottom: 16px; text-align: center; font-family: monospace; background: #1e1e20; padding: 6px 12px; border-radius: 6px; border: 1px solid #27272a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-        loading...
-      </html:div>
+      <!-- Main Status Card -->
+      <html:div id="garudavision-score-circle" class="gv-card gv-status-card">
+        <html:div style="display: flex; gap: 12px; align-items: flex-start; flex: 1;">
+          <html:div class="gv-icon-container">
+            <html:svg class="gv-status-icon gv-success-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <html:circle class="gv-draw-circle" cx="12" cy="12" r="10" stroke="var(--gv-status-accent)" stroke-width="2"/>
+              <html:path class="gv-draw-check" d="M7 12l3 3 7-7" stroke="var(--gv-status-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </html:svg>
+            
+            <html:svg class="gv-status-icon gv-suspicious-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <html:path class="gv-draw-triangle" d="M12 2L2 22h20L12 2z" stroke="var(--gv-status-accent)" stroke-width="2" stroke-linejoin="round"/>
+              <html:path class="gv-draw-exclamation-line" d="M12 9v5" stroke="var(--gv-status-accent)" stroke-width="2" stroke-linecap="round"/>
+              <html:circle class="gv-draw-exclamation-dot" cx="12" cy="17" r="1.2" fill="var(--gv-status-accent)" stroke="none"/>
+            </html:svg>
+            
+            <html:svg class="gv-status-icon gv-dangerous-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <html:path class="gv-draw-shield" d="M12 2S3 5 3 12s9 10 9 10 9-3 9-10S12 2 12 2z" stroke="var(--gv-status-accent)" stroke-width="2" stroke-linejoin="round"/>
+              <html:path class="gv-draw-shield-line" d="M12 7v6" stroke="var(--gv-status-accent)" stroke-width="2" stroke-linecap="round"/>
+              <html:circle class="gv-draw-shield-dot" cx="12" cy="16" r="1.2" fill="var(--gv-status-accent)" stroke="none"/>
+            </html:svg>
 
-      <!-- Warning Banner -->
-      <html:div id="garudavision-warning-banner" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 16px; display: none; align-items: flex-start; gap: 8px;">
-        <html:span style="font-size: 16px; margin-top: -2px;">⚠️</html:span>
-        <html:div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
-          <html:span id="garudavision-warning-text" style="font-size: 12px; font-weight: 600; color: #ef4444; line-height: 1.4;">This is marked as a suspicious link. Navigate at your own risk.</html:span>
-          <html:button id="garudavision-dismiss-btn" style="background: #ef4444; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: 700; cursor: pointer; align-self: flex-start; text-transform: uppercase; letter-spacing: 0.5px;">I understand</html:button>
+            <html:svg class="gv-status-icon gv-informational-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <html:circle class="gv-draw-info-circle" cx="12" cy="12" r="10" stroke="var(--gv-status-accent)" stroke-width="2"/>
+              <html:path class="gv-draw-info-line" d="M12 16v-4" stroke="var(--gv-status-accent)" stroke-width="2" stroke-linecap="round"/>
+              <html:circle class="gv-draw-info-dot" cx="12" cy="8" r="1.2" fill="var(--gv-status-accent)" stroke="none"/>
+            </html:svg>
+          </html:div>
+          
+          <html:div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+            <html:div id="garudavision-verdict" class="gv-verdict-title">Secure</html:div>
+            <html:div id="garudavision-no-reasons" class="gv-verdict-desc">No threats detected.</html:div>
+          </html:div>
+        </html:div>
+        
+        <html:div class="gv-score-display">
+          <html:span id="garudavision-score-val" class="gv-score-val">0</html:span>
+          <html:span class="gv-score-label">RISK SCORE</html:span>
         </html:div>
       </html:div>
 
-      <!-- Circular / Large Score Display -->
-      <html:div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 20px; position: relative;">
-        <!-- Score Circular Ring -->
-        <html:div id="garudavision-score-circle" style="width: 96px; height: 96px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid #10b981; box-shadow: 0 0 20px rgba(16,185,129,0.15); background: #18181b; transition: all 0.3s ease;">
-          <html:div id="garudavision-score-val" style="font-size: 32px; font-weight: 800; color: #10b981; line-height: 1;">0</html:div>
-          <html:div style="font-size: 9px; font-weight: 700; opacity: 0.5; margin-top: 2px; letter-spacing: 0.5px;">SCORE</html:div>
+      <!-- Warning Alert Card (only shown if score >= 25) -->
+      <html:div id="garudavision-warning-banner" class="gv-card gv-warning-card" style="display: none; flex-direction: column; gap: 12px;">
+        <html:div style="display: flex; flex-direction: column; gap: 4px;">
+          <html:span class="gv-section-header" style="color: var(--gv-status-accent);">SECURITY ALERT</html:span>
+          <html:span id="garudavision-warning-text" class="gv-warning-text">This is marked as a suspicious link. Navigate at your own risk.</html:span>
         </html:div>
-        <!-- Verdict Text -->
-        <html:div id="garudavision-verdict" style="font-size: 16px; font-weight: 700; color: #10b981; margin-top: 12px; letter-spacing: 0.5px; text-transform: uppercase;">
-          Clean
+        
+        <!-- Phishing Reasons / Heuristics Card -->
+        <html:div id="garudavision-reasons-container" style="display: flex; flex-direction: column; gap: 8px;">
+          <html:span class="gv-section-header">DETECTED RISKS</html:span>
+          <html:div id="garudavision-reasons-list" style="display: flex; flex-direction: column; gap: 8px;"></html:div>
         </html:div>
+        
+        <html:button id="garudavision-dismiss-btn" class="gv-btn gv-alert-btn">I understand</html:button>
       </html:div>
 
-      <!-- Phishing Reasons / Heuristics Card -->
-      <html:div id="garudavision-reasons-container" style="background: #18181b; border-radius: 8px; border: 1px solid #27272a; padding: 12px; max-height: 160px; overflow-y: auto; display: none;">
-        <html:div style="font-size: 11px; font-weight: 700; opacity: 0.4; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Detected Risks</html:div>
-        <html:div id="garudavision-reasons-list" style="display: flex; flex-direction: column; gap: 8px;"></html:div>
+      <!-- Settings / Allowlist Toggle Switch Card -->
+      <html:div class="gv-card gv-settings-card">
+        <html:div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
+          <html:span class="gv-settings-title">Trust Website</html:span>
+          <html:span class="gv-settings-desc">Bypass safety scans for this site</html:span>
+        </html:div>
+        <html:button id="garudavision-allowlist-btn" class="gv-switch" data-checked="false">
+          <html:span id="garudavision-allowlist-btn-text" class="gv-switch-thumb"></html:span>
+        </html:button>
       </html:div>
-      <html:div id="garudavision-no-reasons" style="text-align: center; padding: 16px; background: rgba(16,185,129,0.04); border-radius: 8px; border: 1px dashed rgba(16,185,129,0.2); color: #a1a1aa; font-size: 12px; display: block;">
-        No security threats detected on this page.
-      </html:div>
-
-      <!-- Allowlist Toggle Button -->
-      <html:button id="garudavision-allowlist-btn"
-                   onmouseover="this.style.background='#3f3f46'; this.style.borderColor='#52525b';"
-                   onmouseout="this.style.background='#27272a'; this.style.borderColor='#3f3f46';"
-                   style="width: 100%; margin-top: 16px; background: #27272a; color: #ffffff; border: 1px solid #3f3f46; border-radius: 6px; padding: 8px 12px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s ease-in-out; display: flex; align-items: center; justify-content: center; gap: 8px;">
-        <html:span id="garudavision-allowlist-btn-text">Don't show warnings for this site</html:span>
-      </html:button>
     </html:div>
   </menupopup>
 </toolbarbutton>

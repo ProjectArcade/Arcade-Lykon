@@ -7,8 +7,30 @@
 var GarudaVisionPanel = {
   init() {
     const popup = document.getElementById("lykon-garudavision-popup");
+    const button = document.getElementById("lykon-garudavision-button");
     if (popup) {
       popup.addEventListener("popupshowing", this);
+      popup.addEventListener("popupshown", () => {
+        const panelContent = document.getElementById(
+          "lykon-garudavision-panel-content"
+        );
+        if (panelContent) {
+          panelContent.classList.remove("gv-animate");
+          void panelContent.offsetWidth;
+          panelContent.classList.add("gv-animate");
+        }
+      });
+    }
+
+    if (popup && button) {
+      button.addEventListener("command", event => {
+        event.preventDefault();
+        if (popup.state === "open") {
+          popup.hidePopup();
+          return;
+        }
+        popup.openPopup(button, "bottomright");
+      });
     }
 
     // Dismiss button within the warning banner inside the popup
@@ -23,9 +45,17 @@ var GarudaVisionPanel = {
     }
 
     // Initialize toolbar button hidden state based on preference
-    const enabled = Services.prefs.getBoolPref("browser.garudavision.enabled", true);
-    const privateEnabled = Services.prefs.getBoolPref("browser.garudavision.privateAndTor.enabled", true);
-    const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
+    const enabled = Services.prefs.getBoolPref(
+      "browser.garudavision.enabled",
+      true
+    );
+    const privateEnabled = Services.prefs.getBoolPref(
+      "browser.garudavision.privateAndTor.enabled",
+      true
+    );
+    const { PrivateBrowsingUtils } = ChromeUtils.importESModule(
+      "resource://gre/modules/PrivateBrowsingUtils.sys.mjs"
+    );
     const isPrivate = PrivateBrowsingUtils.isWindowPrivate(window);
 
     const btn = document.getElementById("lykon-garudavision-button");
@@ -36,15 +66,27 @@ var GarudaVisionPanel = {
     // Listen for preference updates reactively
     this._prefObserver = (subject, topic, data) => {
       if (topic === "nsPref:changed") {
-        if (data === "browser.garudavision.enabled" || data === "browser.garudavision.privateAndTor.enabled") {
-          const isEnabled = Services.prefs.getBoolPref("browser.garudavision.enabled", true);
-          const isPrivateEnabled = Services.prefs.getBoolPref("browser.garudavision.privateAndTor.enabled", true);
-          const { PrivateBrowsingUtils: pbUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
+        if (
+          data === "browser.garudavision.enabled" ||
+          data === "browser.garudavision.privateAndTor.enabled"
+        ) {
+          const isEnabled = Services.prefs.getBoolPref(
+            "browser.garudavision.enabled",
+            true
+          );
+          const isPrivateEnabled = Services.prefs.getBoolPref(
+            "browser.garudavision.privateAndTor.enabled",
+            true
+          );
+          const { PrivateBrowsingUtils: pbUtils } = ChromeUtils.importESModule(
+            "resource://gre/modules/PrivateBrowsingUtils.sys.mjs"
+          );
           const isWindowPrivate = pbUtils.isWindowPrivate(window);
 
           const button = document.getElementById("lykon-garudavision-button");
           if (button) {
-            button.hidden = !isEnabled || (isWindowPrivate && !isPrivateEnabled);
+            button.hidden =
+              !isEnabled || (isWindowPrivate && !isPrivateEnabled);
           }
           const browser = window.gBrowser?.selectedBrowser;
           if (browser) {
@@ -73,7 +115,10 @@ var GarudaVisionPanel = {
     // Clean up observer on window unload to prevent memory leaks
     window.addEventListener("unload", () => {
       if (this._prefObserver) {
-        Services.prefs.removeObserver("browser.garudavision.", this._prefObserver);
+        Services.prefs.removeObserver(
+          "browser.garudavision.",
+          this._prefObserver
+        );
       }
     });
 
@@ -83,7 +128,7 @@ var GarudaVisionPanel = {
         onLocationChange: (aBrowser, aWebProgress, aRequest, aLocation) => {
           if (!aWebProgress || !aWebProgress.isTopLevel) return;
           this.updateSecurityIndicators(aBrowser, aLocation?.spec || "");
-        }
+        },
       });
 
       // Update styling when switching tabs
@@ -94,7 +139,7 @@ var GarudaVisionPanel = {
       });
 
       // Revert styles cleanly when tabs are closed
-      window.gBrowser.tabContainer.addEventListener("TabClose", (event) => {
+      window.gBrowser.tabContainer.addEventListener("TabClose", event => {
         const tab = event.target;
         if (tab && tab.selected) {
           this.styleToolbar(0);
@@ -107,7 +152,10 @@ var GarudaVisionPanel = {
     if (allowlistBtn) {
       allowlistBtn.addEventListener("click", () => {
         const currentURI = window.gBrowser?.currentURI;
-        const host = currentURI?.host;
+        let host = "";
+        try {
+          host = currentURI?.host || "";
+        } catch (e) {}
         if (!host) return;
 
         const list = this.getAllowList();
@@ -130,7 +178,10 @@ var GarudaVisionPanel = {
         // Trigger updates in all windows to apply styling changes immediately
         const browser = window.gBrowser?.selectedBrowser;
         if (browser) {
-          this.updateSecurityIndicators(browser, browser.currentURI?.spec || "");
+          this.updateSecurityIndicators(
+            browser,
+            browser.currentURI?.spec || ""
+          );
         }
       });
     }
@@ -138,7 +189,10 @@ var GarudaVisionPanel = {
 
   getAllowList() {
     try {
-      const listStr = Services.prefs.getStringPref("browser.garudavision.allowlist", "[]");
+      const listStr = Services.prefs.getStringPref(
+        "browser.garudavision.allowlist",
+        "[]"
+      );
       return JSON.parse(listStr);
     } catch (e) {
       return [];
@@ -147,7 +201,10 @@ var GarudaVisionPanel = {
 
   setAllowList(list) {
     try {
-      Services.prefs.setStringPref("browser.garudavision.allowlist", JSON.stringify(list));
+      Services.prefs.setStringPref(
+        "browser.garudavision.allowlist",
+        JSON.stringify(list)
+      );
     } catch (e) {
       console.error("Failed to set allowlist pref:", e);
     }
@@ -177,41 +234,54 @@ var GarudaVisionPanel = {
 
       const currentURI = window.gBrowser?.currentURI;
       const url = currentURI?.spec || "";
-      const host = currentURI?.host || "No active site";
+      let host = "No active site";
+      try {
+        host = currentURI?.host || "No active site";
+      } catch (e) {}
 
       const domainEl = document.getElementById("garudavision-domain");
       if (domainEl) {
         domainEl.textContent = host;
       }
 
-      const allowlistBtn = document.getElementById("garudavision-allowlist-btn");
-      const allowlistText = document.getElementById("garudavision-allowlist-btn-text");
+      const allowlistBtn = document.getElementById(
+        "garudavision-allowlist-btn"
+      );
 
       if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-        this.setCleanUI("0", "Clean", "System/Local Page");
+        this.setCleanUI("0", "Secure", "System/Local Page");
         if (allowlistBtn) {
-          allowlistBtn.style.display = "none";
+          const parentCard = allowlistBtn.closest(".gv-settings-card");
+          if (parentCard) {
+            parentCard.style.display = "none";
+          } else {
+            allowlistBtn.style.display = "none";
+          }
         }
         return;
       }
 
       if (allowlistBtn) {
-        allowlistBtn.style.display = "flex";
-        if (host && this.isHostAllowed(host)) {
-          allowlistText.textContent = "Show warnings for this site";
-          allowlistBtn.style.background = "rgba(239, 68, 68, 0.15)";
-          allowlistBtn.style.color = "#ef4444";
-          allowlistBtn.style.borderColor = "rgba(239, 68, 68, 0.3)";
+        const parentCard = allowlistBtn.closest(".gv-settings-card");
+        if (parentCard) {
+          parentCard.style.display = "flex";
         } else {
-          allowlistText.textContent = "Don't show warnings for this site";
-          allowlistBtn.style.background = "#27272a";
-          allowlistBtn.style.color = "#ffffff";
-          allowlistBtn.style.borderColor = "#3f3f46";
+          allowlistBtn.style.display = "flex";
+        }
+
+        if (host && this.isHostAllowed(host)) {
+          allowlistBtn.setAttribute("data-checked", "true");
+        } else {
+          allowlistBtn.setAttribute("data-checked", "false");
         }
       }
 
       if (host && this.isHostAllowed(host)) {
-        this.setCleanUI("0", "Allowed", "This site is in your GarudaVision allow list.");
+        this.setCleanUI(
+          "0",
+          "Allowed",
+          "This site is in your GarudaVision allow list."
+        );
         return;
       }
 
@@ -219,33 +289,74 @@ var GarudaVisionPanel = {
       const reasons = GarudaService.checkUrlReasons(url);
 
       this.updateScoreUI(score, reasons);
-
     } catch (e) {
       console.error("[GarudaVisionPanel] Failed to update panel:", e);
     }
   },
 
+  animateScoreCountUp(targetScore) {
+    const scoreValEl = document.getElementById("garudavision-score-val");
+    if (!scoreValEl) return;
+
+    let currentScore = 0;
+    const duration = 800; // ms
+    const startTime = performance.now();
+
+    const updateCount = timestamp => {
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Ease-out cubic
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const scoreVal = Math.floor(easeProgress * targetScore);
+
+      scoreValEl.textContent = scoreVal;
+
+      if (progress < 1) {
+        requestAnimationFrame(updateCount);
+      } else {
+        scoreValEl.textContent = targetScore;
+      }
+    };
+
+    requestAnimationFrame(updateCount);
+  },
+
   setCleanUI(score, verdict, message) {
     const scoreValEl = document.getElementById("garudavision-score-val");
     const verdictEl = document.getElementById("garudavision-verdict");
-    const circleEl = document.getElementById("garudavision-score-circle");
-    const reasonsContainer = document.getElementById("garudavision-reasons-container");
+    const reasonsContainer = document.getElementById(
+      "garudavision-reasons-container"
+    );
     const noReasonsEl = document.getElementById("garudavision-no-reasons");
-    const warningBanner = document.getElementById("garudavision-warning-banner");
+    const warningBanner = document.getElementById(
+      "garudavision-warning-banner"
+    );
+    const panelContent = document.getElementById(
+      "lykon-garudavision-panel-content"
+    );
 
-    if (scoreValEl) scoreValEl.textContent = score;
-    if (verdictEl) {
-      verdictEl.textContent = verdict;
-      verdictEl.style.color = "#10b981";
+    if (panelContent) {
+      panelContent.setAttribute(
+        "data-state",
+        verdict === "Allowed" ? "informational" : "safe"
+      );
+      panelContent.classList.remove("gv-animate");
+      void panelContent.offsetWidth;
+      panelContent.classList.add("gv-animate");
     }
-    if (circleEl) {
-      circleEl.style.borderColor = "#10b981";
-      circleEl.style.boxShadow = "0 0 20px rgba(16,185,129,0.15)";
+
+    if (scoreValEl) {
+      this.animateScoreCountUp(0);
+    }
+    if (verdictEl) {
+      verdictEl.textContent = verdict === "Allowed" ? "Allowed" : "Secure";
     }
     if (reasonsContainer) reasonsContainer.style.display = "none";
     if (noReasonsEl) {
       noReasonsEl.style.display = "block";
-      noReasonsEl.textContent = message || "No security threats detected on this page.";
+      noReasonsEl.textContent =
+        message || "No security threats detected on this page.";
     }
     if (warningBanner) {
       warningBanner.style.display = "none";
@@ -255,69 +366,56 @@ var GarudaVisionPanel = {
   updateScoreUI(score, reasons) {
     const scoreValEl = document.getElementById("garudavision-score-val");
     const verdictEl = document.getElementById("garudavision-verdict");
-    const circleEl = document.getElementById("garudavision-score-circle");
-    const reasonsContainer = document.getElementById("garudavision-reasons-container");
+    const reasonsContainer = document.getElementById(
+      "garudavision-reasons-container"
+    );
     const reasonsListEl = document.getElementById("garudavision-reasons-list");
     const noReasonsEl = document.getElementById("garudavision-no-reasons");
+    const warningBanner = document.getElementById(
+      "garudavision-warning-banner"
+    );
+    const warningText = document.getElementById("garudavision-warning-text");
+    const panelContent = document.getElementById(
+      "lykon-garudavision-panel-content"
+    );
 
-    if (scoreValEl) scoreValEl.textContent = score;
+    let verdict = "Secure";
+    let state = "safe";
 
-    let verdict = "Clean";
-    let color = "#10b981";
-    let shadow = "0 0 20px rgba(16,185,129,0.15)";
-
-    if (score >= 80) {
-      verdict = "Block";
-      color = "#ef4444";
-      shadow = "0 0 25px rgba(239,68,68,0.3)";
-    } else if (score >= 50) {
-      verdict = "Caution";
-      color = "#f97316";
-      shadow = "0 0 25px rgba(249,115,22,0.25)";
+    if (score >= 50) {
+      verdict = "Unsafe";
+      state = "dangerous";
     } else if (score >= 25) {
       verdict = "Suspicious";
-      color = "#f59e0b";
-      shadow = "0 0 20px rgba(245,158,11,0.2)";
+      state = "suspicious";
+    }
+
+    if (panelContent) {
+      panelContent.setAttribute("data-state", state);
+      panelContent.classList.remove("gv-animate");
+      void panelContent.offsetWidth;
+      panelContent.classList.add("gv-animate");
+    }
+
+    if (scoreValEl) {
+      this.animateScoreCountUp(score);
     }
 
     if (verdictEl) {
       verdictEl.textContent = verdict;
-      verdictEl.style.color = color;
-    }
-    if (circleEl) {
-      circleEl.style.borderColor = color;
-      circleEl.style.boxShadow = shadow;
     }
 
     // Dynamic warning banner setup based on score
-    const warningBanner = document.getElementById("garudavision-warning-banner");
-    const warningText = document.getElementById("garudavision-warning-text");
-    const dismissBtn = document.getElementById("garudavision-dismiss-btn");
-
     if (score >= 25) {
       if (warningBanner) {
         warningBanner.style.display = "flex";
-        if (score >= 50) {
-          warningBanner.style.background = "rgba(239, 68, 68, 0.15)";
-          warningBanner.style.borderColor = "rgba(239, 68, 68, 0.3)";
-          if (warningText) {
-            warningText.textContent = "This is marked as a suspicious link. Navigate at your own risk.";
-            warningText.style.color = "#ef4444";
-          }
-          if (dismissBtn) {
-            dismissBtn.style.background = "#ef4444";
-            dismissBtn.style.color = "#ffffff";
-          }
-        } else {
-          warningBanner.style.background = "rgba(245, 158, 11, 0.15)";
-          warningBanner.style.borderColor = "rgba(245, 158, 11, 0.3)";
-          if (warningText) {
-            warningText.textContent = "This is marked as a suspicious link. Navigate at your own risk.";
-            warningText.style.color = "#f59e0b";
-          }
-          if (dismissBtn) {
-            dismissBtn.style.background = "#f59e0b";
-            dismissBtn.style.color = "#000000";
+        if (warningText) {
+          if (score >= 50) {
+            warningText.textContent =
+              "Potential phishing or malware risk detected. Navigate at your own risk.";
+          } else {
+            warningText.textContent =
+              "This page contains indicators that may require caution.";
           }
         }
       }
@@ -330,30 +428,27 @@ var GarudaVisionPanel = {
     const hasReasons = reasons && reasons.length > 0;
     if (hasReasons) {
       if (noReasonsEl) noReasonsEl.style.display = "none";
-      if (reasonsContainer) reasonsContainer.style.display = "block";
+      if (reasonsContainer) reasonsContainer.style.display = "flex";
       if (reasonsListEl) {
         reasonsListEl.innerHTML = "";
         for (const reason of reasons) {
-          const item = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-          item.style.display = "flex";
-          item.style.alignItems = "center";
-          item.style.gap = "8px";
-          item.style.padding = "6px 10px";
-          item.style.background = "#1e1e20";
-          item.style.borderRadius = "6px";
-          item.style.border = "1px solid #27272a";
-          item.style.fontSize = "12px";
+          const item = document.createElementNS(
+            "http://www.w3.org/1999/xhtml",
+            "div"
+          );
+          item.className = "gv-reason-item";
 
-          const dot = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-          dot.style.width = "6px";
-          dot.style.height = "6px";
-          dot.style.borderRadius = "50%";
-          dot.style.background = color;
-          
-          const text = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+          const dot = document.createElementNS(
+            "http://www.w3.org/1999/xhtml",
+            "span"
+          );
+          dot.className = "gv-reason-dot";
+
+          const text = document.createElementNS(
+            "http://www.w3.org/1999/xhtml",
+            "span"
+          );
           text.textContent = this.formatReason(reason);
-          text.style.color = "#d4d4d8";
-          text.style.fontWeight = "500";
 
           item.appendChild(dot);
           item.appendChild(text);
@@ -371,10 +466,20 @@ var GarudaVisionPanel = {
 
   updateSecurityIndicators(browser, url) {
     try {
-      const isEnabled = Services.prefs.getBoolPref("browser.garudavision.enabled", true);
-      const isPrivateEnabled = Services.prefs.getBoolPref("browser.garudavision.privateAndTor.enabled", true);
-      const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
-      const isPrivate = PrivateBrowsingUtils.isBrowserPrivate(browser) || PrivateBrowsingUtils.isWindowPrivate(window);
+      const isEnabled = Services.prefs.getBoolPref(
+        "browser.garudavision.enabled",
+        true
+      );
+      const isPrivateEnabled = Services.prefs.getBoolPref(
+        "browser.garudavision.privateAndTor.enabled",
+        true
+      );
+      const { PrivateBrowsingUtils } = ChromeUtils.importESModule(
+        "resource://gre/modules/PrivateBrowsingUtils.sys.mjs"
+      );
+      const isPrivate =
+        PrivateBrowsingUtils.isBrowserPrivate(browser) ||
+        PrivateBrowsingUtils.isWindowPrivate(window);
 
       const tab = window.gBrowser.getTabForBrowser(browser);
 
@@ -420,9 +525,10 @@ var GarudaVisionPanel = {
           GarudaService.init();
         }
 
-        score = (url && (url.startsWith("http://") || url.startsWith("https://")))
-          ? GarudaService.checkUrl(url)
-          : 0;
+        score =
+          url && (url.startsWith("http://") || url.startsWith("https://"))
+            ? GarudaService.checkUrl(url)
+            : 0;
       }
 
       if (tab) {
@@ -432,7 +538,7 @@ var GarudaVisionPanel = {
 
       if (window.gBrowser.selectedBrowser === browser) {
         this.styleToolbar(score);
-        
+
         // Automatically open the GarudaVision popup warning when loading a suspicious link
         if (score >= 25) {
           setTimeout(() => {
@@ -458,25 +564,36 @@ var GarudaVisionPanel = {
   },
 
   styleTab(tab, score) {
-    const tabColoringDisabled = Services.prefs.getBoolPref("browser.garudavision.tabColoring.disabled", false);
+    const tabColoringDisabled = Services.prefs.getBoolPref(
+      "browser.garudavision.tabColoring.disabled",
+      false
+    );
     const finalScore = tabColoringDisabled ? 0 : score;
 
     const tabBackground = tab.querySelector(".tab-background");
 
     if (finalScore >= 50) {
       if (tabBackground) {
-        tabBackground.style.setProperty("background-color", "#ef4444", "important");
+        tabBackground.style.setProperty(
+          "background-color",
+          "#FF453A",
+          "important"
+        );
       } else {
-        tab.style.setProperty("background-color", "#ef4444", "important");
+        tab.style.setProperty("background-color", "#FF453A", "important");
       }
       tab.style.setProperty("color", "#ffffff", "important");
     } else if (finalScore >= 25) {
       if (tabBackground) {
-        tabBackground.style.setProperty("background-color", "#f59e0b", "important");
+        tabBackground.style.setProperty(
+          "background-color",
+          "#FF9F0A",
+          "important"
+        );
       } else {
-        tab.style.setProperty("background-color", "#f59e0b", "important");
+        tab.style.setProperty("background-color", "#FF9F0A", "important");
       }
-      tab.style.setProperty("color", "#000000", "important");
+      tab.style.setProperty("color", "#ffffff", "important");
     } else {
       if (tabBackground) {
         tabBackground.style.removeProperty("background-color");
@@ -487,7 +604,10 @@ var GarudaVisionPanel = {
   },
 
   styleToolbar(score) {
-    const tabColoringDisabled = Services.prefs.getBoolPref("browser.garudavision.tabColoring.disabled", false);
+    const tabColoringDisabled = Services.prefs.getBoolPref(
+      "browser.garudavision.tabColoring.disabled",
+      false
+    );
     const finalScore = tabColoringDisabled ? 0 : score;
 
     const navBar = document.getElementById("nav-bar");
@@ -496,25 +616,41 @@ var GarudaVisionPanel = {
 
     if (finalScore >= 50) {
       if (navBar) {
-        navBar.style.setProperty("background-color", "#ef4444", "important");
+        navBar.style.setProperty("background-color", "#FF453A", "important");
         navBar.style.setProperty("color", "#ffffff", "important");
       }
       if (toolbox) {
-        toolbox.style.setProperty("border-bottom", "2px solid #b91c1c", "important");
+        toolbox.style.setProperty(
+          "border-bottom",
+          "2px solid #FF453A",
+          "important"
+        );
       }
       if (btn) {
-        btn.style.setProperty("filter", "drop-shadow(0 0 8px #ffffff)", "important");
+        btn.style.setProperty(
+          "filter",
+          "drop-shadow(0 0 4px rgba(255, 69, 58, 0.4))",
+          "important"
+        );
       }
     } else if (finalScore >= 25) {
       if (navBar) {
-        navBar.style.setProperty("background-color", "#f59e0b", "important");
-        navBar.style.setProperty("color", "#000000", "important");
+        navBar.style.setProperty("background-color", "#FF9F0A", "important");
+        navBar.style.setProperty("color", "#ffffff", "important");
       }
       if (toolbox) {
-        toolbox.style.setProperty("border-bottom", "2px solid #d97706", "important");
+        toolbox.style.setProperty(
+          "border-bottom",
+          "2px solid #FF9F0A",
+          "important"
+        );
       }
       if (btn) {
-        btn.style.setProperty("filter", "drop-shadow(0 0 8px #000000)", "important");
+        btn.style.setProperty(
+          "filter",
+          "drop-shadow(0 0 4px rgba(255, 159, 10, 0.4))",
+          "important"
+        );
       }
     } else {
       if (navBar) {
@@ -562,7 +698,7 @@ var GarudaVisionPanel = {
       return "Blocked by Malware blocklist";
     }
     return reason;
-  }
+  },
 };
 
 window.addEventListener("load", () => {

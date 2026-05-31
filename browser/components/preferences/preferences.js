@@ -885,15 +885,24 @@ function init_all() {
 
   register_module("paneGarudaVision", {
     init() {
-      const enabledContainer = document.getElementById("garudaVisionEnabledToggleContainer");
-      const colorContainer = document.getElementById("garudaVisionColorCodingToggleContainer");
-      const privateContainer = document.getElementById("garudaVisionPrivateAndTorToggleContainer");
+      const enabledContainer = document.getElementById(
+        "garudaVisionEnabledToggleContainer"
+      );
+      const colorContainer = document.getElementById(
+        "garudaVisionColorCodingToggleContainer"
+      );
+      const privateContainer = document.getElementById(
+        "garudaVisionPrivateAndTorToggleContainer"
+      );
 
       let enabledToggle = null;
       let colorToggle = null;
       let privateToggle = null;
 
-      const isEnabled = Services.prefs.getBoolPref("browser.garudavision.enabled", true);
+      const isEnabled = Services.prefs.getBoolPref(
+        "browser.garudavision.enabled",
+        true
+      );
 
       if (colorContainer) {
         colorContainer.textContent = "";
@@ -901,12 +910,18 @@ function init_all() {
         colorToggle.id = "garudaVisionColorCodingToggle";
         colorToggle.className = "lks-exception-toggle";
         colorToggle.style.cursor = "pointer";
-        
-        const isColorDisabled = Services.prefs.getBoolPref("browser.garudavision.tabColoring.disabled", false);
+
+        const isColorDisabled = Services.prefs.getBoolPref(
+          "browser.garudavision.tabColoring.disabled",
+          false
+        );
         colorToggle.pressed = isColorDisabled;
-        
+
         colorToggle.addEventListener("toggle", () => {
-          Services.prefs.setBoolPref("browser.garudavision.tabColoring.disabled", colorToggle.pressed);
+          Services.prefs.setBoolPref(
+            "browser.garudavision.tabColoring.disabled",
+            colorToggle.pressed
+          );
         });
         colorContainer.appendChild(colorToggle);
       }
@@ -917,12 +932,18 @@ function init_all() {
         privateToggle.id = "garudaVisionPrivateAndTorToggle";
         privateToggle.className = "lks-exception-toggle";
         privateToggle.style.cursor = "pointer";
-        
-        const isPrivateEnabled = Services.prefs.getBoolPref("browser.garudavision.privateAndTor.enabled", true);
+
+        const isPrivateEnabled = Services.prefs.getBoolPref(
+          "browser.garudavision.privateAndTor.enabled",
+          true
+        );
         privateToggle.pressed = isPrivateEnabled;
-        
+
         privateToggle.addEventListener("toggle", () => {
-          Services.prefs.setBoolPref("browser.garudavision.privateAndTor.enabled", privateToggle.pressed);
+          Services.prefs.setBoolPref(
+            "browser.garudavision.privateAndTor.enabled",
+            privateToggle.pressed
+          );
         });
         privateContainer.appendChild(privateToggle);
       }
@@ -962,8 +983,10 @@ function init_all() {
         enabledToggle.className = "lks-exception-toggle";
         enabledToggle.style.cursor = "pointer";
         enabledToggle.pressed = isEnabled;
-        
-        const disableModal = document.getElementById("garudaVisionDisableModal");
+
+        const disableModal = document.getElementById(
+          "garudaVisionDisableModal"
+        );
         const cancelBtn = document.getElementById("garudaVisionModalCancel");
         const confirmBtn = document.getElementById("garudaVisionModalConfirm");
 
@@ -985,7 +1008,10 @@ function init_all() {
               const onConfirm = () => {
                 disableModal.style.display = "none";
                 disableModal.setAttribute("hidden", "true");
-                Services.prefs.setBoolPref("browser.garudavision.enabled", false);
+                Services.prefs.setBoolPref(
+                  "browser.garudavision.enabled",
+                  false
+                );
                 updateSubTogglesState(false);
                 cleanup();
               };
@@ -1004,7 +1030,10 @@ function init_all() {
                 "Disabling GarudaVision turns off real-time phishing and malicious URL protection. Are you sure you want to disable it?"
               );
               if (confirmed) {
-                Services.prefs.setBoolPref("browser.garudavision.enabled", false);
+                Services.prefs.setBoolPref(
+                  "browser.garudavision.enabled",
+                  false
+                );
                 updateSubTogglesState(false);
               } else {
                 enabledToggle.pressed = true;
@@ -1031,7 +1060,10 @@ function init_all() {
 
       function getAllowList() {
         try {
-          const listStr = Services.prefs.getStringPref("browser.garudavision.allowlist", "[]");
+          const listStr = Services.prefs.getStringPref(
+            "browser.garudavision.allowlist",
+            "[]"
+          );
           return JSON.parse(listStr);
         } catch (e) {
           return [];
@@ -1040,7 +1072,10 @@ function init_all() {
 
       function setAllowList(list) {
         try {
-          Services.prefs.setStringPref("browser.garudavision.allowlist", JSON.stringify(list));
+          Services.prefs.setStringPref(
+            "browser.garudavision.allowlist",
+            JSON.stringify(list)
+          );
         } catch (e) {
           console.error("Failed to set allowlist pref:", e);
         }
