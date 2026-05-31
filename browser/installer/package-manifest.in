@@ -362,6 +362,9 @@ bin/libfreebl_64int_3.so
 @RESPATH@/chrome/pippki@JAREXT@
 @RESPATH@/chrome/pippki.manifest
 
+; GarudaVision native FFI library
+@BINPATH@/libgaruda_ffi.so
+
 ; For process sandboxing
 #if defined(MOZ_SANDBOX)
 #if defined(XP_LINUX)

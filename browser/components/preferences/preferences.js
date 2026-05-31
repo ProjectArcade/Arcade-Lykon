@@ -1128,45 +1128,6 @@ function init_all() {
         }
       };
 
-      if (openModalBtn) {
-        openModalBtn.addEventListener("click", () => {
-          let value = { value: "" };
-          const confirmed = Services.prompt.input(
-            window,
-            "Add Allowed Site",
-            "Enter the domain or hostname to allow (e.g. example.com):",
-            value,
-            null,
-            { value: false }
-          );
-          if (confirmed && value.value) {
-            let host = value.value.trim().toLowerCase();
-            try {
-              if (host.includes("://")) {
-                host = new URL(host).hostname;
-              } else if (host.includes("/")) {
-                host = host.split("/")[0];
-              }
-            } catch (e) {}
-            
-            if (host) {
-              const list = getAllowList();
-              if (!list.some(item => item.host === host)) {
-                list.push({ host, enabled: true });
-                setAllowList(list);
-                refreshList();
-              }
-            }
-          }
-        });
-      }
-
-      if (refreshBtn) {
-        refreshBtn.addEventListener("click", () => {
-          refreshList();
-        });
-      }
-
       // Initial Allowed list refresh
       refreshList();
     },
