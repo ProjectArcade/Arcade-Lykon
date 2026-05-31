@@ -1209,14 +1209,15 @@
         <html:div class="lks-header">
           <html:div class="lks-header-left">
             <html:div class="lks-icon-wrap">
-              <html:svg xmlns="http://www.w3.org/2000/svg"
-                        width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <html:path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6L12 2z"
-                           fill="rgba(255,255,255,0.25)" stroke="white"
-                           stroke-width="1.8" stroke-linejoin="round"/>
-                <html:path d="M9 12l2.2 2.2 3.8-3.8"
-                           stroke="white" stroke-width="2"
-                           stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- CARD SUCCESS SVG -->
+              <html:svg class="lks-card-icon lks-card-success-icon" id="lks-card-success-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <html:polyline points="20 6 9 17 4 12"></html:polyline>
+              </html:svg>
+              <!-- CARD WARNING SVG -->
+              <html:svg class="lks-card-icon lks-card-warning-icon" id="lks-card-warning-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <html:path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></html:path>
+                <html:line x1="12" y1="9" x2="12" y2="13"></html:line>
+                <html:line x1="12" y1="17" x2="12.01" y2="17"></html:line>
               </html:svg>
             </html:div>
             <html:span class="lks-title">Lykon Shield</html:span>
@@ -1255,7 +1256,17 @@
       <html:div class="lks-status-card">
         <html:div class="lks-status-left">
           <html:div class="lks-status-badge">
-            <html:span class="lks-dot" id="lks-dot"></html:span>
+            <html:span class="lks-dot" id="lks-dot" style="display: none;"></html:span>
+            <!-- SUCCESS SVG -->
+            <html:svg class="lks-status-icon lks-success-icon" id="lks-success-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#30d158" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <html:polyline points="20 6 9 17 4 12"></html:polyline>
+            </html:svg>
+            <!-- WARNING SVG -->
+            <html:svg class="lks-status-icon lks-warning-icon" id="lks-warning-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff9f0a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <html:path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></html:path>
+              <html:line x1="12" y1="9" x2="12" y2="13"></html:line>
+              <html:line x1="12" y1="17" x2="12.01" y2="17"></html:line>
+            </html:svg>
             <html:span id="lykon-shield-status-text">Blocking ads</html:span>
           </html:div>
           <html:p class="lks-status-hint" id="lks-status-hint">You're browsing ad-free.</html:p>
@@ -1304,41 +1315,60 @@
       <!-- Advanced Controls Toggle -->
       <html:div class="lks-adv-toggle" id="lykon-shield-advanced-header">
         <html:span class="lks-adv-toggle-label">Advanced Controls</html:span>
-        <html:svg class="lks-adv-arrow" id="lykon-shield-adv-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <html:polyline points="6 9 12 15 18 9"></html:polyline>
-        </html:svg>
+        <html:button class="lks-adv-arrow-btn" id="lykon-shield-adv-arrow" tabindex="-1"></html:button>
       </html:div>
 
       <!-- Advanced Controls Panel -->
-      <html:div class="lks-adv-panel" id="lykon-shield-advanced" style="display: none;">
+      <html:div class="lks-adv-panel collapsed" id="lykon-shield-advanced">
         <!-- Trackers & Ads blocking -->
         <html:div class="lks-ctrl-row">
           <html:span class="lks-ctrl-label">Trackers &amp; ads blocking</html:span>
-          <html:select id="lykon-shield-tracker-mode" class="lks-select" onchange="LykonShield.setTrackerMode(this.value)">
-            <html:option value="aggressive">Aggressive</html:option>
-            <html:option value="standard">Standard</html:option>
-            <html:option value="disabled">Disabled</html:option>
-          </html:select>
+          <html:div class="lks-select-wrapper">
+            <html:select id="lykon-shield-tracker-mode" class="lks-select">
+              <html:option value="aggressive">Aggressive</html:option>
+              <html:option value="standard">Standard</html:option>
+              <html:option value="disabled">Disabled</html:option>
+            </html:select>
+            <html:button class="lks-select-btn" tabindex="-1">
+              <html:svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <html:polyline points="6 9 12 15 18 9"></html:polyline>
+              </html:svg>
+            </html:button>
+          </html:div>
         </html:div>
 
         <!-- HTTPS Upgrades -->
         <html:div class="lks-ctrl-row">
           <html:span class="lks-ctrl-label">Upgrade connections to HTTPS</html:span>
-          <html:select id="lykon-shield-https-mode" class="lks-select" onchange="LykonShield.setHttpsMode(this.value)">
-            <html:option value="strict">Strict</html:option>
-            <html:option value="soft">Standard</html:option>
-            <html:option value="disabled">Disabled</html:option>
-          </html:select>
+          <html:div class="lks-select-wrapper">
+            <html:select id="lykon-shield-https-mode" class="lks-select">
+              <html:option value="strict">Strict</html:option>
+              <html:option value="soft">Standard</html:option>
+              <html:option value="disabled">Disabled</html:option>
+            </html:select>
+            <html:button class="lks-select-btn" tabindex="-1">
+              <html:svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <html:polyline points="6 9 12 15 18 9"></html:polyline>
+              </html:svg>
+            </html:button>
+          </html:div>
         </html:div>
 
         <!-- Block Cookies -->
         <html:div class="lks-ctrl-row" style="margin-bottom: 12px;">
           <html:span class="lks-ctrl-label">Block cookies</html:span>
-          <html:select id="lykon-shield-cookie-mode" class="lks-select" onchange="LykonShield.setCookieMode(this.value)">
-            <html:option value="cross-site">Only cross-site trackers</html:option>
-            <html:option value="all">All cookies</html:option>
-            <html:option value="disabled">Disabled</html:option>
-          </html:select>
+          <html:div class="lks-select-wrapper">
+            <html:select id="lykon-shield-cookie-mode" class="lks-select">
+              <html:option value="cross-site">Only cross-site trackers</html:option>
+              <html:option value="all">All cookies</html:option>
+              <html:option value="disabled">Disabled</html:option>
+            </html:select>
+            <html:button class="lks-select-btn" tabindex="-1">
+              <html:svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <html:polyline points="6 9 12 15 18 9"></html:polyline>
+              </html:svg>
+            </html:button>
+          </html:div>
         </html:div>
 
         <!-- Block Scripts -->
@@ -1348,7 +1378,7 @@
             <html:span class="lks-toggle-row-desc">Prevent websites from running scripts.</html:span>
           </html:div>
           <html:label class="lks-toggle-label">
-            <html:input id="lykon-shield-scripts" type="checkbox" class="lks-toggle-input" onchange="LykonShield.toggleScripts()"/>
+            <html:input id="lykon-shield-scripts" type="checkbox" class="lks-toggle-input"/>
             <html:span class="lks-toggle-track">
               <html:span class="lks-toggle-thumb"></html:span>
             </html:span>
@@ -1362,7 +1392,7 @@
             <html:span class="lks-toggle-row-desc">Mask browser &amp; system details.</html:span>
           </html:div>
           <html:label class="lks-toggle-label">
-            <html:input id="lykon-shield-fingerprint" type="checkbox" class="lks-toggle-input" onchange="LykonShield.toggleFingerprint()"/>
+            <html:input id="lykon-shield-fingerprint" type="checkbox" class="lks-toggle-input"/>
             <html:span class="lks-toggle-track">
               <html:span class="lks-toggle-thumb"></html:span>
             </html:span>
@@ -1376,7 +1406,7 @@
             <html:span class="lks-toggle-row-desc">Clear cookies &amp; data when closed.</html:span>
           </html:div>
           <html:label class="lks-toggle-label">
-            <html:input id="lykon-shield-forget" type="checkbox" class="lks-toggle-input" onchange="LykonShield.toggleForget()"/>
+            <html:input id="lykon-shield-forget" type="checkbox" class="lks-toggle-input"/>
             <html:span class="lks-toggle-track">
               <html:span class="lks-toggle-thumb"></html:span>
             </html:span>
@@ -1384,17 +1414,23 @@
         </html:div>
       </html:div>
 
+
       <!-- ═══ NERDS VIEW Redesign ═══ -->
       <html:div class="lks-nerds-container collapsed" id="lykon-shield-nerds-container">
         <html:div class="lks-nerds-header" id="lykon-shield-nerds-header" style="cursor: pointer;">
           <html:div class="lks-nerds-header-left">
             <html:span class="lks-nerds-icon-code">&lt;/&gt;</html:span>
-            <html:span class="lks-nerds-title">Nerds view</html:span>
-            <html:svg class="lks-nerds-arrow" id="lykon-shield-nerds-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <html:div class="lks-nerds-header-text" style="display: flex; flex-direction: column; gap: 2px;">
+              <html:span class="lks-nerds-title" style="font-size: 13.5px; font-weight: 600; color: var(--lks-primary-text);">Advanced Details</html:span>
+              <html:span class="lks-nerds-subtitle" style="font-size: 11px; font-weight: 400; color: var(--lks-secondary-text);">Technical insights about this site.</html:span>
+            </html:div>
+          </html:div>
+          <html:button class="lks-nerds-view-details" id="lykon-shield-view-details-btn" style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+            <html:span id="lks-view-details-text">View details</html:span>
+            <html:svg id="lks-nerds-expand-arrow" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s ease;">
               <html:polyline points="6 9 12 15 18 9"></html:polyline>
             </html:svg>
-          </html:div>
-          <html:button class="lks-nerds-view-details" id="lykon-shield-view-details-btn">View details</html:button>
+          </html:button>
         </html:div>
 
         <html:div id="lykon-shield-nerds-content">
@@ -1435,18 +1471,117 @@
 
         <!-- Enabled state panel -->
         <html:div id="lykon-shield-nerds-enabled" class="lks-nerds-enabled-view">
-          <html:div class="lks-nerds-table-container">
-            <html:div class="lks-table-header">
-              <html:div class="lks-th col-item">Item</html:div>
-              <html:div class="lks-th col-type">Type</html:div>
-              <html:div class="lks-th col-blocked">Blocked</html:div>
+
+          <!-- Blocked Requests list view -->
+          <html:div id="lykon-shield-nerds-list-view" class="lks-view-content active">
+            <html:div class="lks-nerds-table-container">
+              <html:div class="lks-table-header">
+                <html:div class="lks-th col-item">Source</html:div>
+                <html:div class="lks-th col-type">Type</html:div>
+                <html:div class="lks-th col-blocked">Blocked</html:div>
+              </html:div>
+              <html:div id="lykon-shield-blocked-list-table" class="lks-table-body">
+                <html:div class="lks-blocked-empty">No elements blocked yet.</html:div>
+              </html:div>
             </html:div>
-            <html:div id="lykon-shield-blocked-list-table" class="lks-table-body">
-              <html:div class="lks-blocked-empty">No elements blocked yet.</html:div>
+          </html:div>
+
+          <!-- Request Details inspector view -->
+          <html:div id="lykon-shield-nerds-detail-view" class="lks-view-content">
+            <!-- Header Block -->
+            <html:div class="lks-detail-header-row">
+              <html:div class="lks-detail-header-left">
+                <html:button id="lks-btn-back-to-list" class="lks-detail-back-btn">
+                  <html:svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                  </html:svg>
+                </html:button>
+                <html:span class="lks-detail-header-title">Request Details</html:span>
+              </html:div>
+              <html:button id="lks-btn-close-details" class="lks-detail-close-btn">
+                <html:svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </html:svg>
+              </html:button>
+            </html:div>
+
+            <!-- Hero Block -->
+            <html:div class="lks-detail-hero">
+              <html:div id="lks-hero-icon-container" class="lks-hero-icon-wrap">
+                <!-- Dynamically updated -->
+              </html:div>
+              <html:div class="lks-hero-text">
+                <html:span id="lks-hero-title">Tracker Blocked</html:span>
+                <html:span id="lks-hero-host">static.doubleclick.net</html:span>
+                <html:span id="lks-hero-entity">Google's advertising network</html:span>
+              </html:div>
+            </html:div>
+
+            <!-- Key Details Card -->
+            <html:div class="lks-detail-card">
+              <html:div class="lks-detail-card-row">
+                <html:span class="lks-detail-card-label">Category</html:span>
+                <html:span id="lks-detail-badge-cat" class="lks-badge lks-badge-green">Tracker</html:span>
+              </html:div>
+              <html:div class="lks-detail-card-row">
+                <html:span class="lks-detail-card-label">Action</html:span>
+                <html:span class="lks-detail-card-val">Blocked by Lykon Shield</html:span>
+              </html:div>
+              <html:div class="lks-detail-card-row">
+                <html:span class="lks-detail-card-label">Blocked At</html:span>
+                <html:span id="lks-detail-time-at" class="lks-detail-card-val">-</html:span>
+              </html:div>
+              <html:div class="lks-detail-card-row">
+                <html:span class="lks-detail-card-label">Impact</html:span>
+                <html:span id="lks-detail-impact" class="lks-detail-card-val">-</html:span>
+              </html:div>
+            </html:div>
+
+            <!-- Collapsible Technical Details Section -->
+            <html:div class="lks-tech-section">
+              <html:div id="lks-tech-header" class="lks-tech-header">
+                <html:span class="lks-tech-title">Technical Details</html:span>
+                <html:svg id="lks-tech-arrow" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="18 15 12 9 6 15"></polyline>
+                </html:svg>
+              </html:div>
+
+              <html:div id="lks-tech-content" class="lks-tech-content">
+                <html:div class="lks-tech-row">
+                  <html:span class="lks-tech-label">URL</html:span>
+                  <html:div id="lks-tech-url">-</html:div>
+                </html:div>
+                <html:div class="lks-tech-row-horizontal">
+                  <html:span class="lks-tech-label">Type</html:span>
+                  <html:span id="lks-tech-type">-</html:span>
+                </html:div>
+                <html:div class="lks-tech-row-horizontal">
+                  <html:span class="lks-tech-label">Initiator</html:span>
+                  <html:span id="lks-tech-initiator">-</html:span>
+                </html:div>
+                <html:div class="lks-tech-row-horizontal">
+                  <html:span class="lks-tech-label">Rule</html:span>
+                  <html:span id="lks-tech-rule">-</html:span>
+                </html:div>
+                <html:div class="lks-tech-row-horizontal">
+                  <html:span class="lks-tech-label">Matched Filter</html:span>
+                  <html:span id="lks-tech-filter">-</html:span>
+                </html:div>
+                <html:div class="lks-tech-row-horizontal">
+                  <html:span class="lks-tech-label">Size</html:span>
+                  <html:span id="lks-tech-size">-</html:span>
+                </html:div>
+                <html:div class="lks-tech-row-horizontal">
+                  <html:span class="lks-tech-label">Protocol</html:span>
+                  <html:span id="lks-tech-protocol">HTTPS</html:span>
+                </html:div>
+              </html:div>
             </html:div>
           </html:div>
         </html:div>
-        </html:div>
+      </html:div>
 
         <!-- Warning container: outside collapsible content, always visible -->
         <html:div id="lykon-shield-nerds-warning-container">

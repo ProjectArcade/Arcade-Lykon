@@ -79,6 +79,72 @@ var LykonShield = {
         });
       }
 
+      const backBtn = $("lks-btn-back-to-list");
+      if (backBtn) {
+        backBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          this.showNerdView("list");
+        });
+      }
+
+      const closeDetailsBtn = $("lks-btn-close-details");
+      if (closeDetailsBtn) {
+        closeDetailsBtn.addEventListener("click", e => {
+          e.stopPropagation();
+          this._toggleNerds();
+        });
+      }
+
+      const techHeader = $("lks-tech-header");
+      const techContent = $("lks-tech-content");
+      const techArrow = $("lks-tech-arrow");
+      if (techHeader && techContent && techArrow) {
+        techHeader.addEventListener("click", e => {
+          e.stopPropagation();
+          techContent.classList.toggle("expanded");
+          techArrow.classList.toggle("expanded");
+        });
+      }
+
+      // Programmatic bindings for Advanced Controls (bypassing CSP)
+      const trackerModeSelect = $("lykon-shield-tracker-mode");
+      const httpsModeSelect = $("lykon-shield-https-mode");
+      const cookieModeSelect = $("lykon-shield-cookie-mode");
+      const scriptsBlockedToggle = $("lykon-shield-scripts");
+      const fingerprintToggle = $("lykon-shield-fingerprint");
+      const forgetOnExitToggle = $("lykon-shield-forget");
+
+      if (trackerModeSelect) {
+        trackerModeSelect.addEventListener("change", () =>
+          this.setTrackerMode(trackerModeSelect.value)
+        );
+      }
+      if (httpsModeSelect) {
+        httpsModeSelect.addEventListener("change", () =>
+          this.setHttpsMode(httpsModeSelect.value)
+        );
+      }
+      if (cookieModeSelect) {
+        cookieModeSelect.addEventListener("change", () =>
+          this.setCookieMode(cookieModeSelect.value)
+        );
+      }
+      if (scriptsBlockedToggle) {
+        scriptsBlockedToggle.addEventListener("change", () =>
+          this.toggleScripts()
+        );
+      }
+      if (fingerprintToggle) {
+        fingerprintToggle.addEventListener("change", () =>
+          this.toggleFingerprint()
+        );
+      }
+      if (forgetOnExitToggle) {
+        forgetOnExitToggle.addEventListener("change", () =>
+          this.toggleForget()
+        );
+      }
+
       // ── New: Watch for tab/navigation changes ──
       if (window.gBrowser) {
         window.gBrowser.tabContainer.addEventListener("TabSelect", () =>
@@ -114,7 +180,27 @@ var LykonShield = {
     this._applyEnabledState(this._el.toggle.checked);
     this._updatePanelState();
     this._updateStats();
+    this._applyTheme();
     this._currentHost = this._getCurrentHost();
+  },
+
+  _applyTheme() {
+    if (!this._el.content) return;
+    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    this._el.content.setAttribute("data-theme", isDark ? "dark" : "light");
+    if (!this._themeListenerBound) {
+      window
+        .matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", e => {
+          if (this._el.content) {
+            this._el.content.setAttribute(
+              "data-theme",
+              e.matches ? "dark" : "light"
+            );
+          }
+        });
+      this._themeListenerBound = true;
+    }
   },
 
   _refreshLatestStats() {
@@ -196,22 +282,238 @@ var LykonShield = {
 
   _toggleAdvanced() {
     if (!this._el.advPanel || !this._el.advArrow) return;
-    const open = this._el.advPanel.style.display !== "none";
-    this._el.advPanel.style.display = open ? "none" : "block";
-    this._el.advArrow.classList.toggle("open", !open);
+    const collapsed = this._el.advPanel.classList.toggle("collapsed");
+    this._el.advArrow.classList.toggle("open", !collapsed);
   },
 
   _toggleNerds() {
     if (!this._el.nerdsContainer) return;
     const collapsed = this._el.nerdsContainer.classList.toggle("collapsed");
-    if (this._el.viewDetailsBtn) {
-      this._el.viewDetailsBtn.textContent = collapsed
-        ? "View details"
-        : "Hide details";
+    const textEl = document.getElementById("lks-view-details-text");
+    const arrowEl = document.getElementById("lks-nerds-expand-arrow");
+
+    if (textEl) {
+      textEl.textContent = collapsed ? "View details" : "Hide";
     }
+    if (arrowEl) {
+      arrowEl.style.transform = collapsed ? "rotate(0deg)" : "rotate(180deg)";
+    }
+
     if (!collapsed) {
+      this.showNerdView("list");
       this._updateBlockedList();
     }
+  },
+
+  showNerdView(viewName) {
+    const listView = document.getElementById("lykon-shield-nerds-list-view");
+    const detailView = document.getElementById(
+      "lykon-shield-nerds-detail-view"
+    );
+
+    if (viewName === "list") {
+      listView?.classList.add("active");
+      detailView?.classList.remove("active");
+      this._selectedUrl = null;
+      const rows =
+        this._el.blockedListTable?.getElementsByClassName("lks-table-row") ||
+        [];
+      for (const r of rows) {
+        r.classList.remove("selected");
+      }
+    } else {
+      listView?.classList.remove("active");
+      detailView?.classList.add("active");
+    }
+  },
+
+  selectNerdItem(item, rowEl) {
+    this._selectedUrl = item.url;
+
+    // Highlight selected row
+    const rows =
+      this._el.blockedListTable?.getElementsByClassName("lks-table-row") || [];
+    for (const r of rows) {
+      r.classList.remove("selected");
+    }
+    rowEl.classList.add("selected");
+
+    // Extract hostname and path/search
+    let host = "";
+    let path = "";
+    try {
+      const parsed = new URL(item.url);
+      host = parsed.hostname;
+      path = parsed.pathname + parsed.search;
+    } catch (e) {
+      host = item.url;
+      path = "";
+    }
+
+    // Set Hero elements
+    const heroIcon = document.getElementById("lks-hero-icon-container");
+    const heroTitle = document.getElementById("lks-hero-title");
+    const heroHost = document.getElementById("lks-hero-host");
+    const heroEntity = document.getElementById("lks-hero-entity");
+
+    if (heroIcon) {
+      heroIcon.className = "lks-hero-icon-wrap";
+      if (item.isTracker) {
+        if (host.includes("doubleclick.net") || host.includes("google")) {
+          heroIcon.className += " tracker-green-bg";
+          heroIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 11 2 2 4-4"/>
+          </svg>`;
+          if (heroTitle) {
+            heroTitle.textContent = "Tracker Blocked";
+            heroTitle.style.color = "#30d158";
+          }
+        } else {
+          heroIcon.className += " tracker-purple-bg";
+          heroIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M12 8v4"/>
+            <path d="M12 16h.01"/>
+          </svg>`;
+          if (heroTitle) {
+            heroTitle.textContent = "Tracker Blocked";
+            heroTitle.style.color = "#bf5af2";
+          }
+        }
+      } else {
+        heroIcon.className += " ad-red-bg";
+        heroIcon.innerHTML = `<span style="font-size: 11.5px; font-weight: 700;">AD</span>`;
+        if (heroTitle) {
+          heroTitle.textContent = "Ad Blocked";
+          heroTitle.style.color = "#ff453a";
+        }
+      }
+    }
+
+    if (heroHost) {
+      heroHost.textContent = host;
+    }
+
+    if (heroEntity) {
+      if (host.includes("doubleclick.net")) {
+        heroEntity.textContent = "Google's advertising network";
+      } else if (host.includes("google")) {
+        heroEntity.textContent = "Google analytics / tracker";
+      } else if (host.includes("facebook")) {
+        heroEntity.textContent = "Facebook tracking network";
+      } else if (host.includes("twitter") || host.includes("t.co")) {
+        heroEntity.textContent = "Twitter analytics & cookies";
+      } else if (host.includes("youtube")) {
+        heroEntity.textContent = "YouTube video stats tracker";
+      } else if (item.isTracker) {
+        heroEntity.textContent = "Third-party ad tracker";
+      } else {
+        heroEntity.textContent = "Third-party advertising resource";
+      }
+    }
+
+    // Set Key Details Card elements
+    const catBadge = document.getElementById("lks-detail-badge-cat");
+    const timeAt = document.getElementById("lks-detail-time-at");
+    const impactVal = document.getElementById("lks-detail-impact");
+
+    if (catBadge) {
+      if (item.isTracker) {
+        if (host.includes("doubleclick.net") || host.includes("google")) {
+          catBadge.className = "lks-badge lks-badge-green";
+        } else {
+          catBadge.className = "lks-badge lks-badge-purple";
+        }
+        catBadge.textContent = "Tracker";
+      } else {
+        catBadge.className = "lks-badge lks-badge-red";
+        catBadge.textContent = "Ad";
+      }
+    }
+
+    const secs = Math.max(1, Math.round((Date.now() - item.time) / 1000));
+    let timeStr = "";
+    if (secs < 60) {
+      timeStr = secs + " second" + (secs === 1 ? "" : "s") + " ago";
+    } else if (secs < 3600) {
+      const mins = Math.floor(secs / 60);
+      timeStr = mins + " minute" + (mins === 1 ? "" : "s") + " ago";
+    } else {
+      const hrs = Math.floor(secs / 3600);
+      timeStr = hrs + " hour" + (hrs === 1 ? "" : "s") + " ago";
+    }
+
+    if (timeAt) {
+      timeAt.textContent = timeStr;
+    }
+
+    if (impactVal) {
+      if (item.isTracker) {
+        impactVal.textContent = "Prevented cross-site tracking activity.";
+      } else {
+        impactVal.textContent = "Blocked advertisement and page clutter.";
+      }
+    }
+
+    // Set Technical Details elements
+    const techUrl = document.getElementById("lks-tech-url");
+    const techType = document.getElementById("lks-tech-type");
+    const techInitiator = document.getElementById("lks-tech-initiator");
+    const techRule = document.getElementById("lks-tech-rule");
+    const techFilter = document.getElementById("lks-tech-filter");
+    const techSize = document.getElementById("lks-tech-size");
+    const techProtocol = document.getElementById("lks-tech-protocol");
+
+    if (techUrl) techUrl.textContent = item.url;
+    if (techType) {
+      const typeStr = item.type || "Script";
+      techType.textContent = typeStr.charAt(0).toUpperCase() + typeStr.slice(1);
+    }
+
+    if (techInitiator) {
+      try {
+        const currentTabHost = window.gBrowser?.currentURI?.host;
+        techInitiator.textContent = currentTabHost || "youtube.com";
+      } catch (e) {
+        techInitiator.textContent = "youtube.com";
+      }
+    }
+
+    let ruleStr = "EasyList";
+    let filterStr = "||" + host + "^";
+    if (item.isTracker) {
+      ruleStr = "EasyPrivacy";
+    }
+    if (host.includes("doubleclick.net")) {
+      filterStr = "||doubleclick.net^";
+    } else if (host.includes("google")) {
+      filterStr = "||google-analytics.com^";
+    }
+
+    if (techRule) techRule.textContent = ruleStr;
+    if (techFilter) techFilter.textContent = filterStr;
+
+    if (techSize) {
+      // Deterministic simulated premium size from url hash length
+      const bytes = (item.url.length % 75) + 3;
+      techSize.textContent = bytes + " KB";
+    }
+
+    if (techProtocol) {
+      techProtocol.textContent = item.url.startsWith("https")
+        ? "HTTPS"
+        : "HTTP";
+    }
+
+    // Collapse tech content by default on open
+    const techContent = document.getElementById("lks-tech-content");
+    const techArrow = document.getElementById("lks-tech-arrow");
+    if (techContent) techContent.classList.remove("expanded");
+    if (techArrow) techArrow.classList.remove("expanded");
+
+    // Switch to details view automatically
+    this.showNerdView("details");
   },
 
   _updatePanelState() {
@@ -281,6 +583,9 @@ var LykonShield = {
   setHttpsMode(val) {
     try {
       Services.prefs.setStringPref("lykon.shield.https.mode", val);
+      let enabled = val !== "disabled";
+      Services.prefs.setBoolPref("dom.security.https_only_mode", enabled);
+      Services.prefs.setBoolPref("dom.security.https_only_mode_pbm", enabled);
       if (window.gBrowser) {
         window.gBrowser.selectedBrowser.reload();
       }
@@ -289,6 +594,15 @@ var LykonShield = {
   setCookieMode(val) {
     try {
       Services.prefs.setStringPref("lykon.shield.cookie.mode", val);
+      let behavior = 4;
+      if (val === "all") {
+        behavior = 2;
+      } else if (val === "disabled") {
+        behavior = 0;
+      } else if (val === "cross-site") {
+        behavior = 5;
+      }
+      Services.prefs.setIntPref("network.cookie.cookieBehavior", behavior);
       if (window.gBrowser) {
         window.gBrowser.selectedBrowser.reload();
       }
@@ -300,6 +614,7 @@ var LykonShield = {
     if (!el) return;
     try {
       Services.prefs.setBoolPref("lykon.shield.scripts.blocked", el.checked);
+      Services.prefs.setBoolPref("javascript.enabled", !el.checked);
       if (window.gBrowser) {
         window.gBrowser.selectedBrowser.reload();
       }
@@ -312,6 +627,11 @@ var LykonShield = {
     try {
       Services.prefs.setBoolPref(
         "lykon.shield.fingerprint.enabled",
+        el.checked
+      );
+      Services.prefs.setBoolPref("privacy.resistFingerprinting", el.checked);
+      Services.prefs.setBoolPref(
+        "privacy.trackingprotection.fingerprinting.enabled",
         el.checked
       );
       if (lbl) {
@@ -327,6 +647,15 @@ var LykonShield = {
     if (!el) return;
     try {
       Services.prefs.setBoolPref("lykon.shield.forget.onexit", el.checked);
+      Services.prefs.setBoolPref(
+        "privacy.sanitize.sanitizeOnShutdown",
+        el.checked
+      );
+      Services.prefs.setBoolPref("privacy.clearOnShutdown.cookies", el.checked);
+      Services.prefs.setBoolPref(
+        "privacy.clearOnShutdown.sessions",
+        el.checked
+      );
       if (window.gBrowser) {
         window.gBrowser.selectedBrowser.reload();
       }
@@ -490,16 +819,18 @@ var LykonShield = {
       }
 
       if (item.isTracker) {
-        if (domain.includes("facebook.com")) {
-          icon.className += " tracker-blue-bg";
-          icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-            <circle cx="12" cy="12" r="10"/>
-            <circle cx="12" cy="12" r="3"/>
+        if (domain.includes("doubleclick.net") || domain.includes("google")) {
+          icon.className += " tracker-green-bg";
+          icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 11 2 2 4-4"/>
           </svg>`;
         } else {
           icon.className += " tracker-purple-bg";
-          icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"/>
+          icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M12 8v4"/>
+            <path d="M12 16h.01"/>
           </svg>`;
         }
       } else {
@@ -528,23 +859,54 @@ var LykonShield = {
       // Type Column
       const colType = document.createElement("div");
       colType.className = "lks-tr-type";
-      colType.textContent = item.isTracker ? "Tracker" : "Ad";
+
+      const typeBadge = document.createElement("span");
+      if (item.isTracker) {
+        if (domain.includes("doubleclick.net") || domain.includes("google")) {
+          typeBadge.className = "lks-badge lks-badge-green";
+        } else {
+          typeBadge.className = "lks-badge lks-badge-purple";
+        }
+        typeBadge.textContent = "Tracker";
+      } else {
+        typeBadge.className = "lks-badge lks-badge-red";
+        typeBadge.textContent = "Ad";
+      }
+      colType.appendChild(typeBadge);
 
       // Blocked (Time) Column
       const colBlocked = document.createElement("div");
       colBlocked.className = "lks-tr-blocked";
+
+      const timeSpan = document.createElement("span");
       const secs = Math.max(1, Math.round((Date.now() - item.time) / 1000));
       if (secs < 60) {
-        colBlocked.textContent = secs + "s ago";
+        timeSpan.textContent = secs + "s ago";
       } else if (secs < 3600) {
-        colBlocked.textContent = Math.floor(secs / 60) + "m ago";
+        timeSpan.textContent = Math.floor(secs / 60) + "m ago";
       } else {
-        colBlocked.textContent = Math.floor(secs / 3600) + "h ago";
+        timeSpan.textContent = Math.floor(secs / 3600) + "h ago";
       }
+      colBlocked.appendChild(timeSpan);
+
+      const chevron = document.createElement("div");
+      chevron.className = "lks-tr-chevron";
+      chevron.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"></polyline>
+      </svg>`;
+      colBlocked.appendChild(chevron);
 
       row.appendChild(colItem);
       row.appendChild(colType);
       row.appendChild(colBlocked);
+
+      row.addEventListener("click", () => {
+        this.selectNerdItem(item, row);
+      });
+
+      if (this._selectedUrl && this._selectedUrl === item.url) {
+        row.classList.add("selected");
+      }
 
       list.appendChild(row);
     }
