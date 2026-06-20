@@ -493,6 +493,10 @@ void UrlClassifierCommon::AnnotateChannel(nsIChannel* aChannel,
   }
 
   RefPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
+  if (!loadInfo) {
+    return;
+  }
+
   bool isThirdPartyWithTopLevelWinURI =
       loadInfo->GetIsThirdPartyContextToTopWindow();
 
@@ -530,6 +534,10 @@ void UrlClassifierCommon::AnnotateChannelWithoutNotifying(
   }
 
   RefPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
+  if (!loadInfo) {
+    return;
+  }
+
   bool isThirdPartyWithTopLevelWinURI =
       loadInfo->GetIsThirdPartyContextToTopWindow();
 

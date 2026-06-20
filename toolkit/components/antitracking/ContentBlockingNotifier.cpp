@@ -376,6 +376,10 @@ void NotifyEventInParent(
   MOZ_ASSERT(XRE_IsParentProcess());
 
   nsCOMPtr<nsILoadInfo> loadInfo = aTrackingChannel->LoadInfo();
+  if (!loadInfo) {
+    return;
+  }
+
   RefPtr<dom::BrowsingContext> bc;
   loadInfo->GetBrowsingContext(getter_AddRefs(bc));
 

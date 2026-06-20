@@ -41,6 +41,7 @@ crashreporter-resubmit-status = Resending reports that previously failed to send
 crashreporter-button-quit = Quit { -brand-short-name }
 
 crashreporter-button-restart = Restart { -brand-short-name }
+crashreporter-button-dont-send-restart = Don't Send and Start
 
 crashreporter-button-ok = OK
 crashreporter-button-close = Close

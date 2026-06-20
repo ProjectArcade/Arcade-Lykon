@@ -983,6 +983,13 @@ nsresult AsyncUrlChannelClassifier::CheckChannel(
                 [task, channel, shouldCancel, shouldAnnotate,
                  callbackFromFeature = std::move(callbackFromFeature),
                  contentClassifier]() -> void {
+                  nsCOMPtr<nsILoadInfo> loadInfo;
+                  channel->GetLoadInfo(getter_AddRefs(loadInfo));
+                  if (!loadInfo) {
+                    callbackFromFeature();
+                    return;
+                  }
+
                   if (shouldAnnotate) {
                     contentClassifier->AnnotateChannel(channel);
                   }
@@ -991,7 +998,6 @@ nsresult AsyncUrlChannelClassifier::CheckChannel(
                     callbackFromFeature();
                   } else if (task) {
                     task->CompleteClassification();
-                    // This calls the callbackFromFeature
                   } else {
                     callbackFromFeature();
                   }

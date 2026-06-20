@@ -297,6 +297,12 @@ impl ReportCrashUI {
                         {
                             Label text(config.string("crashreporter-button-restart"))
                         },
+                        Button["dont-send-restart"] visible(config.restart_command.is_some())
+                            on_click(cc! { (logic) move || logic.push_async(|s| { s.settings.borrow_mut().submit_report = false; Box::pin(s.restart()) }) })
+                            enabled(&input_enabled) hsize(160)
+                        {
+                            Label text(config.string("crashreporter-button-dont-send-restart"))
+                        },
                         Button["quit"] on_click(cc! { (logic) move || logic.push_async(|s| Box::pin(s.quit())) })
                             enabled(&input_enabled) hsize(160)
                         {
