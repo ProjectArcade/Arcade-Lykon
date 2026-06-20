@@ -73,6 +73,10 @@ function scrubMailtoHandlers(handlerInfo) {
 }
 
 add_setup(async function () {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.settings-redesign.enabled", true]],
+  });
+
   // Create our dummy handlers
   let handler1 = Cc["@mozilla.org/uriloader/web-handler-app;1"].createInstance(
     Ci.nsIWebHandlerApp
@@ -109,9 +113,12 @@ add_setup(async function () {
 
   appHandlerInitialized = TestUtils.topicObserved("app-handler-loaded");
 
-  await openPreferencesViaOpenPreferencesAPI("downloads", { leaveOpen: true });
+  await openPreferencesViaOpenPreferencesAPI("general", { leaveOpen: true });
 
-  info("Preferences page opened on the downloads pane.");
+  info("Preferences page opened on the general pane.");
+
+  await gBrowser.selectedBrowser.contentWindow.promiseLoadHandlersList;
+  info("Apps list loaded.");
 });
 
 /**

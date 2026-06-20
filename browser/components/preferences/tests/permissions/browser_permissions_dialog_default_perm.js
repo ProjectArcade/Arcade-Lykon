@@ -77,7 +77,7 @@ add_setup(async function () {
  * Tests that default (persistent) private browsing permissions can be removed.
  */
 add_task(async function removeAll() {
-  await openPermissionsPane({ leaveOpen: true });
+  await openPreferencesViaOpenPreferencesAPI("privacy", { leaveOpen: true });
   await openPermissionsDialog();
 
   let doc = sitePermissionsDialog.document;
@@ -101,9 +101,7 @@ add_task(async function removeAll() {
   );
 
   info("Clicking remove all.");
-  let removeAllButton = doc.getElementById("removeAllPermissions");
-  await removeAllButton.updateComplete;
-  removeAllButton.click();
+  doc.getElementById("removeAllPermissions").click();
 
   info("Waiting for all list items to be cleared.");
   await BrowserTestUtils.waitForMutationCondition(

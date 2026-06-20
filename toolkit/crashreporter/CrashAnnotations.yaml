@@ -366,15 +366,14 @@ BuildID:
   glean:
     metric: crash.app_build
 
-CrashEventID:
+CrashID:
   description: A UUID for the crash event.
   type: string
   scope: ping
   bugs:
     - 1993525
-    - 2037943
   glean:
-    metric: crash.event_id
+    metric: crash.id
 
 CrashType:
   description: The type of crash that occurred (Android-only).
@@ -646,7 +645,7 @@ HasDeviceTouchScreen:
 InstallTime:
   description: >
     The time when Firefox was installed expressed as seconds since the Epoch
-  type: u64
+  type: string # This should be u64 but we currently handle it as a string
   scope: report
 
 ipc_channel_error:
@@ -1208,14 +1207,6 @@ ShutdownReason:
   type: string
   scope: ping
 
-SignalOrigin:
-  description: >
-    Process name of the source of the signal that caused the crash, if applicable.
-    - On Linux, populated with the name of the process that sent a fatal signal
-    to the crashing process, if it can be determined.
-  type: string
-  scope: report
-
 StackTraces:
   description: >
     Stack traces extracted from the crash minidump, if available. A serialized
@@ -1465,12 +1456,6 @@ UnknownNetAddrSocketFamily:
   description: >
     An unknown network address family was requested to Necko. The value is the
     requested family number.
-  type: u32
-  scope: report
-
-UniFFILeakedCallbackId:
-  description: >
-    ID of the leaked callbacks when we force crash in `UniFFI.sys.mjs`
   type: u32
   scope: report
 

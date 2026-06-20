@@ -9,7 +9,7 @@ Services.scriptloader.loadSubScript(
 async function openEtpPage() {
   await openPreferencesViaOpenPreferencesAPI("etp", { leaveOpen: true });
   let doc = gBrowser.contentDocument;
-  await TestUtils.waitForCondition(
+  await BrowserTestUtils.waitForCondition(
     () => doc.getElementById("contentBlockingCategoryRadioGroup"),
     "Wait for the ETP advanced radio group to render"
   );
@@ -25,7 +25,7 @@ async function openEtpCustomizePage() {
     leaveOpen: true,
   });
   let doc = gBrowser.contentDocument;
-  await TestUtils.waitForCondition(
+  await BrowserTestUtils.waitForCondition(
     () => doc.getElementById("etpAllowListBaselineEnabledCustom"),
     "Wait for the ETP customize controls to render"
   );

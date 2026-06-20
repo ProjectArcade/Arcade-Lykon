@@ -12,18 +12,12 @@ var { XPCOMUtils } = ChromeUtils.importESModule(
 
 const lazy = {};
 
-ChromeUtils.defineESModuleGetters(lazy, {
-  PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
-});
-
 XPCOMUtils.defineLazyServiceGetter(
   lazy,
   "contentBlockingAllowList",
   "@mozilla.org/content-blocking-allow-list;1",
   Ci.nsIContentBlockingAllowList
 );
-
-const DEFAULT_FAVICON = "chrome://global/skin/icons/defaultFavicon.svg";
 
 const permissionExceptionsL10n = {
   trackingprotection: {
@@ -53,10 +47,6 @@ const permissionExceptionsL10n = {
   "ipp-vpn": {
     window: "ip-protection-exceptions-dialog-window",
     description: "ip-protection-exclusions-desc",
-  },
-  "persist-data-on-shutdown": {
-    window: "permissions-exceptions-shutdown-clearing-window",
-    description: "permissions-exceptions-shutdown-clearing-desc",
   },
 };
 
@@ -141,7 +131,10 @@ var gPermissionManager = {
 
     this._forcedHTTP = params.forcedHTTP;
 
-    await document.l10n.translateElements([permissionsText]);
+    await document.l10n.translateElements([
+      permissionsText,
+      document.documentElement,
+    ]);
 
     document.getElementById("btnDisableETP").hidden = !params.disableETPVisible;
     document.getElementById("btnBlock").hidden = !params.blockVisible;
@@ -159,7 +152,8 @@ var gPermissionManager = {
 
     this.onHostInput(this._urlField);
 
-    document.getElementById("urlLabel").hidden = !urlFieldVisible;
+    let urlLabel = document.getElementById("urlLabel");
+    urlLabel.hidden = !urlFieldVisible;
 
     this._hideStatusColumn = params.hideStatusColumn;
     let statusCol = document.getElementById("statusCol");
@@ -210,7 +204,7 @@ var gPermissionManager = {
   },
 
   addCommandListeners() {
-    window.addEventListener("click", event => {
+    window.addEventListener("command", event => {
       switch (event.target.id) {
         case "removePermission":
           gPermissionManager.onPermissionDelete();
@@ -508,12 +502,6 @@ var gPermissionManager = {
     let row = document.createXULElement("hbox");
     row.setAttribute("style", "flex: 1");
 
-    let icon = document.createXULElement("image");
-    icon.setAttribute("class", "website-icon");
-    icon.setAttribute("src", DEFAULT_FAVICON);
-    row.appendChild(icon);
-    this._setSiteIcon(permission.origin, icon);
-
     let hbox = document.createXULElement("hbox");
     let website = document.createXULElement("label");
     website.toggleAttribute("disabled", disabledByPolicy);
@@ -541,21 +529,6 @@ var gPermissionManager = {
 
     richlistitem.appendChild(row);
     return richlistitem;
-  },
-
-  async _setSiteIcon(origin, icon) {
-    let iconURI;
-    try {
-      iconURI = Services.io.newURI(origin);
-    } catch {
-      return;
-    }
-    let favicon = await lazy.PlacesUtils.favicons
-      .getFaviconForPage(iconURI)
-      .catch(() => null);
-    if (favicon) {
-      icon.setAttribute("src", `page-icon:${origin}`);
-    }
   },
 
   onWindowKeyPress(event) {

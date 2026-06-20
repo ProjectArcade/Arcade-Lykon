@@ -12,8 +12,6 @@ const { XPCOMUtils } = ChromeUtils.importESModule(
 const lazy = XPCOMUtils.declareLazy({
   AddonSearchEngine:
     "moz-src:///toolkit/components/search/AddonSearchEngine.sys.mjs",
-  ConfigSearchEngine:
-    "moz-src:///toolkit/components/search/ConfigSearchEngine.sys.mjs",
   CustomizableUI:
     "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs",
   QuickSuggest: "moz-src:///browser/components/urlbar/QuickSuggest.sys.mjs",
@@ -25,7 +23,6 @@ const lazy = XPCOMUtils.declareLazy({
 
 /**
  * @import { SearchEngine } from "moz-src:///toolkit/components/search/SearchEngine.sys.mjs"
- * @import { SettingControlConfig } from "chrome://browser/content/preferences/widgets/setting-control.mjs"
  */
 
 Preferences.addAll([
@@ -91,18 +88,18 @@ async function getEngineIcon(engine, width) {
  *   The method used to get the engine from the Search Service.
  * @param {(id: string) => Promise<void>} options.setEngine
  *   The method used to set a new engine.
- * @returns {typeof Preferences.AsyncSetting}
+ * @returns {PreferencesSettingsConfig}
  */
 function createSearchEngineConfig({ settingId, getEngine, setEngine }) {
   return class extends Preferences.AsyncSetting {
     static id = settingId;
 
-    /** @type {Partial<SettingControlConfig>} */
+    /** @type {{options: PreferencesSettingsConfig[]}} */
     defaultGetControlConfig = { options: [] };
 
     async get() {
       let engine = await getEngine();
-      return engine?.id;
+      return engine.id;
     }
 
     /** @param {string} id */
@@ -123,7 +120,6 @@ function createSearchEngineConfig({ settingId, getEngine, setEngine }) {
         })
       );
 
-      /** @type {Partial<SettingControlConfig>} */
       return {
         options: optionsInfo
           .filter(o => o.status == "fulfilled")
@@ -141,11 +137,11 @@ function createSearchEngineConfig({ settingId, getEngine, setEngine }) {
     }
 
     /**
-     * @param {nsISupports} _subject
+     * @param {?{wrappedJSObject: SearchEngine}} subject
      * @param {"browser-search-service"|"browser-search-engine-modified"} topic
      * @param {string} _data
      */
-    observe(_subject, topic, _data) {
+    observe(subject, topic, _data) {
       if (topic == lazy.SearchUtils.TOPIC_ENGINE_MODIFIED) {
         // Always emit change for any change that could affect the engine list
         // or default.
@@ -158,23 +154,12 @@ function createSearchEngineConfig({ settingId, getEngine, setEngine }) {
 Preferences.addSetting(
   createSearchEngineConfig({
     settingId: "defaultEngineNormal",
-    getEngine: async () => {
-      let engine = await lazy.SearchService.getDefault();
-      if (!engine) {
-        throw new Error("Unable to get default engine.");
-      }
-      return engine;
-    },
-    setEngine: async id => {
-      let engine = lazy.SearchService.getEngineById(id);
-      if (!engine) {
-        throw new Error("Unable to get engine by id.");
-      }
-      await lazy.SearchService.setDefault(
-        engine,
+    getEngine: () => lazy.SearchService.getDefault(),
+    setEngine: id =>
+      lazy.SearchService.setDefault(
+        lazy.SearchService.getEngineById(id),
         lazy.SearchService.CHANGE_REASON.USER
-      );
-    },
+      ),
   })
 );
 
@@ -201,7 +186,6 @@ Preferences.addSetting({
   setup: onChange => {
     // Add observer of CustomizableUI as showSearchTerms checkbox should be
     // hidden while searchbar is enabled.
-    /** @type {Parameters<typeof lazy.CustomizableUI.addListener>[0]} */
     let customizableUIListener = {
       onWidgetAfterDOMChange: node => {
         if (node.id == "search-container") {
@@ -231,23 +215,12 @@ Preferences.addSetting({
 Preferences.addSetting(
   createSearchEngineConfig({
     settingId: "defaultPrivateEngine",
-    getEngine: async () => {
-      let engine = await lazy.SearchService.getDefaultPrivate();
-      if (!engine) {
-        throw new Error("Unable to get default private engine.");
-      }
-      return engine;
-    },
-    setEngine: async id => {
-      let engine = lazy.SearchService.getEngineById(id);
-      if (!engine) {
-        throw new Error("Unable to get engine by id.");
-      }
-      await lazy.SearchService.setDefaultPrivate(
-        engine,
+    getEngine: () => lazy.SearchService.getDefaultPrivate(),
+    setEngine: id =>
+      lazy.SearchService.setDefaultPrivate(
+        lazy.SearchService.getEngineById(id),
         lazy.SearchService.CHANGE_REASON.USER
-      );
-    },
+      ),
   })
 );
 
@@ -336,7 +309,6 @@ Preferences.addSetting({
   setup: onChange => {
     // Add observer of CustomizableUI as checkbox should be hidden while
     // searchbar is enabled.
-    /** @type {Parameters<typeof lazy.CustomizableUI.addListener>[0]} */
     let customizableUIListener = {
       onWidgetAfterDOMChange: node => {
         if (node.id == "search-container") {
@@ -406,7 +378,7 @@ Preferences.addSetting({
   visible: deps => deps.trendingFeaturegatePref.value,
   disabled: deps => {
     let trendingSupported =
-      lazy.SearchService.defaultEngine?.supportsResponseType(
+      lazy.SearchService.defaultEngine.supportsResponseType(
         lazy.SearchUtils.URL_TYPE.TRENDING_JSON
       );
     return (
@@ -460,7 +432,6 @@ Preferences.addSetting({
         ? "addressbar-header-firefox-suggest-2"
         : "addressbar-header-1";
 
-    /** @type {Partial<SettingControlConfig>} */
     return { ...config, l10nId };
   },
 });
@@ -639,7 +610,7 @@ Preferences.addSetting({
  */
 let searchEngineUpdateNotifier;
 Preferences.addSetting(
-  /** @type {{ _engineUpdateTriggered: boolean, _emitChange: ?Function } & SettingConfig} */ ({
+  /** @type {{ _engineUpdateTriggered: boolean, _emitChange: Function } & SettingConfig} */ ({
     id: "updateSearchEngineSuccess",
     _engineUpdateTriggered: false,
     _emitChange: null,
@@ -832,14 +803,11 @@ Preferences.addSetting(
 
           // Add only the English name if localized and English are the same.
           let names =
-            /** @type {string[]} */
-            (
-              localizedName === englishName
-                ? [englishName]
-                : [localizedName, englishName]
-            );
+            localizedName === englishName
+              ? [englishName]
+              : [localizedName, englishName];
 
-          this.#localShortcutL10nNames?.set(source, names);
+          this.#localShortcutL10nNames.set(source, names);
         });
       } catch (ex) {
         console.error("Error loading l10n names", ex);
@@ -856,7 +824,7 @@ Preferences.addSetting(
     handleDeletionOptions(engine) {
       /** @type {SettingControlConfig} */
       let deletionOptions;
-      if (engine instanceof lazy.ConfigSearchEngine) {
+      if (engine.isConfigEngine) {
         let toggleId = `toggleEngine-${engine.id}`;
         maybeMakeSetting(ToggleSetting(toggleId, engine));
 
@@ -928,14 +896,12 @@ Preferences.addSetting(
         maybeMakeSetting(EngineListItemSetting(settingId, engine));
         maybeMakeSetting({
           id: editId,
-          deps: [settingId],
           disabled: () => engine.hidden,
           onUserClick() {
             window.gSubDialog.open(
               "chrome://browser/content/search/addEngine.xhtml",
               {
                 features: "resizable=no, modal=yes",
-                /** @param {CustomEvent} event */
                 closingCallback: event => {
                   if (event.detail.button == "accept") {
                     searchEngineUpdateNotifier?.();
@@ -947,7 +913,7 @@ Preferences.addSetting(
           },
         });
 
-        /** @type {SettingControlConfig & {items: ?SettingControlConfig[]}} */
+        /** @type {SettingControlConfig} */
         let config = {
           id: settingId,
           control: "moz-box-item",
@@ -1009,11 +975,8 @@ Preferences.addSetting(
 
         // Convert the localized words into lowercase keywords prepended with
         // an @ symbol.
-        let names = l10nNames.get(searchMode.source);
-        if (!names) {
-          continue;
-        }
-        let keywords = names
+        let keywords = l10nNames
+          .get(searchMode.source)
           .map(keyword => `@${keyword.toLowerCase()}`)
           .join(", ");
 
@@ -1026,7 +989,7 @@ Preferences.addSetting(
           slot: "static",
           iconSrc: searchMode.icon,
           controlAttrs: {
-            label: l10nNames.get(searchMode.source)?.[0] ?? "",
+            label: l10nNames.get(searchMode.source)[0],
             description: keywords,
             layout: "medium-icon",
           },
@@ -1036,18 +999,13 @@ Preferences.addSetting(
       return configs;
     }
 
-    /** @param {CustomEvent} event */
     async onUserReorder(event) {
-      const { draggedElement, insertAt } = event.detail;
+      const { draggedElement, targetIndex } = event.detail;
       let draggedEngineName = draggedElement.label;
       let draggedEngine = lazy.SearchService.getEngineByName(draggedEngineName);
-      if (!draggedEngine) {
-        return;
-      }
-      await lazy.SearchService.moveEngine(draggedEngine, insertAt);
+      await lazy.SearchService.moveEngine(draggedEngine, targetIndex);
     }
     async getControlConfig() {
-      /** @type {Partial<SettingControlConfig>} */
       return {
         items: [
           ...(await this.makeEngineList()),
@@ -1146,9 +1104,6 @@ SettingGroupManager.registerGroups({
             id: "urlBarSuggestionPermanentPBMessage",
             l10nId: "search-suggestions-cant-show-2",
             control: "moz-message-bar",
-            controlAttrs: {
-              role: "status",
-            },
           },
         ],
       },
@@ -1156,7 +1111,6 @@ SettingGroupManager.registerGroups({
   },
   firefoxSuggest: {
     id: "locationBarGroup",
-    subcategory: "locationBar",
     items: [
       {
         id: "locationBarGroupHeader",

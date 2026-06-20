@@ -5,5 +5,3 @@ Services.scriptloader.loadSubScript(
   "chrome://mochitests/content/browser/browser/components/preferences/tests/head.js",
   this
 );
-
-const PERF_PREF_PANE = SRD_PREF_VALUE ? "paneTabsBrowsing" : "paneGeneral";

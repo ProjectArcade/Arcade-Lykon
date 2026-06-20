@@ -9,6 +9,9 @@ const MIMEService = Cc["@mozilla.org/mime;1"].getService(Ci.nsIMIMEService);
 
 // This test checks that application/xml has the handle internally option.
 add_task(async function applicationXmlHandleInternally() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.settings-redesign.enabled", true]],
+  });
   const mimeInfo = MIMEService.getFromTypeAndExtension(
     "application/xml",
     "xml"
@@ -20,7 +23,7 @@ add_task(async function applicationXmlHandleInternally() {
 
   let appHandlerInitialized = TestUtils.topicObserved("app-handler-loaded");
 
-  await openPreferencesViaOpenPreferencesAPI("downloads", { leaveOpen: true });
+  await openPreferencesViaOpenPreferencesAPI("general", { leaveOpen: true });
 
   await appHandlerInitialized;
 

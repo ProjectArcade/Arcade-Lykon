@@ -12,9 +12,7 @@ describe("settings ai features", () => {
     await SpecialPowers.pushPrefEnv({
       set: [["browser.preferences.aiControls", true]],
     });
-    let aiControlsLoaded = TestUtils.topicObserved("ai-pane-loaded");
     await openPreferencesViaOpenPreferencesAPI("general", { leaveOpen: true });
-    await aiControlsLoaded;
     doc = gBrowser.selectedBrowser.contentDocument;
     win = doc.documentGlobal;
   });
@@ -44,8 +42,6 @@ describe("settings ai features", () => {
       let generalTab = gBrowser.selectedTab;
       let generalDoc = gBrowser.selectedBrowser.contentDocument;
       let generalWin = generalDoc.documentGlobal;
-      const linkPreviewPane = srdAwarePane("general", "tabsBrowsing");
-      await maybeNavigateToPane(linkPreviewPane, generalWin);
 
       let linkPreviewSetting =
         generalWin.Preferences.getSetting("linkPreviewEnabled");
@@ -131,8 +127,6 @@ describe("settings ai features", () => {
       let generalTab = gBrowser.selectedTab;
       let generalDoc = gBrowser.selectedBrowser.contentDocument;
       let generalWin = generalDoc.documentGlobal;
-      const tabGroupPane = srdAwarePane("general", "tabsBrowsing");
-      await maybeNavigateToPane(tabGroupPane, generalWin);
 
       let tabGroupSetting = generalWin.Preferences.getSetting(
         "tabGroupSuggestions"
@@ -173,6 +167,7 @@ describe("settings ai features", () => {
           ["browser.ai.control.default", "available"],
           ["browser.ai.control.translations", "default"],
           ["browser.translations.enable", true],
+          ["browser.settings-redesign.enable", false],
         ],
       });
 
@@ -183,18 +178,11 @@ describe("settings ai features", () => {
       let generalTab = gBrowser.selectedTab;
       let generalDoc = gBrowser.selectedBrowser.contentDocument;
       let generalWin = generalDoc.documentGlobal;
-      const translationsPane = srdAwarePane("general", "languages");
-      await maybeNavigateToPane(translationsPane, generalWin);
 
-      const srdEnabled = Services.prefs.getBoolPref(
-        "browser.settings-redesign.enabled"
-      );
       let translationsSetting = generalWin.Preferences.getSetting(
-        srdEnabled ? "offerTranslations" : "legacyTranslationsVisible"
+        "legacyTranslationsVisible"
       );
-      let translationsGroup = srdEnabled
-        ? generalDoc.querySelector('setting-group[groupid="translations"]')
-        : generalDoc.getElementById("translationsGroup");
+      let translationsGroup = generalDoc.getElementById("translationsGroup");
       Assert.ok(
         BrowserTestUtils.isVisible(translationsGroup),
         "Translations group is visible"
@@ -216,8 +204,8 @@ describe("settings ai features", () => {
       );
 
       gBrowser.selectedTab = generalTab;
-      await TestUtils.waitForCondition(
-        () => !BrowserTestUtils.isVisible(translationsGroup),
+      Assert.ok(
+        !BrowserTestUtils.isVisible(translationsGroup),
         "Translations group is hidden after blocking"
       );
 
@@ -244,8 +232,8 @@ describe("settings ai features", () => {
       });
 
       gBrowser.selectedTab = generalTab;
-      await TestUtils.waitForCondition(
-        () => BrowserTestUtils.isVisible(translationsGroup),
+      Assert.ok(
+        BrowserTestUtils.isVisible(translationsGroup),
         "Translations group is visible after explicitly enabling"
       );
 
@@ -269,8 +257,6 @@ describe("settings ai features", () => {
       let generalTab = gBrowser.selectedTab;
       let generalDoc = gBrowser.selectedBrowser.contentDocument;
       let generalWin = generalDoc.documentGlobal;
-      const linkPreviewPane = srdAwarePane("general", "tabsBrowsing");
-      await maybeNavigateToPane(linkPreviewPane, generalWin);
 
       let linkPreviewSetting =
         generalWin.Preferences.getSetting("linkPreviewEnabled");
@@ -318,8 +304,6 @@ describe("settings ai features", () => {
           ["browser.preferences.aiControls.showUnavailable", false],
         ],
       });
-
-      win.SettingPaneManager.importPane("ai");
 
       // Manually trigger a Setting change to re-calculate visibility based on noKeyPointsRegions.
       let aiControlsShowUnavailable = win.Preferences.getSetting(

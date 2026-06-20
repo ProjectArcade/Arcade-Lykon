@@ -6,6 +6,9 @@
 let mockFxA, unmockFxA;
 
 add_setup(async function () {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.settings-redesign.enabled", true]],
+  });
   let { mock, unmock } = await mockDefaultFxAInstance();
   mockFxA = mock;
   unmockFxA = unmock;
@@ -23,7 +26,7 @@ add_task(async function test_config_renders_with_expected_cards() {
     soloCard,
     thunderbirdCard,
     newProductsCard,
-  } = await getPromoCards();
+  } = await getPromoCardsSRD();
 
   ok(grid, "The products-grid container exists");
 
@@ -60,7 +63,7 @@ add_task(async function test_vpn_hidden_when_disabled() {
     set: [["browser.vpn_promo.enabled", false]],
   });
 
-  let { vpnPromoCard, monitorPromoCard } = await getPromoCards();
+  let { vpnPromoCard, monitorPromoCard } = await getPromoCardsSRD();
   ok(!vpnPromoCard, "The VPN promo card is not visible");
   ok(monitorPromoCard, "The Monitor card is visible");
 
@@ -76,7 +79,7 @@ add_task(async function test_vpn_hidden_in_disallowed_region() {
     set: [["browser.vpn_promo.enabled", true]],
   });
 
-  let { vpnPromoCard, monitorPromoCard } = await getPromoCards();
+  let { vpnPromoCard, monitorPromoCard } = await getPromoCardsSRD();
   ok(!vpnPromoCard, "VPN promo is hidden in disallowed region");
   ok(monitorPromoCard, "The Monitor card is visible");
 
@@ -88,100 +91,42 @@ add_task(async function test_relay_hidden_with_custom_fxa() {
   await clearPolicies();
   unmockFxA();
 
-  let { relayPromoCard } = await getPromoCards();
+  let { relayPromoCard } = await getPromoCardsSRD();
   ok(!relayPromoCard, "The Relay promo card is not visible");
 
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
   mockFxA();
 });
 
-add_task(async function test_when_pref_disabled() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.preferences.moreFromMozilla", false]],
-  });
-
-  await openPreferencesViaOpenPreferencesAPI("paneSync", {
-    leaveOpen: true,
-  });
-
-  let doc = gBrowser.contentDocument;
-  ok(
-    !doc.querySelector(
-      '#categories moz-page-nav-button[view="paneMoreFromMozilla"]'
-    ),
-    "More from Mozilla nav button is not present when pref is disabled"
-  );
-
-  BrowserTestUtils.removeTab(gBrowser.selectedTab);
-  await SpecialPowers.popPrefEnv();
-});
-
-add_task(async function test_aboutpreferences_event_telemetry() {
-  Services.fog.testResetFOG();
-
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.preferences.moreFromMozilla", true]],
-  });
-  await openPreferencesViaOpenPreferencesAPI("paneSync", {
-    leaveOpen: true,
-  });
-
-  let doc = gBrowser.contentDocument;
-  let navButton = doc.querySelector(
-    '#categories moz-page-nav-button[view="paneMoreFromMozilla"]'
-  );
-  ok(navButton, "moreFromMozilla nav button is present");
-
-  let paneShownPromise = BrowserTestUtils.waitForEvent(
-    doc,
-    "paneshown",
-    false,
-    e => e.detail.category === "paneMoreFromMozilla"
-  );
-  navButton.activate();
-  await paneShownPromise;
-
-  let showInitialEvents = Glean.aboutpreferences.showInitial.testGetValue();
-  let showClickEvents = Glean.aboutpreferences.showClick.testGetValue();
-  Assert.equal(showInitialEvents.length, 1, "One show initial event");
-  Assert.equal(showClickEvents.length, 1, "One show click event");
-  Assert.equal(
-    showInitialEvents[0].extra.value,
-    "paneSync",
-    "Show initial on sync"
-  );
-  Assert.equal(
-    showClickEvents[0].extra.value,
-    "paneMoreFromMozilla",
-    "Show click on More from Mozilla"
-  );
-
-  BrowserTestUtils.removeTab(gBrowser.selectedTab);
-  await SpecialPowers.popPrefEnv();
-});
-
-add_task(async function test_aboutpreferences_search() {
+add_task(async function test_box_link_has_correct_utm_params() {
   await clearPolicies();
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.preferences.moreFromMozilla", true]],
-  });
+  let { monitorPromoCard } = await getPromoCardsSRD();
 
-  await openPreferencesViaOpenPreferencesAPI(null, {
-    leaveOpen: true,
-  });
+  let boxLink = monitorPromoCard.querySelector("moz-box-link");
+  ok(boxLink, "Monitor card has a moz-box-link");
 
-  await runSearchInput("More from Mozilla");
-
-  let doc = gBrowser.contentDocument;
-  let moreFromMozillaPane = doc.querySelector(
-    'setting-pane[data-category="paneMoreFromMozilla"]'
+  let href = boxLink.href;
+  ok(href, "Box link has an href");
+  let url = new URL(href);
+  Assert.ok(
+    url.href.startsWith("https://monitor.mozilla.org/"),
+    "Correct base URL"
   );
-  ok(moreFromMozillaPane, "moreFromMozilla setting-pane is in the DOM");
-  ok(
-    BrowserTestUtils.isVisible(moreFromMozillaPane),
-    "moreFromMozilla section is visible in search results for 'More from Mozilla'"
+  Assert.equal(
+    url.searchParams.get("utm_source"),
+    "about-prefs",
+    "utm_source is set"
+  );
+  Assert.equal(
+    url.searchParams.get("utm_campaign"),
+    "morefrommozilla",
+    "utm_campaign is set"
+  );
+  Assert.equal(
+    url.searchParams.get("utm_medium"),
+    "firefox-desktop",
+    "utm_medium is set"
   );
 
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
-  await SpecialPowers.popPrefEnv();
 });

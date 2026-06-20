@@ -14,11 +14,19 @@ const TEST_PATH = getRootDirectory(gTestPath).replace(
   "https://example.com"
 );
 
+add_setup(async function () {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.settings-redesign.enabled", true]],
+  });
+});
+
 async function getPdfCategoryItem() {
   let appHandlerInitialized = TestUtils.topicObserved("app-handler-loaded");
-  await openPreferencesViaOpenPreferencesAPI("downloads", { leaveOpen: true });
-  info("Preferences page opened on the downloads pane.");
+  await openPreferencesViaOpenPreferencesAPI("general", { leaveOpen: true });
+  info("Preferences page opened on the general pane.");
   await appHandlerInitialized;
+  await gBrowser.selectedBrowser.contentWindow.promiseLoadHandlersList;
+  info("Apps list loaded.");
 
   let win = gBrowser.selectedBrowser.contentWindow;
   let container = win.document.getElementById("applicationsHandlersView");

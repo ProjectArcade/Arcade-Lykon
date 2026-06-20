@@ -1,10 +1,7 @@
 [DEFAULT]
-dupe-manifest = true
-prefs = [
-  "browser.settings-redesign.enabled=false",
-]
 support-files = [
   "head.js",
+  "../head.js",
 ]
 tags = "os_integration"
 

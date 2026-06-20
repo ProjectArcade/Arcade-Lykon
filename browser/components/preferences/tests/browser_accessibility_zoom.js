@@ -4,6 +4,9 @@
 "use strict";
 
 async function openAccessibilityPane() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.settings-redesign.enabled", true]],
+  });
   await openPreferencesViaOpenPreferencesAPI("accessibility", {
     leaveOpen: true,
   });

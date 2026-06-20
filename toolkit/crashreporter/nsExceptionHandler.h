@@ -13,6 +13,7 @@
 
 #include "mozilla/EnumeratedArray.h"
 #include "mozilla/Maybe.h"
+#include "mozilla/UniquePtrExtensions.h"  // For UniqueFileHandle
 
 #include "CrashAnnotations.h"
 
@@ -166,7 +167,7 @@ void ClearInactiveStateStart();
 void SetInactiveStateStart();
 
 nsresult SetRestartArgs(int argc, char** argv);
-nsresult SetupExtraData(nsIFile* aAppDataDirectory, nsIFile* aXreDirectory);
+nsresult SetupExtraData(nsIFile* aAppDataDirectory, const nsACString& aBuildID);
 // Registers an additional memory region to be included in the minidump
 nsresult RegisterAppMemory(void* ptr, size_t length);
 nsresult UnregisterAppMemory(void* ptr);
@@ -260,28 +261,20 @@ bool CreateMinidumpsAndPair(ProcessHandle aTargetPid,
                             AnnotationTable& aTargetAnnotations,
                             nsIFile** aTargetDumpOut);
 
+#if defined(XP_WIN) || defined(XP_MACOSX) || defined(XP_IOS)
+using CrashPipeType = const char*;
+#else
+using CrashPipeType = mozilla::UniqueFileHandle;
+#endif
+
 // Parent-side API for children
 #if defined(MOZ_WIDGET_ANDROID)
 void SetCrashHelperPipes(FileHandle breakpadFd, FileHandle crashHelperFd);
 #endif
-bool RegisterChildIPCChannel(mozilla::geckoargs::ChildProcessArgs& aArgs,
-                             GeckoChildID aID);
-#if defined(XP_WIN)
-bool ChildProcessProxyRendezvous(GeckoChildID aID, DWORD aPid, HANDLE aHandle);
-#endif  // defined(XP_WIN)
+CrashPipeType GetChildNotificationPipe();
+bool RegisterChildIPCChannel(mozilla::geckoargs::ChildProcessArgs& aArgs);
 
 // Child-side API
-
-/*
- * Set the exception handler in a child process. The `sCrashReporter` argument
- * must be present on all platforms. The `sCrashHelper` argument must be
- * present on Android, Linux and Windows, and the `sCrashHelperSend` and
- * `sCrashHelperRecv` arguments must be present on macOS and iOS. If any of
- * these arguments are not present in the argument vector then this function
- * will assert.
- *
- * @return bool If `false` the exception handler has not been set.
- */
 MOZ_EXPORT bool SetRemoteExceptionHandler(int& aArgc, char** aArgv);
 bool UnsetRemoteExceptionHandler(bool wasSet = true);
 

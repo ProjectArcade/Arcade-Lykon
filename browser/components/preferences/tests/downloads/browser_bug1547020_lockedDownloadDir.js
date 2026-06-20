@@ -6,7 +6,7 @@
 add_task(async function () {
   Services.prefs.lockPref("browser.download.useDownloadDir");
 
-  await openDownloadsOrPreferencesPane();
+  await openPreferencesViaOpenPreferencesAPI("general", { leaveOpen: true });
   let doc = gBrowser.selectedBrowser.contentDocument;
 
   var chooseFolder = doc.getElementById("chooseFolder");

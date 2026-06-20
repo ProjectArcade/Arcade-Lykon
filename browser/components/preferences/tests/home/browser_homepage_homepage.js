@@ -10,7 +10,10 @@ const BLANK_HOMEPAGE_URL = "chrome://browser/content/blanktab.html";
 
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
-    set: [["identity.fxaccounts.account.device.name", ""]],
+    set: [
+      ["browser.settings-redesign.enabled", true],
+      ["identity.fxaccounts.account.device.name", ""],
+    ],
   });
 });
 
@@ -111,16 +114,16 @@ add_task(async function test_homepage_new_tabs_dropdown() {
   let select = homepageNewTabsControl.controlEl;
   let nativeSelect = select.inputEl;
 
-  is(nativeSelect.value, "home", "Dropdown value is 'home' when pref is true");
+  is(nativeSelect.value, "true", "Dropdown value is 'true' when pref is true");
 
-  await changeMozSelectValue(select, "blank");
+  await changeMozSelectValue(select, "false");
   is(
     Services.prefs.getBoolPref(NEWTAB_ENABLED_PREF),
     false,
     "Pref updated to false"
   );
 
-  await changeMozSelectValue(select, "home");
+  await changeMozSelectValue(select, "true");
   is(
     Services.prefs.getBoolPref(NEWTAB_ENABLED_PREF),
     true,

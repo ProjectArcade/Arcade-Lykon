@@ -33,7 +33,7 @@ const _checkCookiesDialog = (dialog, buttonIds) => {
   return dialog;
 };
 
-const _addWebsiteAddressToPermissionBox = async (
+const _addWebsiteAddressToPermissionBox = (
   websiteAddress,
   dialog,
   buttonId,
@@ -43,9 +43,8 @@ const _addWebsiteAddressToPermissionBox = async (
   let buttonDialog = dialog.document.getElementById(buttonId);
   url.value = websiteAddress;
   url.dispatchEvent(new Event("input", { bubbles: true }));
-  await buttonDialog.updateComplete;
   is(
-    buttonDialog.disabled,
+    buttonDialog.hasAttribute("disabled"),
     false,
     "When the user add an url the button should be clickable"
   );
@@ -67,15 +66,14 @@ const _checkIfPermissionsWereAdded = (dialog, expectedResult) => {
   }
 };
 
-const _removesAllSitesInPermissionBox = async (dialog, shouldBePossible) => {
+const _removesAllSitesInPermissionBox = (dialog, shouldBePossible) => {
   let removeAllWebsitesButton = dialog.document.getElementById(
     "removeAllPermissions"
   );
   ok(removeAllWebsitesButton, "removeAllWebsitesButton found");
-  await removeAllWebsitesButton.updateComplete;
-  const isDisabled = removeAllWebsitesButton.disabled;
+  const isDisabled = removeAllWebsitesButton.hasAttribute("disabled");
   is(
-    !removeAllWebsitesButton.disabled,
+    !removeAllWebsitesButton.hasAttribute("disabled"),
     shouldBePossible,
     "There should be websites in the list"
   );
@@ -136,17 +134,14 @@ add_task(async function checkCookiePermissions() {
 
   for (let buttonId of buttonIds) {
     for (let test of tests) {
-      await _addWebsiteAddressToPermissionBox(
+      _addWebsiteAddressToPermissionBox(
         test.inputWebsite,
         dialog,
         buttonId,
         test.expectedResult.length === 0
       );
       _checkIfPermissionsWereAdded(dialog, test.expectedResult);
-      await _removesAllSitesInPermissionBox(
-        dialog,
-        !!test.expectedResult.length
-      );
+      _removesAllSitesInPermissionBox(dialog, !!test.expectedResult.length);
     }
   }
 

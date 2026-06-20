@@ -33,11 +33,10 @@ add_task(async function testHiddenWhenLabsDisabled() {
     "Experimental Features section not added to the DOM"
   );
 
-  const expectedPane = SRD_PREF_VALUE ? "paneSync" : "paneGeneral";
   is(
     doc.getElementById("categories").currentView,
-    expectedPane,
-    `When the experimental features section is hidden, navigating to #experimental should redirect to the default pane (${expectedPane})`
+    "paneGeneral",
+    "When the experimental features section is hidden, navigating to #experimental should redirect to #general"
   );
 
   BrowserTestUtils.removeTab(gBrowser.selectedTab);

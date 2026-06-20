@@ -15,6 +15,12 @@ add_setup(async function () {
 });
 
 add_task(async function test_restore_functionality() {
+  if (SRD_PREF_VALUE) {
+    Assert.ok(true, "New settings redesign UI is enabled.");
+    // Bail early, as this test doesn't apply to the redesigned settings.
+    return;
+  }
+
   // Ensure no engines are hidden to begin with.
   for (let engine of await SearchService.getAppProvidedEngines()) {
     if (engine.hidden) {
@@ -81,6 +87,12 @@ add_task(async function test_restore_functionality() {
 });
 
 add_task(async function test_restoreEnabledOnOpenWithEngineHidden() {
+  if (SRD_PREF_VALUE) {
+    Assert.ok(true, "New settings redesign UI is enabled.");
+    // Bail early, as this test doesn't apply to the redesigned settings.
+    return;
+  }
+
   let engine = await SearchService.getEngineByName("DuckDuckGo");
   engine.hidden = true;
 
@@ -116,6 +128,12 @@ add_task(async function test_restoreEnabledOnOpenWithEngineHidden() {
 // This removes the last two engines and then the remaining engines from top to
 // bottom, and then it restores the default engines.  See bug 1681818.
 add_task(async function test_removeOutOfOrder() {
+  if (SRD_PREF_VALUE) {
+    Assert.ok(true, "New settings redesign UI is enabled.");
+    // Bail early, as this test doesn't apply to the redesigned settings.
+    return;
+  }
+
   await openPreferencesViaOpenPreferencesAPI("search", { leaveOpen: true });
 
   let doc = gBrowser.selectedBrowser.contentDocument;
@@ -204,6 +222,12 @@ add_task(async function test_removeOutOfOrder() {
 });
 
 add_task(async function test_removeAndRestoreMultiple() {
+  if (SRD_PREF_VALUE) {
+    Assert.ok(true, "New settings redesign UI is enabled.");
+    // Bail early, as this test doesn't apply to the redesigned settings.
+    return;
+  }
+
   await openPreferencesViaOpenPreferencesAPI("search", { leaveOpen: true });
 
   let doc = gBrowser.selectedBrowser.contentDocument;

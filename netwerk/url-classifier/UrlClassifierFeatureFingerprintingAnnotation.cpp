@@ -4,7 +4,6 @@
 
 #include "UrlClassifierFeatureFingerprintingAnnotation.h"
 
-#include "mozilla/net/ChannelClassifierUtils.h"
 #include "mozilla/net/UrlClassifierCommon.h"
 #include "nsIClassifiedChannel.h"
 #include "nsContentUtils.h"
@@ -91,7 +90,7 @@ UrlClassifierFeatureFingerprintingAnnotation::MaybeCreate(
       ("UrlClassifierFeatureFingerprintingAnnotation::MaybeCreate - channel %p",
        aChannel));
 
-  if (ChannelClassifierUtils::IsPassiveContent(aChannel)) {
+  if (UrlClassifierCommon::IsPassiveContent(aChannel)) {
     return nullptr;
   }
 
@@ -147,7 +146,7 @@ UrlClassifierFeatureFingerprintingAnnotation::ProcessChannel(
 
   UrlClassifierCommon::SetTrackingInfo(aChannel, aList, aHashes);
 
-  ChannelClassifierUtils::AnnotateChannel(
+  UrlClassifierCommon::AnnotateChannel(
       aChannel, flags,
       nsIWebProgressListener::STATE_LOADED_FINGERPRINTING_CONTENT);
 

@@ -9,11 +9,8 @@ const PERMISSIONS_URL =
 const TRACKING_URL = "https://example.com";
 
 async function openETPExceptionsDialog(doc) {
-  let buttonId = SRD_PREF_VALUE
-    ? "etpManageExceptionsButton"
-    : "trackingProtectionExceptions";
-  let exceptionsButton = doc.getElementById(buttonId);
-  ok(exceptionsButton, `${buttonId} button found`);
+  let exceptionsButton = doc.getElementById("trackingProtectionExceptions");
+  ok(exceptionsButton, "trackingProtectionExceptions button found");
   let dialogPromise = promiseLoadSubDialog(PERMISSIONS_URL);
   exceptionsButton.click();
   let dialog = await dialogPromise;
@@ -29,9 +26,8 @@ async function addETPPermission(doc) {
 
   url.value = TRACKING_URL;
   url.dispatchEvent(new Event("input", { bubbles: true }));
-  await buttonDisableETP.updateComplete;
   is(
-    buttonDisableETP.disabled,
+    buttonDisableETP.hasAttribute("disabled"),
     false,
     "Disable ETP button is selectable after url is entered"
   );
@@ -57,9 +53,8 @@ async function removeETPPermission(doc) {
   permissionsBox.selectItem(elements[0]);
   let removePermissionButton =
     dialog.document.getElementById("removePermission");
-  await removePermissionButton.updateComplete;
   is(
-    removePermissionButton.disabled,
+    removePermissionButton.hasAttribute("disabled"),
     false,
     "The button should be clickable to remove selected item"
   );
@@ -86,8 +81,7 @@ async function checkShieldIcon(shieldIcon) {
 
 // test adds and removes an ETP permission via the about:preferences#privacy and checks if the ProtectionsUI shield icon resembles the state
 add_task(async function ETPPermissionSyncedFromPrivacyPane() {
-  let pane = SRD_PREF_VALUE ? "etp" : "panePrivacy";
-  await openPreferencesViaOpenPreferencesAPI(pane, {
+  await openPreferencesViaOpenPreferencesAPI("panePrivacy", {
     leaveOpen: true,
   });
   let win = gBrowser.selectedBrowser.contentWindow;

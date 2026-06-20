@@ -18,8 +18,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::{CONTEXT, EXCEPTION_RECORD};
 
 use crate::{
     breakpad::Pid, ipc_connector::CONNECTOR_ANCILLARY_DATA_LEN,
-    platform::PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN, AncillaryData, BreakpadString, GeckoChildId,
-    ProcessHandle,
+    platform::CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN, AncillaryData, BreakpadString, GeckoChildId,
 };
 
 #[derive(Debug, Error)]
@@ -73,10 +72,12 @@ pub enum Kind {
     /// to talk to the crash helper. This is sent from the main process to the
     /// crash helper.
     RegisterChildProcess = 10,
-    /// Message sent by all processes checking-in with the crash helper. After
-    /// this message has been received the crash helper is capable of dumping
-    /// the sending process.
-    ProcessRendezVous = 11,
+    /// Message sent by the crash helper to rendez-vous with a newly-createdù
+    /// child process.
+    ChildProcessRendezVous = 11,
+    /// Reply to a `ChildProcessRendezVous` message sent by a child after
+    /// preparing itself for being dumped.
+    ChildProcessRendezVousReply = 12,
 }
 
 // Bytes helpers to serialize/deserialize values not supported directly by the
@@ -714,16 +715,14 @@ impl Message for UnregisterAuxvInfo {
  * endpoint which the crash helper will use to talk to the child. */
 
 pub struct RegisterChildProcess {
-    pub id: GeckoChildId,
     pub ancillary_data: [AncillaryData; CONNECTOR_ANCILLARY_DATA_LEN],
 }
 
 impl RegisterChildProcess {
     pub fn new(
-        id: GeckoChildId,
         ancillary_data: [AncillaryData; CONNECTOR_ANCILLARY_DATA_LEN],
     ) -> RegisterChildProcess {
-        RegisterChildProcess { id, ancillary_data }
+        RegisterChildProcess { ancillary_data }
     }
 }
 
@@ -733,7 +732,7 @@ impl Message for RegisterChildProcess {
     }
 
     fn payload_size(&self) -> usize {
-        size_of::<GeckoChildId>()
+        0
     }
 
     fn ancillary_data_len(&self) -> usize {
@@ -742,21 +741,15 @@ impl Message for RegisterChildProcess {
 
     fn encode(self) -> (Bytes, Bytes, Vec<AncillaryData>) {
         let header = Header::encode(Self::kind(), self.payload_size());
-        let mut payload = BytesMut::with_capacity(self.payload_size());
+        let payload = Bytes::new();
 
-        payload.put_i32_ne(self.id);
-
-        (header, payload.freeze(), self.ancillary_data.into())
+        (header, payload, self.ancillary_data.into())
     }
 
     fn decode(
-        data: Vec<u8>,
+        _data: Vec<u8>,
         ancillary_data: Vec<AncillaryData>,
     ) -> Result<RegisterChildProcess, MessageError> {
-        let mut data = Bytes::from(data);
-
-        let id = data.try_get_i32_ne()?;
-
         let mut iter = ancillary_data.into_iter();
         #[cfg(any(target_os = "ios", target_os = "macos"))]
         let ancillary_data: [AncillaryData; CONNECTOR_ANCILLARY_DATA_LEN] = {
@@ -768,64 +761,98 @@ impl Message for RegisterChildProcess {
         let ancillary_data: [AncillaryData; CONNECTOR_ANCILLARY_DATA_LEN] =
             [iter.next().ok_or(MessageError::MissingAncillary)?];
 
-        Ok(RegisterChildProcess { id, ancillary_data })
+        Ok(RegisterChildProcess { ancillary_data })
     }
 }
 
-/* Message sent by all processes checking-in with the crash helper. After
- * this message has been received the crash helper is capable of dumping. The
- * message contains information on whether the sending process managed to set
- * itself up for being dumped, its PID plus platform-specific information that
- * might be needed by the crash helper to dump it. */
+/* Message sent from the crash helper process to a newly registered child
+ * process. The child will prepare itself for being dumped by the crash helper
+ * after receiving this message, and then reply to inform the crash helper
+ * that it is now possible to dump it. */
 
-pub struct ProcessRendezVous {
+pub struct ChildProcessRendezVous {
+    pub crash_helper_pid: Pid,
+}
+
+impl ChildProcessRendezVous {
+    pub fn new(pid: Pid) -> ChildProcessRendezVous {
+        ChildProcessRendezVous {
+            crash_helper_pid: pid,
+        }
+    }
+}
+
+impl Message for ChildProcessRendezVous {
+    fn kind() -> Kind {
+        Kind::ChildProcessRendezVous
+    }
+
+    fn payload_size(&self) -> usize {
+        size_of::<Pid>()
+    }
+
+    fn ancillary_data_len(&self) -> usize {
+        0
+    }
+
+    fn encode(self) -> (Bytes, Bytes, Vec<AncillaryData>) {
+        let header = Header::encode(Self::kind(), self.payload_size());
+        let mut payload = BytesMut::with_capacity(self.payload_size());
+
+        payload.put_pid_ne(self.crash_helper_pid);
+
+        (header, payload.freeze(), vec![])
+    }
+
+    fn decode(
+        data: Vec<u8>,
+        ancillary_data: Vec<AncillaryData>,
+    ) -> Result<ChildProcessRendezVous, MessageError> {
+        if !ancillary_data.is_empty() {
+            return Err(MessageError::UnexpectedAncillaryData);
+        }
+
+        let mut data = Bytes::from(data);
+        let pid = data.try_get_pid_ne()?;
+
+        Ok(ChildProcessRendezVous {
+            crash_helper_pid: pid,
+        })
+    }
+}
+
+/* Reply sent by a child process to the crash helper process after receiving
+ * a ChildProcessRendezVous message. The message contains information on
+ * whether the child process managed to set itself up for being dumped, its
+ * PID plus platform-specific information that might be needed by the parent to
+ * dump it. */
+
+pub struct ChildProcessRendezVousReply {
     pub dumpable: bool,
     pub child_pid: Pid,
     pub id: GeckoChildId,
-    pub ancillary_data: [AncillaryData; PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN],
+    pub ancillary_data: [AncillaryData; CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN],
 }
 
-impl ProcessRendezVous {
+impl ChildProcessRendezVousReply {
     pub fn new(
         dumpable: bool,
         child_pid: Pid,
         id: GeckoChildId,
-        ancillary_data: [AncillaryData; PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN],
-    ) -> ProcessRendezVous {
-        ProcessRendezVous {
+        ancillary_data: [AncillaryData; CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN],
+    ) -> ChildProcessRendezVousReply {
+        ChildProcessRendezVousReply {
             dumpable,
             child_pid,
             id,
             ancillary_data,
         }
     }
-
-    pub fn get_process_handle(self) -> ProcessHandle {
-        #[cfg(target_os = "windows")]
-        {
-            let handle = self.ancillary_data.into_iter().next().unwrap();
-            ProcessHandle(handle)
-        }
-        #[cfg(any(target_os = "android", target_os = "linux"))]
-        {
-            ProcessHandle(self.child_pid)
-        }
-        #[cfg(any(target_os = "ios", target_os = "macos"))]
-        {
-            let task_right = self.ancillary_data.into_iter().next().unwrap();
-            match task_right {
-                crate::MachPortRight::Send(task_right) => task_right,
-                _ => {
-                    panic!("Wrong task right was provided")
-                }
-            }
-        }
-    }
 }
 
-impl Message for ProcessRendezVous {
+impl Message for ChildProcessRendezVousReply {
     fn kind() -> Kind {
-        Kind::ProcessRendezVous
+        Kind::ChildProcessRendezVousReply
     }
 
     fn payload_size(&self) -> usize {
@@ -833,7 +860,7 @@ impl Message for ProcessRendezVous {
     }
 
     fn ancillary_data_len(&self) -> usize {
-        PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN
+        CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN
     }
 
     fn encode(self) -> (Bytes, Bytes, Vec<AncillaryData>) {
@@ -850,11 +877,11 @@ impl Message for ProcessRendezVous {
     fn decode(
         data: Vec<u8>,
         ancillary_data: Vec<AncillaryData>,
-    ) -> Result<ProcessRendezVous, MessageError> {
+    ) -> Result<ChildProcessRendezVousReply, MessageError> {
         #[allow(clippy::absurd_extreme_comparisons)]
-        if ancillary_data.len() < PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN {
+        if ancillary_data.len() < CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN {
             return Err(MessageError::MissingAncillary);
-        } else if ancillary_data.len() > PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN {
+        } else if ancillary_data.len() > CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN {
             return Err(MessageError::UnexpectedAncillaryData);
         }
 
@@ -864,7 +891,7 @@ impl Message for ProcessRendezVous {
         let id = data.try_get_i32_ne()?;
         let ancillary_data = ancillary_data.try_into().unwrap();
 
-        Ok(ProcessRendezVous {
+        Ok(ChildProcessRendezVousReply {
             dumpable,
             child_pid,
             id,

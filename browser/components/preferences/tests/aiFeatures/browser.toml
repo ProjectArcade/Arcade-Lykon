@@ -1,8 +1,4 @@
 [DEFAULT]
-dupe-manifest=true
-prefs = [
-  "browser.settings-redesign.enabled=false",
-]
 support-files = [
   "head.js",
   "../head.js",
@@ -24,11 +20,7 @@ tags = "os_integration"
 
 ["browser_aiFeatures_smart_window_memories.js"]
 
-["browser_aiFeatures_smart_window_model_selection.js"]
-
-["browser_aiFeatures_smart_window_model_selection_custom.js"]
-
-["browser_aiFeatures_smart_window_model_settings_custom.js"]
+["browser_aiFeatures_smart_window_model_settings.js"]
 
 ["browser_aiFeatures_smart_window_telemetry.js"]
 

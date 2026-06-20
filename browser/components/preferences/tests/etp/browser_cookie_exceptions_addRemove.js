@@ -36,7 +36,7 @@ function checkCookiesDialog(dialog) {
   ok(!cancelBtn.hidden, "cancelButton found");
 }
 
-async function addNewPermission(websiteAddress, dialog) {
+function addNewPermission(websiteAddress, dialog) {
   let url = dialog.document.getElementById("url");
   let buttonDialog = dialog.document.getElementById("btnBlock");
   let permissionsBox = dialog.document.getElementById("permissionsBox");
@@ -44,9 +44,8 @@ async function addNewPermission(websiteAddress, dialog) {
 
   url.value = websiteAddress;
   url.dispatchEvent(new Event("input", { bubbles: true }));
-  await buttonDialog.updateComplete;
   is(
-    buttonDialog.disabled,
+    buttonDialog.hasAttribute("disabled"),
     false,
     "When the user add an url the button should be clickable"
   );
@@ -61,28 +60,26 @@ async function addNewPermission(websiteAddress, dialog) {
 
 async function cleanList(dialog) {
   let removeAllButton = dialog.document.getElementById("removeAllPermissions");
-  await removeAllButton.updateComplete;
-  if (!removeAllButton.disabled) {
+  if (!removeAllButton.hasAttribute("disabled")) {
     removeAllButton.click();
   }
 }
 
-async function addData(websites, dialog) {
+function addData(websites, dialog) {
   for (let website of websites) {
-    await addNewPermission(website, dialog);
+    addNewPermission(website, dialog);
   }
 }
 
-async function deletePermission(permission, dialog) {
+function deletePermission(permission, dialog) {
   let permissionsBox = dialog.document.getElementById("permissionsBox");
   let elements = permissionsBox.getElementsByAttribute("origin", permission);
   is(elements.length, 1, "It should find only one entry");
   permissionsBox.selectItem(elements[0]);
   let removePermissionButton =
     dialog.document.getElementById("removePermission");
-  await removePermissionButton.updateComplete;
   is(
-    removePermissionButton.disabled,
+    removePermissionButton.hasAttribute("disabled"),
     false,
     "The button should be clickable to remove selected item"
   );
@@ -124,7 +121,7 @@ async function runTest(test, websites, doc) {
   checkCookiesDialog(dialog);
 
   if (test.needPreviousData) {
-    await addData(websites, dialog);
+    addData(websites, dialog);
     save(dialog);
     dialog = await openCookiesDialog(doc);
   }
@@ -132,10 +129,10 @@ async function runTest(test, websites, doc) {
   for (let step of test.steps) {
     switch (step) {
       case "addNewPermission":
-        await addNewPermission(test.newData, dialog);
+        addNewPermission(test.newData, dialog);
         break;
       case "deletePermission":
-        await deletePermission(test.newData, dialog);
+        deletePermission(test.newData, dialog);
         break;
       case "deleteAllPermission":
         await cleanList(dialog);

@@ -389,19 +389,8 @@ class BrowserLanguageRemoteLocalesSetting extends Preferences.AsyncSetting {
   /** @type {Promise<RemoteLocale[]> | null} */
   #cache = null;
 
-  #languagesLoaded = false;
-
   setup() {
     this.#multilingualDownloadEnabled.on("change", this.emitChange);
-    /** @param {CustomEvent} e */
-    const onPaneshown = e => {
-      if (e.detail.category == "paneLanguages") {
-        this.#languagesLoaded = true;
-        this.emitChange();
-        window.removeEventListener("paneshown", onPaneshown);
-      }
-    };
-    window.addEventListener("paneshown", onPaneshown);
     return () =>
       this.#multilingualDownloadEnabled.off("change", this.emitChange);
   }
@@ -413,7 +402,7 @@ class BrowserLanguageRemoteLocalesSetting extends Preferences.AsyncSetting {
   /** @returns {Promise<RemoteLocale[]>} */
   // @ts-expect-error Arrays aren't typed currently.
   async get() {
-    if (!this.#multilingualDownloadEnabled.value || !this.#languagesLoaded) {
+    if (!this.#multilingualDownloadEnabled.value) {
       return [];
     }
     if (!this.#cache) {
@@ -662,14 +651,15 @@ Preferences.addSetting({
   id: "websiteLanguageWrapper",
   deps: ["acceptLanguages"],
   onUserReorder(event, deps) {
+    const { draggedIndex, targetIndex } = event.detail;
+
     let re = /\s*(?:,|$)\s*/;
-    let languages = /**@type {string} */ (deps.acceptLanguages.value)
-      .split(re)
-      .filter(lang => lang);
-    languages = /** @type {MozBoxGroup} */ (event.target).reorderArrayFromEvent(
-      languages,
-      event
-    );
+    let languages = deps.acceptLanguages.value.split(re).filter(lang => lang);
+
+    const [draggedLang] = languages.splice(draggedIndex, 1);
+
+    languages.splice(targetIndex, 0, draggedLang);
+
     deps.acceptLanguages.value = languages.join(",");
   },
   getControlConfig(config, deps) {
@@ -933,7 +923,6 @@ SettingGroupManager.registerGroups({
   },
   translations: {
     inProgress: true,
-    subcategory: "translations",
     l10nId: "settings-translations-header",
     iconSrc: "chrome://browser/skin/translations.svg",
     supportPage: "website-translation",
@@ -945,7 +934,6 @@ SettingGroupManager.registerGroups({
       },
       {
         id: "translationsManageButton",
-        loadPane: "translations",
         l10nId: "settings-translations-more-settings-button",
         control: "moz-box-button",
       },

@@ -1,14 +1,13 @@
 [DEFAULT]
-dupe-manifest=true
-prefs = [
-  "browser.settings-redesign.enabled=false",
-]
 support-files = [
   "head.js",
+  "../head.js",
 ]
 tags = "os_integration"
 
 ["browser_moreFromMozilla.js"]
+
+["browser_moreFromMozilla_config.js"]
 
 ["browser_moreFromMozilla_locales.js"]
 

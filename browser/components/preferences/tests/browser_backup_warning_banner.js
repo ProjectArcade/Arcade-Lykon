@@ -57,7 +57,7 @@ add_task(async function test_banner_visible_when_other_profiles_have_backup() {
 
   await SpecialPowers.pushPrefEnv({
     set: [
-      [ENABLED_ON_PROFILES_PREF, JSON.stringify(["other"])],
+      [ENABLED_ON_PROFILES_PREF, JSON.stringify({ other: true })],
       [UPLOAD_ENABLED_PREF, true],
     ],
   });
@@ -97,7 +97,7 @@ add_task(
     mockCurrentProfile("my-profile");
 
     await SpecialPowers.pushPrefEnv({
-      set: [[ENABLED_ON_PROFILES_PREF, JSON.stringify(["my-profile"])]],
+      set: [[ENABLED_ON_PROFILES_PREF, JSON.stringify({ "my-profile": true })]],
     });
 
     await openPreferencesViaOpenPreferencesAPI("panePrivacy", {
@@ -122,7 +122,7 @@ add_task(async function test_banner_hidden_when_no_profiles_enabled() {
   mockCurrentProfile("my-profile");
 
   await SpecialPowers.pushPrefEnv({
-    set: [[ENABLED_ON_PROFILES_PREF, "[]"]],
+    set: [[ENABLED_ON_PROFILES_PREF, "{}"]],
   });
 
   await openPreferencesViaOpenPreferencesAPI("panePrivacy", {
@@ -149,7 +149,10 @@ add_task(async function test_banner_shows_on_data_collection_pref_change() {
 
   await SpecialPowers.pushPrefEnv({
     set: [
-      [ENABLED_ON_PROFILES_PREF, JSON.stringify(["my-profile", "other"])],
+      [
+        ENABLED_ON_PROFILES_PREF,
+        JSON.stringify({ "my-profile": true, other: true }),
+      ],
       [UPLOAD_ENABLED_PREF, true],
     ],
   });
@@ -197,7 +200,10 @@ add_task(
 
     await SpecialPowers.pushPrefEnv({
       set: [
-        [ENABLED_ON_PROFILES_PREF, JSON.stringify(["my-profile", "other"])],
+        [
+          ENABLED_ON_PROFILES_PREF,
+          JSON.stringify({ "my-profile": true, other: true }),
+        ],
         [UPLOAD_ENABLED_PREF, true],
       ],
     });

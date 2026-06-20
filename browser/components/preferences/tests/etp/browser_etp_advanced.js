@@ -17,6 +17,7 @@ const PERMISSIONS_DIALOG_URL =
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
     set: [
+      ["browser.settings-redesign.enabled", true],
       ["privacy.trackingprotection.allow_list.hasMigratedCategoryPrefs", true],
     ],
   });
@@ -105,7 +106,7 @@ add_task(async function test_etp_category_radios_and_customize_navigation() {
   synthesizeClick(customizeButton);
   await paneShown;
   is(
-    win.gLastCategory?.category,
+    win.history.state,
     "paneEtpCustomize",
     "Customize button navigated to the ETP custom pane"
   );
@@ -151,7 +152,7 @@ add_task(async function test_reload_tabs_message_bar() {
   await prefChange;
 
   info("Wait for message bar to become visible");
-  await TestUtils.waitForCondition(
+  await BrowserTestUtils.waitForCondition(
     () => BrowserTestUtils.isVisible(reloadTabsHint),
     "Waiting for reload tabs message bar to become visible"
   );
@@ -167,7 +168,7 @@ add_task(async function test_reload_tabs_message_bar() {
   info("Click reload button to hide the message bar");
   synthesizeClick(reloadButton);
 
-  await TestUtils.waitForCondition(
+  await BrowserTestUtils.waitForCondition(
     () => BrowserTestUtils.isHidden(reloadTabsHint),
     "Waiting for reload tabs message bar to become hidden"
   );

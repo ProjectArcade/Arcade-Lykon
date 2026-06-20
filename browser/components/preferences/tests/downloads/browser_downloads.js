@@ -6,41 +6,9 @@
 let { TelemetryTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/TelemetryTestUtils.sys.mjs"
 );
-
 const { MockFilePicker } = SpecialPowers;
 
-/**
- * Asserts the UI telemetry for the element
- * that matches the provided ID depending on whether
- * the `browser.settings-redesign.enabled` pref is enabled.
- *
- * @param {string} id - ID of element to check
- * @param {number} count - The amount of times the telemetry should have been triggered
- * @param {string} message - Assertion message
- */
-async function assertTelemetry(id, count, message) {
-  if (SpecialPowers.getBoolPref("browser.settings-redesign.enabled", false)) {
-    await Services.fog.testFlushAllChildren();
-    Assert.equal(
-      Glean.browserUiInteraction.preferencesPaneDownloads[id].testGetValue(),
-      count,
-      message
-    );
-  } else {
-    TelemetryTestUtils.assertKeyedScalar(
-      TelemetryTestUtils.getProcessScalars("parent", true, false),
-      "browser.ui.interaction.preferences_paneGeneral",
-      id,
-      count
-    );
-  }
-}
-
 add_task(async function testSelectDownloadDir() {
-  await Services.fog.testFlushAllChildren();
-  Services.fog.testResetFOG();
-  Services.telemetry.clearScalars();
-
   // Setup
   const tempDirPath = await IOUtils.createUniqueDirectory(
     PathUtils.tempDir,
@@ -57,7 +25,11 @@ add_task(async function testSelectDownloadDir() {
       ["browser.download.dir", downloadsDirPath],
     ],
   });
-  await openDownloadsOrPreferencesPane();
+
+  // Open preferences pane
+  await openPreferencesViaOpenPreferencesAPI("general", {
+    leaveOpen: true,
+  });
 
   let win = gBrowser.selectedBrowser.contentWindow;
   let doc = gBrowser.contentDocument;
@@ -133,10 +105,11 @@ add_task(async function testSelectDownloadDir() {
   );
 
   // Assert telemetry after first interaction
-  await assertTelemetry(
+  TelemetryTestUtils.assertKeyedScalar(
+    TelemetryTestUtils.getProcessScalars("parent", true, false),
+    "browser.ui.interaction.preferences_paneGeneral",
     "chooseFolder",
-    1,
-    "chooseFolder interaction should be recorded once"
+    1
   );
 
   // Select Downloads again
@@ -153,10 +126,11 @@ add_task(async function testSelectDownloadDir() {
   );
 
   // Reassert telemetry
-  await assertTelemetry(
+  TelemetryTestUtils.assertKeyedScalar(
+    TelemetryTestUtils.getProcessScalars("parent", true, true),
+    "browser.ui.interaction.preferences_paneGeneral",
     "chooseFolder",
-    2,
-    "chooseFolder interaction should be recorded twice"
+    2
   );
 
   // Cleanup

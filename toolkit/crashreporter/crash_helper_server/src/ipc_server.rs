@@ -2,17 +2,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use crash_helper_common::{
-    messages::{self, Header, Message, ProcessRendezVous},
+    messages::{self, ChildProcessRendezVousReply, Header, Message},
     AncillaryData, GeckoChildId, IPCConnector, IPCConnectorKey, IPCEvent, IPCListener, IPCQueue,
     Pid, ProcessHandle,
 };
-use std::{collections::HashMap, ffi::OsString, mem, rc::Rc, sync::Mutex};
+use std::{collections::HashMap, ffi::OsString, mem, process, rc::Rc, sync::Mutex};
 
 use crate::{
     breakpad_crash_generator::BreakpadCrashGenerator, crash_generation::CrashGenerator,
-    finalize_breakpad_minidump, platform, BreakpadData,
+    finalize_breakpad_minidump, BreakpadData,
 };
 
 #[derive(PartialEq)]
@@ -35,14 +35,17 @@ enum IPCEndpoint {
 struct ProcessId {
     /// The pid of a process.
     pid: Pid,
-    #[allow(unused)]
-    /// A handle natively representing a process.
-    handle: ProcessHandle,
+    /// The Gecko-assigned ID of a process.
+    id: GeckoChildId,
 }
 
 impl ProcessId {
-    fn new(pid: Pid, handle: ProcessHandle) -> ProcessId {
-        ProcessId { pid, handle }
+    fn for_child(pid: Pid, id: GeckoChildId) -> ProcessId {
+        ProcessId { pid, id }
+    }
+
+    fn for_parent(pid: Pid) -> ProcessId {
+        ProcessId { pid, id: 0 }
     }
 }
 
@@ -51,14 +54,18 @@ struct IPCConnection {
     connector: Rc<IPCConnector>,
     /// The type of process on the other side of this connection
     endpoint: IPCEndpoint,
-    /// The Gecko-assigned id of this process. This has a 0 value for the main
-    /// process and `None`` for external connections.
-    id: Option<GeckoChildId>,
-    /// The native identifiers of a process, this is the pid plus a
-    /// platform-dependent type. It is `None` upon child process registration
-    /// then gets populated by a `ProcessRendezVous` message. It remains as
-    /// `None` for external processes.
+    /// The identifier of the process at the other end of this connection.
+    /// This is `None` for external processes or the Breakpad crash generator
+    /// and is set to some value for all other processes that have
+    /// successfully rendez-vous'd with the crash helper. In that case the pid
+    /// will be the `pid`` of the connected process and the `id` will be the
+    /// Gecko-assigned child ID for child proceses or 0 for the main process.
     process: Option<ProcessId>,
+    #[allow(dead_code)]
+    /// Platform-specific data associated with this connection. Currently used
+    /// on macOS/iOS to store the send right to the mach task on the other end
+    /// of this connection.
+    process_handle: Option<ProcessHandle>,
 }
 
 pub(crate) struct IPCServer {
@@ -76,27 +83,12 @@ pub(crate) struct IPCServer {
 impl IPCServer {
     pub(crate) fn new(
         client_pid: Pid,
-        client_handle: Option<ProcessHandle>,
         listener: IPCListener,
         connector: IPCConnector,
         breakpad_data: BreakpadData,
         minidump_path: OsString,
-        build_id: String,
     ) -> Result<IPCServer> {
-        // If the client process handle was not provided at launch then it will
-        // be sent by the client using a regular `ProcessRendezVous` message.
-        let client_handle = match client_handle {
-            Some(handle) => handle,
-            None => connector
-                .recv_reply::<ProcessRendezVous>()
-                .context("Client failed to rendez-vous")?
-                .get_process_handle(),
-        };
-
-        let crash_generator = Box::new(Mutex::new(CrashGenerator::new(
-            minidump_path.clone(),
-            build_id,
-        )));
+        let crash_generator = Box::new(Mutex::new(CrashGenerator::new(minidump_path.clone())));
 
         // SAFETY: We widen the lifetime of this crash generator reference
         // as we guarantee that the underlying object will outlive the Breakpad
@@ -124,11 +116,10 @@ impl IPCServer {
             IPCConnection {
                 connector,
                 endpoint: IPCEndpoint::Parent,
-                id: Some(0),
-                process: Some(ProcessId {
-                    pid: client_pid,
-                    handle: client_handle,
-                }),
+                process: Some(ProcessId::for_parent(client_pid)),
+                // TODO: This needs to be populated when we move main process
+                // crash generation OOP.
+                process_handle: None,
             },
         );
 
@@ -151,8 +142,8 @@ impl IPCServer {
                         IPCConnection {
                             connector,
                             endpoint: IPCEndpoint::External,
-                            id: None,
                             process: None,
+                            process_handle: None,
                         },
                     );
                 }
@@ -171,11 +162,12 @@ impl IPCServer {
                         .expect("Disconnection event but no corresponding connection");
 
                     if let Some(process) = connection.process {
-                        // `connection.id` always contains a value if `process` did.
                         self.generator
                             .lock()
                             .unwrap()
-                            .move_report_to_id(process.pid, connection.id.unwrap());
+                            .move_report_to_id(process.pid, process.id);
+                    } else {
+                        log::error!("TODO");
                     }
 
                     if connection.endpoint == IPCEndpoint::Parent {
@@ -239,7 +231,27 @@ impl IPCServer {
                 }
                 messages::Kind::RegisterChildProcess => {
                     let message = messages::RegisterChildProcess::decode(data, ancillary_data)?;
-                    self.register_child_process(message)?;
+                    let connector = IPCConnector::from_ancillary(message.ancillary_data)?;
+                    connector.send_message(messages::ChildProcessRendezVous::new(
+                        process::id() as Pid
+                    ))?;
+                    let reply = connector.recv_reply::<messages::ChildProcessRendezVousReply>()?;
+
+                    if !reply.dumpable {
+                        bail!("Child process {} is not dumpable", reply.child_pid);
+                    }
+
+                    let connector = Rc::new(connector);
+                    self.queue.add_connector(&connector)?;
+                    self.connections.insert(
+                        connector.key(),
+                        IPCConnection {
+                            connector,
+                            endpoint: IPCEndpoint::Child,
+                            process: Some(ProcessId::for_child(reply.child_pid, reply.id)),
+                            process_handle: get_process_handle(reply)?,
+                        },
+                    );
                 }
                 #[cfg(any(target_os = "android", target_os = "linux"))]
                 messages::Kind::RegisterAuxvInfo => {
@@ -253,19 +265,6 @@ impl IPCServer {
                         .lock()
                         .unwrap()
                         .unregister_auxv_info(message)?;
-                }
-                #[cfg(target_os = "windows")]
-                messages::Kind::ProcessRendezVous => {
-                    let message = messages::ProcessRendezVous::decode(data, ancillary_data)?;
-                    for connection in self.connections.values_mut() {
-                        if connection.id.is_some_and(|value| value == message.id) {
-                            connection.process = Some(ProcessId {
-                                pid: message.child_pid,
-                                handle: message.get_process_handle(),
-                            });
-                            break;
-                        }
-                    }
                 }
                 kind => {
                     bail!("Unexpected message {kind:?} from parent process");
@@ -301,51 +300,38 @@ impl IPCServer {
         Ok(())
     }
 
-    fn register_child_process(&mut self, message: messages::RegisterChildProcess) -> Result<()> {
-        let connector = IPCConnector::from_ancillary(message.ancillary_data)?;
-
-        let process = if platform::PROXY_RENDEZ_VOUS {
-            None
-        } else {
-            let reply = connector.recv_reply::<messages::ProcessRendezVous>()?;
-
-            if !reply.dumpable {
-                bail!("Child process {} is not dumpable", reply.id);
-            }
-
-            if reply.id != message.id {
-                bail!(
-                    "Child process id {} does not match the one sent from the parent {}",
-                    reply.id,
-                    message.id
-                );
-            }
-
-            Some(ProcessId::new(reply.child_pid, reply.get_process_handle()))
-        };
-
-        let connector = Rc::new(connector);
-        self.queue.add_connector(&connector)?;
-        self.connections.insert(
-            connector.key(),
-            IPCConnection {
-                connector,
-                endpoint: IPCEndpoint::Child,
-                id: Some(message.id),
-                process,
-            },
-        );
-
-        Ok(())
-    }
-
+    #[allow(dead_code)]
     fn find_pid(&self, id: GeckoChildId) -> Option<Pid> {
         for connection in self.connections.values() {
-            if connection.id.is_some_and(|value| value == id) {
-                return connection.process.as_ref().map(|p| p.pid);
+            if let Some(process) = connection.process.as_ref() {
+                if process.id == id {
+                    return Some(process.pid);
+                }
             }
         }
 
         None
+    }
+}
+
+fn get_process_handle(
+    #[allow(unused)] child_rendezvous: ChildProcessRendezVousReply,
+) -> Result<Option<ProcessHandle>> {
+    #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+    {
+        Ok(None)
+    }
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    {
+        // HACK: For some reason `.into_iter()` doesn't work here, it yields
+        // references instead of owned objects so I have to go through an array
+        // to take hold of the send right.
+        let mut vector: Vec<AncillaryData> = child_rendezvous.ancillary_data.into();
+        let ancillary_data = vector.pop().unwrap();
+        if let crash_helper_common::MachPortRight::Send(task_right) = ancillary_data {
+            Ok(Some(task_right))
+        } else {
+            bail!("Wrong right has been provided");
+        }
     }
 }
