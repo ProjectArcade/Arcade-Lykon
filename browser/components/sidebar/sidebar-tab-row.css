@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+@import url("chrome://browser/skin/tabbrowser/tab.tokens.css");
+
 #fxview-tab-row-secondary-button {
   display: none;
 
@@ -43,6 +45,10 @@
   --button-outer-padding-inline: 4px;
   --button-size-icon: 24px;
   --button-min-height: 24px;
+}
+
+.fxview-tab-row-button.dismiss-button {
+  --icon-size: var(--icon-size-xsmall);
 }
 
 .attention > #fxview-tab-row-favicon::after {
@@ -109,4 +115,13 @@
   -moz-context-properties: fill;
   fill: var(--identity-icon-color);
   margin-inline-end: 8px;
+}
+
+:host([current]) {
+  @media (not (prefers-contrast)) and (-moz-pref("browser.nova.enabled")) {
+    border: 1px solid transparent;
+    background:
+      var(--tab-border-color-accent) border-box border-area,
+      var(--tab-background-color-selected) padding-box;
+  }
 }

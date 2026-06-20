@@ -39,6 +39,7 @@ import org.mozilla.fenix.navigation.DefaultNavControllerProvider
 import org.mozilla.fenix.navigation.NavControllerProvider
 import org.mozilla.fenix.theme.ThemeManager
 import org.mozilla.fenix.utils.isLargeScreenSize
+import com.google.android.material.R as materialR
 import mozilla.components.ui.icons.R as iconsR
 
 /**
@@ -110,7 +111,7 @@ fun Fragment.showToolbarWithIconButton(
 
             val item = menu.add(Menu.NONE, Menu.NONE, Menu.NONE, "")
             item.setIcon(iconResId)
-            val colorResId = ThemeManager.resolveAttribute(R.attr.textPrimary, activity)
+            val colorResId = ThemeManager.resolveAttribute(materialR.attr.colorOnSurface, activity)
             item.iconTintList = ColorStateList.valueOf(activity.getColor(colorResId))
             item.contentDescription = contentDescription
             item.setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
@@ -197,7 +198,7 @@ fun Fragment.breadcrumb(
  * When user preference allowScreenCaptureInSecureScreens is true, this function is a no-op
  */
 fun Fragment.secure() {
-    if (context?.settings()?.allowScreenCaptureInSecureScreens != true) {
+    if (!requireComponents.settings.allowScreenCaptureInSecureScreens) {
         this.activity?.window?.addFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
         )
@@ -357,6 +358,7 @@ fun Fragment.updateMicrosurveyPromptForConfigurationChange(
  * @param resId Resource ID of the dimension.
  * @return The pixel size corresponding to the given dimension resource.
  */
+@Suppress("Resources.GetDimensionPixelSizeInsteadOfPixelSizeFor")
 fun Fragment.pixelSizeFor(
     @DimenRes resId: Int,
 ) = resources.getDimensionPixelSize(resId)

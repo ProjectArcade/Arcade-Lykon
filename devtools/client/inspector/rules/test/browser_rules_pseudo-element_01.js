@@ -12,6 +12,7 @@ add_task(async function () {
   await pushPref(PSEUDO_PREF, true);
   await pushPref("dom.text_fragments.enabled", true);
   await pushPref("layout.css.modern-range-pseudos.enabled", true);
+  await pushPref("dom.select.customizable_select.enabled", true);
   await pushPref("full-screen-api.transition-duration.enter", "0 0");
   await pushPref("full-screen-api.transition-duration.leave", "0 0");
 
@@ -30,6 +31,7 @@ add_task(async function () {
   await testSlider(inspector, view);
   await testUrlFragmentTextDirective(inspector, view);
   await testDetailsContent(inspector, view);
+  await testCustomizableSelect(inspector, view);
   // keep this one last as it makes the browser go fullscreen and seem to impact other tests
   await testBackdrop(inspector, view);
 });
@@ -485,6 +487,89 @@ async function testDetailsContent(inspector, view) {
   assertHeaders(view);
 }
 
+async function testCustomizableSelect(inspector, view) {
+  const selectNodeFront = await getNodeFront("#customizable-select", inspector);
+
+  info("Test ::picker-icon for select element");
+  await selectNode(selectNodeFront, inspector);
+  await checkRuleViewContent(view, [
+    {
+      header: "Pseudo-elements",
+    },
+    {
+      selector: `#customizable-select::picker-icon`,
+      ancestorRulesData: null,
+      declarations: [{ name: "color", value: "purple" }],
+    },
+    {
+      header: "This Element",
+    },
+    {
+      selector: `element`,
+      ancestorRulesData: null,
+      selectorEditable: false,
+      declarations: [],
+    },
+    {
+      selector: `*`,
+      ancestorRulesData: null,
+      declarations: [{ name: "cursor", value: "default" }],
+    },
+    {
+      header: "Inherited from body",
+    },
+    {
+      selector: `body`,
+      ancestorRulesData: null,
+      inherited: true,
+      declarations: [{ name: "color", value: "#333" }],
+    },
+  ]);
+
+  info("Check Rule View content when selecting the ::picker-icon element");
+  const { nodes: selectChildren } =
+    await inspector.walker.children(selectNodeFront);
+  const selectPickerIconNodeFront = selectChildren[1];
+  await selectNode(selectPickerIconNodeFront, inspector, "test");
+  await checkRuleViewContent(view, [
+    {
+      selector: `#customizable-select::picker-icon`,
+      ancestorRulesData: null,
+      declarations: [{ name: "color", value: "purple" }],
+    },
+    {
+      header: "Inherited from select#customizable-select",
+    },
+    {
+      selector: `*`,
+      ancestorRulesData: null,
+      inherited: true,
+      declarations: [{ name: "cursor", value: "default" }],
+    },
+    {
+      header: "Inherited from body",
+    },
+    {
+      selector: `body`,
+      ancestorRulesData: null,
+      inherited: true,
+      declarations: [{ name: "color", value: "#333", overridden: true }],
+    },
+  ]);
+
+  info("Test ::checkmark for option element");
+  await assertPseudoElementRulesNumbersForSelector(
+    "#customizable-select-option",
+    inspector,
+    view,
+    {
+      elementRules: 3,
+      checkmarkRules: 1,
+    }
+  );
+  assertHeaders(view);
+}
+
 function convertTextPropsToString(textProps) {
   return textProps
     .map(
@@ -510,6 +595,9 @@ const PSEUDO_DICT = {
   sliderTrackRules: "::slider-track",
   targetTextRules: "::target-text",
   detailsContentRules: "::details-content",
+  pickerIconRules: "::picker-icon",
+  pickerRules: "::picker",
+  checkmarkRules: "::checkmark",
 };
 
 async function assertPseudoElementRulesNumbersForSelector(

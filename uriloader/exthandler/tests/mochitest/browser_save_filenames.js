@@ -135,6 +135,21 @@ function checkShortenedFilename(actual, expected) {
     ) {
       return true;
     }
+
+    // validateFileNameForSaving may preserve a dangerous extension (e.g.
+    // ".lnk") when truncating a long filename. This places the extension at a
+    // position in the root where the expected name has different characters.
+    // Strip that inner extension from the actual root and re-check.
+    if (actualExtension == expectedExtension) {
+      let actualRoot = actual.substring(0, actualDot);
+      let innerDot = actualRoot.lastIndexOf(".");
+      if (
+        innerDot > 0 &&
+        expected.startsWith(actualRoot.substring(0, innerDot))
+      ) {
+        return true;
+      }
+    }
   }
 
   return false;

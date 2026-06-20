@@ -6,6 +6,7 @@ package org.mozilla.fenix.ui.efficiency.helpers
 
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
+import org.mozilla.fenix.ui.efficiency.pageObjects.BookmarkSearchPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.BookmarksPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.BrowserPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.CollectionsPage
@@ -20,6 +21,7 @@ import org.mozilla.fenix.ui.efficiency.pageObjects.SearchBarComponent
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsAboutPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsAccessibilityPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsAddonsManagerPage
+import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsAppIconPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsAutofillPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsCustomizePage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsDataCollectionPage
@@ -37,6 +39,7 @@ import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsPasswordsPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsPrivateBrowsingPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsSavePasswordsPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsSavedPasswordsPage
+import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsSearchDefaultSearchEnginePage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsSearchPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsSiteSettingsExceptionsPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.SettingsSiteSettingsPage
@@ -46,9 +49,12 @@ import org.mozilla.fenix.ui.efficiency.pageObjects.ShareOverlayPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.ShortcutsPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.TabDrawerPage
 import org.mozilla.fenix.ui.efficiency.pageObjects.ToolbarComponent
+import org.mozilla.fenix.ui.efficiency.pageObjects.UnifiedTrustPanelPage
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 class PageContext(val composeRule: AndroidComposeTestRule<HomeActivityIntentTestRule, *>) {
     // Let's make sure we have them in a lexicographic order
+    val bookmarkSearch = BookmarkSearchPage(composeRule)
     val bookmarks = BookmarksPage(composeRule)
     val browserPage = BrowserPage(composeRule)
     val collections = CollectionsPage(composeRule)
@@ -64,6 +70,7 @@ class PageContext(val composeRule: AndroidComposeTestRule<HomeActivityIntentTest
     val settingsAbout = SettingsAboutPage(composeRule)
     val settingsAccessibility = SettingsAccessibilityPage(composeRule)
     val settingsAddonsManager = SettingsAddonsManagerPage(composeRule)
+    val settingsAppIcon = SettingsAppIconPage(composeRule)
     val settingsAutofill = SettingsAutofillPage(composeRule)
     val settingsCustomize = SettingsCustomizePage(composeRule)
     val settingsDataCollection = SettingsDataCollectionPage(composeRule)
@@ -81,6 +88,7 @@ class PageContext(val composeRule: AndroidComposeTestRule<HomeActivityIntentTest
     val settingsSavePasswords = SettingsSavePasswordsPage(composeRule)
     val settingsSavedPasswords = SettingsSavedPasswordsPage(composeRule)
     val settingsSearch = SettingsSearchPage(composeRule)
+    val settingsSearchDefaultSearchEngine = SettingsSearchDefaultSearchEnginePage(composeRule)
     val settingsSiteSettings = SettingsSiteSettingsPage(composeRule)
     val settingsSiteSettingsExceptions = SettingsSiteSettingsExceptionsPage(composeRule)
     val settingsTabs = SettingsTabsPage(composeRule)
@@ -89,13 +97,14 @@ class PageContext(val composeRule: AndroidComposeTestRule<HomeActivityIntentTest
     val shortcuts = ShortcutsPage(composeRule)
     val tabDrawer = TabDrawerPage(composeRule)
     val toolbar = ToolbarComponent(composeRule)
+    val unifiedTrustPanel = UnifiedTrustPanelPage(composeRule)
 
     fun initTestRule(
         skipOnboarding: Boolean = true,
         isMenuRedesignCFREnabled: Boolean = false,
         isPageLoadTranslationsPromptEnabled: Boolean = false,
     ): AndroidComposeTestRule<HomeActivityIntentTestRule, *> {
-        return AndroidComposeTestRule(
+        return AndroidComposeTestRuleV2(
             HomeActivityIntentTestRule(
                 skipOnboarding = skipOnboarding,
                 isMenuRedesignCFREnabled = isMenuRedesignCFREnabled,

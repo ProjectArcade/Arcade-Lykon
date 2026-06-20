@@ -1149,8 +1149,7 @@ void MacroAssembler::wasmMulI64WideHI64(Register lhs, Register rhs,
       MOZ_RELEASE_ASSERT(regs[i] != regs[j]);
     }
   }
-  // Require: lhs is in RAX and rhs is in RDX.  Or the other way round -- it
-  // doesn't matter since the operation is commutative.
+  // Require: lhs is in RAX and rhs is in RDX.
   MOZ_RELEASE_ASSERT(lhs == rax);
   MOZ_RELEASE_ASSERT(rhs == rdx);
   // Hence we are also assured that output != RDX and output != RAX.
@@ -1166,21 +1165,23 @@ void MacroAssembler::wasmMulI64WideHI64(Register lhs, Register rhs,
   //       temp1   holds  original RDX
   //       rdx     holds  resultHI
   //       rax     holds  resultLO
-  //   xchgq rdx, temp1
+  //   movq rdx, output
   //       temp0   holds  original RAX
-  //       temp1   holds  resultHI
-  //       rdx     holds  original RDX
+  //       temp1   holds  original RDX
+  //       rdx     holds  resultHI
   //       rax     holds  resultLO
+  //       output  holds  resultHI
   //   movq temp0, rax
   //       temp0   holds  original RAX
-  //       temp1   holds  resultHI
+  //       temp1   holds  original RDX
+  //       rdx     holds  resultHI
+  //       rax     holds  original RAX
+  //       output  holds  resultHI
+  //   movq temp1, rdx
+  //       temp0   holds  original RAX
+  //       temp1   holds  original RDX
   //       rdx     holds  original RDX
   //       rax     holds  original RAX
-  //   movq temp1, output
-  //       temp0   holds  original RAX
-  //       temp1   holds  resultHI
-  //       rdx     holds  original RDX (because output != RDX)
-  //       rax     holds  original RAX (because output != RAX)
   //       output  holds  resultHI
   movq(rax, temp0);
   movq(rdx, temp1);
@@ -1189,9 +1190,9 @@ void MacroAssembler::wasmMulI64WideHI64(Register lhs, Register rhs,
   } else {
     umulq(rdx);
   }
-  xchgq(rdx, temp1);
+  movq(rdx, output);
   movq(temp0, rax);
-  movq(temp1, output);
+  movq(temp1, rdx);
 }
 
 // ========================================================================

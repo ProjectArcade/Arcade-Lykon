@@ -46,6 +46,7 @@
 #include "nsIWebBrowserPersist.h"
 #include "nsNetUtil.h"
 #include "nsPIDOMWindow.h"
+#include "nsPIDOMWindowInlines.h"
 #include "nsQueryObject.h"
 #include "nsRange.h"
 #include "nsServiceManagerUtils.h"
@@ -332,7 +333,7 @@ void DragDataProducer::CreateLinkText(const nsAString& inURL,
   nsAutoString linkText(u"<a href=\""_ns + inURL + u"\">"_ns + inText +
                         u"</a>"_ns);
 
-  outLinkText = linkText;
+  outLinkText = std::move(linkText);
 }
 
 nsresult DragDataProducer::GetImageData(imgIContainer* aImage,

@@ -23,7 +23,6 @@ import mozilla.components.compose.base.Banner
 import mozilla.components.compose.base.BannerColors
 import mozilla.components.compose.base.button.FilledButton
 import mozilla.components.compose.base.button.TextButton
-import mozilla.components.compose.base.theme.AcornTheme
 import org.mozilla.fenix.R
 import org.mozilla.fenix.theme.FirefoxTheme
 
@@ -59,16 +58,16 @@ fun EliminatedBanner(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = AcornTheme.layout.size.static150),
+                    .padding(horizontal = FirefoxTheme.layout.size.static150),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(
-                    text = stringResource(R.string.sports_widget_remove),
+                    text = stringResource(R.string.sports_widget_skip),
                     onClick = onRemove,
                 )
 
-                Spacer(Modifier.width(AcornTheme.layout.size.static100))
+                Spacer(Modifier.width(FirefoxTheme.layout.size.static100))
 
                 FilledButton(
                     text = stringResource(R.string.sports_widget_follow_another_team),

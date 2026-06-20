@@ -388,7 +388,7 @@ class TelemetryHandler {
     this._contentHandler.init(rawProviderInfo);
     this._originalProviderInfo = rawProviderInfo;
 
-    // Now convert the regexps into
+    // Now convert the regexps into RegExp objects
     this._setSearchProviderInfo(rawProviderInfo);
 
     for (let win of Services.wm.getEnumerator("navigator:browser")) {
@@ -2079,7 +2079,7 @@ class ContentHandler {
         target: info.target,
       });
       impressionIdsWithoutEngagementsSet.delete(impressionId);
-      // In-content searches are not be categorized with a type, so they will
+      // In-content searches are not categorized with a type, so they will
       // not be picked up in the network processes.
       if (
         info.target ==

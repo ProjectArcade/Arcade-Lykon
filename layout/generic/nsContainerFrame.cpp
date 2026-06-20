@@ -14,6 +14,7 @@
 #include "mozilla/AutoRestore.h"
 #include "mozilla/ComputedStyle.h"
 #include "mozilla/PresShell.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/HTMLSummaryElement.h"
 #include "mozilla/gfx/2D.h"
@@ -854,10 +855,12 @@ void nsContainerFrame::ReflowAbsoluteFrames(nsPresContext* aPresContext,
     AbsPosReflowFlags flags{AbsPosReflowFlag::AllowFragmentation,
                             AbsPosReflowFlag::CBWidthChanged,
                             AbsPosReflowFlag::CBHeightChanged};
+    nsReflowStatus absposStatus;
     absoluteContainer->Reflow(
-        this, aPresContext, aReflowInput, aStatus,
+        this, aPresContext, aReflowInput, absposStatus,
         cbRect.GetPhysicalRect(wm, aDesiredSize.PhysicalSize()), flags,
         &aDesiredSize.mOverflowAreas);
+    aStatus.MergeCompletionStatusFrom(absposStatus);
   }
 }
 
@@ -998,7 +1001,7 @@ void nsContainerFrame::ReflowOverflowContainerChildren(
                                        aReflowInput.ComputedPhysicalSize());
       }
     }
-    ConsiderChildOverflow(aOverflowRects, frame, /* aAsIfScrolled = */ false);
+    ConsiderChildOverflow(aOverflowRects, frame, OverflowAreaUnionFlags::None);
   }
 }
 
@@ -2422,21 +2425,25 @@ bool nsContainerFrame::ShouldAvoidBreakInside(
 
 void nsContainerFrame::ConsiderChildOverflow(OverflowAreas& aOverflowAreas,
                                              nsIFrame* aChildFrame,
-                                             bool aAsIfScrolled) {
-  if (StyleDisplay()->IsContainLayout() && SupportsContainLayoutAndPaint() &&
-      !aAsIfScrolled) {
-    // If we have layout containment and are not a non-atomic, inline-level
-    // principal box, we should only consider our child's ink overflow,
-    // leaving the scrollable regions of the parent unaffected.
-    // Note: scrollable overflow is a subset of ink overflow,
-    // so this has the same affect as unioning the child's ink and
-    // scrollable overflow with the parent's ink overflow.
-    const OverflowAreas childOverflows(aChildFrame->InkOverflowRect(),
-                                       nsRect());
-    aOverflowAreas.UnionWith(childOverflows + aChildFrame->GetPosition());
+                                             OverflowAreaUnionFlags aFlags) {
+  const OverflowAreas childOverflows = [&]() -> OverflowAreas {
+    if (StyleDisplay()->IsContainLayout() && SupportsContainLayoutAndPaint() &&
+        !(aFlags & OverflowAreaUnionFlags::AsIfScrolled)) {
+      // If we have layout containment and are not a non-atomic, inline-level
+      // principal box, we should only consider our child's ink overflow,
+      // leaving the scrollable regions of the parent unaffected.
+      // Note: scrollable overflow is a subset of ink overflow,
+      // so this has the same affect as unioning the child's ink and
+      // scrollable overflow with the parent's ink overflow.
+      return OverflowAreas(aChildFrame->InkOverflowRect(), nsRect()) +
+             aChildFrame->GetPosition();
+    }
+    return aChildFrame->GetActualAndNormalOverflowAreasRelativeToParent();
+  }();
+  if (aFlags & OverflowAreaUnionFlags::ChildIsAbsPos) {
+    aOverflowAreas.UnionWithAbsoluteOverflowAreas(childOverflows);
   } else {
-    aOverflowAreas.UnionWith(
-        aChildFrame->GetActualAndNormalOverflowAreasRelativeToParent());
+    aOverflowAreas.UnionWith(childOverflows);
   }
 }
 

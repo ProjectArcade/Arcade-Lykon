@@ -16,6 +16,7 @@
 
 #include "MFCDMExtra.h"
 #include "mozilla/Assertions.h"
+#include "mozilla/EndianUtils.h"
 
 namespace mozilla {
 
@@ -84,6 +85,18 @@ inline std::string GetPrettyFunctionName(const char* aPrettyFunc) {
       (void)(0, ##__VA_ARGS__);    \
     } while (0)
 #endif
+
+// Convert a GUID (little-endian GUID byte order) to a 16-byte big-endian key
+// ID. In Media Foundation, key IDs are GUIDs but the actual key ID bytes are
+// big-endian. Data1/2/3 are stored little-endian in a GUID, so we swap them.
+inline void GuidToKeyId(const GUID& aGuid, uint8_t aKeyId[16]) {
+  GUID swapped = aGuid;
+  swapped.Data1 = NativeEndian::swapToBigEndian(aGuid.Data1);
+  swapped.Data2 = NativeEndian::swapToBigEndian(aGuid.Data2);
+  swapped.Data3 = NativeEndian::swapToBigEndian(aGuid.Data3);
+  // Data4 is already a byte array (big-endian), no swap needed.
+  memcpy(aKeyId, &swapped, 16);
+}
 
 // TODO : should we use Microsoft's definition or Chromium's defintion?
 

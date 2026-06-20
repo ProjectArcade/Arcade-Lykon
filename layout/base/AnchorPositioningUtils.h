@@ -321,11 +321,11 @@ struct AnchorPositioningUtils {
 
   static Maybe<nsRect> GetAnchorPosRect(
       const nsIFrame* aAbsoluteContainingBlock, const nsIFrame* aAnchor,
-      bool aCBRectIsvalid);
+      bool aCBRectIsValid);
 
   static Maybe<AnchorPosInfo> ResolveAnchorPosRect(
       const nsIFrame* aPositioned, const nsIFrame* aAbsoluteContainingBlock,
-      const ScopedNameRef& aAnchorName, bool aCBRectIsvalid,
+      const ScopedNameRef& aAnchorName, bool aCBRectIsValid,
       AnchorPosResolutionCache* aResolutionCache);
 
   static Maybe<nsSize> ResolveAnchorPosSize(
@@ -433,8 +433,8 @@ struct AnchorPositioningUtils {
                                      const nsIFrame* aContainingBlock);
 
   // Helper to get shadow root for a property's tree scope
-  static dom::ShadowRoot* GetShadowRootForTreeScope(
-      const nsIContent& aContent, const StyleCascadeLevel& aTreeScope);
+  static const dom::ShadowRoot* GetShadowRootForTreeScope(
+      const dom::Element& aElement, const StyleCascadeLevel& aTreeScope);
 };
 
 }  // namespace mozilla

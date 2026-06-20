@@ -29,13 +29,13 @@ import mozilla.components.support.test.whenever
 import mozilla.components.support.utils.toSafeIntent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.verify
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class CustomTabIntentProcessorTest {
@@ -76,7 +76,7 @@ class CustomTabIntentProcessorTest {
         verify(intent).putExtra(eq(EXTRA_SESSION_ID), any<String>())
 
         val customTab = store.state.findCustomTab(customTabId!!)
-        assertNotNull(customTab!!)
+        assertNotNull(customTab)
         assertEquals("http://mozilla.org", customTab.content.url)
         assertIs<Source.External.CustomTab>(customTab.source)
         assertNotNull(customTab.config)
@@ -127,7 +127,7 @@ class CustomTabIntentProcessorTest {
         verify(intent).putExtra(eq(EXTRA_SESSION_ID), any<String>())
 
         val customTab = store.state.findCustomTab(customTabId!!)
-        assertNotNull(customTab!!)
+        assertNotNull(customTab)
         assertEquals("http://mozilla.org", customTab.content.url)
         assertIs<Source.External.CustomTab>(customTab.source)
         assertNotNull(customTab.config)
@@ -171,7 +171,7 @@ class CustomTabIntentProcessorTest {
         verify(intent).putExtra(eq(EXTRA_SESSION_ID), any<String>())
 
         val customTab = store.state.findCustomTab(customTabId!!)
-        assertNotNull(customTab!!)
+        assertNotNull(customTab)
         assertEquals("http://mozilla.org", customTab.content.url)
         assertIs<Source.External.CustomTab>(customTab.source)
         assertNotNull(customTab.config)

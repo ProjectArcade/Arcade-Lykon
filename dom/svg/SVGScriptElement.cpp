@@ -38,8 +38,7 @@ NS_IMPL_ISUPPORTS_INHERITED(SVGScriptElement, SVGScriptElementBase,
 // Implementation
 
 SVGScriptElement::SVGScriptElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo,
-    FromParser aFromParser)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo, FromParser aFromParser)
     : SVGScriptElementBase(std::move(aNodeInfo)), ScriptElement(aFromParser) {
   AddMutationObserver(this);
 }
@@ -138,7 +137,7 @@ void SVGScriptElement::FreezeExecutionAttrs(const Document* aOwnerDoc) {
 
       if (!mUri) {
         AutoTArray<nsString, 2> params = {
-            isHref ? u"href"_ns : u"xlink:href"_ns, src};
+            isHref ? u"href"_ns : u"xlink:href"_ns, std::move(src)};
 
         nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "SVG"_ns,
                                         OwnerDoc(),

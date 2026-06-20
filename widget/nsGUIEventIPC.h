@@ -83,13 +83,15 @@ struct ParamTraits<mozilla::WidgetEvent> {
             ToChar(aExpectedEventClassID), ToChar(aResult->mClass),
             ToChar(aResult->mMessage))
             .c_str());
-    if (aResult->mClass == aExpectedEventClassID) [[likely]] {
+    if (aResult->mClass == aExpectedEventClassID &&
+        mozilla::IsValidMessageForIPC(aResult->mMessage, aExpectedEventClassID))
+        [[likely]] {
       return true;
     }
     // Clear mClass value to avoid the assertion failure in the destructor in
     // the debug build because it's not a fault in this process.
     aResult->mClass = mozilla::eEventClassUninitialized;
-    // Don't allow illegal mClass value.
+    // Don't allow illegal mClass/mMessage combination.
     return false;
   }
 
@@ -356,6 +358,7 @@ struct ParamTraits<mozilla::WidgetMouseEvent> {
     WriteParam(aWriter, aParam.mExitFrom);
     WriteParam(aWriter, aParam.mClickCount);
     WriteParam(aWriter, aParam.mCallbackId);
+    WriteParam(aWriter, aParam.mMovement);
 
     // Mark the event as stopped to notify callback.
     const_cast<mozilla::WidgetMouseEvent&>(aParam).mCallbackId.reset();
@@ -378,7 +381,8 @@ struct ParamTraits<mozilla::WidgetMouseEvent> {
            ReadParam(aReader, &aResult->mContextMenuTrigger) &&
            ReadParam(aReader, &aResult->mExitFrom) &&
            ReadParam(aReader, &aResult->mClickCount) &&
-           ReadParam(aReader, &aResult->mCallbackId);
+           ReadParam(aReader, &aResult->mCallbackId) &&
+           ReadParam(aReader, &aResult->mMovement);
   }
 };
 
@@ -799,7 +803,6 @@ struct ParamTraits<mozilla::WidgetSelectionEvent> {
     WriteParam(aWriter, aParam.mReversed);
     WriteParam(aWriter, aParam.mExpandToClusterBoundary);
     WriteParam(aWriter, aParam.mSucceeded);
-    WriteParam(aWriter, aParam.mUseNativeLineBreak);
   }
 
   static bool Read(MessageReader* aReader, paramType* aResult) {
@@ -809,8 +812,7 @@ struct ParamTraits<mozilla::WidgetSelectionEvent> {
            ReadParam(aReader, &aResult->mLength) &&
            ReadParam(aReader, &aResult->mReversed) &&
            ReadParam(aReader, &aResult->mExpandToClusterBoundary) &&
-           ReadParam(aReader, &aResult->mSucceeded) &&
-           ReadParam(aReader, &aResult->mUseNativeLineBreak);
+           ReadParam(aReader, &aResult->mSucceeded);
   }
 };
 

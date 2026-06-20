@@ -5,20 +5,30 @@
 #include "mozilla/dom/CSSMathSum.h"
 
 #include "mozilla/AlreadyAddRefed.h"
+#include "mozilla/Assertions.h"
 #include "mozilla/ErrorResult.h"
+#include "mozilla/NotNull.h"
 #include "mozilla/ServoStyleConsts.h"
 #include "mozilla/dom/BindingDeclarations.h"
+#include "mozilla/dom/CSSMathNegate.h"
 #include "mozilla/dom/CSSMathSumBinding.h"
 #include "mozilla/dom/CSSNumericArray.h"
+#include "mozilla/dom/CSSNumericValue.h"
 #include "mozilla/dom/CSSNumericValueBinding.h"
-#include "mozilla/dom/CSSUnitValue.h"
 #include "nsString.h"
 
 namespace mozilla::dom {
 
 CSSMathSum::CSSMathSum(nsCOMPtr<nsISupports> aParent,
                        RefPtr<CSSNumericArray> aValues)
-    : CSSMathValue(std::move(aParent), NumericValueType::MathSum),
+    : CSSMathValue(std::move(aParent), MathValueType::MathSum),
+      mValues(std::move(aValues)) {}
+
+CSSMathSum::CSSMathSum(nsCOMPtr<nsISupports> aParent,
+                       MovingNotNull<UniquePtr<StyleNumericType>> aNumericType,
+                       RefPtr<CSSNumericArray> aValues)
+    : CSSMathValue(std::move(aParent), std::move(aNumericType),
+                   MathValueType::MathSum),
       mValues(std::move(aValues)) {}
 
 // static
@@ -26,13 +36,8 @@ RefPtr<CSSMathSum> CSSMathSum::Create(nsCOMPtr<nsISupports> aParent,
                                       const StyleMathSum& aMathSum) {
   nsTArray<RefPtr<CSSNumericValue>> values;
 
-  for (const auto& value : aMathSum.values) {
-    // XXX Only supporting units for now
-    if (value.IsUnit()) {
-      const auto& unitValue = value.AsUnit();
-
-      values.AppendElement(CSSUnitValue::Create(aParent, unitValue));
-    }
+  for (const auto& value : aMathSum) {
+    values.AppendElement(CSSNumericValue::Create(aParent, value));
   }
 
   auto array = MakeRefPtr<CSSNumericArray>(aParent, std::move(values));
@@ -63,15 +68,7 @@ already_AddRefed<CSSMathSum> CSSMathSum::Constructor(
   nsTArray<RefPtr<CSSNumericValue>> values;
 
   for (const OwningCSSNumberish& arg : aArgs) {
-    RefPtr<CSSNumericValue> value;
-
-    if (arg.IsDouble()) {
-      value = MakeRefPtr<CSSUnitValue>(global, arg.GetAsDouble(), "number"_ns);
-    } else {
-      MOZ_ASSERT(arg.IsCSSNumericValue());
-
-      value = arg.GetAsCSSNumericValue();
-    }
+    RefPtr<CSSNumericValue> value = CSSNumericValue::Create(global, arg);
 
     values.AppendElement(std::move(value));
   }
@@ -83,13 +80,27 @@ already_AddRefed<CSSMathSum> CSSMathSum::Constructor(
     return nullptr;
   }
 
-  // XXX Step 3 is not yet implemented!
+  // Step 3.
+
+  nsTArray<const StyleNumericType*> numericTypes;
+  numericTypes.SetCapacity(values.Length());
+
+  for (const auto& value : values) {
+    numericTypes.AppendElement(&value->GetNumericType());
+  }
+
+  auto numericType = MakeUnique<StyleNumericType>();
+  if (!Servo_NumericType_AddTypes(&numericTypes, numericType.get())) {
+    aRv.ThrowTypeError("Incompatible types");
+    return nullptr;
+  }
 
   // Step 4.
 
   auto array = MakeRefPtr<CSSNumericArray>(global, std::move(values));
 
-  return MakeAndAddRef<CSSMathSum>(global, std::move(array));
+  return MakeAndAddRef<CSSMathSum>(
+      global, WrapMovingNotNull(std::move(numericType)), std::move(array));
 }
 
 CSSNumericArray* CSSMathSum::Values() const { return mValues; }
@@ -97,54 +108,61 @@ CSSNumericArray* CSSMathSum::Values() const { return mValues; }
 // end of CSSMathSum Web IDL implementation
 
 void CSSMathSum::ToCssTextWithProperty(const CSSPropertyId& aPropertyId,
+                                       const SerializationContext& aContext,
                                        nsACString& aDest) const {
-  aDest.Append("calc("_ns);
-
-  bool written = false;
-
-  for (const RefPtr<CSSNumericValue>& value : mValues->GetValues()) {
-    if (value->IsCSSUnitValue()) {
-      CSSUnitValue& unitValue = value->GetAsCSSUnitValue();
-
-      if (written) {
-        aDest.Append(" + "_ns);
-      }
-
-      unitValue.ToCssTextWithProperty(aPropertyId, aDest);
-      written = true;
-    }
-
-    // TODO: Add support for other objects. See bug 2012324.
+  if (!aContext.IsParenLess()) {
+    aDest.Append(aContext.IsNested() ? "("_ns : "calc("_ns);
   }
 
-  aDest.Append(")"_ns);
+  const auto& values = mValues->GetValues();
+  MOZ_DIAGNOSTIC_ASSERT(!values.IsEmpty());
+
+  values[0]->ToCssTextWithProperty(aPropertyId, SerializationContext(Nested{}),
+                                   aDest);
+
+  for (size_t index = 1; index < values.Length(); ++index) {
+    const RefPtr<CSSNumericValue>& value = values[index];
+
+    if (value->IsCSSMathValue()) {
+      CSSMathValue& mathValue = value->GetAsCSSMathValue();
+      if (mathValue.IsCSSMathNegate()) {
+        CSSMathNegate& mathNegate = mathValue.GetAsCSSMathNegate();
+
+        aDest.Append(" - "_ns);
+        mathNegate.Value()->ToCssTextWithProperty(
+            aPropertyId, SerializationContext(Nested{}), aDest);
+        continue;
+      }
+    }
+
+    aDest.Append(" + "_ns);
+    value->ToCssTextWithProperty(aPropertyId, SerializationContext(Nested{}),
+                                 aDest);
+  }
+
+  if (!aContext.IsParenLess()) {
+    aDest.Append(")"_ns);
+  }
 }
 
 StyleMathSum CSSMathSum::ToStyleMathSum() const {
   nsTArray<StyleNumericValue> values;
 
   for (const RefPtr<CSSNumericValue>& value : mValues->GetValues()) {
-    if (value->IsCSSUnitValue()) {
-      CSSUnitValue& unitValue = value->GetAsCSSUnitValue();
-
-      values.AppendElement(
-          StyleNumericValue::Unit(unitValue.ToStyleUnitValue()));
-    }
-
-    // TODO: Add support for other objects. See bug 2012324.
+    values.AppendElement(value->ToStyleNumericValue());
   }
 
   return StyleMathSum{std::move(values)};
 }
 
-const CSSMathSum& CSSNumericValue::GetAsCSSMathSum() const {
-  MOZ_DIAGNOSTIC_ASSERT(mNumericValueType == NumericValueType::MathSum);
+const CSSMathSum& CSSMathValue::GetAsCSSMathSum() const {
+  MOZ_DIAGNOSTIC_ASSERT(mMathValueType == MathValueType::MathSum);
 
   return *static_cast<const CSSMathSum*>(this);
 }
 
-CSSMathSum& CSSNumericValue::GetAsCSSMathSum() {
-  MOZ_DIAGNOSTIC_ASSERT(mNumericValueType == NumericValueType::MathSum);
+CSSMathSum& CSSMathValue::GetAsCSSMathSum() {
+  MOZ_DIAGNOSTIC_ASSERT(mMathValueType == MathValueType::MathSum);
 
   return *static_cast<CSSMathSum*>(this);
 }

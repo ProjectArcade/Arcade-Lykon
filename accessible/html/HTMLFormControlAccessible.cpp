@@ -57,8 +57,8 @@ void HTMLFormAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
               !acc->Elm()->AttrValueIs(kNameSpaceID_None,
                                        nsGkAtoms::autocomplete, nsGkAtoms::OFF,
                                        eIgnoreCase)) {
-            RefPtr<AccEvent> stateChangeEvent =
-                new AccStateChangeEvent(acc, states::SUPPORTS_AUTOCOMPLETION);
+            auto stateChangeEvent = MakeRefPtr<AccStateChangeEvent>(
+                acc, states::SUPPORTS_AUTOCOMPLETION);
             mDoc->FireDelayedEvent(stateChangeEvent);
           }
         }
@@ -879,7 +879,7 @@ void HTMLProgressAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
 
     uint64_t currState = NativeState();
     if ((aOldState ^ currState) & states::MIXED) {
-      RefPtr<AccEvent> stateChangeEvent = new AccStateChangeEvent(
+      auto stateChangeEvent = MakeRefPtr<AccStateChangeEvent>(
           this, states::MIXED, (currState & states::MIXED));
       mDoc->FireDelayedEvent(stateChangeEvent);
     }

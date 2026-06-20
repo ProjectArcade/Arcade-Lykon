@@ -21,7 +21,6 @@ import mozilla.components.support.test.whenever
 import mozilla.components.test.ReflectionUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -35,6 +34,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.robolectric.Robolectric.buildActivity
 import org.robolectric.Shadows.shadowOf
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class GeckoEngineViewTest {

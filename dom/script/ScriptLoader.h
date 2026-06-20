@@ -812,6 +812,10 @@ class ScriptLoader final : public JS::loader::ScriptLoaderInterface {
                               const Vector<uint8_t>& aCompressed);
 
  private:
+  void Decode(JSContext* aCx, JS::CompileOptions& aCompileOptions,
+              const JS::TranscodeRange& aRange, RefPtr<JS::Stencil>& aStencil,
+              ErrorResult& aRv);
+
   /**
    * Discard all disk-cache-related info for scripts queued for the disk cache.
    *
@@ -849,6 +853,8 @@ class ScriptLoader final : public JS::loader::ScriptLoaderInterface {
   void MaybeMoveToLoadedList(ScriptLoadRequest* aRequest);
 
   bool IsBeforeFCP();
+
+  bool UsesMemoryCache() const { return !!mCache; }
 
  public:
   struct DiskCacheStrategy {

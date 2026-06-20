@@ -10,6 +10,7 @@ const ICONS = {
   insecure: "chrome://browser/skin/trust-icon-insecure.svg",
   warning: "chrome://browser/skin/trust-icon-warning.svg",
   secure: "chrome://global/skin/icons/security.svg",
+  secureCustomRoot: "chrome://global/skin/icons/security-custom-root.svg",
   broken: "chrome://global/skin/icons/security-broken.svg",
   failure: "chrome://global/skin/icons/info.svg",
 };
@@ -24,7 +25,7 @@ const TESTS = [
   {
     url: "https://example.com",
     icon: ICONS.active,
-    connectionIcon: ICONS.secure,
+    connectionIcon: ICONS.secureCustomRoot,
     descriptionSection: "trustpanel-header-enabled",
   },
   {

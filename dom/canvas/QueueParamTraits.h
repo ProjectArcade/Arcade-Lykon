@@ -3,18 +3,20 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef QUEUEPARAMTRAITS_H_
-#define QUEUEPARAMTRAITS_H_ 1
+#  define QUEUEPARAMTRAITS_H_ 1
 
-#include "WebGLTypes.h"
-#include "ipc/EnumSerializer.h"
-#include "mozilla/Assertions.h"
-#include "mozilla/IntegerRange.h"
-#include "mozilla/Logging.h"
-#include "mozilla/TimeStamp.h"
-#include "mozilla/gfx/2D.h"
-#include "mozilla/ipc/ProtocolUtils.h"
-#include "nsExceptionHandler.h"
-#include "nsString.h"
+#  include <tuple>
+
+#  include "WebGLTypes.h"
+#  include "ipc/EnumSerializer.h"
+#  include "mozilla/Assertions.h"
+#  include "mozilla/IntegerRange.h"
+#  include "mozilla/Logging.h"
+#  include "mozilla/TimeStamp.h"
+#  include "mozilla/gfx/2D.h"
+#  include "mozilla/ipc/ProtocolUtils.h"
+#  include "nsExceptionHandler.h"
+#  include "nsString.h"
 
 namespace mozilla::webgl {
 
@@ -115,7 +117,7 @@ class ProducerView {
   template <typename T>
   bool WriteFromRange(const Range<const T>& src) {
     static_assert(BytesAlwaysValidT<T>::value);
-    if (MOZ_LIKELY(mOk)) {
+    if (mOk) [[likely]] {
       mOk &= mProducer->WriteFromRange(src);
     }
     return mOk;
@@ -169,9 +171,9 @@ class ConsumerView {
 
     const auto dest = AsRange(destBegin, destEnd);
     const auto view = ReadRange<T>(dest.length());
-    if (MOZ_LIKELY(view)) {
+    if (view) [[likely]] {
       const auto byteSize = ByteSize(dest);
-      if (MOZ_LIKELY(byteSize)) {
+      if (byteSize) [[likely]] {
         memcpy(dest.begin().get(), view->begin().get(), byteSize);
       }
     }
@@ -182,7 +184,9 @@ class ConsumerView {
   template <typename T>
   inline Maybe<Range<const T>> ReadRange(const size_t elemCount) {
     static_assert(BytesAlwaysValidT<T>::value);
-    if (MOZ_UNLIKELY(!mOk)) return {};
+    if (!mOk) [[unlikely]] {
+      return {};
+    }
     const auto view = mConsumer->template ReadRange<T>(elemCount);
     mOk &= bool(view);
     return view;
@@ -269,29 +273,16 @@ template <class T>
 struct QueueParamTraits_TiedFields {
   template <typename ProducerView>
   static bool Write(ProducerView& aProducerView, const T& aArg) {
-    const auto fields = TiedFields(aArg);
     static_assert(AreAllBytesTiedFields<T>(),
                   "Are there missing fields or padding between fields?");
-
-    bool ok = true;
-    MapTuple(fields, [&](const auto& field) {
-      ok &= aProducerView.WriteParam(field);
-      return true;
-    });
-    return ok;
+    return aProducerView.WriteParam(TiedFields(aArg));
   }
 
   template <typename ConsumerView>
   static bool Read(ConsumerView& aConsumerView, T* aArg) {
-    const auto fields = TiedFields(*aArg);
     static_assert(AreAllBytesTiedFields<T>());
-
-    bool ok = true;
-    MapTuple(fields, [&](auto& field) {
-      ok &= aConsumerView.ReadParam(&field);
-      return true;
-    });
-    return ok;
+    auto fields = TiedFields(*aArg);
+    return aConsumerView.ReadParam(&fields);
   }
 };
 
@@ -746,22 +737,20 @@ struct QueueParamTraits<std::tuple<T...>> {
 
   template <typename U>
   static bool Write(ProducerView<U>& aProducerView, const ParamType& aArg) {
-    bool ok = true;
-    mozilla::MapTuple(aArg, [&](const auto& field) {
-      ok &= aProducerView.WriteParam(field);
-      return true;  // ignored
-    });
-    return ok;
+    return std::apply(
+        [&](const auto&... field) {
+          return (aProducerView.WriteParam(field) && ...);
+        },
+        aArg);
   }
 
   template <typename U>
   static bool Read(ConsumerView<U>& aConsumerView, ParamType* aArg) {
-    bool ok = true;
-    mozilla::MapTuple(*aArg, [&](auto& field) {
-      ok &= aConsumerView.ReadParam(&field);
-      return true;  // ignored
-    });
-    return ok;
+    return std::apply(
+        [&](auto&... field) {
+          return (aConsumerView.ReadParam(&field) && ...);
+        },
+        *aArg);
   }
 };
 

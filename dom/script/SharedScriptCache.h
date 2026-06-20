@@ -158,6 +158,7 @@ class ScriptLoadData final
 
  public:
   ScriptLoadData(ScriptLoader* aLoader, JS::loader::ScriptLoadRequest* aRequest,
+                 CacheExpirationTime aExpirationTime,
                  JS::loader::LoadedScript* aLoadedScript);
 
   NS_DECL_ISUPPORTS

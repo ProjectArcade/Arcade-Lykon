@@ -40,6 +40,7 @@ def copy_and_update_includes(src_path, dst_path):
         "regexp-bytecode-analysis.h",
         "regexp-bytecode-peephole.h",
         "regexp-bytecodes.h",
+        "regexp-compiler.h",
         "regexp-dotprinter.h",
         "regexp-error.h",
         "regexp.h",
@@ -60,7 +61,7 @@ def copy_and_update_includes(src_path, dst_path):
     regexp_include_new = '#include "irregexp/imported'
 
     # 2. Remove includes of other V8 headers
-    other_include = re.compile('#include "src/')
+    other_include = re.compile('#include "(src|include)/')
 
     # 3. If needed, add '#include "irregexp/RegExpShim.h"'.
     #    Note: We get a little fancy to ensure that header files are

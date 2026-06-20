@@ -24,17 +24,6 @@ class ContentProviderTest {
     }
 
     @Test
-    fun `that if we fail to extract content we return a failure`() = runTest {
-        val content = ContentProvider.fromPage(
-            "",
-            { Result.failure(PageContentExtractor.Exception()) },
-            { Result.success(PageMetadata()) },
-        ).getContent().exceptionOrNull()
-
-        assertIs<PageContentExtractor.Exception>(content)
-    }
-
-    @Test
     fun `that if extracting page metadata fails we recover with default metadata`() = runTest {
         val content = ContentProvider.fromPage(
             "",
@@ -44,5 +33,18 @@ class ContentProviderTest {
 
         assertEquals("This is the page content", content.body)
         assertEquals(PageMetadata(), content.metadata)
+    }
+
+    @Test
+    fun `when the content extractor fails, the raw throwable is forwarded`() = runTest {
+        val title = "title"
+        val result = ContentProvider.fromPage(
+            pageTitle = title,
+            { Result.failure(NullPointerException("boom")) },
+            { Result.success(PageMetadata(wordCount = 500)) },
+        ).getContent().exceptionOrNull()
+
+        assertIs<NullPointerException>(result)
+        assertEquals("boom", result.message)
     }
 }

@@ -207,6 +207,42 @@ SI Float sqrt(Float v) {
 #endif
 }
 
+// NOTE: the Bool type is actually int under the hood,
+// and is used for bitwise return value masking in the
+// generated code ("ret_mask" variable).
+//
+// The ret_mask is initialized to -1 (0xffffffff), and
+// is then subsequently masked with condition results.
+//
+// If we use the boolean result directly here (0 or 1),
+// the bitwise AND ends up removing just one bit from
+// the mask, and it doesn't work.
+//
+// Taking the negative transforms 1 (single bit) into -1
+// (all bits 1), and correctly broadcasts the boolean
+// result into all bits of the ret_mask.
+//
+// If the condition is false, 0 becomes -0 which is the
+// same bit pattern for integers (all bits 0).
+
+SI Bool isnan(Float v) {
+  return (Bool){
+    -(fpclassify(v.x) == FP_NAN),
+    -(fpclassify(v.y) == FP_NAN),
+    -(fpclassify(v.z) == FP_NAN),
+    -(fpclassify(v.w) == FP_NAN)
+  };
+}
+
+SI Bool isinf(Float v) {
+  return (Bool){
+    -(fpclassify(v.x) == FP_INFINITE),
+    -(fpclassify(v.y) == FP_INFINITE),
+    -(fpclassify(v.z) == FP_INFINITE),
+    -(fpclassify(v.w) == FP_INFINITE)
+  };
+}
+
 SI float recip(float x) {
 #if USE_SSE2
   return _mm_cvtss_f32(_mm_rcp_ss(_mm_set_ss(x)));
@@ -469,6 +505,11 @@ struct vec2_scalar_ref {
   vec2_scalar_ref& operator=(const vec2_scalar& a) {
     x = a.x;
     y = a.y;
+    return *this;
+  }
+  vec2_scalar_ref& operator+=(vec2_scalar a) {
+    x += a.x;
+    y += a.y;
     return *this;
   }
   vec2_scalar_ref& operator*=(vec2_scalar a) {
@@ -800,6 +841,14 @@ SI float pow(float x, float y) { return powf(x, y); }
 
 Float pow(Float x, Float y) {
   return if_then_else((x == 0) | (x == 1), x, approx_pow2(approx_log2(x) * y));
+}
+
+vec2 pow(vec2 a, vec2 b) {
+  return vec2(pow(a.x, b.x), pow(a.y, b.y));
+}
+
+vec2_scalar pow(vec2_scalar a, vec2_scalar b) {
+  return vec2_scalar(pow(a.x, b.x), pow(a.y, b.y));
 }
 
 #define exp __glsl_exp
@@ -1593,6 +1642,13 @@ struct vec3 {
     z += a.z;
     return *this;
   }
+
+  vec3& operator*=(Float a) {
+    x *= a;
+    y *= a;
+    z *= a;
+    return *this;
+  }
 };
 
 vec3_scalar force_scalar(const vec3& v) {
@@ -1603,6 +1659,10 @@ vec3_scalar make_vec3(float n) { return vec3_scalar{n, n, n}; }
 
 vec3_scalar make_vec3(const vec2_scalar& v, float z) {
   return vec3_scalar{v.x, v.y, z};
+}
+
+vec3_scalar make_vec3(float x, const vec2_scalar& v) {
+  return vec3_scalar{x, v.x, v.y};
 }
 
 vec3_scalar make_vec3(float x, float y, float z) {

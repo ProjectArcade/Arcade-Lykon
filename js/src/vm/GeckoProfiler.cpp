@@ -178,34 +178,31 @@ void GeckoProfilerRuntime::enable(bool enabled) {
 /* Lookup the string for the function/script, creating one if necessary */
 const char* GeckoProfilerRuntime::profileString(JSContext* cx,
                                                 BaseScript* script) {
-  ProfileStringMap::AddPtr s = strings().lookupForAdd(script);
+  JS::Zone* zone = script->zone();
+  if (!zone->profilerStrings) {
+    auto map = cx->make_unique<JS::WeakCache<ProfileStringMap>>(zone);
+    if (!map) {
+      return nullptr;
+    }
+    zone->profilerStrings = std::move(map);
+  }
 
-  if (!s) {
+  ProfileStringMap& map = zone->profilerStrings->get();
+  ProfileStringMap::AddPtr ptr = map.lookupForAdd(script);
+
+  if (!ptr) {
     UniqueChars str = allocProfileString(cx, script);
     if (!str) {
       return nullptr;
     }
     MOZ_ASSERT(script->hasBytecode());
-    if (!strings().add(s, script, std::move(str))) {
+    if (!map.add(ptr, script, std::move(str))) {
       ReportOutOfMemory(cx);
       return nullptr;
     }
   }
 
-  return s->value().get();
-}
-
-void GeckoProfilerRuntime::onScriptFinalized(BaseScript* script) {
-  /*
-   * This function is called whenever a script is destroyed, regardless of
-   * whether profiling has been turned on, so don't invoke a function on an
-   * invalid hash set. Also, even if profiling was enabled but then turned
-   * off, we still want to remove the string, so no check of enabled() is
-   * done.
-   */
-  if (ProfileStringMap::Ptr entry = strings().lookup(script)) {
-    strings().remove(entry);
-  }
+  return ptr->value().get();
 }
 
 void GeckoProfilerRuntime::markEvent(const char* event, const char* details,
@@ -335,7 +332,7 @@ UniqueChars GeckoProfilerRuntime::allocProfileString(JSContext* cx,
                                                      BaseScript* script) {
   // Note: this profiler string is regexp-matched by
   // profiler code. Most recently at
-  // https://github.com/firefox-devtools/profiler/blob/245b1a400c5c368ccc13641d0335398bafa0e870/src/profile-logic/process-profile.js#L520-L525
+  // https://github.com/firefox-devtools/profiler/blob/8f4935823ec06507c3125d4c6c1e78eef31361f3/src/profile-logic/process-profile.ts#L407-L415
 
   // If the script has a function, try calculating its name.
   JSAtom* name = nullptr;
@@ -430,25 +427,23 @@ void GeckoProfilerThread::trace(JSTracer* trc) {
   }
 }
 
-void GeckoProfilerRuntime::fixupStringsMapAfterMovingGC() {
-  for (auto iter = strings().modIter(); !iter.done(); iter.next()) {
-    BaseScript* script = iter.get().key();
-    if (IsForwarded(script)) {
-      script = Forwarded(script);
-      iter.rekey(script);
+size_t GeckoProfilerRuntime::stringsCount() {
+  size_t count = 0;
+  for (AllZonesIter zone(rt); !zone.done(); zone.next()) {
+    if (zone->profilerStrings) {
+      count += zone->profilerStrings->get().count();
+    }
+  }
+  return count;
+}
+
+void GeckoProfilerRuntime::stringsReset() {
+  for (AllZonesIter zone(rt); !zone.done(); zone.next()) {
+    if (zone->profilerStrings) {
+      zone->profilerStrings->get().clear();
     }
   }
 }
-
-#ifdef JSGC_HASH_TABLE_CHECKS
-void GeckoProfilerRuntime::checkStringsMapAfterMovingGC() {
-  CheckTableAfterMovingGC(strings(), [](const auto& entry) {
-    BaseScript* script = entry.key();
-    CheckGCThingAfterMovingGC(script);
-    return script;
-  });
-}
-#endif
 
 // Get all script sources as a list of ProfilerJSSourceData.
 js::ProfilerJSSources GeckoProfilerRuntime::getProfilerScriptSources(
@@ -580,7 +575,7 @@ js::ProfilerJSSources GeckoProfilerRuntime::getProfilerScriptSources(
 void ProfilingStackFrame::trace(JSTracer* trc) {
   if (isJsFrame()) {
     JSScript* s = rawScript();
-    TraceNullableRoot(trc, &s, "ProfilingStackFrame script");
+    TraceRoot(trc, &s, "ProfilingStackFrame script");
     spOrScript = s;
   }
 }

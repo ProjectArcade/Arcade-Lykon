@@ -9,10 +9,42 @@
  * The default implementations are safe no-ops that keep the service in an
  * unauthenticated/inactive state.
  */
-export class IPPAuthProvider {
+export class IPPAuthProvider extends EventTarget {
   /** Returns whether the user is authenticated and ready to use the proxy. */
   get isReady() {
     return false;
+  }
+
+  /** Returns whether the user has a VPN subscription. */
+  get hasUpgraded() {
+    return false;
+  }
+
+  /** Returns true while enrollment or entitlement checks are in progress. */
+  get isEnrolling() {
+    return false;
+  }
+
+  /** Returns the maximum bytes allowed for the current entitlement, or null if unknown. */
+  get maxBytes() {
+    return null;
+  }
+
+  /**
+   * Checks whether the user has upgraded their subscription since the last
+   * known state and updates accordingly.
+   *
+   * @returns {Promise<void>}
+   */
+  async checkForUpgrade() {}
+
+  /**
+   * Enrolls and entitles the user.
+   *
+   * @returns {Promise<{isEnrolledAndEntitled: boolean, error?: string}>}
+   */
+  async enroll() {
+    throw new Error("enroll() must be implemented by subclasses");
   }
 
   /**

@@ -38,7 +38,9 @@ RsdparsaSdp::RsdparsaSdp(const RsdparsaSdp& aOrig)
     : RsdparsaSdp(RsdparsaSessionHandle(create_sdp_clone(aOrig.mSession.get())),
                   aOrig.mOrigin) {}
 
-Sdp* RsdparsaSdp::Clone() const { return new RsdparsaSdp(*this); }
+UniquePtr<Sdp> RsdparsaSdp::Clone() const {
+  return WrapUnique(new RsdparsaSdp(*this));
+}
 
 const SdpOrigin& RsdparsaSdp::GetOrigin() const { return mOrigin; }
 
@@ -58,8 +60,9 @@ SdpMediaSection& RsdparsaSdp::GetMediaSection(size_t level) {
 }
 
 SdpMediaSection& RsdparsaSdp::AddMediaSection(
-    SdpMediaSection::MediaType mediaType, SdpDirectionAttribute::Direction dir,
-    uint16_t port, SdpMediaSection::Protocol protocol, sdp::AddrType addrType,
+    const SdpMediaSection::MediaType mediaType,
+    const SdpDirectionAttribute::Direction dir, const uint16_t port,
+    const SdpMediaSection::Protocol protocol, const sdp::AddrType addrType,
     const std::string& addr) {
   sdp::ffi::StringView rustAddr{reinterpret_cast<const uint8_t*>(addr.c_str()),
                                 addr.size()};

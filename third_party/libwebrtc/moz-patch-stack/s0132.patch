@@ -1,30 +1,27 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Fri, 30 Jan 2026 18:55:00 +0000
-Subject: Bug 2005262 - better logging in
- ModuleRtpRtcpImpl2::RegisterRtpHeaderExtension. r=ng
+Date: Tue, 7 Apr 2026 18:03:00 -0500
+Subject: Bug 2030139 - (fix-1ccc59d5c9) don't use
+ std::make_unique_for_overwrite for now to fix build error
 
-Differential Revision: https://phabricator.services.mozilla.com/D281051
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/b44955c4c033ebaf31b40701f12f7cb0dc035ba8
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/a4e2ac07bd6f2deb8fde32b147422c3918c31eca
 ---
- modules/rtp_rtcp/source/rtp_rtcp_impl2.cc | 6 +++++-
+ rtc_base/copy_on_write_buffer.cc | 6 +++++-
  1 file changed, 5 insertions(+), 1 deletion(-)
 
-diff --git a/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc b/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc
-index c12f80e3d5..baeddc0da7 100644
---- a/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc
-+++ b/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc
-@@ -586,9 +586,13 @@ void ModuleRtpRtcpImpl2::SetExtmapAllowMixed(bool extmap_allow_mixed) {
+diff --git a/rtc_base/copy_on_write_buffer.cc b/rtc_base/copy_on_write_buffer.cc
+index 68e98ce729..5877f323f6 100644
+--- a/rtc_base/copy_on_write_buffer.cc
++++ b/rtc_base/copy_on_write_buffer.cc
+@@ -28,7 +28,11 @@
+ namespace webrtc {
  
- void ModuleRtpRtcpImpl2::RegisterRtpHeaderExtension(absl::string_view uri,
-                                                     int id) {
-+  RTC_LOG(LS_INFO) << "RegisterRtpHeaderExtension uri:'" << uri << "' id: " << id;
-   bool registered =
-       rtp_sender_->packet_generator.RegisterRtpHeaderExtension(uri, id);
--  RTC_CHECK(registered);
-+  if (!registered) {
-+    RTC_LOG(LS_WARNING) << "RegisterRtpHeaderExtension failed to register uri:'" << uri << "' id: " << id;
-+  }
-+  RTC_DCHECK(registered);
- }
+ CopyOnWriteBuffer::RawBuffer::RawBuffer(size_t size)
+-    : size_(size), data_(std::make_unique_for_overwrite<uint8_t[]>(size)) {}
++    : size_(size), data_(std::unique_ptr<uint8_t[]>(new uint8_t[size])) {}
++// We should be able to use the form below, but our current compile setup
++// doesn't find std::make_unique_for_overwrite.  See Bug 2030186 to revert
++// this change.
++//     : size_(size), data_(std::make_unique_for_overwrite<uint8_t[]>(size)) {}
  
- void ModuleRtpRtcpImpl2::DeregisterSendRtpHeaderExtension(
+ scoped_refptr<CopyOnWriteBuffer::RefCountedBuffer>
+ CopyOnWriteBuffer::CreateBuffer(size_t capacity) {

@@ -13,6 +13,7 @@
 #include "nsDNSPrefetch.h"
 #include "nsEscape.h"
 #include "nsHttpConnectionMgr.h"
+#include "nsHttpHeaderArray.h"
 #include "nsHttpTransaction.h"
 #include "nsThreadUtils.h"
 #include "nsICancelable.h"
@@ -456,6 +457,17 @@ nsresult TRRServiceChannel::BeginConnect() {
     glean::http::transaction_use_altsvc
         .EnumGet(glean::http::TransactionUseAltsvcLabel::eFalse)
         .Add();
+  }
+
+  // TRRServiceChannel does not use nsHttpChannelAuthProvider, so seed
+  // Proxy-Authorization onto mRequestHead here for https/masque proxies.
+  if (proxyInfo && mConnectionInfo->UsingConnect()) {
+    const nsCString& pa = proxyInfo->ProxyAuthorizationHeader();
+    if (!pa.IsEmpty()) {
+      DebugOnly<nsresult> rvSet =
+          mRequestHead.SetHeader(nsHttp::Proxy_Authorization, pa);
+      MOZ_ASSERT(NS_SUCCEEDED(rvSet));
+    }
   }
 
   // Need to re-ask the handler, since mConnectionInfo may not be the connInfo
@@ -1151,8 +1163,8 @@ TRRServiceChannel::OnDataAvailable(nsIRequest* request, nsIInputStream* input,
 
   MOZ_ASSERT(mResponseHead, "No response head in ODA!!");
 
-  if (mListener) {
-    return mListener->OnDataAvailable(this, input, offset, count);
+  if (nsCOMPtr<nsIStreamListener> listener = mListener) {
+    return listener->OnDataAvailable(this, input, offset, count);
   }
 
   return NS_ERROR_ABORT;
@@ -1270,7 +1282,8 @@ TRRServiceChannel::OnStopRequest(nsIRequest* request, nsresult status) {
     MOZ_ASSERT(!LoadOnStopRequestCalled(),
                "We should not call OnStopRequest twice");
     StoreOnStopRequestCalled(true);
-    mListener->OnStopRequest(this, status);
+    nsCOMPtr<nsIStreamListener> listener = mListener;
+    listener->OnStopRequest(this, status);
   }
   StoreOnStopRequestCalled(true);
 
@@ -1436,6 +1449,11 @@ NS_IMETHODIMP TRRServiceChannel::GetHttpProxyConnectResponseCode(
 
   *aResponseCode = -1;
   return NS_OK;
+}
+
+NS_IMETHODIMP TRRServiceChannel::GetHttpProxyResponseHeader(const nsACString&,
+                                                            nsACString&) {
+  return NS_ERROR_NOT_AVAILABLE;
 }
 
 NS_IMETHODIMP

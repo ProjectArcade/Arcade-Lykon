@@ -42,6 +42,7 @@ BROWSER_CHROME_MANIFESTS += [
     "tests/browser/general/browser.toml",
     "tests/browser/hittest/browser.toml",
     "tests/browser/mac/browser.toml",
+    "tests/browser/mac/zoom/browser.toml",
     "tests/browser/name_and_description/browser.toml",
     "tests/browser/performance/perftest.toml",
     "tests/browser/pivot/browser.toml",
@@ -53,6 +54,7 @@ BROWSER_CHROME_MANIFESTS += [
     "tests/browser/telemetry/browser.toml",
     "tests/browser/text/browser.toml",
     "tests/browser/tree/browser.toml",
+    "tests/browser/treeupdate/browser.toml",
     "tests/browser/windows/ia2/browser.toml",
     "tests/browser/windows/uia/browser.toml",
 ]

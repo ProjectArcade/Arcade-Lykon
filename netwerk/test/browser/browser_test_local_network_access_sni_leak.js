@@ -144,6 +144,14 @@ function waitForFetchComplete(port) {
 
 let gServer;
 
+// With HappyEyeballs, the pre-connect CheckLNAForAddr call was removed from
+// EstablishTCPConnection. The LNA check now fires post-TCP-connect via
+// SetLnaCheckCallback, so one TCP connection is always established before the
+// prompt appears regardless of whether HappyEyeballs is enabled or not.
+// If CheckLNAForAddr is re-added pre-connect for HappyEyeballs, this value
+// should revert to a conditional: HappyEyeballs ? 0 : 1.
+const kExpectedConnsBeforePromptResponse = 1;
+
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
     set: [
@@ -192,8 +200,8 @@ add_task(async function test_lna_block_no_sni_leak() {
 
   Assert.equal(
     await gServer.connectionCount(),
-    1,
-    "Only 1 TCP connection should have been made before LNA prompt response"
+    kExpectedConnsBeforePromptResponse,
+    `${kExpectedConnsBeforePromptResponse} TCP connection(s) expected before LNA prompt response`
   );
 
   Assert.deepEqual(
@@ -205,12 +213,12 @@ add_task(async function test_lna_block_no_sni_leak() {
   let notification = popup?.owner?.panel?.childNodes?.[0];
   ok(notification, "Notification popup element is available");
   let fetchDone = waitForFetchComplete(gServer.port());
-  notification.secondaryButton.doCommand();
+  notification.secondaryButton.click();
   await fetchDone;
 
   Assert.equal(
     await gServer.connectionCount(),
-    1,
+    kExpectedConnsBeforePromptResponse,
     "No new TCP connections after blocking the LNA prompt"
   );
 
@@ -252,8 +260,8 @@ add_task(async function test_lna_accept_receives_sni() {
 
   Assert.equal(
     await gServer.connectionCount(),
-    1,
-    "Only 1 TCP connection should have been made before LNA prompt response"
+    kExpectedConnsBeforePromptResponse,
+    `${kExpectedConnsBeforePromptResponse} TCP connection(s) expected before LNA prompt response`
   );
 
   Assert.deepEqual(
@@ -265,11 +273,11 @@ add_task(async function test_lna_accept_receives_sni() {
   // Accept the prompt.
   let notification = popup?.owner?.panel?.childNodes?.[0];
   ok(notification, "Notification popup element is available for accept");
-  notification.button.doCommand();
+  notification.button.click();
 
   // The server is a raw TCP socket, so the TLS handshake will fail after the
   // ClientHello is sent. Wait for the SNI to be captured by the server.
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     async () => !!(await gServer.sniValues()).length,
     "Waiting for SNI value after accepting the LNA prompt"
   );
@@ -445,7 +453,7 @@ async function runPromptShownAgainstServer(server) {
     let fetchDone = observeStopRequest(ctx.targetURL);
     let notification = popup.owner.panel.childNodes[0];
     ok(notification, `[${ctx.label}] Notification popup element is available`);
-    notification.secondaryButton.doCommand();
+    notification.secondaryButton.click();
     let status = await fetchDone;
 
     Assert.equal(

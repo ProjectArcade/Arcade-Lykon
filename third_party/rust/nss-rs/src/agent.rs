@@ -364,8 +364,8 @@ impl SecretAgentPreInfo {
     }
 
     #[must_use]
-    pub const fn alpn(&self) -> Option<&String> {
-        self.alpn.as_ref()
+    pub fn alpn(&self) -> Option<&str> {
+        self.alpn.as_deref()
     }
 }
 
@@ -428,8 +428,8 @@ impl SecretAgentInfo {
         self.ech_accepted
     }
     #[must_use]
-    pub const fn alpn(&self) -> Option<&String> {
-        self.alpn.as_ref()
+    pub fn alpn(&self) -> Option<&str> {
+        self.alpn.as_deref()
     }
     #[must_use]
     pub const fn signature_scheme(&self) -> SignatureScheme {
@@ -817,6 +817,40 @@ impl SecretAgent {
     #[must_use]
     pub fn peer_certificate(&self) -> Option<CertificateInfo> {
         CertificateInfo::new(self.fd)
+    }
+
+    /// Export keying material per RFC 8446 Section 7.5.
+    ///
+    /// This can only be called after the handshake is complete.
+    /// In TLS 1.3, there is no distinction between no context and an empty
+    /// context, so the caller passes `&[u8]` instead of `Option<&[u8]>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::InvalidState` if the handshake is not complete,
+    /// `Error::InvalidInput` if `out` is empty, or an NSS error if the
+    /// export fails.
+    pub fn export_keying_material(&self, label: &[u8], context: &[u8], out: &mut [u8]) -> Res<()> {
+        if !self.state.is_connected() {
+            return Err(Error::InvalidState);
+        }
+
+        if out.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+
+        secstatus_to_res(unsafe {
+            ssl::SSL_ExportKeyingMaterial(
+                self.fd,
+                label.as_ptr().cast(),
+                c_uint::try_from(label.len())?,
+                PRBool::from(!context.is_empty()),
+                context.as_ptr(),
+                c_uint::try_from(context.len())?,
+                out.as_mut_ptr(),
+                c_uint::try_from(out.len())?,
+            )
+        })
     }
 
     /// Return any fatal alert that the TLS stack might have sent.

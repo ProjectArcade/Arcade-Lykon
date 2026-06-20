@@ -9,17 +9,14 @@ import logging
 from typing import Optional
 
 from taskgraph.transforms.base import TransformSequence
-from taskgraph.util.dependencies import get_dependencies, get_primary_dependency
+from taskgraph.util.dependencies import get_primary_dependency
 from taskgraph.util.schema import Schema
 from taskgraph.util.taskcluster import get_artifact_prefix
 from taskgraph.util.treeherder import inherit_treeherder_from_dep, replace_group
 
 from gecko_taskgraph.transforms.beetmover import craft_release_properties
 from gecko_taskgraph.transforms.task import TaskDescriptionSchema
-from gecko_taskgraph.util.attributes import (
-    copy_attributes_from_dependent_job,
-    sorted_unique_list,
-)
+from gecko_taskgraph.util.attributes import copy_attributes_from_dependent_job
 from gecko_taskgraph.util.partials import (
     get_balrog_platform_name,
     get_partials_artifacts_from_params,
@@ -87,18 +84,6 @@ def get_label_by_suffix(labels: list, suffix: str):
 
 
 @transforms.add
-def gather_required_signoffs(config, jobs):
-    for job in jobs:
-        job.setdefault("attributes", {})["required_signoffs"] = sorted_unique_list(
-            *(
-                dep.attributes.get("required_signoffs", [])
-                for dep in get_dependencies(config, job)
-            )
-        )
-        yield job
-
-
-@transforms.add
 def make_task_description(config, jobs):
     for job in jobs:
         dep_job = get_primary_dependency(config, job)
@@ -162,25 +147,26 @@ def make_task_description(config, jobs):
             "build": upstream_deps[build_name],
             "signing": upstream_deps[signing_name],
         }
-        if repackage_name in upstream_deps:
-            dependencies["repackage"] = upstream_deps[repackage_name]
-        if mar_signing_name in upstream_deps:
-            dependencies["mar-signing"] = upstream_deps[mar_signing_name]
-        if "partials-signing" in upstream_deps:
-            dependencies["partials-signing"] = upstream_deps["partials-signing"]
-        if msi_signing_name in upstream_deps:
-            dependencies[msi_signing_name] = upstream_deps[msi_signing_name]
-        if msix_signing_name in upstream_deps:
-            dependencies[msix_signing_name] = upstream_deps[msix_signing_name]
-        if repackage_signing_name in upstream_deps:
-            dependencies["repackage-signing"] = upstream_deps[repackage_signing_name]
-        if attribution_name in upstream_deps:
-            dependencies[attribution_name] = upstream_deps[attribution_name]
-        if repackage_deb_name in upstream_deps:
-            dependencies[repackage_deb_name] = upstream_deps[repackage_deb_name]
-        for kind in ("upload-symbols", "upload-symbols-dummy"):
-            if kind in upstream_deps:
-                dependencies[kind] = upstream_deps[kind]
+        # Optional dependencies: (dep_key, upstream_name) pairs.
+        # When the dep_key differs from the upstream name, the dependency is
+        # aliased (e.g. repackage_name -> "repackage").
+        optional_deps = [
+            ("repackage", repackage_name),
+            ("mar-signing", mar_signing_name),
+            ("partials-signing", "partials-signing"),
+            (msi_signing_name, msi_signing_name),
+            (msix_signing_name, msix_signing_name),
+            ("repackage-signing", repackage_signing_name),
+            (attribution_name, attribution_name),
+            (repackage_deb_name, repackage_deb_name),
+            ("repackage-pkg-notarization", "repackage-pkg-notarization"),
+            ("repackage-l10n-pkg-notarization", "repackage-l10n-pkg-notarization"),
+            ("upload-symbols", "upload-symbols"),
+            ("upload-symbols-dummy", "upload-symbols-dummy"),
+        ]
+        for dep_key, upstream_name in optional_deps:
+            if upstream_name in upstream_deps:
+                dependencies[dep_key] = upstream_deps[upstream_name]
 
         attributes = copy_attributes_from_dependent_job(dep_job)
         attributes.update(job.get("attributes", {}))

@@ -10,13 +10,16 @@
 #include "CanRunScriptChecker.h"
 #include "DanglingOnTemporaryChecker.h"
 #include "EnumSerializerChecker.h"
+#include "FinalCycleCollectingIsupportsChecker.h"
 #include "ExplicitImplicitChecker.h"
 #include "ExplicitOperatorBoolChecker.h"
 #ifdef TARGET_IS_WINDOWS
+#include "EmptyBasesChecker.h"
 #include "LoadLibraryUsageChecker.h"
 #include "FopenUsageChecker.h"
 #endif
 #include "GlobalVariableInitializationChecker.h"
+#include "IntToEnumCastChecker.h"
 #include "JSHandleRootedTypedefChecker.h"
 #include "KungFuDeathGripChecker.h"
 #include "KnownLiveChecker.h"

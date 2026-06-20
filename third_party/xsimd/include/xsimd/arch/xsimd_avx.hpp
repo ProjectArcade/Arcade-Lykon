@@ -13,12 +13,12 @@
 #ifndef XSIMD_AVX_HPP
 #define XSIMD_AVX_HPP
 
+#include "../types/xsimd_avx_register.hpp"
+#include "../types/xsimd_batch_constant.hpp"
+
 #include <complex>
 #include <limits>
 #include <type_traits>
-
-#include "../types/xsimd_avx_register.hpp"
-#include "../types/xsimd_batch_constant.hpp"
 
 namespace xsimd
 {
@@ -748,6 +748,80 @@ namespace xsimd
             return self - batch<T, A>(mask.data);
         }
 
+        // first (must precede get for two-phase lookup)
+        template <class A>
+        XSIMD_INLINE float first(batch<float, A> const& self, requires_arch<avx>) noexcept
+        {
+            return _mm256_cvtss_f32(self);
+        }
+
+        template <class A>
+        XSIMD_INLINE double first(batch<double, A> const& self, requires_arch<avx>) noexcept
+        {
+            return _mm256_cvtsd_f64(self);
+        }
+
+        template <class A, class T, class = std::enable_if_t<std::is_integral<T>::value>>
+        XSIMD_INLINE T first(batch<T, A> const& self, requires_arch<avx>) noexcept
+        {
+            XSIMD_IF_CONSTEXPR(sizeof(T) == 1)
+            {
+                return static_cast<T>(_mm_cvtsi128_si32(_mm256_castsi256_si128(self)) & 0xFF);
+            }
+            else XSIMD_IF_CONSTEXPR(sizeof(T) == 2)
+            {
+                return static_cast<T>(_mm_cvtsi128_si32(_mm256_castsi256_si128(self)) & 0xFFFF);
+            }
+            else XSIMD_IF_CONSTEXPR(sizeof(T) == 4)
+            {
+                return static_cast<T>(_mm_cvtsi128_si32(_mm256_castsi256_si128(self)));
+            }
+            else XSIMD_IF_CONSTEXPR(sizeof(T) == 8)
+            {
+                batch<T, sse4_2> low = _mm256_castsi256_si128(self);
+                return first(low, sse4_2 {});
+            }
+            else
+            {
+                assert(false && "unsupported arch/op combination");
+                return {};
+            }
+        }
+
+        // get
+        template <class A, size_t I>
+        XSIMD_INLINE float get(batch<float, A> const& self, ::xsimd::index<I>, requires_arch<avx>) noexcept
+        {
+            XSIMD_IF_CONSTEXPR(I == 0) { return first(self, avx {}); }
+            constexpr size_t elements_per_lane = batch<float, sse4_1>::size;
+            constexpr size_t lane = I / elements_per_lane;
+            constexpr size_t sub_index = I % elements_per_lane;
+            const auto half = (lane == 0) ? detail::lower_half(self) : detail::upper_half(self);
+            return kernel::get(batch<float, sse4_1>(half), ::xsimd::index<sub_index> {}, sse4_1 {});
+        }
+
+        template <class A, size_t I>
+        XSIMD_INLINE double get(batch<double, A> const& self, ::xsimd::index<I>, requires_arch<avx>) noexcept
+        {
+            XSIMD_IF_CONSTEXPR(I == 0) { return first(self, avx {}); }
+            constexpr size_t elements_per_lane = batch<double, sse4_1>::size;
+            constexpr size_t lane = I / elements_per_lane;
+            constexpr size_t sub_index = I % elements_per_lane;
+            const auto half = (lane == 0) ? detail::lower_half(self) : detail::upper_half(self);
+            return kernel::get(batch<double, sse4_1>(half), ::xsimd::index<sub_index> {}, sse4_1 {});
+        }
+
+        template <class A, size_t I, class T, class = std::enable_if_t<std::is_integral<T>::value>>
+        XSIMD_INLINE T get(batch<T, A> const& self, ::xsimd::index<I>, requires_arch<avx>) noexcept
+        {
+            XSIMD_IF_CONSTEXPR(I == 0) { return first(self, avx {}); }
+            constexpr size_t elements_per_lane = batch<T, sse4_1>::size;
+            constexpr size_t lane = I / elements_per_lane;
+            constexpr size_t sub_index = I % elements_per_lane;
+            const auto half = (lane == 0) ? detail::lower_half(self) : detail::upper_half(self);
+            return kernel::get(batch<T, sse4_1>(half), ::xsimd::index<sub_index> {}, sse4_1 {});
+        }
+
         // insert
         template <class A, class T, size_t I, class = std::enable_if_t<std::is_integral<T>::value>>
         XSIMD_INLINE batch<T, A> insert(batch<T, A> const& self, T val, index<I> pos, requires_arch<avx>) noexcept
@@ -919,19 +993,20 @@ namespace xsimd
         {
             using int_t = as_integer_t<T>;
             constexpr size_t half_size = batch<T, A>::size / 2;
+            using half_arch = typename ::xsimd::make_sized_batch_t<T, half_size>::arch_type;
 
-            // confined to lower 128-bit half → forward to SSE2
+            // lower 128-bit half
             XSIMD_IF_CONSTEXPR(mask.countl_zero() >= half_size)
             {
-                constexpr auto mlo = ::xsimd::detail::lower_half<sse4_2>(batch_bool_constant<int_t, A, Values...> {});
-                const auto lo = load_masked(reinterpret_cast<int_t const*>(mem), mlo, convert<int_t> {}, Mode {}, sse4_2 {});
+                constexpr auto mlo = ::xsimd::detail::lower_half<half_arch>(batch_bool_constant<int_t, A, Values...> {});
+                const auto lo = load_masked(reinterpret_cast<int_t const*>(mem), mlo, convert<int_t> {}, Mode {}, half_arch {});
                 return bitwise_cast<T>(batch<int_t, A>(_mm256_zextsi128_si256(lo)));
             }
-            // confined to upper 128-bit half → forward to SSE2
+            // upper 128-bit half
             else XSIMD_IF_CONSTEXPR(mask.countr_zero() >= half_size)
             {
-                constexpr auto mhi = ::xsimd::detail::upper_half<sse4_2>(mask);
-                const auto hi = load_masked(mem + half_size, mhi, convert<T> {}, Mode {}, sse4_2 {});
+                constexpr auto mhi = ::xsimd::detail::upper_half<half_arch>(mask);
+                const auto hi = load_masked(mem + half_size, mhi, convert<T> {}, Mode {}, half_arch {});
                 return detail::zero_extend<A>(hi);
             }
             else
@@ -944,41 +1019,54 @@ namespace xsimd
         // store_masked
         namespace detail
         {
-            template <class A>
+            // True when batch_bool<T, A> is the legacy VEX vector mask, i.e. it is stored
+            // in the same register as the data (__m256 / __m256d) rather than in an EVEX
+            // k-register (__mmask8) as on the avx512vl architectures. The _mm256_cast*_si256
+            // path below is only well-formed for the vector-mask representation. This names
+            // no architecture — it tests the mask's representation, in the spirit of
+            // detail::masked_memory_uses_fp_bitcast.
+            template <class T, class A>
+            using uses_vector_mask = std::is_same<typename batch_bool<T, A>::register_type,
+                                                  typename batch<T, A>::register_type>;
+
+            template <class A, class = std::enable_if_t<uses_vector_mask<float, A>::value>>
             XSIMD_INLINE void maskstore(float* mem, batch_bool<float, A> const& mask, batch<float, A> const& src) noexcept
             {
-                _mm256_maskstore_ps(mem, mask, src);
+                _mm256_maskstore_ps(mem, _mm256_castps_si256(mask), src);
             }
 
-            template <class A>
+            template <class A, class = std::enable_if_t<uses_vector_mask<double, A>::value>>
             XSIMD_INLINE void maskstore(double* mem, batch_bool<double, A> const& mask, batch<double, A> const& src) noexcept
             {
-                _mm256_maskstore_pd(mem, mask, src);
+                _mm256_maskstore_pd(mem, _mm256_castpd_si256(mask), src);
             }
         }
 
-        template <class A, class T, bool... Values, class Mode>
+        template <class A, class T, bool... Values, class Mode,
+                  typename = std::enable_if_t<std::is_floating_point<T>::value && detail::uses_vector_mask<T, A>::value>>
         XSIMD_INLINE void store_masked(T* mem, batch<T, A> const& src, batch_bool_constant<T, A, Values...> mask, Mode, requires_arch<avx>) noexcept
         {
             constexpr size_t half_size = batch<T, A>::size / 2;
+            using half_batch = ::xsimd::make_sized_batch_t<T, half_size>;
+            using half_arch = typename half_batch::arch_type;
 
-            // confined to lower 128-bit half → forward to SSE2
+            // lower 128-bit half
             XSIMD_IF_CONSTEXPR(mask.countl_zero() >= half_size)
             {
-                constexpr auto mlo = ::xsimd::detail::lower_half<sse4_2>(mask);
-                const auto lo = detail::lower_half(src);
-                store_masked<sse4_2>(mem, lo, mlo, Mode {}, sse4_2 {});
+                constexpr auto mlo = ::xsimd::detail::lower_half<half_arch>(mask);
+                const half_batch lo = detail::lower_half(src);
+                store_masked<half_arch>(mem, lo, mlo, Mode {}, half_arch {});
             }
-            // confined to upper 128-bit half → forward to SSE2
+            // upper 128-bit half
             else XSIMD_IF_CONSTEXPR(mask.countr_zero() >= half_size)
             {
-                constexpr auto mhi = ::xsimd::detail::upper_half<sse4_2>(mask);
-                const auto hi = detail::upper_half(src);
-                store_masked<sse4_2>(mem + half_size, hi, mhi, Mode {}, sse4_2 {});
+                constexpr auto mhi = ::xsimd::detail::upper_half<half_arch>(mask);
+                const half_batch hi = detail::upper_half(src);
+                store_masked<half_arch>(mem + half_size, hi, mhi, Mode {}, half_arch {});
             }
             else
             {
-                detail::maskstore(mem, mask.as_batch(), src);
+                detail::maskstore(mem, mask.as_batch_bool(), src);
             }
         }
 
@@ -1526,7 +1614,7 @@ namespace xsimd
         {
             _mm256_stream_pd(mem, self);
         }
-        template <class A, class T, class = typename std::enable_if<std::is_integral<T>::value, void>::type>
+        template <class A, class T, class = std::enable_if_t<std::is_integral<T>::value, void>>
         XSIMD_INLINE void store_stream(T* mem, batch<T, A> const& self, requires_arch<avx>) noexcept
         {
             _mm256_stream_si256((__m256i*)mem, self);
@@ -2013,46 +2101,6 @@ namespace xsimd
             auto lo = _mm256_unpacklo_pd(self, other);
             auto hi = _mm256_unpackhi_pd(self, other);
             return _mm256_insertf128_pd(lo, _mm256_castpd256_pd128(hi), 1);
-        }
-
-        // first
-        template <class A>
-        XSIMD_INLINE float first(batch<float, A> const& self, requires_arch<avx>) noexcept
-        {
-            return _mm256_cvtss_f32(self);
-        }
-
-        template <class A>
-        XSIMD_INLINE double first(batch<double, A> const& self, requires_arch<avx>) noexcept
-        {
-            return _mm256_cvtsd_f64(self);
-        }
-
-        template <class A, class T, class = std::enable_if_t<std::is_integral<T>::value>>
-        XSIMD_INLINE T first(batch<T, A> const& self, requires_arch<avx>) noexcept
-        {
-            XSIMD_IF_CONSTEXPR(sizeof(T) == 1)
-            {
-                return static_cast<T>(_mm256_cvtsi256_si32(self) & 0xFF);
-            }
-            else XSIMD_IF_CONSTEXPR(sizeof(T) == 2)
-            {
-                return static_cast<T>(_mm256_cvtsi256_si32(self) & 0xFFFF);
-            }
-            else XSIMD_IF_CONSTEXPR(sizeof(T) == 4)
-            {
-                return static_cast<T>(_mm256_cvtsi256_si32(self));
-            }
-            else XSIMD_IF_CONSTEXPR(sizeof(T) == 8)
-            {
-                batch<T, sse4_2> low = _mm256_castsi256_si128(self);
-                return first(low, sse4_2 {});
-            }
-            else
-            {
-                assert(false && "unsupported arch/op combination");
-                return {};
-            }
         }
 
         // widen

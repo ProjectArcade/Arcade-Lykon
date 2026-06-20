@@ -16,7 +16,6 @@ import mozilla.components.concept.storage.bookmarks.InsertableBookmarkTreeRoot
 import mozilla.components.support.test.robolectric.testContext
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -24,6 +23,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.TimeUnit
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class PlacesBookmarksStorageTest {
@@ -237,7 +237,7 @@ class PlacesBookmarksStorageTest {
 
         val insertedFolder = bookmarks.getTree(rootGuid).getOrNull()
         assertNotNull(insertedFolder)
-        assertEquals("Imported", insertedFolder!!.title)
+        assertEquals("Imported", insertedFolder.title)
         assertEquals(BookmarkNodeType.FOLDER, insertedFolder.type)
         assertEquals(BookmarkRoot.Mobile.id, insertedFolder.parentGuid)
         assertEquals(2, insertedFolder.children!!.size)
@@ -285,7 +285,7 @@ class PlacesBookmarksStorageTest {
         val rootGuid = bookmarks.insertTree(tree).getOrThrow()
         val outerFolder = bookmarks.getTree(rootGuid, true).getOrNull()
         assertNotNull(outerFolder)
-        assertEquals("Outer", outerFolder!!.title)
+        assertEquals("Outer", outerFolder.title)
         assertEquals(1, outerFolder.children!!.size)
 
         val innerFolder = outerFolder.children!![0]
@@ -315,7 +315,7 @@ class PlacesBookmarksStorageTest {
         val rootGuid = bookmarks.insertTree(tree).getOrThrow()
         val folder = bookmarks.getTree(rootGuid).getOrNull()
         assertNotNull(folder)
-        assertEquals("Empty Folder", folder!!.title)
+        assertEquals("Empty Folder", folder.title)
         assertEquals(BookmarkNodeType.FOLDER, folder.type)
         assertEquals(emptyList<BookmarkNode>(), folder.children)
     }
@@ -334,20 +334,20 @@ class PlacesBookmarksStorageTest {
         // And now for ones that do exist
         suggestion = bookmarks.getAutocompleteSuggestion("moz")
         assertNotNull(suggestion)
-        assertEquals("moz", suggestion?.input)
+        assertEquals("moz", suggestion.input)
         // There are multiple bookmarks from the mozilla host with no guarantee about the read order.
         // Use a smaller URL that would match all.
-        assertTrue(suggestion?.text?.startsWith("mozilla.org/en-us/") ?: false)
-        assertTrue(suggestion?.url?.startsWith("https://www.mozilla.org/en-us/") ?: false)
-        assertEquals(BOOKMARKS_AUTOCOMPLETE_SOURCE_NAME, suggestion?.source)
-        assertEquals(1, suggestion?.totalItems)
+        assertTrue(suggestion.text.startsWith("mozilla.org/en-us/"))
+        assertTrue(suggestion.url.startsWith("https://www.mozilla.org/en-us/"))
+        assertEquals(BOOKMARKS_AUTOCOMPLETE_SOURCE_NAME, suggestion.source)
+        assertEquals(1, suggestion.totalItems)
 
         suggestion = bookmarks.getAutocompleteSuggestion("sup")
         assertNotNull(suggestion)
-        assertEquals("sup", suggestion?.input)
-        assertEquals("support.mozilla.org/", suggestion?.text)
-        assertEquals("https://support.mozilla.org/", suggestion?.url)
-        assertEquals(BOOKMARKS_AUTOCOMPLETE_SOURCE_NAME, suggestion?.source)
-        assertEquals(1, suggestion?.totalItems)
+        assertEquals("sup", suggestion.input)
+        assertEquals("support.mozilla.org/", suggestion.text)
+        assertEquals("https://support.mozilla.org/", suggestion.url)
+        assertEquals(BOOKMARKS_AUTOCOMPLETE_SOURCE_NAME, suggestion.source)
+        assertEquals(1, suggestion.totalItems)
     }
 }

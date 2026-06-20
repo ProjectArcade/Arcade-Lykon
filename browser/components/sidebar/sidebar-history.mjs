@@ -142,7 +142,7 @@ export class SidebarHistory extends SidebarPage {
       const list = row.getRootNode().host;
       if (!list.isTabItemSelected(row)) {
         this.treeView.resetSelection();
-        this.treeView.selectRowInList(row, list);
+        this.treeView.selectRowInList(list, row.guid);
         list.dispatchEvent(
           new CustomEvent("set-anchor", {
             bubbles: true,
@@ -154,7 +154,8 @@ export class SidebarHistory extends SidebarPage {
     }
   }
 
-  handleCommandEvent(e) {
+  async handleCommandEvent(e) {
+    let label;
     switch (e.target.id) {
       case "sidebar-history-sort-by-date":
         this.#changeSortOption(e, "date");
@@ -168,21 +169,63 @@ export class SidebarHistory extends SidebarPage {
       case "sidebar-history-sort-by-last-visited":
         this.#changeSortOption(e, "lastvisited");
         break;
-      case "sidebar-history-clear":
-        lazy.Sanitizer.showUI(this.topWindow);
+      case "sidebar-history-clear": {
+        const button = await lazy.Sanitizer.showUI(this.topWindow);
+        const outcome = button === "accept" ? "confirmed" : "cancelled";
+        Glean.browserUiInteraction.sidebarHistory[
+          `clear_history_${outcome}`
+        ].add(1);
         break;
+      }
       case "sidebar-history-context-open-all-in-tabs":
         this.#openAllInTabs(e);
         break;
       case "sidebar-history-context-delete-page":
         this.controller.deleteFromHistory().catch(console.error);
+        label = "delete_from_history";
         break;
       case "sidebar-history-context-delete-pages":
         this.#deleteMultipleFromHistory().catch(console.error);
+        label = "delete_from_history";
+        break;
+      case "sidebar-history-context-open-in-tab":
+        super.handleCommandEvent(e);
+        label = "open_in_new_tab";
+        break;
+      case "sidebar-history-context-open-in-window":
+        super.handleCommandEvent(e);
+        label = "open_in_new_window";
+        break;
+      case "sidebar-history-context-open-in-private-window":
+        super.handleCommandEvent(e);
+        label = "open_in_private_window";
+        break;
+      case "sidebar-history-context-forget-site": {
+        const button = await this.forgetAboutThisSite();
+        const outcome = button === "accept" ? "confirmed" : "cancelled";
+        Glean.browserUiInteraction.sidebarHistory[
+          `clear_all_website_data_${outcome}`
+        ].add(1);
+        break;
+      }
+      case "sidebar-history-context-bookmark-page": {
+        const guid = await super.handleCommandEvent(e);
+        const outcome = guid ? "confirmed" : "cancelled";
+        Glean.browserUiInteraction.sidebarHistory[
+          `bookmark_tab_${outcome}`
+        ].add(1);
+        break;
+      }
+      case "sidebar-history-context-copy-link":
+        super.handleCommandEvent(e);
+        label = "copy_link";
         break;
       default:
         super.handleCommandEvent(e);
         break;
+    }
+    if (label) {
+      Glean.browserUiInteraction.sidebarHistory[label].add(1);
     }
   }
 
@@ -190,6 +233,15 @@ export class SidebarHistory extends SidebarPage {
     this.treeView.resetSelection();
     Services.prefs.setStringPref(SORT_OPTION_PREF, sortOption);
     this.controller.onChangeSortOption(e, sortOption);
+    const sortTypeMap = {
+      date: "date",
+      site: "site",
+      datesite: "date_and_site",
+      lastvisited: "last_visited",
+    };
+    Glean.browserUiInteraction.sidebarSortHistory.record({
+      sort_type: sortTypeMap[sortOption],
+    });
   }
 
   #openAllInTabs(e) {
@@ -211,7 +263,7 @@ export class SidebarHistory extends SidebarPage {
   #deleteMultipleFromHistory() {
     const pageGuids = this.treeView
       .getSelectedTabItems()
-      .map(item => item.guid);
+      .map(item => item.pageGuid);
     return lazy.PlacesUtils.history.remove(pageGuids);
   }
 
@@ -230,7 +282,7 @@ export class SidebarHistory extends SidebarPage {
     navigateToLink(e, e.originalTarget.url, { forceNewTab: false });
     Glean.sidebar.link.history.add(1);
     this.treeView.resetSelection();
-    this.treeView.selectRowInList(e.originalTarget, e.currentTarget);
+    this.treeView.selectRowInList(e.currentTarget, e.originalTarget.guid);
   }
 
   onPrimaryAction(e) {
@@ -337,7 +389,7 @@ export class SidebarHistory extends SidebarPage {
       data-l10n-args=${JSON.stringify({
         date: isDateSite ? items[0][1][0].time : items[0].time,
       })}
-      @keydown=${e => this.treeView.handleCardKeydown(e)}
+      @keydown=${this.keydownHandler}
       tabindex=${ifDefined(tabIndex)}
     >
       ${isDateSite
@@ -371,7 +423,7 @@ export class SidebarHistory extends SidebarPage {
       type="accordion"
       ?expanded=${!isDateSite}
       heading=${domain}
-      @keydown=${e => this.treeView.handleCardKeydown(e)}
+      @keydown=${this.keydownHandler}
       tabindex=${ifDefined(tabIndex)}
       data-l10n-id=${domain ? nothing : "sidebar-history-site-localhost"}
       data-l10n-attrs=${domain ? nothing : "heading"}
@@ -464,6 +516,7 @@ export class SidebarHistory extends SidebarPage {
 
   onSearchQuery(e) {
     this.controller.onSearchQuery(e);
+    Glean.browserUiInteraction.sidebarHistory.search.add(1);
   }
 
   getTabItems(items) {

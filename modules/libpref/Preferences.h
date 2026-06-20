@@ -36,8 +36,6 @@ class nsPrefBranch;
 
 namespace mozilla {
 
-struct RegisterCallbacksInternal;
-
 void UnloadPrefsModule();
 
 class PreferenceServiceReporter;
@@ -96,11 +94,9 @@ class Preferences final : public nsIPrefService,
   friend class ::nsPrefBranch;
 
  public:
-  using WritePrefFilePromise = MozPromise<bool, nsresult, false>;
-
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSIPREFSERVICE
-  NS_FORWARD_NSIPREFBRANCH(mRootBranch->)
+  NS_DECL_NSIPREFBRANCH
   NS_DECL_NSIOBSERVER
 
   Preferences();
@@ -126,11 +122,7 @@ class Preferences final : public nsIPrefService,
 
   // Returns shared pref branch instance. NOTE: not addreffed.
   static nsIPrefBranch* GetRootBranch(
-      PrefValueKind aKind = PrefValueKind::User) {
-    NS_ENSURE_TRUE(InitStaticMembers(), nullptr);
-    return (aKind == PrefValueKind::Default) ? sPreferences->mDefaultRootBranch
-                                             : sPreferences->mRootBranch;
-  }
+      PrefValueKind aKind = PrefValueKind::User);
 
   // Gets the type of the pref.
   static nsIPrefBranch::PreferenceType GetType(const char* aPrefName);
@@ -270,14 +262,16 @@ class Preferences final : public nsIPrefService,
   static nsresult RegisterCallback(PrefChangedFunc aCallback,
                                    const nsACString& aPref,
                                    T* aClosure = nullptr) {
-    return RegisterCallback(aCallback, aPref, aClosure, ExactMatch);
+    return RegisterCallback(aCallback, aPref, static_cast<void*>(aClosure),
+                            false);
   }
 
   template <typename T = void>
   static nsresult UnregisterCallback(PrefChangedFunc aCallback,
                                      const nsACString& aPref,
                                      T* aClosure = nullptr) {
-    return UnregisterCallback(aCallback, aPref, aClosure, ExactMatch);
+    return UnregisterCallback(aCallback, aPref, static_cast<void*>(aClosure),
+                              false);
   }
 
   // Like RegisterCallback, but also calls the callback immediately for
@@ -286,7 +280,12 @@ class Preferences final : public nsIPrefService,
   static nsresult RegisterCallbackAndCall(PrefChangedFunc aCallback,
                                           const nsACString& aPref,
                                           T* aClosure = nullptr) {
-    return RegisterCallbackAndCall(aCallback, aPref, aClosure, ExactMatch);
+    nsresult rv = RegisterCallback(aCallback, aPref, aClosure, false);
+    if (NS_SUCCEEDED(rv)) {
+      (*aCallback)(PromiseFlatCString(aPref).get(),
+                   static_cast<void*>(aClosure));
+    }
+    return rv;
   }
 
   // Like RegisterCallback, but registers a callback for a prefix of multiple
@@ -295,7 +294,8 @@ class Preferences final : public nsIPrefService,
   static nsresult RegisterPrefixCallback(PrefChangedFunc aCallback,
                                          const nsACString& aPref,
                                          T* aClosure = nullptr) {
-    return RegisterCallback(aCallback, aPref, aClosure, PrefixMatch);
+    return RegisterCallback(aCallback, aPref, static_cast<void*>(aClosure),
+                            true);
   }
 
   // Like RegisterPrefixCallback, but also calls the callback immediately for
@@ -304,7 +304,12 @@ class Preferences final : public nsIPrefService,
   static nsresult RegisterPrefixCallbackAndCall(PrefChangedFunc aCallback,
                                                 const nsACString& aPref,
                                                 T* aClosure = nullptr) {
-    return RegisterCallbackAndCall(aCallback, aPref, aClosure, PrefixMatch);
+    nsresult rv = RegisterCallback(aCallback, aPref, aClosure, true);
+    if (NS_SUCCEEDED(rv)) {
+      (*aCallback)(PromiseFlatCString(aPref).get(),
+                   static_cast<void*>(aClosure));
+    }
+    return rv;
   }
 
   // Unregister a callback registered with RegisterPrefixCallback or
@@ -313,7 +318,8 @@ class Preferences final : public nsIPrefService,
   static nsresult UnregisterPrefixCallback(PrefChangedFunc aCallback,
                                            const nsACString& aPref,
                                            T* aClosure = nullptr) {
-    return UnregisterCallback(aCallback, aPref, aClosure, PrefixMatch);
+    return UnregisterCallback(aCallback, aPref, static_cast<void*>(aClosure),
+                              true);
   }
 
   // Variants of the above which register a single callback to handle multiple
@@ -329,7 +335,8 @@ class Preferences final : public nsIPrefService,
   static nsresult RegisterCallbacks(PrefChangedFunc aCallback,
                                     const char* const* aPrefs,
                                     T* aClosure = nullptr) {
-    return RegisterCallbacks(aCallback, aPrefs, aClosure, ExactMatch);
+    return RegisterCallbacks(aCallback, aPrefs, static_cast<void*>(aClosure),
+                             false);
   }
   static nsresult RegisterCallbacksAndCall(PrefChangedFunc aCallback,
                                            const char* const* aPrefs,
@@ -338,67 +345,78 @@ class Preferences final : public nsIPrefService,
   static nsresult UnregisterCallbacks(PrefChangedFunc aCallback,
                                       const char* const* aPrefs,
                                       T* aClosure = nullptr) {
-    return UnregisterCallbacks(aCallback, aPrefs, aClosure, ExactMatch);
+    return UnregisterCallbacks(aCallback, aPrefs, static_cast<void*>(aClosure),
+                               false);
   }
   template <typename T = void>
   static nsresult RegisterPrefixCallbacks(PrefChangedFunc aCallback,
                                           const char* const* aPrefs,
                                           T* aClosure = nullptr) {
-    return RegisterCallbacks(aCallback, aPrefs, aClosure, PrefixMatch);
+    return RegisterCallbacks(aCallback, aPrefs, static_cast<void*>(aClosure),
+                             true);
   }
   template <typename T = void>
   static nsresult UnregisterPrefixCallbacks(PrefChangedFunc aCallback,
                                             const char* const* aPrefs,
                                             T* aClosure = nullptr) {
-    return UnregisterCallbacks(aCallback, aPrefs, aClosure, PrefixMatch);
+    return UnregisterCallbacks(aCallback, aPrefs, static_cast<void*>(aClosure),
+                               true);
   }
 
   template <int N, typename T = void>
   static nsresult RegisterCallback(PrefChangedFunc aCallback,
                                    const char (&aPref)[N],
                                    T* aClosure = nullptr) {
-    return RegisterCallback(aCallback, nsLiteralCString(aPref), aClosure,
-                            ExactMatch);
+    return RegisterCallback(aCallback, nsLiteralCString(aPref),
+                            static_cast<void*>(aClosure), false);
   }
 
   template <int N, typename T = void>
   static nsresult UnregisterCallback(PrefChangedFunc aCallback,
                                      const char (&aPref)[N],
                                      T* aClosure = nullptr) {
-    return UnregisterCallback(aCallback, nsLiteralCString(aPref), aClosure,
-                              ExactMatch);
+    return UnregisterCallback(aCallback, nsLiteralCString(aPref),
+                              static_cast<void*>(aClosure), false);
   }
 
   template <int N, typename T = void>
   static nsresult RegisterCallbackAndCall(PrefChangedFunc aCallback,
                                           const char (&aPref)[N],
                                           T* aClosure = nullptr) {
-    return RegisterCallbackAndCall(aCallback, nsLiteralCString(aPref), aClosure,
-                                   ExactMatch);
+    nsresult rv = RegisterCallback(aCallback, nsLiteralCString(aPref),
+                                   static_cast<void*>(aClosure), false);
+    if (NS_SUCCEEDED(rv)) {
+      (*aCallback)(aPref, static_cast<void*>(aClosure));
+    }
+    return rv;
   }
 
   template <int N, typename T = void>
   static nsresult RegisterPrefixCallback(PrefChangedFunc aCallback,
                                          const char (&aPref)[N],
                                          T* aClosure = nullptr) {
-    return RegisterCallback(aCallback, nsLiteralCString(aPref), aClosure,
-                            PrefixMatch);
+    return RegisterCallback(aCallback, nsLiteralCString(aPref),
+                            static_cast<void*>(aClosure), true);
   }
 
   template <int N, typename T = void>
   static nsresult RegisterPrefixCallbackAndCall(PrefChangedFunc aCallback,
                                                 const char (&aPref)[N],
                                                 T* aClosure = nullptr) {
-    return RegisterCallbackAndCall(aCallback, nsLiteralCString(aPref), aClosure,
-                                   PrefixMatch);
+    nsresult rv = RegisterCallback(aCallback, nsLiteralCString(aPref),
+                                   static_cast<void*>(aClosure), true);
+    if (NS_SUCCEEDED(rv)) {
+      (*aCallback)(aPref, static_cast<void*>(aClosure));
+    }
+    return rv;
   }
 
   template <int N, typename T = void>
   static nsresult UnregisterPrefixCallback(PrefChangedFunc aCallback,
                                            const char (&aPref)[N],
                                            T* aClosure = nullptr) {
-    return UnregisterCallback(aCallback, nsLiteralCString(aPref), aClosure,
-                              PrefixMatch);
+    return UnregisterCallback(aCallback, nsLiteralCString(aPref),
+                              static_cast<void*>(aClosure), true);
   }
 
   // When a content process is created these methods are used to pass changed
@@ -439,107 +457,24 @@ class Preferences final : public nsIPrefService,
   bool AllowOffMainThreadSave();
 
  private:
+  friend class PreferencesImpl;
+
   ~Preferences();
-
-  nsresult NotifyServiceObservers(const char* aSubject);
-
-  // Loads the prefs.js file from the profile, or creates a new one. Returns
-  // the prefs file if successful, or nullptr on failure.
-  already_AddRefed<nsIFile> ReadSavedPrefs();
-
-  // Loads the user.js file from the profile if present.
-  void ReadUserOverridePrefs();
-
-  nsresult MakeBackupPrefFile(nsIFile* aFile);
-
-  // Default pref file save can be blocking or not.
-  enum class SaveMethod { Blocking, Asynchronous };
-
-  // Off main thread is only respected for the default aFile value (nullptr).
-  nsresult SavePrefFileInternal(nsIFile* aFile, SaveMethod aSaveMethod);
-
-  nsresult WritePrefFile(
-      nsIFile* aFile, SaveMethod aSaveMethod,
-      UniquePtr<MozPromiseHolder<WritePrefFilePromise>> aPromise = nullptr,
-      const nsIPrefOverrideMap* aPrefOverrideMap = nullptr);
-
-  nsresult ResetUserPrefs();
-
-  // Helpers for implementing
-  // Register(Prefix)Callback/Unregister(Prefix)Callback.
- public:
-  // Public so the ValueObserver classes can use it.
-  enum MatchKind {
-    PrefixMatch,
-    ExactMatch,
-  };
-
- private:
-  static void SetupTelemetryPref();
-  static nsresult InitInitialObjects(bool aIsStartup);
-
-  friend struct Internals;
 
   static nsresult RegisterCallback(PrefChangedFunc aCallback,
                                    const nsACString& aPref, void* aClosure,
-                                   MatchKind aMatchKind,
-                                   bool aIsPriority = false);
+                                   bool aPrefixMatch, bool aIsPriority = false);
   static nsresult UnregisterCallback(PrefChangedFunc aCallback,
                                      const nsACString& aPref, void* aClosure,
-                                     MatchKind aMatchKind);
-  static nsresult RegisterCallbackAndCall(PrefChangedFunc aCallback,
-                                          const nsACString& aPref,
-                                          void* aClosure, MatchKind aMatchKind);
-
+                                     bool aPrefixMatch);
   static nsresult RegisterCallbacks(PrefChangedFunc aCallback,
                                     const char* const* aPrefs, void* aClosure,
-                                    MatchKind aMatchKind);
+                                    bool aPrefixMatch);
   static nsresult UnregisterCallbacks(PrefChangedFunc aCallback,
                                       const char* const* aPrefs, void* aClosure,
-                                      MatchKind aMatchKind);
+                                      bool aPrefixMatch);
 
   static uint32_t UnregisterCallbacksForBranch(nsPrefBranch* aBranch);
-
-  template <typename T>
-  static nsresult RegisterCallbackImpl(PrefChangedFunc aCallback, T& aPref,
-                                       void* aClosure, MatchKind aMatchKind,
-                                       bool aIsPriority = false);
-  template <typename T>
-  static nsresult UnregisterCallbackImpl(PrefChangedFunc aCallback, T& aPref,
-                                         void* aClosure, MatchKind aMatchKind);
-
-  static nsresult RegisterCallback(PrefChangedFunc aCallback, const char* aPref,
-                                   void* aClosure, MatchKind aMatchKind,
-                                   bool aIsPriority = false) {
-    return RegisterCallback(aCallback, nsDependentCString(aPref), aClosure,
-                            aMatchKind, aIsPriority);
-  }
-  static nsresult UnregisterCallback(PrefChangedFunc aCallback,
-                                     const char* aPref, void* aClosure,
-                                     MatchKind aMatchKind) {
-    return UnregisterCallback(aCallback, nsDependentCString(aPref), aClosure,
-                              aMatchKind);
-  }
-  static nsresult RegisterCallbackAndCall(PrefChangedFunc aCallback,
-                                          const char* aPref, void* aClosure,
-                                          MatchKind aMatchKind) {
-    return RegisterCallbackAndCall(aCallback, nsDependentCString(aPref),
-                                   aClosure, aMatchKind);
-  }
-
- private:
-  nsCOMPtr<nsIFile> mCurrentFile;
-  nsCOMPtr<nsISerialEventTarget> mAsyncTarget;
-  // Time since unix epoch in ms (JS Date compatible)
-  PRTime mUserPrefsFileLastModifiedAtStartup = 0;
-  bool mDirty = false;
-  bool mProfileShutdown = false;
-  // We wait a bit after prefs are dirty before writing them. In this period,
-  // mDirty and mSavePending will both be true.
-  bool mSavePending = false;
-
-  nsCOMPtr<nsIPrefBranch> mRootBranch;
-  nsCOMPtr<nsIPrefBranch> mDefaultRootBranch;
 
   static StaticRefPtr<Preferences> sPreferences;
   static bool sShutdown;

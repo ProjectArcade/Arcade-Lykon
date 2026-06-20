@@ -21,7 +21,7 @@ use neqo_common::{
     Buffer, Datagram, Decoder, Ecn, Encoder, Role, Tos, datagram, event::Provider as EventProvider,
     hex, hex_snip_middle, hex_with_len, hrtime, qdebug, qerror, qinfo, qlog::Qlog, qtrace, qwarn,
 };
-use neqo_crypto::{
+use nss::{
     Agent, AntiReplay, AuthenticationStatus, Cipher, Client, Group, HandshakeState, PrivateKey,
     PublicKey, ResumptionToken, SecretAgentInfo, SecretAgentPreInfo, Server, ZeroRttChecker,
     agent::{CertificateCompressor, CertificateInfo},
@@ -32,6 +32,7 @@ use strum::IntoEnumIterator as _;
 use crate::{
     AppError, CloseReason, Error, Res, StreamId,
     addr_valid::{AddressValidation, NewTokenState},
+    cc::Phase,
     cid::{
         ConnectionId, ConnectionIdEntry, ConnectionIdGenerator, ConnectionIdManager,
         ConnectionIdRef, ConnectionIdStore,
@@ -944,10 +945,12 @@ impl Connection {
     #[must_use]
     pub fn stats(&self) -> Stats {
         let mut v = self.stats.borrow().clone();
+        v.version = self.version;
         if let Some(p) = self.paths.primary() {
             let p = p.borrow();
             v.rtt = p.rtt().estimate();
             v.rttvar = p.rtt().rttvar();
+            v.min_rtt = p.rtt().minimum();
         }
         v
     }
@@ -1104,6 +1107,10 @@ impl Connection {
             return;
         }
 
+        // Snapshot timer type before ACKs can alter loss state.
+        if let Some(path) = self.paths.primary() {
+            self.loss_recovery.note_timeout_type(&path.borrow(), now);
+        }
         for d in dgrams {
             self.input(d, now, now);
         }
@@ -1262,6 +1269,10 @@ impl Connection {
         max_datagrams: NonZeroUsize,
     ) -> OutputBatch {
         if let Some(d) = dgram {
+            // Snapshot timer type before ACKs can alter loss state.
+            if let Some(path) = self.paths.primary() {
+                self.loss_recovery.note_timeout_type(&path.borrow(), now);
+            }
             self.input(d, now, now);
             self.process_saved(now);
         }
@@ -1694,6 +1705,12 @@ impl Connection {
             // path validation to this path.
             path.borrow_mut().set_valid(now);
         }
+
+        // Update SCONE signal.
+        if let Some(rate) = path.borrow_mut().update_scone(now, packet.scone()) {
+            qdebug!("[{self}] SCONE rate updated to {rate:x?}");
+            self.events.scone_updated(rate);
+        }
     }
 
     /// Take a datagram as input.  This reports an error if the packet was bad.
@@ -2090,8 +2107,15 @@ impl Connection {
             .migrate(&path, force, now, &mut self.stats.borrow_mut())
         {
             self.loss_recovery.migrate();
+            self.path_migrated(&path);
         }
         Ok(())
+    }
+
+    fn path_migrated(&self, path: &PathRef) {
+        let p = path.borrow();
+        self.events
+            .path_migrated(p.local_address(), p.remote_address());
     }
 
     fn migrate_to_preferred_address(&mut self, now: Instant) -> Res<()> {
@@ -2158,8 +2182,12 @@ impl Connection {
         }
 
         if self.ensure_permanent(path, now).is_ok() {
+            let was_primary = path.borrow().is_primary();
             self.paths
                 .handle_migration(path, remote, now, &mut self.stats.borrow_mut());
+            if !was_primary {
+                self.path_migrated(path);
+            }
         } else {
             qinfo!(
                 "[{self}] {} Peer migrated, but no connection ID available",
@@ -2689,9 +2717,7 @@ impl Connection {
                 path.borrow().pmtud().probe_size()
             } else {
                 profile.limit()
-                    - if space == PacketNumberSpace::Initial
-                        && self.conn_params.scone_enabled()
-                    {
+                    - if space == PacketNumberSpace::Initial && self.conn_params.scone_enabled() {
                         // Reserve some space for the SCONE indication in an Initial.
                         // This reduces the amount available for building the packet,
                         // but we'll pad to `profile.limit()` when padding.
@@ -2905,6 +2931,13 @@ impl Connection {
                 &mut self.qlog,
                 path.borrow().plpmtu(),
                 self.conn_params.get_congestion_control(),
+                now,
+            );
+            qlog::congestion_state_updated(
+                &mut self.qlog,
+                None,
+                Phase::SlowStart.into(),
+                None,
                 now,
             );
         }
@@ -3198,7 +3231,7 @@ impl Connection {
             }
             _ => {
                 qerror!("Crypto state should not be new or failed after successful handshake");
-                return Err(Error::Crypto(neqo_crypto::Error::Internal));
+                return Err(Error::Crypto(nss::Error::Internal));
             }
         }
 
@@ -3372,11 +3405,11 @@ impl Connection {
             }
             Frame::PathResponse { data } => {
                 self.stats.borrow_mut().frame_rx.path_response += 1;
-                if self
-                    .paths
-                    .path_response(data, now, &mut self.stats.borrow_mut())
+                if let Some(primary) =
+                    self.paths
+                        .path_response(data, now, &mut self.stats.borrow_mut())
                 {
-                    // This PATH_RESPONSE enabled migration; tell loss recovery.
+                    self.path_migrated(&primary);
                     self.loss_recovery.migrate();
                 }
             }
@@ -3607,6 +3640,13 @@ impl Connection {
                 &mut self.qlog,
                 path.borrow().plpmtu(),
                 self.conn_params.get_congestion_control(),
+                now,
+            );
+            qlog::congestion_state_updated(
+                &mut self.qlog,
+                None,
+                Phase::SlowStart.into(),
+                None,
                 now,
             );
         } else {
@@ -3842,20 +3882,14 @@ impl Connection {
     /// `InvalidStreamId` if the stream does not exist.
     /// `NoMoreData` if data and fin bit were previously read by the application.
     pub fn stream_recv(&mut self, stream_id: StreamId, data: &mut [u8]) -> Res<(usize, bool)> {
-        let stream = self.streams.get_recv_stream_mut(stream_id)?;
-
-        let rb = stream.read(data)?;
-        Ok(rb)
+        self.streams.recv(stream_id, data)
     }
 
     /// Application is no longer interested in this stream.
     /// # Errors
     /// When the stream ID is invalid.
     pub fn stream_stop_sending(&mut self, stream_id: StreamId, err: AppError) -> Res<()> {
-        let stream = self.streams.get_recv_stream_mut(stream_id)?;
-
-        stream.stop_sending(err);
-        Ok(())
+        self.streams.stop_sending(stream_id, err)
     }
 
     /// Increases `max_stream_data` for a `stream_id`.
@@ -3973,7 +4007,7 @@ impl Connection {
                 };
                 let x = f.dump();
                 if !x.is_empty() {
-                    _ = write!(&mut s, "\n  {} {}", meta.direction(), &x);
+                    _ = write!(&mut s, "\n  {} {x}", meta.direction());
                 }
             }
             qdebug!("[{self}] {meta}{s}");

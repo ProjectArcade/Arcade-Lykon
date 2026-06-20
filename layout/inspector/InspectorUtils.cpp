@@ -215,6 +215,9 @@ void InspectorUtils::GetChildrenForNode(nsINode& aNode,
   if (auto* node = nsLayoutUtils::GetMarkerPseudo(parent)) {
     aResult.AppendElement(node);
   }
+  if (auto* node = nsLayoutUtils::GetCheckmarkPseudo(parent)) {
+    aResult.AppendElement(node);
+  }
   if (auto* node = nsLayoutUtils::GetBeforePseudo(parent)) {
     aResult.AppendElement(node);
   }
@@ -236,6 +239,10 @@ void InspectorUtils::GetChildrenForNode(nsINode& aNode,
     aResult.AppendElement(node);
   }
   if (auto* node = nsLayoutUtils::GetAfterPseudo(parent)) {
+    aResult.AppendElement(node);
+  }
+
+  if (auto* node = nsLayoutUtils::GetPickerIconPseudo(parent)) {
     aResult.AppendElement(node);
   }
 }
@@ -297,12 +304,10 @@ class ReadOnlyInspectorDeclaration final : public nsDOMCSSDeclaration {
     return CSSStyleProperties_Binding::Wrap(aCx, this, aGivenProto);
   }
   // These ones are a bit sad, but matches e.g. nsComputedDOMStyle.
-  nsresult SetCSSDeclaration(DeclarationBlock* aDecl,
-                             MutationClosureData*) final {
+  nsresult SetCSSDeclaration(Block* aDecl, MutationClosureData*) final {
     MOZ_CRASH("called ReadOnlyInspectorDeclaration::SetCSSDeclaration");
   }
-  DeclarationBlock* GetOrCreateCSSDeclaration(Operation,
-                                              DeclarationBlock**) override {
+  Block* GetOrCreateCSSDeclaration(Operation, Block**) override {
     MOZ_CRASH("called ReadOnlyInspectorDeclaration::GetOrCreateCSSDeclaration");
   }
   ParsingEnvironment GetParsingEnvironment(nsIPrincipal*) const final {
@@ -418,7 +423,8 @@ void InspectorUtils::GetMatchingCSSRules(
     GlobalObject& aGlobalObject, Element& aElement, const nsAString& aPseudo,
     bool aIncludeVisitedStyle, bool aWithStartingStyle,
     nsTArray<OwningCSSRuleOrInspectorDeclaration>& aResult) {
-  auto pseudo = PseudoStyleRequest::Parse(aPseudo);
+  auto pseudo = PseudoStyleRequest::Parse(
+      aPseudo, aElement.OwnerDoc()->DefaultStyleAttrURLData());
   if (!pseudo) {
     return;
   }
@@ -693,8 +699,17 @@ static uint8_t ToServoCssType(InspectorPropertyType aType) {
 
 bool InspectorUtils::Supports(GlobalObject&, const nsACString& aDeclaration,
                               const SupportsOptions& aOptions) {
-  return Servo_CSSSupports(&aDeclaration, aOptions.mUserAgent, aOptions.mChrome,
-                           aOptions.mQuirks);
+  StyleCssSupportsParams params{
+      .origin =
+          aOptions.mUserAgent ? StyleOrigin::UserAgent : StyleOrigin::Author,
+      .url_context = aOptions.mChrome ? StyleCssSupportsUrlContext::Chrome
+                                      : StyleCssSupportsUrlContext::Default,
+      .quirks = aOptions.mQuirks
+                    ? nsCompatibility::eCompatibility_NavQuirks
+                    : nsCompatibility::eCompatibility_FullStandards,
+  };
+  return Servo_CSSSupports(&aDeclaration, &params,
+                           /* aUrlData = */ nullptr);
 }
 
 bool InspectorUtils::CssPropertySupportsType(GlobalObject& aGlobalObject,
@@ -845,6 +860,12 @@ void InspectorUtils::ColorTo(GlobalObject&, const nsACString& aFromColor,
 bool InspectorUtils::IsValidCSSColor(GlobalObject& aGlobalObject,
                                      const nsACString& aColorString) {
   return ServoCSSParser::IsValidCSSColor(aColorString);
+}
+
+/* static */
+bool InspectorUtils::IsValidCSSImage(GlobalObject& aGlobalObject,
+                                     const nsACString& aImageString) {
+  return ServoCSSParser::IsValidCSSImage(aImageString);
 }
 
 /* static */
@@ -1408,6 +1429,42 @@ void InspectorUtils::GetAnchorNamesFor(GlobalObject& aGlobalObject,
   }
 
   frame->PresShell()->CollectAnchorNames(frame, aResult);
+}
+
+/* static */
+void InspectorUtils::GetComputationStepsSupportedCSSFunctions(
+    GlobalObject& aGlobalObject, nsTArray<nsCString>& aResult) {
+  Servo_GetComputationStepsSupportedCSSFunctions(&aResult);
+}
+
+/* static */
+void InspectorUtils::GetComputationSteps(GlobalObject& aGlobalObject,
+                                         const nsAString& aExpression,
+                                         Element& aElement,
+                                         const nsAString& aPseudo,
+                                         nsTArray<nsString>& aResult) {
+  Document* doc = aElement.GetComposedDoc();
+  if (!doc) {
+    return;
+  }
+
+  auto pseudo = PseudoStyleRequest::Parse(
+      aPseudo, aElement.OwnerDoc()->DefaultStyleAttrURLData());
+  if (!pseudo) {
+    return;
+  }
+
+  RefPtr<const ComputedStyle> computedStyle =
+      GetCleanComputedStyleForElement(&aElement, *pseudo);
+  if (!computedStyle) {
+    // This can fail for elements that are not in the document or
+    // if the document they're in doesn't have a presshell.  Bail out.
+    return;
+  }
+
+  Servo_GetComputationSteps(&aExpression, &aElement, pseudo->mType,
+                            computedStyle, doc->EnsureStyleSet().RawData(),
+                            &aResult);
 }
 
 }  // namespace mozilla::dom

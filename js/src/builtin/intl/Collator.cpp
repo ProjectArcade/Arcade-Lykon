@@ -38,16 +38,7 @@ using namespace js;
 using namespace js::intl;
 
 const JSClassOps CollatorObject::classOps_ = {
-    nullptr,                   // addProperty
-    nullptr,                   // delProperty
-    nullptr,                   // enumerate
-    nullptr,                   // newEnumerate
-    nullptr,                   // resolve
-    nullptr,                   // mayResolve
-    CollatorObject::finalize,  // finalize
-    nullptr,                   // call
-    nullptr,                   // construct
-    nullptr,                   // trace
+    .finalize = CollatorObject::finalize,
 };
 
 const JSClass CollatorObject::class_ = {

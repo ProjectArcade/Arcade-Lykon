@@ -16,6 +16,7 @@ const FIRST_ORDERED_NODE_TYPE = 9;
 const DOCUMENT_FRAGMENT_NODE = 11;
 const ELEMENT_NODE = 1;
 
+const MATHML_NS = "http://www.w3.org/1998/Math/MathML";
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
 /** XUL elements that support checked property. */
@@ -876,6 +877,15 @@ dom.isInView = function (el) {
     if (el.localName === "tr" && el.cells && el.cells.length) {
       return tree.includes(el.cells[0]);
     }
+    // Same for MathML <mtr>, but we can't use HTMLTableRowElement.cells.
+    if (
+      el.namespaceURI === MATHML_NS &&
+      el.localName === "mtr" &&
+      el.children &&
+      el.children.length
+    ) {
+      return tree.includes(el.children[0]);
+    }
 
     return tree.includes(el);
   } finally {
@@ -942,6 +952,31 @@ dom.isVisible = async function (el, x = undefined, y = undefined) {
 dom.isObscured = function (el) {
   let tree = dom.getPointerInteractablePaintTree(el);
   return !el.contains(tree[0]);
+};
+
+/**
+ * Returns the first rect from a DOMRectList with non-zero width and height,
+ * falling back to the first rect if all are zero-size.
+ *
+ * Inline elements wrapping block-level children produce zero-size line-box
+ * rects at the start/end of their getClientRects() list. Using such a rect
+ * to compute a click point or check visibility leads to incorrect results.
+ *
+ * Note: this diverges from the Webdriver spec. Indeed the Webdriver spec
+ * mentions using the first rect in the list.
+ * See https://github.com/w3c/webdriver/issues/1961
+ *
+ * @param {DOMRectList} rects
+ *     List of rects to search through.
+ *
+ * @returns {DOMRect}
+ *     First rect with non-zero width and height, or rects[0] if all are zero-size.
+ */
+dom.getFirstNonZeroRect = function (rects) {
+  return (
+    Array.prototype.find.call(rects, r => r.width > 0 && r.height > 0) ||
+    rects[0]
+  );
 };
 
 // TODO(ato): Only used by deprecated action API
@@ -1024,7 +1059,7 @@ dom.getPointerInteractablePaintTree = function (el) {
   }
 
   // step 4
-  let centre = dom.getInViewCentrePoint(rects[0], win);
+  let centre = dom.getInViewCentrePoint(dom.getFirstNonZeroRect(rects), win);
 
   // step 5
   return rootNode.elementsFromPoint(centre.x, centre.y);
@@ -1222,4 +1257,25 @@ dom.isBooleanAttribute = function (el, attr) {
     return false;
   }
   return boolEls[el.localName].includes(attr);
+};
+
+/**
+ * Get the position and dimensions of the element.
+ *
+ * @param {Element} el
+ *     Element to get the dimensions of.
+ *
+ * @returns {DOMRect}
+ *     A DOMRect describing the element's position relative to the document.
+ */
+dom.getElementRect = function (el) {
+  const win = el.documentGlobal;
+  const rect = el.getBoundingClientRect();
+
+  return new DOMRect(
+    rect.x + win.pageXOffset,
+    rect.y + win.pageYOffset,
+    rect.width,
+    rect.height
+  );
 };

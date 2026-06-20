@@ -48,6 +48,13 @@ void CoalescedMouseData::Coalesce(const WidgetMouseEvent& aMouseOrPointerEvent,
     mCoalescedInputEvent->mRefPoint = aMouseOrPointerEvent.mRefPoint;
     mCoalescedInputEvent->mPressure = aMouseOrPointerEvent.mPressure;
     mCoalescedInputEvent->AssignPointerHelperData(aMouseOrPointerEvent);
+    // Accumulate motion across coalesced events. Without this,
+    // the dispatched event would report only the first motion,
+    // missing subsequent movements.
+    if (mCoalescedInputEvent->mMovement) {
+      MOZ_ASSERT(aMouseOrPointerEvent.mMovement);
+      *mCoalescedInputEvent->mMovement += *aMouseOrPointerEvent.mMovement;
+    }
   }
 
   if (aMouseOrPointerEvent.mMessage == eMouseMove) {
@@ -85,6 +92,7 @@ bool CoalescedMouseData::CanCoalesce(const WidgetMouseEvent& aMouseMoveEvent,
       mCoalescedInputEvent->pointerId != aMouseMoveEvent.pointerId ||
       mCoalescedInputEvent->mButton != aMouseMoveEvent.mButton ||
       mCoalescedInputEvent->mButtons != aMouseMoveEvent.mButtons ||
+      mCoalescedInputEvent->mMovement != aMouseMoveEvent.mMovement ||
       mGuid != aGuid || mInputBlockId != aInputBlockId) {
     return false;
   }

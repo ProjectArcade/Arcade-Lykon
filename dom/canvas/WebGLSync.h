@@ -39,7 +39,7 @@ class WebGLSync final : public WebGLContextBoundObject, public SupportsWeakPtr {
 
   MOZ_DECLARE_REFCOUNTED_VIRTUAL_TYPENAME(WebGLSync, override)
 
-  GLsync mGLName = 0;
+  GLsync mGLName = nullptr;
   const uint64_t mFenceId;
   bool mCanBeAvailable = false;
 
@@ -54,7 +54,7 @@ class WebGLSync final : public WebGLContextBoundObject, public SupportsWeakPtr {
   template <class F>
   void OnCompleteTaskAdd(F&& fn) {
     MOZ_RELEASE_ASSERT(mOnCompleteTasks);
-    auto task = std::make_unique<webgl::FnTask<F>>(std::move(fn));
+    auto task = std::make_unique<webgl::FnTask<F>>(std::forward<F>(fn));
     mOnCompleteTasks->push_back(std::move(task));
   }
 

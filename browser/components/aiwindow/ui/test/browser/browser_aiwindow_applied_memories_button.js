@@ -15,7 +15,10 @@ add_task(async function test_applied_memories_button_basic() {
       const button = doc.getElementById("test-button");
 
       button.messageId = "msg-1";
-      button.appliedMemories = ["User is vegan", "User has a cat"];
+      button.appliedMemories = [
+        { memory_summary: "User is vegan" },
+        { memory_summary: "User has a cat" },
+      ];
 
       await content.customElements.whenDefined("applied-memories-button");
 
@@ -51,7 +54,7 @@ add_task(async function test_applied_memories_button_basic() {
       button.addEventListener("remove-applied-memory", onRemove);
 
       removeButton.click();
-      button.appliedMemories = ["User has a cat"];
+      button.appliedMemories = [{ memory_summary: "User has a cat" }];
       await content.Promise.resolve();
 
       const itemsAfter = button.shadowRoot.querySelectorAll(
@@ -61,7 +64,11 @@ add_task(async function test_applied_memories_button_basic() {
 
       ok(removeEventDetail, "remove-applied-memory event fired");
       is(removeEventDetail.messageId, "msg-1", "Event includes messageId");
-      is(removeEventDetail.memory, "User is vegan", "Event includes memory");
+      is(
+        removeEventDetail.memory.memory_summary,
+        "User is vegan",
+        "Event includes memory"
+      );
 
       doc.body.click();
 
@@ -83,7 +90,10 @@ add_task(async function test_applied_memories_button_retry_without_memories() {
       const button = content.document.getElementById("test-button");
 
       button.messageId = "msg-1";
-      button.appliedMemories = ["User is vegan", "User has a cat"];
+      button.appliedMemories = [
+        { memory_summary: "User is vegan" },
+        { memory_summary: "User has a cat" },
+      ];
 
       await content.customElements.whenDefined("applied-memories-button");
 
@@ -119,7 +129,7 @@ add_task(async function test_applied_memories_button_showCallout_auto_opens() {
     await SpecialPowers.spawn(browser, [], async () => {
       const button = content.document.getElementById("test-button");
       button.messageId = "msg-1";
-      button.appliedMemories = ["User is vegan"];
+      button.appliedMemories = [{ memory_summary: "User is vegan" }];
 
       await content.customElements.whenDefined("applied-memories-button");
 
@@ -188,49 +198,58 @@ add_task(async function test_applied_memories_button_keyboard_navigation() {
 
       const root = button.shadowRoot;
       const removeButtons = root.querySelectorAll(".memories-remove-button");
-      const manageButton = root.querySelector(".manage-memories-button");
       const retryButton = root.querySelector(".retry-without-memories-button");
 
       is(removeButtons.length, 2, "Two remove buttons rendered");
 
-      // Opening the menu should focus the first item.
-      assertFocused(root, removeButtons[0], "First item focused on open");
+      // Opening the dialog should focus the first delete button.
+      assertFocused(
+        root,
+        removeButtons[0],
+        "First delete button focused on open"
+      );
 
-      // ArrowDown moves to next item
+      // ArrowDown moves to next delete button
       pressKey(removeButtons[0], "ArrowDown");
-      assertFocused(root, removeButtons[1], "ArrowDown moves to second item");
+      assertFocused(
+        root,
+        removeButtons[1],
+        "ArrowDown moves to second delete button"
+      );
 
+      // ArrowDown wraps from last delete button to first
       pressKey(removeButtons[1], "ArrowDown");
-      assertFocused(root, manageButton, "ArrowDown moves to manage button");
+      assertFocused(
+        root,
+        removeButtons[0],
+        "ArrowDown wraps to first delete button"
+      );
 
-      pressKey(manageButton, "ArrowDown");
-      assertFocused(root, retryButton, "ArrowDown moves to retry button");
-
-      // ArrowDown wraps from last to first
-      pressKey(retryButton, "ArrowDown");
-      assertFocused(root, removeButtons[0], "ArrowDown wraps to first item");
-
-      // ArrowUp wraps from first to last
+      // ArrowUp wraps from first delete button to last
       pressKey(removeButtons[0], "ArrowUp");
-      assertFocused(root, retryButton, "ArrowUp wraps to last item");
+      assertFocused(
+        root,
+        removeButtons[1],
+        "ArrowUp wraps to last delete button"
+      );
 
-      // ArrowUp moves to previous item
-      pressKey(retryButton, "ArrowUp");
-      assertFocused(root, manageButton, "ArrowUp moves to manage button");
+      // Home jumps to first delete button
+      pressKey(removeButtons[1], "Home");
+      assertFocused(
+        root,
+        removeButtons[0],
+        "Home jumps to first delete button"
+      );
 
-      // Home jumps to first item
-      pressKey(manageButton, "Home");
-      assertFocused(root, removeButtons[0], "Home jumps to first item");
-
-      // End jumps to last item
+      // End jumps to last delete button
       pressKey(removeButtons[0], "End");
-      assertFocused(root, retryButton, "End jumps to last item");
+      assertFocused(root, removeButtons[1], "End jumps to last delete button");
 
-      // Tab closes popover and returns focus to trigger
+      // Tab from retry button closes popover
+      retryButton.focus();
       pressKey(retryButton, "Tab");
       await button.updateComplete;
-      ok(!button.open, "Tab closes popover");
-      assertFocused(root, trigger, "Tab returns focus to trigger");
+      ok(!button.open, "Tab from retry button closes popover");
 
       // Reopen and test Escape
       trigger.click();
@@ -252,7 +271,7 @@ add_task(async function test_applied_memories_button_manage_memories() {
     await SpecialPowers.spawn(browser, [], async () => {
       const button = content.document.getElementById("test-button");
       button.messageId = "msg-1";
-      button.appliedMemories = ["User is vegan"];
+      button.appliedMemories = [{ memory_summary: "User is vegan" }];
       button.showCallout = true;
 
       await content.customElements.whenDefined("applied-memories-button");

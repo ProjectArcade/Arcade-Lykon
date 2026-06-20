@@ -31,6 +31,7 @@ const JSWINDOWACTORS = {
       attributionActorRegister = register;
       attributionActorUnregister = unregister;
     },
+    safeForUntrustedWebProcess: true,
   },
   MozNewTabRemoteRendererProtocol: {
     parent: {
@@ -38,6 +39,7 @@ const JSWINDOWACTORS = {
         "resource://newtab/lib/actors/MozNewTabRemoteRendererProtocolParent.sys.mjs",
     },
     includeParent: true,
+    remoteTypes: ["parent", "privilegedabout"],
   },
 };
 

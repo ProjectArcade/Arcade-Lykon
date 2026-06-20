@@ -21,13 +21,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import mozilla.components.compose.base.theme.AcornTheme
+import mozilla.components.compose.base.BottomSheetHandle
 import mozilla.components.concept.sync.Device
 import mozilla.components.concept.sync.DeviceType
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.menu.compose.MenuGroup
 import org.mozilla.fenix.components.menu.compose.MenuItem
-import org.mozilla.fenix.compose.BottomSheetHandle
 import org.mozilla.fenix.share.ShareViewModel
 import org.mozilla.fenix.share.listadapters.SyncShareOption
 import org.mozilla.fenix.theme.FirefoxTheme
@@ -60,7 +59,7 @@ internal fun SendToDevicesContent(
             )
             Text(
                 text = stringResource(id = R.string.share_device_subheader),
-                style = AcornTheme.typography.headline7,
+                style = FirefoxTheme.typography.headline7,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -133,7 +132,7 @@ private fun ColumnScope.NoDevicesAvailable() {
     )
     Text(
         text = stringResource(id = R.string.synced_tabs_connect_another_device),
-        style = AcornTheme.typography.headline6,
+        style = FirefoxTheme.typography.headline6,
         color = MaterialTheme.colorScheme.primary,
         textAlign = TextAlign.Center,
         modifier = Modifier

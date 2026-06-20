@@ -66,7 +66,7 @@ async function showChangePasswordDoorhanger(
 
   let { panel } = PopupNotifications;
   let notificationElement = panel.childNodes[0];
-  await BrowserTestUtils.waitForCondition(() => {
+  await TestUtils.waitForCondition(() => {
     return (
       notificationElement.querySelector("#password-notification-password")
         .value == formLogin.password &&
@@ -153,7 +153,7 @@ async function promptToChangePasswordTest(testData) {
       }
 
       info("Clicking mainActionButton");
-      mainActionButton.doCommand();
+      mainActionButton.click();
       info("Waiting for promiseHidden");
       await promiseHidden;
       info("Waiting for storagePromise");

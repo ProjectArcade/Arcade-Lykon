@@ -62,16 +62,7 @@ using mozilla::Maybe;
 using mozilla::Some;
 
 const JSClassOps DebuggerScript::classOps_ = {
-    nullptr,                          // addProperty
-    nullptr,                          // delProperty
-    nullptr,                          // enumerate
-    nullptr,                          // newEnumerate
-    nullptr,                          // resolve
-    nullptr,                          // mayResolve
-    nullptr,                          // finalize
-    nullptr,                          // call
-    nullptr,                          // construct
-    CallTraceMethod<DebuggerScript>,  // trace
+    .trace = CallTraceMethod<DebuggerScript>,
 };
 
 const JSClass DebuggerScript::class_ = {
@@ -1502,9 +1493,6 @@ static bool BytecodeIsEffectful(JSScript* script, size_t offset) {
     case JSOp::SetFunName:
     case JSOp::MutateProto:
     case JSOp::DynamicImport:
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
-    case JSOp::DynamicImportSource:
-#endif
     case JSOp::InitialYield:
     case JSOp::Yield:
     case JSOp::Await:

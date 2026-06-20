@@ -4,7 +4,7 @@
 
 "use strict";
 
-/* exported definePyVar, assignPyVarToUiaWithId, setUpWaitForUiaEvent, setUpWaitForUiaPropEvent, waitForUiaEvent, testPatternAbsent, testPythonRaises, isUiaElementArray */
+/* exported definePyVar, assignPyVarToUiaWithId, setUpWaitForUiaEvent, setUpWaitForUiaPropEvent, waitForUiaEvent, testPatternSupported, testPatternAbsent, testPythonRaises, isUiaElementArray */
 
 // Load the shared-head file first.
 Services.scriptloader.loadSubScript(
@@ -12,11 +12,11 @@ Services.scriptloader.loadSubScript(
   this
 );
 
-// Loading and common.js from accessible/tests/mochitest/ for all tests, as
-// well as promisified-events.js and layout.js.
+// Loading helpers from accessible/tests/mochitest/ for all tests, as
+// well as events.js and layout.js.
 loadScripts(
   { name: "common.js", dir: MOCHITESTS_DIR },
-  { name: "promisified-events.js", dir: MOCHITESTS_DIR },
+  { name: "events.js", dir: MOCHITESTS_DIR },
   { name: "layout.js", dir: MOCHITESTS_DIR }
 );
 
@@ -71,6 +71,17 @@ function waitForUiaEvent() {
     global event
     event = onEvent.wait()
   `);
+}
+
+/**
+ * Verify that a UIA element supports the given control pattern.
+ */
+async function testPatternSupported(id, patternName) {
+  const hasPattern = await runPython(`
+    el = findUiaByDomId(doc, "${id}")
+    return bool(getUiaPattern(el, "${patternName}"))
+  `);
+  ok(hasPattern, `${id} has ${patternName} pattern`);
 }
 
 /**

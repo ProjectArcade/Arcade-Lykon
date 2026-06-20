@@ -27,7 +27,9 @@
 #endif
 
 mozilla::LazyLogModule gMediaParentLog("MediaParent");
-#define LOG(args) MOZ_LOG(gMediaParentLog, mozilla::LogLevel::Debug, args)
+#define LOG(args)                                        \
+  MOZ_LOG_FMT(gMediaParentLog, mozilla::LogLevel::Debug, \
+              MOZ_LOG_EXPAND_ARGS args)
 
 // A file in the profile dir is used to persist mOriginKeys used to anonymize
 // deviceIds to be unique per origin, to avoid them being supercookies.
@@ -87,10 +89,13 @@ class OriginKeyStore {
       OriginKey since(nsCString(), aSinceWhen / PR_USEC_PER_SEC);
       for (auto iter = mKeys.Iter(); !iter.Done(); iter.Next()) {
         auto originKey = iter.UserData();
-        LOG((((originKey->mSecondsStamp >= since.mSecondsStamp)
-                  ? "%s: REMOVE %" PRId64 " >= %" PRId64
-                  : "%s: KEEP   %" PRId64 " < %" PRId64),
-             __FUNCTION__, originKey->mSecondsStamp, since.mSecondsStamp));
+        if (originKey->mSecondsStamp >= since.mSecondsStamp) {
+          LOG(("{}: REMOVE {} >= {}", __FUNCTION__, originKey->mSecondsStamp,
+               since.mSecondsStamp));
+        } else {
+          LOG(("{}: KEEP   {} < {}", __FUNCTION__, originKey->mSecondsStamp,
+               since.mSecondsStamp));
+        }
 
         if (originKey->mSecondsStamp >= since.mSecondsStamp) {
           if (aRemovedKeys) {
@@ -384,7 +389,7 @@ class OriginKeyStore {
   virtual ~OriginKeyStore() {
     MOZ_ASSERT(NS_IsMainThread());
     sOriginKeyStore = nullptr;
-    LOG(("%s", __FUNCTION__));
+    LOG(("{}", __FUNCTION__));
   }
 
  public:
@@ -453,17 +458,18 @@ mozilla::ipc::IPCResult Parent<Super>::RecvGetPrincipalKey(
         if (NS_WARN_IF(NS_FAILED(rv))) {
           return PrincipalKeyPromise::CreateAndReject(rv, __func__);
         }
-        return PrincipalKeyPromise::CreateAndResolve(result, __func__);
+        return PrincipalKeyPromise::CreateAndResolve(std::move(result),
+                                                     __func__);
       })
-      ->Then(
-          GetCurrentSerialEventTarget(), __func__,
-          [aResolve](const PrincipalKeyPromise::ResolveOrRejectValue& aValue) {
-            if (aValue.IsReject()) {
-              aResolve(""_ns);
-            } else {
-              aResolve(aValue.ResolveValue());
-            }
-          });
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [aResolve = std::move(aResolve)](
+                 const PrincipalKeyPromise::ResolveOrRejectValue& aValue) {
+               if (aValue.IsReject()) {
+                 aResolve(""_ns);
+               } else {
+                 aResolve(aValue.ResolveValue());
+               }
+             });
 
   return IPC_OK();
 }
@@ -528,18 +534,18 @@ template <class Super>
 void Parent<Super>::ActorDestroy(ActorDestroyReason aWhy) {
   // No more IPC from here
   mDestroyed = true;
-  LOG(("%s", __FUNCTION__));
+  LOG(("{}", __FUNCTION__));
 }
 
 template <class Super>
 Parent<Super>::Parent()
     : mOriginKeyStore(OriginKeyStore::Get()), mDestroyed(false) {
-  LOG(("media::Parent: %p", this));
+  LOG(("media::Parent: {}", fmt::ptr(this)));
 }
 
 template <class Super>
 Parent<Super>::~Parent() {
-  LOG(("~media::Parent: %p", this));
+  LOG(("~media::Parent: {}", fmt::ptr(this)));
 }
 
 PMediaParent* AllocPMediaParent() {

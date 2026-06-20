@@ -24,7 +24,7 @@ import mozilla.components.browser.state.state.searchEngines
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarState
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarStore
 import mozilla.components.compose.browser.toolbar.store.Mode
-import mozilla.components.feature.importer.ImporterResult
+import mozilla.components.feature.importer.ImporterEvent
 import mozilla.components.lib.state.helpers.StoreProvider.Companion.fragmentStore
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import org.mozilla.fenix.HomeActivity
@@ -36,12 +36,12 @@ import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.metrics.MetricsUtils
 import org.mozilla.fenix.components.search.BOOKMARKS_SEARCH_ENGINE_ID
+import org.mozilla.fenix.components.share.ShareSource
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.bookmarkStorage
 import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
-import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.pbmlock.registerForVerification
 import org.mozilla.fenix.pbmlock.verifyUser
 import org.mozilla.fenix.search.BrowserStoreToFenixSearchMapperMiddleware
@@ -53,7 +53,6 @@ import org.mozilla.fenix.search.SearchFragmentStore
 import org.mozilla.fenix.search.createInitialSearchFragmentState
 import org.mozilla.fenix.tabstray.redux.state.Page
 import org.mozilla.fenix.theme.FirefoxTheme
-import org.mozilla.fenix.utils.lastSavedFolderCache
 
 /**
  * The screen that displays the user's bookmark list in their Library.
@@ -78,14 +77,18 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
         ViewBoundFeatureWrapper<LensFeature>()
     private val lensLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            lensFeature?.get()?.handleImageResult(result.resultCode, result.data)
+            lensFeature?.get()?.handleCameraActivityResult(
+                result.resultCode,
+                result.data,
+                qrScanFenixFeature?.get(),
+            )
         }
     private val lensCameraPermissionLauncher: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             lensFeature?.get()?.onCameraPermissionResult(isGranted)
         }
 
-    private val importResultFlow = MutableSharedFlow<ImporterResult>(extraBufferCapacity = 1)
+    private val importEventsFlow = MutableSharedFlow<ImporterEvent>(extraBufferCapacity = 1)
 
     @Suppress("LongMethod")
     override fun onCreateView(
@@ -103,9 +106,9 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
 
                 val store by fragmentStore(
                     BookmarksState.default.copy(
-                        showBookmarksImport = requireContext().settings().importBookmarksFeatureFlagEnabled,
+                        showBookmarksImport = requireComponents.settings.importBookmarksFeatureFlagEnabled,
                         sortOrder = BookmarksListSortOrder.fromString(
-                            value = requireContext().settings().bookmarkListSortOrder,
+                            value = requireComponents.settings.bookmarkListSortOrder,
                             default = BookmarksListSortOrder.Alphabetical(true),
                         ),
                     ),
@@ -132,7 +135,7 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                                 bookmarksStorage = requireContext().bookmarkStorage,
                                 addNewTabUseCase = requireComponents.useCases.tabsUseCases.addTab,
                                 fenixBrowserUseCases = requireComponents.useCases.fenixBrowserUseCases,
-                                openBookmarksInNewTab = if (settings().enableHomepageAsNewTab) {
+                                openBookmarksInNewTab = if (requireComponents.settings.enableHomepageAsNewTab) {
                                     false
                                 } else {
                                     navController
@@ -158,11 +161,17 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                                     )
                                 },
                                 shareBookmarks = { bookmarks ->
-                                    navController.nav(
-                                        R.id.bookmarkFragment,
-                                        BookmarkFragmentDirections.actionGlobalShareFragment(
-                                            data = bookmarks.asShareDataArray(),
-                                        ),
+                                    requireComponents.useCases.shareUseCases.shareItems(
+                                        items = bookmarks.asShareDataArray().toList(),
+                                        source = ShareSource.BOOKMARKS,
+                                        navigateToShareFragment = {
+                                            navController.nav(
+                                                R.id.bookmarkFragment,
+                                                BookmarkFragmentDirections.actionGlobalShareFragment(
+                                                    data = bookmarks.asShareDataArray(),
+                                                ),
+                                            )
+                                        },
                                     )
                                 },
                                 showTabsTray = ::showTabTray,
@@ -177,16 +186,16 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                                     appStore.state.mode
                                 },
                                 saveBookmarkSortOrder = {
-                                    requireContext().settings().bookmarkListSortOrder =
+                                    requireComponents.settings.bookmarkListSortOrder =
                                         it.asString
                                 },
-                                lastSavedFolderCache = requireContext().settings().lastSavedFolderCache,
+                                editBookmarkUseCase = requireComponents.useCases.bookmarksUseCases.editBookmark,
                                 reportResultGlobally = {
                                     requireComponents.appStore.dispatch(
                                         AppAction.BookmarkAction.BookmarkOperationResultReported(it),
                                     )
                                 },
-                                importResults = { importResultFlow },
+                                importEvents = { importEventsFlow },
                             ),
                         ),
                     )
@@ -220,7 +229,7 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
             viewLifecycleOwner,
         ) { _, bundle ->
             ImportBookmarksDialogFragment.decodeResult(bundle)?.let {
-                importResultFlow.tryEmit(it)
+                importEventsFlow.tryEmit(it)
             }
         }
     }

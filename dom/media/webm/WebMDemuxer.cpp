@@ -141,7 +141,7 @@ static void webmdemux_log(nestegg* aContext, unsigned int aSeverity,
 
   SprintfLiteral(msg, "%p [Nestegg-%s] ", aContext, sevStr);
   PR_vsnprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), aFormat, args);
-  MOZ_LOG(gNesteggLog, LogLevel::Debug, ("%s", msg));
+  MOZ_LOG_FMT(gNesteggLog, LogLevel::Debug, "{}", msg);
 
   va_end(args);
 }
@@ -323,9 +323,8 @@ nsresult WebMDemuxer::SetVideoCodecInfo(nestegg* aContext, int aTrackId) {
   return NS_OK;
 }
 
-nsresult WebMDemuxer::SetAudioCodecInfo(nestegg* aContext, int aTrackId,
-                                        const nestegg_audio_params& aParams) {
-  mAudioCodec = nestegg_track_codec_id(aContext, aTrackId);
+nsresult WebMDemuxer::SetContainerAudioCodecInfo(
+    nestegg* aContext, const nestegg_audio_params& aParams) {
   switch (mAudioCodec) {
     case NESTEGG_CODEC_VORBIS: {
       mInfo.mAudio.mCodecSpecificConfig =
@@ -349,10 +348,21 @@ nsresult WebMDemuxer::SetAudioCodecInfo(nestegg* aContext, int aTrackId,
       NS_WARNING("Unknown WebM audio codec");
       return NS_ERROR_DOM_MEDIA_METADATA_ERR;
   }
+  return NS_OK;
+}
+
+nsresult WebMDemuxer::SetAudioCodecInfo(nestegg* aContext, int aTrackId,
+                                        const nestegg_audio_params& aParams) {
+  mAudioCodec = nestegg_track_codec_id(aContext, aTrackId);
+
+  nsresult rv = SetContainerAudioCodecInfo(aContext, aParams);
+  if (NS_FAILED(rv)) {
+    return rv;
+  }
 
   AutoTArray<const unsigned char*, 4> headers;
   AutoTArray<size_t, 4> headerLens;
-  nsresult rv = GetCodecPrivateData(aContext, aTrackId, &headers, &headerLens);
+  rv = GetCodecPrivateData(aContext, aTrackId, &headers, &headerLens);
   if (NS_FAILED(rv)) {
     WEBM_DEBUG("GetCodecPrivateData error for WebM");
     return rv;
@@ -388,7 +398,7 @@ nsresult WebMDemuxer::GetCodecPrivateData(
   }
 
   for (uint32_t header = 0; header < nheaders; ++header) {
-    unsigned char* data = 0;
+    unsigned char* data = nullptr;
     size_t length = 0;
     r = nestegg_track_codec_data(aContext, aTrackId, header, &data, &length);
     if (r == -1) {
@@ -969,7 +979,7 @@ nsresult WebMDemuxer::GetNextPacket(TrackInfo::TrackType aType,
         } else if (packetEncryption ==
                    NESTEGG_PACKET_HAS_SIGNAL_BYTE_PARTITIONED) {
           uint8_t numPartitions = 0;
-          const uint32_t* partitions = NULL;
+          const uint32_t* partitions = nullptr;
           nestegg_packet_offsets(holder->Packet(), &partitions, &numPartitions);
 
           // WebM stores a list of 'partitions' in the data, which alternate

@@ -176,8 +176,8 @@ BufferTextureData* BufferTextureData::CreateInternal(
 
     bool isClear = aDesc.type() == BufferDescriptor::TRGBDescriptor &&
                    !IsOpaque(aDesc.get_RGBDescriptor().format());
-    RefPtr<ShmemTextureData::ShmemHolder> shmemHolder =
-        new ShmemTextureData::ShmemHolder(aAllocator, shm);
+    RefPtr shmemHolder =
+        MakeRefPtr<ShmemTextureData::ShmemHolder>(aAllocator, shm);
     return new ShmemTextureData(aDesc, aMoz2DBackend, shmemHolder, isClear);
   }
 }
@@ -188,7 +188,8 @@ BufferTextureData* BufferTextureData::CreateForYCbCr(
     const gfx::IntSize& aCbCrSize, uint32_t aCbCrStride, StereoMode aStereoMode,
     gfx::ColorDepth aColorDepth, gfx::YUVColorSpace aYUVColorSpace,
     gfx::ColorRange aColorRange, gfx::TransferFunction aTransferFunction,
-    gfx::ChromaSubsampling aSubsampling, TextureFlags aTextureFlags) {
+    gfx::ChromaSubsampling aSubsampling, TextureFlags aTextureFlags,
+    const Maybe<gfx::HDRMetadata>& aHDRMetadata) {
   Maybe<uint32_t> bufSize = ImageDataSerializer::ComputeYCbCrBufferSize(
       aDisplay, aYSize, aYStride, aCbCrSize, aCbCrStride, aColorDepth,
       aSubsampling);
@@ -206,7 +207,7 @@ BufferTextureData* BufferTextureData::CreateForYCbCr(
   YCbCrDescriptor descriptor = YCbCrDescriptor(
       aDisplay, aYSize, aYStride, aCbCrSize, aCbCrStride, yOffset, cbOffset,
       crOffset, aStereoMode, aColorDepth, aYUVColorSpace, aColorRange,
-      aTransferFunction, aSubsampling);
+      aTransferFunction, aSubsampling, aHDRMetadata);
 
   return CreateInternal(
       aAllocator ? aAllocator->GetTextureForwarder().get() : nullptr,
@@ -285,7 +286,7 @@ gfx::SurfaceFormat BufferTextureData::GetFormat() const {
 struct ShmemHolderUserData {
   explicit ShmemHolderUserData(ShmemTextureData::ShmemHolder* aShmemHolder)
       : mShmemHolder(aShmemHolder) {}
-  ~ShmemHolderUserData() {}
+  ~ShmemHolderUserData() = default;
   RefPtr<ShmemTextureData::ShmemHolder> mShmemHolder;
 };
 
@@ -612,8 +613,8 @@ ShmemTextureData* ShmemTextureData::Create(
   BufferDescriptor descriptor =
       RGBDescriptor(aSize, aFormat, aColorSpace, aTransferFunction);
   bool isClear = (aAllocFlags & ALLOC_CLEAR_BUFFER) || !IsOpaque(aFormat);
-  RefPtr<ShmemTextureData::ShmemHolder> shmemHolder =
-      new ShmemTextureData::ShmemHolder(aAllocator, shm);
+  RefPtr shmemHolder =
+      MakeRefPtr<ShmemTextureData::ShmemHolder>(aAllocator, shm);
   return new ShmemTextureData(descriptor, aMoz2DBackend, shmemHolder, isClear);
 }
 

@@ -57,7 +57,6 @@ import mozilla.components.support.test.whenever
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -78,6 +77,7 @@ import org.robolectric.annotation.Config
 import java.io.StringReader
 import java.security.cert.X509Certificate
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class SystemEngineViewTest {
@@ -358,7 +358,6 @@ class SystemEngineViewTest {
         engineSession.webView.webViewClient.doUpdateVisitedHistory(webView, "https://www.mozilla.com/not-allowed", false)
         verify(historyDelegate, never()).onVisited(eq("https://www.mozilla.com/not-allowed"), any())
         verify(historyDelegate).shouldStoreUri("https://www.mozilla.com/not-allowed")
-        Unit
     }
 
     @Test
@@ -527,7 +526,7 @@ class SystemEngineViewTest {
         engineSession.trackingProtectionPolicy = TrackingProtectionPolicy.strict()
         response = webViewClient.shouldInterceptRequest(engineSession.webView, invalidRequest)
         assertNotNull(response)
-        assertNull(response!!.data)
+        assertNull(response.data)
         assertNull(response.encoding)
         assertNull(response.mimeType)
 
@@ -536,7 +535,7 @@ class SystemEngineViewTest {
         whenever(faviconRequest.url).thenReturn("http://foo/favicon.ico".toUri())
         response = webViewClient.shouldInterceptRequest(engineSession.webView, faviconRequest)
         assertNotNull(response)
-        assertNull(response!!.data)
+        assertNull(response.data)
         assertNull(response.encoding)
         assertNull(response.mimeType)
 
@@ -555,7 +554,7 @@ class SystemEngineViewTest {
 
         response = webViewClient.shouldInterceptRequest(engineSession.webView, blockedRequest)
         assertNotNull(response)
-        assertNull(response!!.data)
+        assertNull(response.data)
         assertNull(response.encoding)
         assertNull(response.mimeType)
         assertTrue(trackerBlocked!!.trackingCategories.isEmpty())
@@ -785,7 +784,7 @@ class SystemEngineViewTest {
 
         val response = webViewClient.shouldInterceptRequest(engineSession.webView, webFontRequest)
         assertNotNull(response)
-        assertNull(response!!.data)
+        assertNull(response.data)
         assertNull(response.encoding)
         assertNull(response.mimeType)
     }

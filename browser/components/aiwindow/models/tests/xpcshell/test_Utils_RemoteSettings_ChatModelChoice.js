@@ -2,13 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-const { openAIEngine, resolveChatModelChoice } = ChromeUtils.importESModule(
+const {
+  resolveChatModelChoice,
+  FEATURE_MAJOR_VERSIONS,
+  _setRemoteClientForTesting,
+  _clearRemoteClientForTesting,
+} = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs"
 );
 
 const { sinon } = ChromeUtils.importESModule(
   "resource://testing-common/Sinon.sys.mjs"
 );
+
+registerCleanupFunction(() => _clearRemoteClientForTesting());
 
 add_task(async function test_resolveChatModelChoice_found() {
   const sb = sinon.createSandbox();
@@ -17,7 +24,7 @@ add_task(async function test_resolveChatModelChoice_found() {
     const fakeRecords = [
       {
         feature: "chat",
-        version: "4.1",
+        version: `${FEATURE_MAJOR_VERSIONS.chat}.1`,
         model: "qwen3-235b-a22b-instruct-2507-maas",
         model_choice_id: "2",
         owner_name: "Alibaba",
@@ -25,7 +32,7 @@ add_task(async function test_resolveChatModelChoice_found() {
       },
       {
         feature: "chat",
-        version: "4.1",
+        version: `${FEATURE_MAJOR_VERSIONS.chat}.1`,
         model: "gemini-2.5-flash-lite",
         model_choice_id: "1",
         owner_name: "Google",
@@ -40,7 +47,7 @@ add_task(async function test_resolveChatModelChoice_found() {
       },
     ];
 
-    sb.stub(openAIEngine, "getRemoteClient").returns({
+    _setRemoteClientForTesting({
       get: sb.stub().resolves(fakeRecords),
     });
 
@@ -87,7 +94,7 @@ add_task(async function test_resolveChatModelChoice_version_filtering() {
       },
     ];
 
-    sb.stub(openAIEngine, "getRemoteClient").returns({
+    _setRemoteClientForTesting({
       get: sb.stub().resolves(fakeRecords),
     });
 
@@ -111,13 +118,13 @@ add_task(async function test_resolveChatModelChoice_not_found() {
     const fakeRecords = [
       {
         feature: "chat",
-        version: "4.0",
+        version: "${FEATURE_MAJOR_VERSIONS.chat}.0",
         model: "some-model",
         model_choice_id: "2", // Different choice ID
       },
     ];
 
-    sb.stub(openAIEngine, "getRemoteClient").returns({
+    _setRemoteClientForTesting({
       get: sb.stub().resolves(fakeRecords),
     });
 

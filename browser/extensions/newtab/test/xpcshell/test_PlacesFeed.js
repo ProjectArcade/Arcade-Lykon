@@ -130,6 +130,26 @@ add_task(async function test_addToBlockedTopSitesSponsors_no_dupes() {
   sandbox.restore();
 });
 
+add_task(async function test_addToBlockedTopSitesSponsors_invalid_pref() {
+  info(
+    "PlacesFeed.addToBlockedTopSitesSponsors should treat an invalid pref " +
+      "value as an empty blocklist"
+  );
+  let sandbox = sinon.createSandbox();
+  let feed = getPlacesFeedForTest(sandbox);
+  Services.prefs.setStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "");
+
+  feed.addToBlockedTopSitesSponsors([{ url: "test.com" }]);
+
+  let blockedSponsors = JSON.parse(
+    Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF)
+  );
+  Assert.deepEqual(new Set(["test"]), new Set(blockedSponsors));
+
+  Services.prefs.clearUserPref(TOP_SITES_BLOCKED_SPONSORS_PREF);
+  sandbox.restore();
+});
+
 add_task(async function test_onAction_PlacesEvents() {
   info(
     "PlacesFeed.onAction should add bookmark, history, places, blocked " +

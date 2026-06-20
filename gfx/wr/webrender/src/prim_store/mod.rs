@@ -3,10 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use api::{BorderRadius, ClipMode, ColorF};
-use api::{ImageRendering, RepeatMode, PrimitiveFlags};
+use api::{ImageRendering, PrimitiveFlags};
 use api::{FillRule, POLYGON_CLIP_VERTEX_MAX};
 use api::units::*;
-use euclid::{SideOffsets2D, Size2D};
 use malloc_size_of::MallocSizeOf;
 use crate::clip::ClipLeafId;
 use crate::quad::QuadTileClassifier;
@@ -38,11 +37,11 @@ pub mod interned;
 
 pub mod storage;
 
-use backdrop::{BackdropCaptureDataHandle, BackdropRenderDataHandle, BackdropRenderScratch};
+use backdrop::{BackdropCaptureDataHandle, BackdropRenderDataHandle};
 use borders::{ImageBorderDataHandle, ImageBorderScratch, NormalBorderDataHandle, NormalBorderScratch};
 use gradient::{LinearGradientDataHandle, RadialGradientDataHandle, ConicGradientDataHandle};
 use image::{ImageDataHandle, ImageScratch, VisibleImageTile, YuvImageDataHandle};
-use line_dec::{LineDecorationDataHandle, LineDecorationScratch};
+use line_dec::LineDecorationDataHandle;
 use picture::PictureDataHandle;
 use rectangle::RectangleDataHandle;
 use text_run::{TextRunDataHandle, TextRunScratch};
@@ -230,193 +229,14 @@ impl PolygonKey {
 
 impl Eq for PolygonKey {}
 
-/// A hashable SideOffset2D that can be used in primitive keys.
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, Clone, MallocSizeOf, PartialEq)]
-pub struct SideOffsetsKey {
-    pub top: f32,
-    pub right: f32,
-    pub bottom: f32,
-    pub left: f32,
-}
+// `SideOffsetsKey`, `SizeKey`, `PointKey` and `VectorKey` now live in
+// `webrender_api` so builder-side interning keys can reference them. Re-exported
+// here to keep existing references working.
+pub use api::key_types::{PointKey, SizeKey, VectorKey};
 
-impl Eq for SideOffsetsKey {}
-
-impl hash::Hash for SideOffsetsKey {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.top.to_bits().hash(state);
-        self.right.to_bits().hash(state);
-        self.bottom.to_bits().hash(state);
-        self.left.to_bits().hash(state);
-    }
-}
-
-impl From<SideOffsetsKey> for LayoutSideOffsets {
-    fn from(key: SideOffsetsKey) -> LayoutSideOffsets {
-        LayoutSideOffsets::new(
-            key.top,
-            key.right,
-            key.bottom,
-            key.left,
-        )
-    }
-}
-
-impl<U> From<SideOffsets2D<f32, U>> for SideOffsetsKey {
-    fn from(offsets: SideOffsets2D<f32, U>) -> SideOffsetsKey {
-        SideOffsetsKey {
-            top: offsets.top,
-            right: offsets.right,
-            bottom: offsets.bottom,
-            left: offsets.left,
-        }
-    }
-}
-
-/// A hashable size for using as a key during primitive interning.
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Copy, Debug, Clone, MallocSizeOf, PartialEq)]
-pub struct SizeKey {
-    w: f32,
-    h: f32,
-}
-
-impl Eq for SizeKey {}
-
-impl hash::Hash for SizeKey {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.w.to_bits().hash(state);
-        self.h.to_bits().hash(state);
-    }
-}
-
-impl From<SizeKey> for LayoutSize {
-    fn from(key: SizeKey) -> LayoutSize {
-        LayoutSize::new(key.w, key.h)
-    }
-}
-
-impl<U> From<Size2D<f32, U>> for SizeKey {
-    fn from(size: Size2D<f32, U>) -> SizeKey {
-        SizeKey {
-            w: size.width,
-            h: size.height,
-        }
-    }
-}
-
-/// A hashable vec for using as a key during primitive interning.
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Copy, Debug, Clone, MallocSizeOf, PartialEq)]
-pub struct VectorKey {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl Eq for VectorKey {}
-
-impl hash::Hash for VectorKey {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.x.to_bits().hash(state);
-        self.y.to_bits().hash(state);
-    }
-}
-
-impl From<VectorKey> for LayoutVector2D {
-    fn from(key: VectorKey) -> LayoutVector2D {
-        LayoutVector2D::new(key.x, key.y)
-    }
-}
-
-impl From<VectorKey> for WorldVector2D {
-    fn from(key: VectorKey) -> WorldVector2D {
-        WorldVector2D::new(key.x, key.y)
-    }
-}
-
-impl From<LayoutVector2D> for VectorKey {
-    fn from(vec: LayoutVector2D) -> VectorKey {
-        VectorKey {
-            x: vec.x,
-            y: vec.y,
-        }
-    }
-}
-
-impl From<WorldVector2D> for VectorKey {
-    fn from(vec: WorldVector2D) -> VectorKey {
-        VectorKey {
-            x: vec.x,
-            y: vec.y,
-        }
-    }
-}
-
-/// A hashable point for using as a key during primitive interning.
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, Copy, Clone, MallocSizeOf, PartialEq)]
-pub struct PointKey {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl Eq for PointKey {}
-
-impl hash::Hash for PointKey {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.x.to_bits().hash(state);
-        self.y.to_bits().hash(state);
-    }
-}
-
-impl From<PointKey> for LayoutPoint {
-    fn from(key: PointKey) -> LayoutPoint {
-        LayoutPoint::new(key.x, key.y)
-    }
-}
-
-impl From<LayoutPoint> for PointKey {
-    fn from(p: LayoutPoint) -> PointKey {
-        PointKey {
-            x: p.x,
-            y: p.y,
-        }
-    }
-}
-
-impl From<PicturePoint> for PointKey {
-    fn from(p: PicturePoint) -> PointKey {
-        PointKey {
-            x: p.x,
-            y: p.y,
-        }
-    }
-}
-
-impl From<WorldPoint> for PointKey {
-    fn from(p: WorldPoint) -> PointKey {
-        PointKey {
-            x: p.x,
-            y: p.y,
-        }
-    }
-}
-
-/// A hashable float for using as a key during primitive interning.
-
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, Clone, Eq, MallocSizeOf, PartialEq, Hash)]
-pub struct PrimKeyCommonData {
-    pub flags: PrimitiveFlags,
-    pub aligned_aa_edges: EdgeMask,
-    pub transformed_aa_edges: EdgeMask,
-    pub prim_size: SizeKey,
-}
+// `PrimKeyCommonData` now lives in `webrender_api` so interned keys reference
+// only api-resident types. Re-exported here to keep existing references working.
+pub use api::key_types::PrimKeyCommonData;
 
 impl From<&LayoutPrimitiveInfo> for PrimKeyCommonData {
     fn from(info: &LayoutPrimitiveInfo) -> Self {
@@ -424,7 +244,6 @@ impl From<&LayoutPrimitiveInfo> for PrimKeyCommonData {
             flags: info.flags,
             aligned_aa_edges: info.aligned_aa_edges,
             transformed_aa_edges: info.transformed_aa_edges,
-            prim_size: info.rect.size().into(),
         }
     }
 }
@@ -443,8 +262,6 @@ pub struct PrimKey<T: MallocSizeOf> {
 #[derive(Debug)]
 pub struct PrimTemplateCommonData {
     pub flags: PrimitiveFlags,
-    pub may_need_repetition: bool,
-    pub prim_size: LayoutSize,
     pub opacity: PrimitiveOpacity,
     /// Address of the per-primitive data in the GPU cache.
     ///
@@ -460,8 +277,6 @@ impl PrimTemplateCommonData {
     pub fn with_key_common(common: PrimKeyCommonData) -> Self {
         PrimTemplateCommonData {
             flags: common.flags,
-            may_need_repetition: true,
-            prim_size: common.prim_size.into(),
             gpu_buffer_address: GpuBufferAddress::INVALID,
             opacity: PrimitiveOpacity::translucent(),
             aligned_aa_edges: common.aligned_aa_edges,
@@ -710,20 +525,9 @@ impl ClipData {
     }
 }
 
-/// A hashable descriptor for nine-patches, used by image and
-/// gradient borders.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, MallocSizeOf)]
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct NinePatchDescriptor {
-    pub width: i32,
-    pub height: i32,
-    pub slice: DeviceIntSideOffsets,
-    pub fill: bool,
-    pub repeat_horizontal: RepeatMode,
-    pub repeat_vertical: RepeatMode,
-    pub widths: SideOffsetsKey,
-}
+// `NinePatchDescriptor` now lives in `webrender_api` so builder-side interning
+// keys can reference it. Re-exported here to keep existing references working.
+pub use api::key_types::NinePatchDescriptor;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "capture", derive(Serialize))]
@@ -820,20 +624,25 @@ pub struct PrimitiveInstance {
     /// All information and state related to clip(s) for this primitive
     pub clip_leaf_id: ClipLeafId,
 
-    /// Position of the primitive in local space
-    pub prim_origin: LayoutPoint,
+    /// Local-space rect of the primitive (origin + size), as authored by the
+    /// display list (not snapped to the device pixel grid). Carries both the
+    /// position and the per-instance size; the latter used to live on
+    /// `PrimTemplateCommonData.prim_size` but is per-instance now so that the
+    /// intern key can deduplicate across differently-sized instances of the
+    /// same prim shape.
+    pub unsnapped_prim_rect: LayoutRect,
 }
 
 impl PrimitiveInstance {
     pub fn new(
         kind: PrimitiveKind,
         clip_leaf_id: ClipLeafId,
-        prim_origin: LayoutPoint,
+        unsnapped_prim_rect: LayoutRect,
     ) -> Self {
         PrimitiveInstance {
             kind,
             clip_leaf_id,
-            prim_origin,
+            unsnapped_prim_rect,
         }
     }
 
@@ -910,16 +719,8 @@ pub struct PrimitiveFrameScratch {
     /// visible primitive.
     pub draws: Vec<PrimitiveDrawHeader>,
 
-    /// Per-frame scratch for LineDecoration primitives.
-    pub line_decoration: storage::Storage<LineDecorationScratch>,
-
     /// Per-frame scratch for NormalBorder primitives.
     pub normal_border: storage::Storage<NormalBorderScratch>,
-
-    /// Per-frame scratch for BackdropRender primitives. Captures the
-    /// source sub-graph render task id at prepare time so batch reads
-    /// don't reach into the source Picture's per-frame state.
-    pub backdrop_render: storage::Storage<BackdropRenderScratch>,
 
     /// Per-frame scratch for Picture primitives. Holds the picture's
     /// primary/secondary render task ids and any per-composite-mode
@@ -995,9 +796,7 @@ impl Default for PrimitiveFrameScratch {
     fn default() -> Self {
         PrimitiveFrameScratch {
             draws: Vec::new(),
-            line_decoration: storage::Storage::new(0),
             normal_border: storage::Storage::new(0),
-            backdrop_render: storage::Storage::new(0),
             pictures: storage::Storage::new(0),
             images: storage::Storage::new(0),
             visible_image_tiles: storage::Storage::new(0),
@@ -1020,9 +819,7 @@ impl Default for PrimitiveFrameScratch {
 impl PrimitiveFrameScratch {
     pub fn recycle(&mut self, recycler: &mut Recycler) {
         recycler.recycle_vec(&mut self.draws);
-        self.line_decoration.recycle(recycler);
         self.normal_border.recycle(recycler);
-        self.backdrop_render.recycle(recycler);
         self.pictures.recycle(recycler);
         self.images.recycle(recycler);
         self.visible_image_tiles.recycle(recycler);
@@ -1040,9 +837,7 @@ impl PrimitiveFrameScratch {
     }
 
     pub fn begin_frame(&mut self) {
-        self.line_decoration.clear();
         self.normal_border.clear();
-        self.backdrop_render.clear();
         self.pictures.clear();
         self.images.clear();
         self.visible_image_tiles.clear();
@@ -1328,6 +1123,6 @@ fn test_struct_sizes() {
     //     test expectations and move on.
     // (b) You made a structure larger. This is not necessarily a problem, but should only
     //     be done with care, and after checking if talos performance regresses badly.
-    assert_eq!(mem::size_of::<PrimitiveInstance>(), 40, "PrimitiveInstance size changed");
+    assert_eq!(mem::size_of::<PrimitiveInstance>(), 48, "PrimitiveInstance size changed");
     assert_eq!(mem::size_of::<PrimitiveKind>(), 24, "PrimitiveKind size changed");
 }

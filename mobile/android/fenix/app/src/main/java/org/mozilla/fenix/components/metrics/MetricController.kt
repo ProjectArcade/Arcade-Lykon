@@ -24,6 +24,8 @@ import mozilla.components.feature.prompts.dialog.LoginDialogFacts
 import mozilla.components.feature.prompts.facts.AddressAutofillDialogFacts
 import mozilla.components.feature.prompts.facts.CreditCardAutofillDialogFacts
 import mozilla.components.feature.prompts.facts.LoginAutofillDialogFacts
+import mozilla.components.feature.protection.dashboard.TrackerCategory
+import mozilla.components.feature.protection.dashboard.facts.ProtectionDashboardFacts
 import mozilla.components.feature.pwa.ProgressiveWebAppFacts
 import mozilla.components.feature.search.telemetry.ads.AdsTelemetry
 import mozilla.components.feature.search.telemetry.incontent.InContentTelemetry
@@ -55,6 +57,7 @@ import org.mozilla.fenix.GleanMetrics.LoginDialog
 import org.mozilla.fenix.GleanMetrics.Logins
 import org.mozilla.fenix.GleanMetrics.MediaNotification
 import org.mozilla.fenix.GleanMetrics.MediaState
+import org.mozilla.fenix.GleanMetrics.NativeShareSheet
 import org.mozilla.fenix.GleanMetrics.PerfAwesomebar
 import org.mozilla.fenix.GleanMetrics.Pings
 import org.mozilla.fenix.GleanMetrics.ProgressiveWebApp
@@ -62,6 +65,8 @@ import org.mozilla.fenix.GleanMetrics.SitePermissions
 import org.mozilla.fenix.GleanMetrics.Sync
 import org.mozilla.fenix.GleanMetrics.SyncedTabs
 import org.mozilla.fenix.GleanMetrics.Toolbar
+import org.mozilla.fenix.GleanMetrics.TrackingProtection
+import org.mozilla.fenix.components.share.ShareSource
 import org.mozilla.fenix.telemetry.ACTION_TAB_COUNTER_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_TAB_COUNTER_LONG_CLICKED
 import org.mozilla.fenix.telemetry.SOURCE_ADDRESS_BAR
@@ -178,6 +183,21 @@ internal class ReleaseMetricController(
             when (action) {
                 Action.PLAY -> MediaNotification.play.record(NoExtras())
                 Action.PAUSE -> MediaNotification.pause.record(NoExtras())
+                Action.NEXT -> MediaNotification.next.record(NoExtras())
+                Action.PREVIOUS -> MediaNotification.previous.record(NoExtras())
+                else -> Unit
+            }
+        }
+        Component.FEATURE_PROTECTION_DASHBOARD to ProtectionDashboardFacts.Items.TRACKER_CATEGORY -> {
+            when (value) {
+                TrackerCategory.CROSS_SITE_COOKIES.name ->
+                    TrackingProtection.privacyReportTrackingCookiesTapped.record(NoExtras())
+                TrackerCategory.SOCIAL_MEDIA_TRACKERS.name ->
+                    TrackingProtection.privacyReportSocialTapped.record(NoExtras())
+                TrackerCategory.FINGERPRINTERS.name ->
+                    TrackingProtection.privacyReportFingerprintsTapped.record(NoExtras())
+                TrackerCategory.TRACKING_CONTENT.name ->
+                    TrackingProtection.privacyReportTrackingContentTapped.record(NoExtras())
                 else -> Unit
             }
         }
@@ -199,15 +219,18 @@ internal class ReleaseMetricController(
                 contextMenuAllowList[item]?.let { extraKey ->
                     ContextMenu.itemTapped.record(ContextMenu.ItemTappedExtra(extraKey))
                 }
-            }
-            Unit
+                if (item == SHARE_LINK_CONTEXT_MENU_ITEM_ID) {
+                    NativeShareSheet.shown.record(
+                        NativeShareSheet.ShownExtra(source = ShareSource.CONTEXT_MENU_LINK.value),
+                    )
+                }
+            } ?: Unit
         }
 
         Component.BROWSER_MENU to BrowserMenuFacts.Items.WEB_EXTENSION_MENU_ITEM -> {
             metadata?.get("id")?.let {
                 Addons.openAddonInToolbarMenu.record(Addons.OpenAddonInToolbarMenuExtra(it.toString()))
-            }
-            Unit
+            } ?: Unit
         }
         Component.FEATURE_PROMPTS to CreditCardAutofillDialogFacts.Items.AUTOFILL_CREDIT_CARD_FORM_DETECTED ->
             CreditCards.formDetected.record(NoExtras())
@@ -409,61 +432,7 @@ internal class ReleaseMetricController(
 
         Component.FEATURE_FXSUGGEST to FxSuggestFacts.Items.AMP_SUGGESTION_IMPRESSED,
         Component.FEATURE_FXSUGGEST to FxSuggestFacts.Items.WIKIPEDIA_SUGGESTION_IMPRESSED,
-        -> {
-            val impressionInfo = metadata?.get(FxSuggestFacts.MetadataKeys.INTERACTION_INFO)
-            val engagementAbandoned = metadata?.get(FxSuggestFacts.MetadataKeys.ENGAGEMENT_ABANDONED) as? Boolean
-                ?: false
-
-            // Record an event for this impression in the `events` ping. These events include the `client_id`, and
-            // we record them for engaged and abandoned search sessions.
-            when (impressionInfo) {
-                is FxSuggestInteractionInfo.Amp -> {
-                    Awesomebar.sponsoredSuggestionImpressed.record(
-                        Awesomebar.SponsoredSuggestionImpressedExtra(
-                            provider = "amp",
-                        ),
-                    )
-                }
-                is FxSuggestInteractionInfo.Wikipedia -> {
-                    Awesomebar.nonSponsoredSuggestionImpressed.record(
-                        Awesomebar.NonSponsoredSuggestionImpressedExtra(
-                            provider = "wikipedia",
-                        ),
-                    )
-                }
-            }
-
-            // Submit a separate `fx-suggest` ping for this impression. These pings do not include the `client_id`,
-            // and we submit them for engaged search sessions only.
-            if (!engagementAbandoned) {
-                FxSuggest.pingType.set("fxsuggest-impression")
-                (metadata?.get(FxSuggestFacts.MetadataKeys.CLIENT_COUNTRY) as? String)?.let {
-                    FxSuggest.country.set(it)
-                }
-                (metadata?.get(FxSuggestFacts.MetadataKeys.IS_CLICKED) as? Boolean)?.let {
-                    FxSuggest.isClicked.set(it)
-                }
-                (metadata?.get(FxSuggestFacts.MetadataKeys.POSITION) as? Long)?.let {
-                    FxSuggest.position.set(it)
-                }
-                when (impressionInfo) {
-                    is FxSuggestInteractionInfo.Amp -> {
-                        FxSuggest.blockId.set(impressionInfo.blockId)
-                        FxSuggest.advertiser.set(impressionInfo.advertiser)
-                        FxSuggest.reportingUrl.set(impressionInfo.reportingUrl)
-                        FxSuggest.iabCategory.set(impressionInfo.iabCategory)
-                        FxSuggest.contextId.set(UUID.fromString(impressionInfo.contextId))
-                    }
-                    is FxSuggestInteractionInfo.Wikipedia -> {
-                        FxSuggest.advertiser.set("wikipedia")
-                        FxSuggest.contextId.set(UUID.fromString(impressionInfo.contextId))
-                    }
-                }
-                Pings.fxSuggest.submit()
-            }
-
-            Unit
-        }
+        -> recordFxSuggestImpression(metadata)
 
         Component.FEATURE_FXSUGGEST to FxSuggestFacts.Items.SUGGESTION_QUERY_COUNT -> {
             FxSuggest.pingType.set("fxsuggest-query")
@@ -504,8 +473,7 @@ internal class ReleaseMetricController(
                     settings.enabledAddonsCount = enabledAddons.size
                     settings.enabledAddonsList = enabledAddons.joinToString(",")
                 }
-            }
-            Unit
+            } ?: Unit
         }
         Component.COMPOSE_AWESOMEBAR to ComposeAwesomeBarFacts.Items.PROVIDER_DURATION -> {
             metadata?.get(ComposeAwesomeBarFacts.MetadataKeys.DURATION_PAIR)
@@ -523,8 +491,7 @@ internal class ReleaseMetricController(
                             null
                         }
                     }?.accumulateSamples(listOf(providerTiming.second as Long))
-                }
-            Unit
+                } ?: Unit
         }
         Component.FEATURE_TOP_SITES to TopSitesFacts.Items.COUNT -> {
             value?.let {
@@ -536,8 +503,7 @@ internal class ReleaseMetricController(
                 }
 
                 settings.topSitesSize = count
-            }
-            Unit
+            } ?: Unit
         }
         Component.FEATURE_SITEPERMISSIONS to SitePermissionsFacts.Items.PERMISSIONS -> {
             when (action) {
@@ -614,6 +580,60 @@ internal class ReleaseMetricController(
             }
     }
 
+    private fun recordFxSuggestImpression(metadata: Map<String, Any>?) {
+        val impressionInfo = metadata?.get(FxSuggestFacts.MetadataKeys.INTERACTION_INFO)
+        val engagementAbandoned = metadata?.get(FxSuggestFacts.MetadataKeys.ENGAGEMENT_ABANDONED) as? Boolean
+            ?: false
+
+        // Record an event for this impression in the `events` ping. These events include the `client_id`, and
+        // we record them for engaged and abandoned search sessions.
+        when (impressionInfo) {
+            is FxSuggestInteractionInfo.Amp -> {
+                Awesomebar.sponsoredSuggestionImpressed.record(
+                    Awesomebar.SponsoredSuggestionImpressedExtra(
+                        provider = "amp",
+                    ),
+                )
+            }
+            is FxSuggestInteractionInfo.Wikipedia -> {
+                Awesomebar.nonSponsoredSuggestionImpressed.record(
+                    Awesomebar.NonSponsoredSuggestionImpressedExtra(
+                        provider = "wikipedia",
+                    ),
+                )
+            }
+        }
+
+        // Submit a separate `fx-suggest` ping for this impression. These pings do not include the `client_id`,
+        // and we submit them for engaged search sessions only.
+        if (engagementAbandoned) return
+
+        FxSuggest.pingType.set("fxsuggest-impression")
+        (metadata?.get(FxSuggestFacts.MetadataKeys.CLIENT_COUNTRY) as? String)?.let {
+            FxSuggest.country.set(it)
+        }
+        (metadata?.get(FxSuggestFacts.MetadataKeys.IS_CLICKED) as? Boolean)?.let {
+            FxSuggest.isClicked.set(it)
+        }
+        (metadata?.get(FxSuggestFacts.MetadataKeys.POSITION) as? Long)?.let {
+            FxSuggest.position.set(it)
+        }
+        when (impressionInfo) {
+            is FxSuggestInteractionInfo.Amp -> {
+                FxSuggest.blockId.set(impressionInfo.blockId)
+                FxSuggest.advertiser.set(impressionInfo.advertiser)
+                FxSuggest.reportingUrl.set(impressionInfo.reportingUrl)
+                FxSuggest.iabCategory.set(impressionInfo.iabCategory)
+                FxSuggest.contextId.set(UUID.fromString(impressionInfo.contextId))
+            }
+            is FxSuggestInteractionInfo.Wikipedia -> {
+                FxSuggest.advertiser.set("wikipedia")
+                FxSuggest.contextId.set(UUID.fromString(impressionInfo.contextId))
+            }
+        }
+        Pings.fxSuggest.submit()
+    }
+
     private fun isInitialized(type: MetricServiceType): Boolean = initialized.contains(type)
 
     private fun isTelemetryEnabled(type: MetricServiceType): Boolean = when (type) {
@@ -632,6 +652,9 @@ internal class ReleaseMetricController(
         const val CONTEXT_MENU_SELECT_ALL = "org.mozilla.geckoview.SELECT_ALL"
         const val CONTEXT_MENU_SHARE = "CUSTOM_CONTEXT_MENU_SHARE"
 
+        @VisibleForTesting
+        internal const val SHARE_LINK_CONTEXT_MENU_ITEM_ID = "mozac.feature.contextmenu.share_link"
+
         /**
          * Non - Text selection long press context menu items to be tracked.
          */
@@ -640,7 +663,7 @@ internal class ReleaseMetricController(
             "mozac.feature.contextmenu.open_in_private_tab" to "open_in_private_tab",
             "mozac.feature.contextmenu.open_image_in_new_tab" to "open_image_in_new_tab",
             "mozac.feature.contextmenu.save_image" to "save_image",
-            "mozac.feature.contextmenu.share_link" to "share_link",
+            SHARE_LINK_CONTEXT_MENU_ITEM_ID to "share_link",
             "mozac.feature.contextmenu.copy_link" to "copy_link",
             "mozac.feature.contextmenu.copy_image_location" to "copy_image_location",
             "mozac.feature.contextmenu.share_image" to "share_image",

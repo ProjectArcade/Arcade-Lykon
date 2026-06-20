@@ -14,9 +14,20 @@ const { sinon } = ChromeUtils.importESModule(
 ChromeUtils.defineESModuleGetters(lazy, {
   SpecialMessageActions:
     "resource://messaging-system/lib/SpecialMessageActions.sys.mjs",
-  IPPEnrollAndEntitleManager:
-    "moz-src:///toolkit/components/ipprotection/fxa/IPPEnrollAndEntitleManager.sys.mjs",
+  IPProtection:
+    "moz-src:///browser/components/ipprotection/IPProtection.sys.mjs",
+  IPProtectionWidget:
+    "moz-src:///browser/components/ipprotection/IPProtection.sys.mjs",
 });
+
+const { IPProtectionActivator } = ChromeUtils.importESModule(
+  "moz-src:///toolkit/components/ipprotection/IPProtectionActivator.sys.mjs"
+);
+
+const { IPPDummyAuthProvider } = ChromeUtils.importESModule(
+  "resource://testing-common/ipprotection/IPPDummyAuthProvider.sys.mjs"
+);
+IPProtectionActivator.setAuthProvider(IPPDummyAuthProvider);
 
 const { BANDWIDTH } = ChromeUtils.importESModule(
   "chrome://browser/content/ipprotection/ipprotection-constants.mjs"
@@ -39,6 +50,7 @@ const IPP_STATE_CACHE_PREF = "browser.ipProtection.stateCache";
 const IPP_PANEL_HAS_OPENED_PREF = "browser.ipProtection.everOpenedPanel";
 const IPP_CACHE_DISABLED_PREF = "browser.ipProtection.cacheDisabled";
 const maxBytes = BANDWIDTH.MAX_IN_GB * BANDWIDTH.BYTES_IN_GB;
+const UPGRADE_NOT_AVAILABLE_PREF = "browser.ipProtection.upgradeNotAvailable";
 
 add_setup(async function ippSetup() {
   await SpecialPowers.pushPrefEnv({
@@ -62,6 +74,7 @@ async function setupVpnPrefs({
   autostartprivate = false,
   entitlementCache = "",
   usageCache = "",
+  upgradeNotAvailable = false,
 }) {
   let prefs = [
     [FEATURE_PREF, feature],
@@ -72,6 +85,7 @@ async function setupVpnPrefs({
     [AUTOSTART_PRIVATE_PREF, autostartprivate],
     [ENTITLEMENT_CACHE_PREF, entitlementCache],
     [USAGE_CACHE_PREF, usageCache],
+    [UPGRADE_NOT_AVAILABLE_PREF, upgradeNotAvailable],
   ];
 
   return SpecialPowers.pushPrefEnv({
@@ -210,6 +224,7 @@ add_task(async function test_exclusions_add_button() {
       EventUtils.sendString(site1, win);
       Assert.ok(!addButton.disabled, "Add button is enabled");
 
+      await addButton.updateComplete;
       addButton.click();
 
       await siteListUpdatedPromise;
@@ -326,11 +341,13 @@ add_task(async function test_exclusions_telemetry() {
       const site2 = "https://example.com";
       urlField.focus();
       EventUtils.sendString(site2, win);
+      await addButton.updateComplete;
       addButton.click();
 
       const site3 = "https://another.example.com";
       urlField.focus();
       EventUtils.sendString(site3, win);
+      await addButton.updateComplete;
       addButton.click();
 
       await siteListUpdatedPromise;
@@ -351,6 +368,7 @@ add_task(async function test_exclusions_telemetry() {
       Assert.ok(existingItem, "Should find the existing entry");
 
       existingItem.click();
+      await removeButton.updateComplete;
       removeButton.click();
 
       await siteListUpdatedPromise;
@@ -577,11 +595,7 @@ add_task(async function test_get_started_button() {
     .callsFake(async function () {
       return true;
     });
-  sandbox
-    .stub(lazy.IPPEnrollAndEntitleManager, "maybeEnrollAndEntitle")
-    .callsFake(async function () {
-      return true;
-    });
+  let enrollSpy = sandbox.spy(IPPDummyAuthProvider, "enroll");
 
   await setupVpnPrefs({
     feature: true,
@@ -620,8 +634,8 @@ add_task(async function test_get_started_button() {
       );
 
       Assert.ok(
-        lazy.IPPEnrollAndEntitleManager.maybeEnrollAndEntitle.calledOnce,
-        "maybeEnrollAndEntitle should be called once when Get started button is clicked"
+        enrollSpy.calledOnce,
+        "enroll should be called once when Get started button is clicked"
       );
     }
   );
@@ -632,15 +646,85 @@ add_task(async function test_get_started_button() {
   sandbox.restore();
 });
 
+// Tests flow when we click "Get started" in settings while the VPN widget
+// is not visible in the toolbar.
+add_task(
+  async function test_get_started_button_VPN_widget_not_visible_in_toolbar() {
+    let sandbox = sinon.createSandbox();
+    let fxaStub = sandbox
+      .stub(lazy.SpecialMessageActions, "fxaSignInFlow")
+      .resolves(true);
+    let enrollSpy = sandbox.spy(IPPDummyAuthProvider, "enroll");
+
+    await setupVpnPrefs({
+      feature: true,
+      entitlementCache: "",
+    });
+
+    CustomizableUI.removeWidgetFromArea(lazy.IPProtectionWidget.WIDGET_ID);
+
+    await BrowserTestUtils.withNewTab(
+      { gBrowser, url: "about:preferences#privacy" },
+      async function (browser) {
+        let settingGroup = testSettingsGroupVisible(browser);
+        let getStartedButton = settingGroup?.querySelector("#getStartedButton");
+        is_element_visible(
+          getStartedButton,
+          "Get started button is shown when entitlementCache is empty"
+        );
+
+        let window = browser.documentGlobal;
+        let popupSpy = sandbox.spy();
+        window.document.addEventListener("popupshown", popupSpy, true);
+
+        let enrollPromise = TestUtils.waitForCondition(
+          () => enrollSpy.calledOnce,
+          "enroll should be called after sign-in succeeds"
+        );
+
+        getStartedButton.click();
+
+        await enrollPromise;
+
+        Assert.ok(
+          fxaStub.calledOnce,
+          "fxaSignInFlow should still be called when widget is not visible"
+        );
+        Assert.ok(
+          enrollSpy.calledOnce,
+          "enroll should still complete when widget is not visible"
+        );
+
+        let panel = lazy.IPProtection.getPanel(window);
+        Assert.ok(panel, "panel instance is created for the window");
+        Assert.ok(
+          !panel.active,
+          "panel should not auto-open and be active when widget is not visible"
+        );
+        Assert.ok(
+          !popupSpy.called,
+          "no popup should be shown when widget is not visible"
+        );
+
+        window.document.removeEventListener("popupshown", popupSpy, true);
+      }
+    );
+
+    // Restore widget
+    CustomizableUI.addWidgetToArea(
+      lazy.IPProtectionWidget.WIDGET_ID,
+      CustomizableUI.AREA_NAVBAR
+    );
+    sandbox.restore();
+  }
+);
+
 // Test that clicking "Get started" in settings passes vpn_integration_settings
 // as the entrypoint to fxaSignInFlow.
 add_task(async function test_VPN_get_started_entrypoint() {
   let sandbox = sinon.createSandbox();
   let fxaStub = sandbox
     .stub(lazy.SpecialMessageActions, "fxaSignInFlow")
-    .resolves(true);
-  sandbox
-    .stub(lazy.IPPEnrollAndEntitleManager, "maybeEnrollAndEntitle")
     .resolves(true);
 
   await setupVpnPrefs({
@@ -899,7 +983,7 @@ add_task(async function test_bandwidth_usage_sub_gb_precision_in_preferences() {
       );
       Assert.equal(
         bandwidthEl.description.getAttribute("data-l10n-id"),
-        "ip-protection-bandwidth-left-mb",
+        "ip-protection-bandwidth-left-mb-1",
         "Should use the MB l10n string when remaining is less than 1 GB"
       );
     }
@@ -928,6 +1012,33 @@ add_task(async function test_vpn_ipProtectionLinks_hidden_if_subscribed() {
     }
   );
 });
+
+// Test that the upsell link is not visible when upgradeNotAvailable is true.
+add_task(
+  async function test_vpn_ipProtectionLinks_hidden_if_upgrade_not_available() {
+    await setupVpnPrefs({
+      feature: true,
+      siteExceptions: true,
+      entitlementCache: '{"subscribed": false}',
+      upgradeNotAvailable: true,
+    });
+
+    await BrowserTestUtils.withNewTab(
+      { gBrowser, url: "about:preferences#privacy" },
+      async function (browser) {
+        let settingGroup = testSettingsGroupVisible(browser);
+        let ipProtectionLinks =
+          settingGroup?.querySelector("#ipProtectionLinks");
+        is_element_hidden(
+          ipProtectionLinks,
+          "VPN upgrade link section is hidden when upgradeNotAvailable is true"
+        );
+      }
+    );
+
+    await SpecialPowers.popPrefEnv();
+  }
+);
 
 // Test that we default to showing the upsell link if entitlement cache pref fails to be parsed.
 add_task(

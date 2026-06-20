@@ -201,13 +201,13 @@ async function task_resetState() {
   for (let download of downloads) {
     await publicList.remove(download);
     if (await IOUtils.exists(download.target.path)) {
-      await download.finalize(true);
       info("removing " + download.target.path);
       if (Services.appinfo.OS === "WINNT") {
         // We need to make the file writable to delete it on Windows.
         await IOUtils.setPermissions(download.target.path, 0o600);
       }
-      await IOUtils.remove(download.target.path);
+      await download.finalize(true);
+      await IOUtils.remove(download.target.path, { ignoreAbsent: true });
     }
   }
 
@@ -472,7 +472,7 @@ function promiseDownloadHasProgress(aDownload, progress) {
  */
 function promiseButtonShown(id) {
   let dwu = window.windowUtils;
-  return BrowserTestUtils.waitForCondition(() => {
+  return TestUtils.waitForCondition(() => {
     let target = document.getElementById(id);
     let bounds = dwu.getBoundsWithoutFlushing(target);
     return bounds.width > 0 && bounds.height > 0;

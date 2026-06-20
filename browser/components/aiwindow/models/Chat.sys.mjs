@@ -4,8 +4,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import { ToolRoleOpts } from "moz-src:///browser/components/aiwindow/ui/modules/ChatMessage.sys.mjs";
-import { openAIEngine } from "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs";
+import { openAIEngine } from "moz-src:///browser/components/aiwindow/models/openAIEngine.sys.mjs";
+import { MESSAGE_ROLE } from "moz-src:///browser/components/aiwindow/models/Conversation.sys.mjs";
 import {
   toolsConfig,
   toolFns,
@@ -17,17 +17,138 @@ import {
   RUN_SEARCH,
   GET_USER_MEMORIES,
   GET_NAVIGATION_INFO,
+  MANAGE_TABS,
+  WORLD_CUP_MATCHES,
+  WORLD_CUP_LIVE,
+  WORLD_CUP_TOOLS,
+  WORLD_CUP_PREF,
+  ADD_MEMORY,
 } from "moz-src:///browser/components/aiwindow/models/Tools.sys.mjs";
-import {
-  expandUrlTokensInToolParams,
-  replaceUrlsWithTokens,
-} from "moz-src:///browser/components/aiwindow/models/ChatUtils.sys.mjs";
-import { compactMessages } from "moz-src:///browser/components/aiwindow/models/PromptOptimizer.sys.mjs";
+
+import { expandUrlTokensInToolParams } from "moz-src:///browser/components/aiwindow/models/ChatUtils.sys.mjs";
+import { runLLMaJTelemetry } from "moz-src:///browser/components/aiwindow/models/TelemetryUtils.sys.mjs";
+
+/**
+ * Execute a specific tool and return the result
+ * Exported for testing purposes
+ *
+ * @param {string} toolName - The name of the tool to execute
+ * @param {object} toolParams - The parameters to pass to the tool
+ * @param {string} toolCallId - The ID of the tool call
+ * @param {ChatConversation} conversation - The conversation context
+ * @param {BrowsingContext} browsingContext - The browsing context (can be null for some tools)
+ * @param {string} mode - The mode of operation (e.g., "fullpage", "sidebar", "urlbar")
+ * @param {number} currentTurn - The current turn number in the conversation
+ * @returns {Promise<object>} The result of the tool execution
+ * @private
+ */
+export async function executeToolByName(
+  toolName,
+  toolParams,
+  toolCallId,
+  conversation,
+  browsingContext,
+  mode,
+  currentTurn
+) {
+  let result;
+  switch (toolName) {
+    case GET_PAGE_CONTENT: {
+      const startTime = new Date();
+      result = await GetPageContent.getPageContent(toolParams, conversation);
+      Glean.smartWindow.getPageContent.record({
+        location: mode,
+        chat_id: conversation.id,
+        message_seq: conversation.messageCount,
+        length: result.reduce((acc, curr) => acc + (curr?.length || 0), 0),
+        time: new Date() - startTime,
+      });
+      break;
+    }
+    case RUN_SEARCH: {
+      result = await RunSearch.runSearch(
+        toolParams,
+        browsingContext,
+        conversation
+      );
+      const engine = await lazy.SearchService.getDefault();
+      Glean.smartWindow.searchHandoff.record({
+        location: mode,
+        chat_id: conversation.id,
+        message_seq: conversation.messageCount,
+        provider: engine.name ?? "unknown",
+        model: conversation.engine?.model,
+      });
+      conversation._searchExecutedTurn = currentTurn;
+      break;
+    }
+    case GET_OPEN_TABS:
+      result = await toolFns.getOpenTabs(conversation);
+      break;
+    case SEARCH_BROWSING_HISTORY:
+      result = await toolFns.searchBrowsingHistory(toolParams, conversation);
+      break;
+    case GET_USER_MEMORIES:
+      result = await toolFns.getUserMemories(conversation);
+      break;
+    case GET_NAVIGATION_INFO:
+      result = await toolFns.getNavigationInfo(toolParams);
+      break;
+    case MANAGE_TABS: {
+      const { toolResult, uiData } = await toolFns.manageTabs(
+        toolParams,
+        conversation,
+        mode,
+        conversation.engine?.model
+      );
+      if (uiData) {
+        conversation.addUIToolToCurrentMessage(toolCallId, uiData);
+      }
+      result = toolResult;
+      break;
+    }
+    case ADD_MEMORY: {
+      result = await toolFns.addMemory(toolParams, conversation);
+      break;
+    }
+    default: {
+      const err = new Error(`No such tool: ${toolName}`);
+      err.clientReason = "unknownTool";
+      throw err;
+    }
+  }
+  return result;
+}
 
 // Hard limit on how many times run_search can execute per conversation turn.
 // Prevents infinite tool-call loops when the model repeatedly requests search.
 // Bug 2024006.
 const MAX_RUN_SEARCH_PER_TURN = 3;
+
+/**
+ * Handlers for tools that are feature-gated by a pref and intended to be
+ * added or removed independently of the main tool dispatch. Lookups happen
+ * before the main switch so each new gated tool does not grow
+ * fetchWithHistory's cyclomatic complexity.
+ */
+const FEATURE_GATED_HANDLERS = new Map([
+  [WORLD_CUP_MATCHES, toolFns.worldCupMatches],
+  [WORLD_CUP_LIVE, toolFns.worldCupLive],
+]);
+
+/**
+ * Removes any feature-gated tools whose enable pref is currently off, so the
+ * model is never offered tools the build is not configured to support.
+ *
+ * @param {object[]} tools
+ * @returns {object[]}
+ */
+function filterFeatureGatedTools(tools) {
+  if (Services.prefs.getBoolPref(WORLD_CUP_PREF, false)) {
+    return tools;
+  }
+  return tools.filter(t => !WORLD_CUP_TOOLS.has(t.function?.name));
+}
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
@@ -58,6 +179,31 @@ ChromeUtils.defineLazyGetter(lazy, "console", () =>
  */
 
 /**
+ * Records the smart_window.tool_call Glean event for any tool invocation
+ * issued by the assistant. The prompt_version extra captures the Remote
+ * Settings prompt configuration version loaded for the chat feature so
+ * tool-call behavior can be correlated with prompt revisions during
+ * debugging.
+ *
+ * @param {object} options
+ * @param {string} options.toolName
+ * @param {"fullpage" | "sidebar" | "urlbar"} options.mode
+ * @param {ChatConversation} options.conversation
+ * @param {string} options.error - Canonical error code, or "" on success
+ */
+function recordToolCallEvent({ toolName, mode, conversation, error }) {
+  Glean.smartWindow.toolCall.record({
+    location: mode,
+    chat_id: conversation.id,
+    message_seq: conversation.messageCount,
+    tool_name: toolName,
+    model: conversation.engine?.model,
+    prompt_version: conversation.systemPromptVersion,
+    error,
+  });
+}
+
+/**
  * Chat
  */
 export const Chat = {};
@@ -72,6 +218,26 @@ export const Chat = {};
  * @param {object | Array} [data]
  * @param {string} [extraText]
  */
+/**
+ * Attach a default clientReason to a streaming error if it doesn't already
+ * carry classification info we recognize downstream.
+ *
+ * @param {unknown} err
+ */
+function classifyStreamingError(err) {
+  if (!err || (typeof err !== "object" && typeof err !== "function")) {
+    return;
+  }
+  const hasClassification =
+    err.clientReason ||
+    "status" in err ||
+    err.error ||
+    err.metadata?.errorMessage;
+  if (!hasClassification) {
+    err.clientReason = Services.io.offline ? "offline" : "connectionFailure";
+  }
+}
+
 function logConversationStream(turn, action, data = null, extraText = "") {
   try {
     let prefix = `[Chat][Turn ${turn}][${action.padEnd(10)}]`;
@@ -105,35 +271,27 @@ Object.assign(Chat, {
    *
    * @param {object} options
    * @param {ChatConversation} options.conversation
-   * @param {openAIEngine} options.engineInstance
    * @param {BrowsingContext} options.browsingContext - Omitted for tests only.
    * @param {"fullpage" | "sidebar" | "urlbar"} options.mode - See the MODE in ai-window.mjs
    * @param {AbortSignal} [options.signal]
    */
-  async fetchWithHistory({
-    conversation,
-    engineInstance,
-    browsingContext,
-    mode,
-    signal,
-  }) {
+  async fetchWithHistory({ conversation, browsingContext, mode, signal }) {
     if (!browsingContext && !Cu.isInAutomation) {
-      throw new Error(
+      const err = new Error(
         "The browsingContext must exist for fetchWithHistory unless we're in automation."
       );
+      err.clientReason = "missingBrowsingContext";
+      throw err;
     }
     const fxAccountToken = await openAIEngine.getFxAccountToken();
     if (!fxAccountToken) {
       console.error("fetchWithHistory Account Token null or undefined");
       const fxaError = new Error("FxA token unavailable");
-      fxaError.error = 4; // ACCOUNT_ERROR: triggers FxA sign-in prompt in the UI
+      fxaError.clientReason = "fxaTokenUnavailable";
       throw fxaError;
     }
 
-    const toolRoleOpts = new ToolRoleOpts(engineInstance.model);
     const currentTurn = conversation.currentTurnIndex();
-    const config = engineInstance.getConfig(engineInstance.feature);
-    const inferenceParams = config?.parameters || {};
 
     /**
      * For the first turn only, we use exactly what the user typed as the `run_search` search query.
@@ -147,33 +305,31 @@ Object.assign(Chat, {
       isVerbatimQuery = false;
     }
 
+    chatToolsConfig = filterFeatureGatedTools(chatToolsConfig);
+
     let fullResponseText = "";
     const searchExecuted = conversation._searchExecutedTurn === currentTurn;
     let blockedSearchAttempts = 0;
 
     const streamModelResponse = () => {
-      const rawMessages = conversation.getMessagesInOpenAiFormat();
+      const snapshot = conversation.compactChatCompletions();
+
       lazy.console.log(
         `Request (${conversation.securityProperties.getLogText()})`,
-        rawMessages.at(-1)
+        snapshot.at(-1)
       );
-      const messages = compactMessages(rawMessages);
-
-      // This is done in-place on the messages.
-      replaceUrlsWithTokens(conversation, messages);
 
       // Debug logging: Record only the latest message being sent to the model
-      logConversationStream(currentTurn, "CHAT SEND", messages.at(-1));
+      logConversationStream(currentTurn, "CHAT SEND", snapshot.at(-1));
 
-      return engineInstance.runWithGenerator({
+      return conversation.runWithGenerator({
         streamOptions: { enabled: true },
         fxAccountToken,
         chatId: conversation.id,
         tool_choice: "auto",
         tools: chatToolsConfig,
-        args: messages,
+        args: snapshot,
         signal,
-        ...inferenceParams,
       });
     };
 
@@ -181,6 +337,12 @@ Object.assign(Chat, {
       /** @type {ToolCall[] | null} */
       let pendingToolCalls = null;
 
+      ChromeUtils.addProfilerMarker(
+        "SmartWindow",
+        {},
+        "chat-server-request-start"
+      );
+      const turnStart = ChromeUtils.now();
       try {
         this.lastUsage = null;
         const response = await conversation.receiveResponse(
@@ -188,7 +350,6 @@ Object.assign(Chat, {
         );
         fullResponseText = response.fullResponseText;
         pendingToolCalls = response.pendingToolCalls;
-        lazy.console.log("Response", { fullResponseText, pendingToolCalls });
 
         // Debug logging: Record the raw text and requested tool calls from the model
         logConversationStream(currentTurn, "CHAT RECV", {
@@ -201,12 +362,24 @@ Object.assign(Chat, {
         }
       } catch (err) {
         console.error("fetchWithHistory streaming error:", err);
+        classifyStreamingError(err);
         throw err;
+      } finally {
+        ChromeUtils.addProfilerMarker(
+          "SmartWindow",
+          { startTime: turnStart },
+          "ServerE2E"
+        );
       }
 
       if (!pendingToolCalls || pendingToolCalls.length === 0) {
+        ChromeUtils.addProfilerMarker("SmartWindow", {}, "chat-no-tool-calls");
         // Debug logging: Mark the end of the streaming loop for this turn
         logConversationStream(currentTurn, "STREAM END");
+        if (!conversation.engine?.isCustomEndpoint) {
+          // We only run telemetry on our own endpoints
+          runLLMaJTelemetry(conversation);
+        }
         return;
       }
 
@@ -243,7 +416,13 @@ Object.assign(Chat, {
             body: "ERROR: run_search tool call error: You may only run one search per user message. Respond to the user with what you have already found and ask if they want you to proceed with the next search. Do not hallucinate search results.",
             name: tc.function.name,
           };
-          conversation.addToolCallMessage(content, currentTurn, toolRoleOpts);
+          conversation.addToolCallMessage(content);
+          recordToolCallEvent({
+            toolName: tc.function.name,
+            mode,
+            conversation,
+            error: "duplicate_search",
+          });
         }
 
         if (blockedSearchAttempts === MAX_RUN_SEARCH_PER_TURN) {
@@ -257,7 +436,8 @@ Object.assign(Chat, {
       // should not be able to retrieve them using the get_user_memories tool
       else if (firstPending?.name === GET_USER_MEMORIES) {
         const lastUserMessage =
-          conversation.messages.findLast(m => m.role === 0) ?? null;
+          conversation.messages.findLast(m => m.role === MESSAGE_ROLE.USER) ??
+          null;
         if (lastUserMessage.memoriesEnabled === false) {
           for (const tc of pendingToolCalls.slice(0, 1)) {
             const content = {
@@ -265,7 +445,27 @@ Object.assign(Chat, {
               body: "ERROR: get_user_memories tool call error: inform the user that they have disabled memories, so they cannot be retrieved.",
               name: tc.function.name,
             };
-            conversation.addToolCallMessage(content, currentTurn, toolRoleOpts);
+            // Append the tool_call BEFORE the error result so the message order
+            // satisfies OpenAI's assistant-then-tool sequence.
+            conversation.addAssistantMessage("function", {
+              tool_calls: [
+                {
+                  id: tc.id,
+                  type: "function",
+                  function: {
+                    name: tc.function.name,
+                    arguments: tc.function.arguments || "{}",
+                  },
+                },
+              ],
+            });
+            conversation.addToolCallMessage(content);
+            recordToolCallEvent({
+              toolName: tc.function.name,
+              mode,
+              conversation,
+              error: "memories_disabled",
+            });
           }
           continue;
         }
@@ -291,10 +491,23 @@ Object.assign(Chat, {
 
       lazy.AIWindow.chatStore?.updateConversation(conversation).catch(() => {});
 
+      ChromeUtils.addProfilerMarker(
+        "SmartWindow",
+        {},
+        `chat-tools-detected(${pendingToolCalls.length})`
+      );
+
       for (const toolCall of pendingToolCalls) {
         const { id, function: functionSpec } = toolCall;
         const toolName = functionSpec?.name || "";
         let toolParams = {};
+
+        ChromeUtils.addProfilerMarker(
+          "SmartWindow",
+          {},
+          `chat-run-tool-start(${toolName})`
+        );
+        const toolStart = ChromeUtils.now();
 
         try {
           toolParams = functionSpec?.arguments
@@ -302,12 +515,23 @@ Object.assign(Chat, {
             : {};
 
           expandUrlTokensInToolParams(toolParams, conversation.tokenToUrl);
-        } catch {
+        } catch (e) {
+          ChromeUtils.addProfilerMarker(
+            "SmartWindow",
+            {},
+            `chat-run-tool-error(${toolName}:argument-parse)`
+          );
           const content = {
             tool_call_id: id,
             body: { error: "Invalid JSON arguments" },
           };
-          conversation.addToolCallMessage(content, currentTurn, toolRoleOpts);
+          conversation.addToolCallMessage(content);
+          recordToolCallEvent({
+            toolName,
+            mode,
+            conversation,
+            error: "invalid_arguments",
+          });
           continue;
         }
 
@@ -327,60 +551,21 @@ Object.assign(Chat, {
         // Dispatch the required arguments to different tool calls. Wrap this in a
         // try/catch so the conversation can be updated for failed calls.
         let result;
+        let toolCallError = "";
+        const featureGatedHandler = FEATURE_GATED_HANDLERS.get(toolName);
         try {
-          switch (toolName) {
-            case GET_PAGE_CONTENT: {
-              const startTime = new Date();
-              result = await GetPageContent.getPageContent(
-                toolParams,
-                conversation
-              );
-              Glean.smartWindow.getPageContent.record({
-                location: mode,
-                chat_id: conversation.id,
-                message_seq: conversation.messageCount,
-                length: result.reduce(
-                  (acc, curr) => acc + (curr?.length || 0),
-                  0
-                ),
-                time: new Date() - startTime,
-              });
-              break;
-            }
-            case RUN_SEARCH: {
-              result = await RunSearch.runSearch(
-                toolParams,
-                browsingContext,
-                conversation
-              );
-              const engine = await lazy.SearchService.getDefault();
-              Glean.smartWindow.searchHandoff.record({
-                location: mode,
-                chat_id: conversation.id,
-                message_seq: conversation.messageCount,
-                provider: engine.name ?? "unknown",
-                model: engineInstance?.model,
-              });
-              conversation._searchExecutedTurn = currentTurn;
-              break;
-            }
-            case GET_OPEN_TABS:
-              result = await toolFns.getOpenTabs(conversation);
-              break;
-            case SEARCH_BROWSING_HISTORY:
-              result = await toolFns.searchBrowsingHistory(
-                toolParams,
-                conversation
-              );
-              break;
-            case GET_USER_MEMORIES:
-              result = await toolFns.getUserMemories(conversation);
-              break;
-            case GET_NAVIGATION_INFO:
-              result = await toolFns.getNavigationInfo(toolParams);
-              break;
-            default:
-              throw new Error(`No such tool: ${toolName}`);
+          if (featureGatedHandler) {
+            result = await featureGatedHandler(toolParams, conversation);
+          } else {
+            result = await executeToolByName(
+              toolName,
+              toolParams,
+              toolCall.id,
+              conversation,
+              browsingContext,
+              mode,
+              currentTurn
+            );
           }
 
           // Debug logging: Record the data returned by the tool before feeding it to the model
@@ -391,18 +576,43 @@ Object.assign(Chat, {
             toolName
           );
 
+          ChromeUtils.addProfilerMarker(
+            "SmartWindow",
+            { startTime: toolStart },
+            `chat-run-tool-complete(${toolName})`
+          );
+
           const content = { tool_call_id: id, body: result, name: toolName };
-          conversation.addToolCallMessage(content, currentTurn, toolRoleOpts);
+          conversation.addToolCallMessage(content);
         } catch (error) {
           console.error(error);
+          toolCallError = "execution_failed";
           result = { error: `Tool execution failed: ${String(error)}` };
+          ChromeUtils.addProfilerMarker(
+            "SmartWindow",
+            { startTime: toolStart },
+            `chat-run-tool-error(${toolName})`
+          );
           const content = { tool_call_id: id, body: result };
-          conversation.addToolCallMessage(content, currentTurn, toolRoleOpts);
+          conversation.addToolCallMessage(content);
         }
+
+        recordToolCallEvent({
+          toolName,
+          mode,
+          conversation,
+          error: toolCallError,
+        });
 
         lazy.AIWindow.chatStore
           ?.updateConversation(conversation)
           .catch(() => {});
+
+        // MANAGE_TABS is terminal - UI handles the interaction.
+        if (toolName === MANAGE_TABS) {
+          conversation.securityProperties.commit();
+          return;
+        }
 
         // Perform the search handoff if the RUN_SEARCH tool was run.
         if (toolName === RUN_SEARCH) {

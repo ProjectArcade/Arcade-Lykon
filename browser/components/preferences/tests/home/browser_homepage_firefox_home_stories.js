@@ -12,7 +12,6 @@ const STORIES_PREF =
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
     set: [
-      ["browser.settings-redesign.enabled", true],
       // Opening preferences initializes FxA code which sets this pref.
       // Track it to avoid test warnings.
       ["identity.fxaccounts.account.device.name", ""],
@@ -66,7 +65,7 @@ add_task(async function test_stories_toggle_functionality() {
 
   let toggle = storiesControl.querySelector("moz-toggle");
   ok(toggle, "Stories toggle element exists");
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => toggle.descriptionEl?.textContent?.trim().length > 0,
     "Wait for stories description text to render"
   );

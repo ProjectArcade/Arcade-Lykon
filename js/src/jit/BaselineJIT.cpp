@@ -31,6 +31,7 @@
 
 #include "debugger/DebugAPI-inl.h"
 #include "gc/GC-inl.h"
+#include "gc/WeakMap-inl.h"
 #include "jit/JitHints-inl.h"
 #include "jit/JitScript-inl.h"
 #include "vm/GeckoProfiler-inl.h"
@@ -468,13 +469,7 @@ MethodStatus jit::BaselineCompile(JSContext* cx, JSScript* script,
 
 static MethodStatus CanEnterBaselineJIT(JSContext* cx, HandleScript script,
                                         AbstractFramePtr osrSourceFrame) {
-  // Skip if the script has been disabled.
-  if (!script->canBaselineCompile()) {
-    return Method_Skipped;
-  }
-
-  if (!IsBaselineJitEnabled(cx)) {
-    script->disableBaselineCompile();
+  if (!CanBaselineCompileScript(cx, script)) {
     return Method_CantCompile;
   }
 
@@ -501,16 +496,6 @@ static MethodStatus CanEnterBaselineJIT(JSContext* cx, HandleScript script,
   if (osrSourceFrame && osrSourceFrame.isDebuggee() &&
       !DebugAPI::ensureExecutionObservabilityOfOsrFrame(cx, osrSourceFrame)) {
     return Method_Error;
-  }
-
-  if (script->length() > BaselineMaxScriptLength) {
-    script->disableBaselineCompile();
-    return Method_CantCompile;
-  }
-
-  if (script->nslots() > BaselineMaxScriptSlots) {
-    script->disableBaselineCompile();
-    return Method_CantCompile;
   }
 
   if (script->hasBaselineScript()) {
@@ -549,11 +534,6 @@ static MethodStatus CanEnterBaselineJIT(JSContext* cx, HandleScript script,
     return Method_Error;
   }
 
-  if (script->hasForceInterpreterOp()) {
-    script->disableBaselineCompile();
-    return Method_CantCompile;
-  }
-
   // Frames can be marked as debuggee frames independently of its underlying
   // script being a debuggee script, e.g., when performing
   // Debugger.Frame.prototype.eval.
@@ -581,31 +561,54 @@ bool jit::CanBaselineInterpretScript(JSScript* script) {
   return true;
 }
 
+bool jit::CanBaselineCompileScript(JSContext* cx, JSScript* script) {
+  if (!script->canBaselineCompile()) {
+    return false;
+  }
+  if (!IsBaselineJitEnabled(cx)) {
+    script->disableBaselineCompile();
+    return false;
+  }
+  if (!CanBaselineInterpretScript(script)) {
+    script->disableBaselineCompile();
+    return false;
+  }
+  if (script->length() > BaselineMaxScriptLength) {
+    script->disableBaselineCompile();
+    return false;
+  }
+  MOZ_RELEASE_ASSERT(script->nslots() <= BaselineMaxScriptSlots,
+                     "nslots is checked in CanBaselineInterpretScript");
+  return true;
+}
+
 static bool MaybeCreateBaselineInterpreterEntryScript(JSContext* cx,
                                                       JSScript* script) {
   MOZ_ASSERT(script->hasJitScript());
+
+  Zone* zone = script->zone();
+  EntryTrampolineMap* map =
+      zone->jitZone()->getOrCreateInterpreterEntryMap(zone);
+  if (!map) {
+    return false;
+  }
 
   JitRuntime* jitRuntime = cx->runtime()->jitRuntime();
   if (script->jitCodeRaw() != jitRuntime->baselineInterpreter().codeRaw()) {
     // script already has an updated interpreter trampoline.
 #ifdef DEBUG
-    auto p = jitRuntime->getInterpreterEntryMap()->lookup(script);
-    MOZ_ASSERT(p);
-    MOZ_ASSERT(p->value().raw() == script->jitCodeRaw());
+    auto ptr = map->lookup(script);
+    MOZ_ASSERT(ptr);
+    MOZ_ASSERT(ptr->value()->raw() == script->jitCodeRaw());
 #endif
     return true;
   }
 
-  auto p = jitRuntime->getInterpreterEntryMap()->lookupForAdd(script);
-  if (!p) {
+  auto ptr = map->lookupForAdd(script);
+  if (!ptr) {
     Rooted<JitCode*> code(
         cx, jitRuntime->generateEntryTrampolineForScript(cx, script));
-    if (!code) {
-      return false;
-    }
-
-    EntryTrampoline entry(cx, code);
-    if (!jitRuntime->getInterpreterEntryMap()->add(p, script, entry)) {
+    if (!code || !map->relookupOrAdd(ptr, script, code)) {
       return false;
     }
   }
@@ -643,6 +646,7 @@ static MethodStatus CanEnterBaselineInterpreter(JSContext* cx,
 
   if (JitOptions.emitInterpreterEntryTrampoline) {
     if (!MaybeCreateBaselineInterpreterEntryScript(cx, script)) {
+      ReportOutOfMemory(cx);
       return Method_Error;
     }
   }
@@ -1182,6 +1186,8 @@ static void ToggleProfilerInstrumentation(JitCode* code,
                                         CodeOffset(profilerEnterToggleOffset));
   CodeLocationLabel exitToggleLocation(code,
                                        CodeOffset(profilerExitToggleOffset));
+
+  code->setProfilerInstrumented(enable);
   if (enable) {
     Assembler::ToggleToCmp(enterToggleLocation);
     Assembler::ToggleToCmp(exitToggleLocation);
@@ -1192,21 +1198,11 @@ static void ToggleProfilerInstrumentation(JitCode* code,
 }
 
 void BaselineScript::toggleProfilerInstrumentation(bool enable) {
-  if (enable == isProfilerInstrumentationOn()) {
-    return;
-  }
-
   JitSpew(JitSpew_BaselineIC, "  toggling profiling %s for BaselineScript %p",
           enable ? "on" : "off", this);
 
   ToggleProfilerInstrumentation(method_, profilerEnterToggleOffset_,
                                 profilerExitToggleOffset_, enable);
-
-  if (enable) {
-    flags_ |= uint32_t(PROFILER_INSTRUMENTATION_ON);
-  } else {
-    flags_ &= ~uint32_t(PROFILER_INSTRUMENTATION_ON);
-  }
 }
 
 void BaselineInterpreter::toggleProfilerInstrumentation(bool enable) {
@@ -1313,8 +1309,11 @@ void jit::ToggleBaselineProfiling(JSContext* cx, bool enable) {
         jitScript->ensureProfilerScriptSource(cx, script);
       }
       if (script->hasBaselineScript()) {
-        AutoWritableJitCode awjc(script->baselineScript()->method());
-        script->baselineScript()->toggleProfilerInstrumentation(enable);
+        BaselineScript* baselineScript = script->baselineScript();
+        if (baselineScript->isProfilerInstrumentationOn() != enable) {
+          AutoWritableJitCode awjc(baselineScript->method());
+          baselineScript->toggleProfilerInstrumentation(enable);
+        }
       }
     });
   }

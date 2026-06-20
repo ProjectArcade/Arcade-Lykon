@@ -373,7 +373,7 @@ class GLLibraryEGL final {
   }
 
  public:
-  const GLubyte* fQueryString(EGLDisplay dpy, EGLint name) const {
+  const char* fQueryString(EGLDisplay dpy, EGLint name) const {
     WRAP(fQueryString(dpy, name));
   }
 
@@ -606,7 +606,7 @@ class GLLibraryEGL final {
     EGLBoolean(GLAPIENTRY* fSwapBuffers)(EGLDisplay dpy, EGLSurface surface);
     EGLBoolean(GLAPIENTRY* fCopyBuffers)(EGLDisplay dpy, EGLSurface surface,
                                          EGLNativePixmapType target);
-    const GLubyte*(GLAPIENTRY* fQueryString)(EGLDisplay, EGLint name);
+    const char*(GLAPIENTRY* fQueryString)(EGLDisplay, EGLint name);
     EGLBoolean(GLAPIENTRY* fQueryContext)(EGLDisplay dpy, EGLContext ctx,
                                           EGLint attribute, EGLint* value);
     EGLBoolean(GLAPIENTRY* fBindTexImage)(EGLDisplay, EGLSurface surface,

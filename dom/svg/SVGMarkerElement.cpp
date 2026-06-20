@@ -51,7 +51,7 @@ SVGElement::EnumInfo SVGMarkerElement::sEnumInfo[1] = {
 // Implementation
 
 SVGMarkerElement::SVGMarkerElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
     : SVGMarkerElementBase(std::move(aNodeInfo)), mCoordCtx(nullptr) {}
 
 //----------------------------------------------------------------------
@@ -163,12 +163,13 @@ gfx::Matrix SVGMarkerElement::GetMarkerTransform(float aStrokeWidth,
       angle = aMark.angle + (aMark.type == SVGMark::Type::Start ? M_PI : 0.0f);
       break;
     default:  // SVG_MARKER_ORIENT_ANGLE
-      angle = mOrient.GetAnimValue() * M_PI / 180.0f;
+      angle = mOrient.GetAnimValue() * kRadPerDegree;
       break;
   }
 
   return gfx::Matrix(cos(angle) * scale, sin(angle) * scale,
-                     -sin(angle) * scale, cos(angle) * scale, aMark.x, aMark.y);
+                     -sin(angle) * scale, cos(angle) * scale, aMark.pos.x,
+                     aMark.pos.y);
 }
 
 SVGViewBox SVGMarkerElement::GetViewBox() {

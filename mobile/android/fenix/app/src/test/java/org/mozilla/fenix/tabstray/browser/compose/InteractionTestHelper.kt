@@ -8,17 +8,26 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import org.mozilla.fenix.tabstray.browser.compose.interactable.GridItemOffset
 import org.mozilla.fenix.tabstray.browser.compose.interactable.InteractionState
+import org.mozilla.fenix.tabstray.browser.compose.interactable.ListItemOffset
 
-fun fakeActiveState(key: String = "key"): InteractionState.Active {
-    return InteractionState.Active(
+fun fakeGridActiveState(key: String = "key"): InteractionState.Grid.Active {
+    return InteractionState.Grid.Active(
         index = 0,
         key = key,
         initialOffset = Offset.Zero,
     )
 }
 
-fun fakeDraggedItemOffset(): GridItemOffset {
-    val draggedItem = InteractionState.Active(
+fun fakeListActiveState(key: String = "key"): InteractionState.List.Active {
+    return InteractionState.List.Active(
+        index = 0,
+        key = key,
+        initialOffset = 0f,
+    )
+}
+
+fun fakeDraggedGridItemOffset(): GridItemOffset {
+    val draggedItem = InteractionState.Grid.Active(
         index = 0,
         key = "key",
         initialOffset = Offset.Zero,
@@ -28,4 +37,24 @@ fun fakeDraggedItemOffset(): GridItemOffset {
         draggingItemOffset = Offset.Zero,
         itemSize = IntSize(2, 2),
     )
+}
+
+fun fakeDraggedListItemOffset(): ListItemOffset {
+    val draggedItem = InteractionState.List.Active(
+        index = 0,
+        key = "key",
+        initialOffset = 0f,
+    )
+    return ListItemOffset(
+        draggedItem = draggedItem,
+        draggingItemOffset = 0f,
+        itemSize = 2,
+    )
+}
+
+object TabKeys {
+    const val HEADER = "header"
+    const val TAB_ALPHA = "alpha"
+    const val TAB_BETA = "beta"
+    const val SPAN = "span"
 }

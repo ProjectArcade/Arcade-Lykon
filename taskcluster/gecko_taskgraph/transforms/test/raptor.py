@@ -34,7 +34,9 @@ class RaptorSchema(Schema, kw_only=True):
         optionally_keyed_by("app", "test-platform", bool, use_msgspec=True)
     ] = None
     subtests: Optional[  # type: ignore
-        optionally_keyed_by("app", "test-platform", list[object], use_msgspec=True)
+        optionally_keyed_by(
+            "app", "test-platform", "variant", list[object], use_msgspec=True
+        )
     ] = None
     test: Optional[str] = None
     test_url_param: Optional[  # type: ignore
@@ -161,7 +163,12 @@ def handle_keyed_by_prereqs(config, tests):
     as well.
     """
     for test in tests:
-        resolve_keyed_by(test, "raptor.subtests", item_name=test["test-name"])
+        resolve_keyed_by(
+            test,
+            "raptor.subtests",
+            item_name=test["test-name"],
+            variant=test["attributes"].get("unittest_variant"),
+        )
         yield test
 
 
@@ -365,8 +372,6 @@ def add_extra_options(config, tests):
         test_platform = test["test-platform"]
         if test_platform.startswith("android-hw-a55"):
             extra_options.append("--device-name=a55")
-        elif test_platform.startswith("android-hw-p5"):
-            extra_options.append("--device-name=p5_aarch64")
         elif test_platform.startswith("android-hw-p6"):
             extra_options.append("--device-name=p6_aarch64")
         elif test_platform.startswith("android-hw-s24"):
@@ -407,11 +412,8 @@ def add_extra_options(config, tests):
             ("android-hw-p6" in test_platform or "android-hw-s24" in test_platform)
             and "speedometer2-" not in test["test-name"]
             # Bug 1943674 resolve why --power-test causes permafails on certain mobile platforms and browsers
-        ) or (
-            "android-hw-a55" in test_platform
-            and any(t in test["test-name"] for t in ("tp6", "speedometer3"))
-            # Bug 1919024 remove tp6 and sp3 restrictions once benchmark parsing is done in the support scripts
         ):
+            # Bug 2037511 Temporarily disable power-test option for tp6m on a55s
             if "--power-test" not in extra_options:
                 extra_options.append("--power-test")
         elif "windows" in test_platform and any(
@@ -534,99 +536,271 @@ def setup_internal_artifacts(config, tasks):
 def select_tasks_to_lambda(config, tasks):
     """
     all motionmark tests
+    speedometer3 test
     unity-webgl test
-    all non-power-testing youtube-playback tests
+    all youtube-playback tests (including power)
     all vpl (video-playback-latency) tests
     all pageload tests (ideally fenix/CaR/ChR)
+    jetstream2/jetstream3 benchmarks
+    background/foreground resource tests (browsertime-power idle/idle-bg)
+    trr-* performance tests
 
     """
     tests_to_run_at_lambdatest = [
         "motionmark-1-3",
         "motionmark-htmlsuite-1-3",
+        "speedometer3",
         "unity-webgl",
         "video-playback-latency",
         "youtube-playback-av1-sfr",
         "youtube-playback-hfr",
         "youtube-playback-vp9-sfr",
+        "youtube-playback-h264-sfr",
+        "youtube-playback-h264-720p60",
+        "youtube-playback-vp9-720p60",
         "tp6m",
+        "jetstream2",
+        "jetstream3",
+        "browsertime-power",
+        "browsertime-trr-performance",
     ]
 
+    # Bug 2017151 - newly-migrated tests run at tier 2 while stabilizing on LT
+    tests_to_force_tier2 = [
+        "youtube-playback-h264-sfr",
+        "youtube-playback-h264-720p60",
+        "youtube-playback-vp9-720p60",
+        "jetstream2",
+        "jetstream3",
+        "browsertime-power",
+        "browsertime-trr-performance",
+    ]
+
+    def redirect_to_lt(task):
+        task["tags"]["os"] = "linux-lambda"
+        task["worker"]["os"] = "linux-lambda"
+        task["worker-type"] = "t-lambda-perf-a55"
+        task["worker"]["env"]["TASKCLUSTER_WORKER_TYPE"] = "t-lambda-perf-a55"
+        cmds = []
+        for cmd in task["worker"]["command"]:
+            # Bug 1981862 - issues with condprof setup @ lambdatest
+            cmds.append([
+                c.replace(
+                    "/builds/taskcluster/script.py",
+                    "/home/ltuser/taskcluster/script.py",
+                )
+                for c in cmd
+                if not c.startswith("--conditioned-profile")
+            ])
+        task["worker"]["command"] = cmds
+        task["worker"]["env"]["DISABLE_USB_POWER_METER_RESET"] = "1"
+        # Bug 2017151 - newly-migrated tests run at tier 2 while stabilizing on LT
+        if any(t in task["label"] for t in tests_to_force_tier2):
+            th = task.setdefault("treeherder", {})
+            th["tier"] = max(th.get("tier", 1), 2)
+        return task
+
+    def make_sp3_lt_copy(task):
+        lt_task = deepcopy(task)
+        lt_task["label"] = lt_task["label"].replace("-a55-", "-a55-lt-")
+        if "treeherder" in lt_task:
+            group, symbol = split_symbol(lt_task["treeherder"]["symbol"])
+            lt_task["treeherder"]["symbol"] = join_symbol(group, f"{symbol}-LT")
+            lt_task["treeherder"]["platform"] = lt_task["treeherder"][
+                "platform"
+            ].replace("-a55-", "-a55-lt-")
+        return redirect_to_lt(lt_task)
+
     for task in tasks:
-        if "android" in task["label"] and "a55" in task["label"]:
-            if any([t in task["label"] for t in tests_to_run_at_lambdatest]):
-                if task["worker-type"] == "t-bitbar-gw-perf-a55":
-                    task["tags"]["os"] = "linux-lambda"
-                    task["worker"]["os"] = "linux-lambda"
-                    task["worker-type"] = "t-lambda-perf-a55"
-                    task["worker"]["env"]["TASKCLUSTER_WORKER_TYPE"] = (
-                        "t-lambda-perf-a55"
-                    )
-                    cmds = []
-                    for cmd in task["worker"]["command"]:
-                        # Bug 1981862 - issues with condprof setup @ lambdatest
-                        cmds.append([
-                            c.replace(
-                                "/builds/taskcluster/script.py",
-                                "/home/ltuser/taskcluster/script.py",
-                            )
-                            for c in cmd
-                            if not c.startswith("--conditioned-profile")
-                        ])
-                    task["worker"]["command"] = cmds
-                    task["worker"]["env"]["DISABLE_USB_POWER_METER_RESET"] = "1"
-        yield task
+        if not ("android" in task["label"] and "a55" in task["label"]):
+            yield task
+            continue
+        if not any(t in task["label"] for t in tests_to_run_at_lambdatest):
+            yield task
+            continue
+        if task["worker-type"] != "t-bitbar-gw-perf-a55":
+            yield task
+            continue
+        if "speedometer3" in task["label"]:
+            # Bug 2017152 - temporary: run SP3 on both BitBar and LT for comparison
+            # deepcopy must happen before yielding task, as downstream transforms
+            # mutate task["routes"] in-place.
+            # Copying after yield picks up those mutations.
+            lt_task = make_sp3_lt_copy(task)
+            yield task
+            yield lt_task
+        else:
+            yield redirect_to_lt(task)
 
 
 @transforms.add
 def add_simpleperf(config, tests):
-    is_simpleperf = config.params.get("try_task_config", {}).get(
+    is_native_profiling = config.params.get("try_task_config", {}).get(
         "native-profiling", False
     )
     app_packages = {
         "fenix": "org.mozilla.fenix",
         "geckoview": "org.mozilla.geckoview_example",
     }
+
+    def _setup_simpleperf_profiling(test):
+        extra_options = test.setdefault("mozharness", {}).setdefault(
+            "extra-options", []
+        )
+        extra_options.extend([
+            "--simpleperf",
+            "--browsertime-arg=androidSimpleperf=$MOZ_FETCHES_DIR/android-simpleperf",
+        ])
+        app_data_dir = (
+            f"/storage/emulated/0/Android/data/{app_packages[test.get('app')]}/files"
+        )
+        extra_options.extend([
+            "--setenv MOZ_USE_PERFORMANCE_MARKER_FILE=1",
+            f"--setenv MOZ_PERFORMANCE_MARKER_DIR={app_data_dir}",
+            f"--setenv PERF_SPEW_DIR={app_data_dir}",
+            "--setenv IONPERF=func",
+            "--setenv JIT_OPTION_onlyInlineSelfHosted=true",
+        ])
+
+        fetches = test.setdefault("fetches", {})
+        fetches.setdefault("build", []).append({
+            "artifact": "target.crashreporter-symbols.zip",
+            "extract": False,
+        })
+        toolchains = [
+            "linux64-android-simpleperf-linux-repack",
+            "linux64-samply",
+        ]
+        by_app = fetches.setdefault("toolchain", {}).setdefault("by-app", {})
+        default_toolchains = by_app.setdefault("default", [])
+        for toolchain in toolchains:
+            if toolchain not in default_toolchains:
+                default_toolchains.append(toolchain)
+
     for test in tests:
-        test_name = test.get("test-name", None)
         app = test.get("app")
-        if is_simpleperf and app in app_packages and "speedometer3-mobile" in test_name:
-            extra_options = test.setdefault("mozharness", {}).setdefault(
-                "extra-options", []
+        if app in app_packages and "speedometer3-mobile" in test.get("test-name", None):
+            # On autoland, run a copy of the Speedometer 3 a55 Fenix task
+            # with native (Simpleperf) profiling
+
+            is_autoland_job = (
+                config.params["project"] == "autoland"
+                and app == "fenix"
+                and "a55" in test.get("test-platform", "")
+                and test["attributes"].get("shippable", False)
+                and "no-fission"
+                not in (test.get("attributes", {}).get("unittest_variant") or "")
             )
+
+            if is_autoland_job:
+                # Modify a duplicate test
+                autoland_test = deepcopy(test)
+                autoland_test["run-on-projects"] = ["autoland-only"]
+                autoland_test["test-name"] += "-native-profiling"
+                autoland_test["try-name"] += "-native-profiling"
+                _setup_simpleperf_profiling(autoland_test)
+                yield autoland_test
+            elif is_native_profiling:
+                # Modify the test in-place
+                _setup_simpleperf_profiling(test)
+
+        yield test
+
+
+@transforms.add
+def add_etw_profile(config, tests):
+    is_native_profiling = config.params.get("try_task_config", {}).get(
+        "native-profiling", False
+    )
+
+    def _setup_etw_profiling(test):
+
+        extra_options = test.setdefault("mozharness", {}).setdefault(
+            "extra-options", []
+        )
+
+        extra_options.extend([
+            "--etw-profile",
+            "--setenv ETW_ENABLED=1",
+            "--setenv JIT_OPTION_enableICFramePointers=true",
+            "--setenv JIT_OPTION_onlyInlineSelfHosted=true",
+            "--setenv JIT_OPTION_emitInterpreterEntryTrampoline=true",
+        ])
+
+        if test.get("app") in ["chrome", "custom-car"]:
             extra_options.extend([
-                "--add-option=--simpleperf",
-                "--browsertime-arg=androidSimpleperf=$MOZ_FETCHES_DIR/android-simpleperf",
+                "--browsertime-arg=chrome.args=--enable-features=EnableEtwExports",
+                "--browsertime-arg=chrome.args=--enable-benchmarking",
+                "--browsertime-arg=chrome.args=--js-flags=--perf-prof",
+                "--browsertime-arg=chrome.args=--js-flags=--enable-etw-stack-walking",
+                "--browsertime-arg=chrome.args=--js-flags=--interpreted-frames-native-stack",
+                "--browsertime-arg=chrome.args=--js-flags=--no-turbo-inlining",
+                "--browsertime-arg=chrome.args=--js-flags=--no-compact-code-space",
             ])
 
-            app_data_dir = f"/storage/emulated/0/Android/data/{app_packages[app]}/files"
-            extra_options.extend([
-                "--setenv MOZ_USE_PERFORMANCE_MARKER_FILE=1",
-                f"--setenv MOZ_PERFORMANCE_MARKER_DIR={app_data_dir}",
-                f"--setenv PERF_SPEW_DIR={app_data_dir}",
-                "--setenv IONPERF=func",
-                "--setenv JIT_OPTION_onlyInlineSelfHosted=true",
-            ])
+        if "speedometer3" in test.get("test-name", None):
+            test["max-run-time"] = 4200  # seconds
+            if "--extra-profiler-run" in extra_options:
+                extra_options.remove("--extra-profiler-run")
 
-            fetches = test.setdefault("fetches", {})
+        fetches = test.setdefault("fetches", {})
+
+        by_apps = fetches.setdefault("toolchain", {}).setdefault("by-app", {})
+        for by_app in by_apps.values():
+            test_platforms = by_app.get("by-test-platform")
+
+            if not test_platforms:
+                continue
+
+            for test_platform, test_platform_config in test_platforms.items():
+                if (
+                    "win" in test_platform
+                    and "win64-samply" not in test_platform_config
+                ):
+                    test_platform_config.append("win64-samply")
+
+        if not is_external_browser(test["app"]):
             fetches.setdefault("build", []).append({
                 "artifact": "target.crashreporter-symbols.zip",
                 "extract": False,
             })
 
-            toolchains = [
-                "linux64-android-simpleperf-linux-repack",
-                "linux64-samply",
-            ]
-            by_app = fetches.setdefault("toolchain", {}).setdefault("by-app", {})
-            by_app.setdefault("default", []).extend(toolchains)
+    for test in tests:
+        if "win" in test.get("test-platform", "") and "speedometer3" in test.get(
+            "test-name", None
+        ):
+            # On Autoland, run duplicates of the following Windows tasks with native profiling:
+            # - Sp3 on Firefox Windows 11 24H2 Shippable (trunk)
+            # - Sp3 on Firefox Windows 11 24H2 Ref HW Shippable (trunk)
+            # - Sp3 on Firefox Windows 11 24H2 NightlyAsRelease (autoland)
+
+            run_on_projects = test.get("run-on-projects", [])
+            if config.params["project"] == "autoland" and (
+                "autoland" in run_on_projects or "trunk" in run_on_projects
+            ):
+                autoland_test = deepcopy(test)
+                autoland_test["run-on-projects"] = ["autoland-only"]
+                autoland_test["test-name"] += "-native-profiling"
+                autoland_test["try-name"] += "-native-profiling"
+                _setup_etw_profiling(autoland_test)
+                yield autoland_test
+            elif is_native_profiling:
+                _setup_etw_profiling(test)
+
         yield test
 
 
 @transforms.add
-def handle_simpleperf_symbol(config, tests):
+def handle_native_profiling_symbol(config, tests):
     for test in tests:
         extra_options = test.get("mozharness", {}).get("extra-options", [])
-        if "--add-option=--simpleperf" in extra_options:
+
+        native_profiling_args = [
+            "--simpleperf",
+            "--etw-profile",
+        ]
+
+        if any(arg in extra_options for arg in native_profiling_args):
             group, symbol = split_symbol(test["treeherder-symbol"])
-            test["treeherder-symbol"] = join_symbol(group, f"{symbol}-simpleperf")
+            test["treeherder-symbol"] = join_symbol(group, f"{symbol}-p")
         yield test

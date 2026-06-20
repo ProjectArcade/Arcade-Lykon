@@ -275,6 +275,9 @@ tags = "imagebitmap"
 ["test_imagebitmap_cropping.html"]
 tags = "imagebitmap"
 
+["test_imagebitmap_error_messages.html"]
+tags = "imagebitmap"
+
 ["test_imagebitmap_structuredclone.html"]
 tags = "imagebitmap"
 
@@ -354,6 +357,11 @@ subsuite = "gpu"
 tags = "offscreencanvas"
 skip-if = [
   "true",
+]
+
+["test_offscreencanvas_todataurl_stride.html"]
+skip-if = [
+  "os == 'android'", # test depends on things android doesn't have
 ]
 
 ["test_offscreencanvas_toimagebitmap.html"]

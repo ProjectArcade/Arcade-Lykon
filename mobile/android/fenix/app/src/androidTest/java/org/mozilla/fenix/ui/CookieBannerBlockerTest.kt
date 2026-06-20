@@ -4,13 +4,12 @@
 
 package org.mozilla.fenix.ui
 
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.core.net.toUri
 import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.mozilla.fenix.customannotations.SmokeTest
-import org.mozilla.fenix.ext.settings
+import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.helpers.AppAndSystemHelper.runWithCondition
 import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
@@ -18,6 +17,7 @@ import org.mozilla.fenix.helpers.TestHelper.appContext
 import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.navigationToolbar
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 /**
  *  Tests for verifying the new Cookie banner blocker option and functionality.
@@ -27,22 +27,20 @@ class CookieBannerBlockerTest {
     @get:Rule(order = 0)
     val fenixTestRule: FenixTestRule = FenixTestRule()
 
-    @get:Rule
+    @get:Rule(order = 1)
     val composeTestRule =
-        AndroidComposeTestRule(
-            HomeActivityIntentTestRule.withDefaultSettingsOverrides(
-                skipOnboarding = true,
-            ),
+        AndroidComposeTestRuleV2(
+            HomeActivityIntentTestRule.withDefaultSettingsOverrides(),
         ) { it.activity }
 
-    @get:Rule
-    val memoryLeaksRule = DetectMemoryLeaksRule()
+    @get:Rule(order = 2)
+    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2419260
     @SmokeTest
     @Test
     fun verifyCookieBannerBlockerSettingsOptionTest() {
-        runWithCondition(appContext.settings().shouldUseCookieBannerPrivateMode) {
+        runWithCondition(appContext.components.settings.shouldUseCookieBannerPrivateMode) {
             homeScreen(composeTestRule) {
             }.openThreeDotMenu {
             }.clickSettingsButton {
@@ -55,7 +53,7 @@ class CookieBannerBlockerTest {
     @SmokeTest
     @Test
     fun verifyCFRAfterBlockingTheCookieBanner() {
-        runWithCondition(appContext.settings().shouldUseCookieBannerPrivateMode) {
+        runWithCondition(appContext.components.settings.shouldUseCookieBannerPrivateMode) {
             homeScreen(composeTestRule) {
             }.togglePrivateBrowsingMode()
 

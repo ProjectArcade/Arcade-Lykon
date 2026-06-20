@@ -60,29 +60,9 @@ interface TabManagerInteractor :
     fun onShareSelectedTabs()
 
     /**
-     * Invoked when a drag-drop operation with a tab is completed.
-     *
-     * @param tabId ID of the tab being moved.
-     * @param targetId ID of the tab the moved tab's new neighbor.
-     * @param placeAfter [Boolean] indicating whether the moved tab is being placed before or after [targetId].
-     */
-    fun onTabsMove(
-        tabId: String,
-        targetId: String?,
-        placeAfter: Boolean,
-    )
-
-    /**
      * Invoked when the recently closed item is clicked.
      */
     fun onRecentlyClosedClicked()
-
-    /**
-     * Invoked when a tab is long clicked.
-     *
-     * @param tab [TabsTrayItem] that was clicked.
-     */
-    fun onTabLongClicked(tab: TabsTrayItem): Boolean
 
     /**
      * Invoked when the back button is pressed.
@@ -104,7 +84,7 @@ interface TabManagerInteractor :
     /**
      * A tab has been closed.
      */
-    fun onTabClosed(tab: TabsTrayItem, source: String? = null)
+    fun onTabClosed(tab: TabsTrayItem.Tab, source: String? = null)
 }
 
 /**
@@ -121,19 +101,11 @@ class DefaultTabManagerInteractor(
     }
 
     override fun onDeletePrivateTabWarningAccepted(tabId: String, source: String?) {
-        controller.handleDeleteTabWarningAccepted(tabId, source)
+        controller.handleDeletePrivateTabWarningAccepted(tabId = tabId, source = source)
     }
 
     override fun onDeleteSelectedTabsClicked() {
         controller.handleDeleteSelectedTabsClicked()
-    }
-
-    override fun onTabsMove(
-        tabId: String,
-        targetId: String?,
-        placeAfter: Boolean,
-    ) {
-        controller.onMove(tabId, targetId, placeAfter)
     }
 
     override fun onForceSelectedTabsAsInactiveClicked() {
@@ -162,8 +134,8 @@ class DefaultTabManagerInteractor(
 
     override fun onBackPressed(): Boolean = controller.handleBackPressed()
 
-    override fun onTabClosed(tab: TabsTrayItem, source: String?) {
-        controller.handleTabDeletion(tab.id, source)
+    override fun onTabClosed(tab: TabsTrayItem.Tab, source: String?) {
+        controller.handleTabDeletion(tab, source)
     }
 
     override fun onTabSelected(tab: TabsTrayItem.Tab, source: String?) {
@@ -184,10 +156,6 @@ class DefaultTabManagerInteractor(
 
     override fun onRecentlyClosedClicked() {
         controller.handleNavigateToRecentlyClosed()
-    }
-
-    override fun onTabLongClicked(tab: TabsTrayItem): Boolean {
-        return controller.handleTabLongClick(tab)
     }
 
     /**

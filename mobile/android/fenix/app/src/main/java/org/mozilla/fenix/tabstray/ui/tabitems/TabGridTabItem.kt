@@ -4,7 +4,6 @@
 
 package org.mozilla.fenix.tabstray.ui.tabitems
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +43,7 @@ import mozilla.components.compose.base.button.IconButton
 import mozilla.components.concept.engine.utils.ABOUT_HOME_URL
 import mozilla.components.support.base.utils.MAX_URI_LENGTH
 import org.mozilla.fenix.R
+import org.mozilla.fenix.compose.Favicon
 import org.mozilla.fenix.compose.SwipeToDismissBox2
 import org.mozilla.fenix.compose.SwipeToDismissState2
 import org.mozilla.fenix.compose.TabThumbnail
@@ -140,13 +140,13 @@ private fun TabContent(
     Box(
         modifier = modifier
             .wrapContentSize()
-            .tabItemInteractionAnimation(interactionState)
+            .tabItemGridInteractionAnimation(interactionState)
             .testTag(TabsTrayTestTag.TAB_ITEM_ROOT),
     ) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(TabContentCardShape)
+                .clip(tabContentCardShape)
                 .tabItemClickable(
                     clickHandler = clickHandler,
                     clickedItem = tab,
@@ -154,14 +154,10 @@ private fun TabContent(
                 .semantics {
                     selected = selectionState.isFocused
                 },
-            shape = TabContentCardShape,
+            shape = tabContentCardShape,
             border = tabItemConditionalBorder(selectionState),
             colors = CardDefaults.cardColors(
-                containerColor = if (selectionState.isSelected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHighest
-                },
+                containerColor = tabGridItemContainerColor(selectionState),
             ),
         ) {
             Column(modifier = Modifier.aspectRatio(gridItemAspectRatio)) {
@@ -180,7 +176,7 @@ private fun TabContent(
                             end = FirefoxTheme.layout.space.static50,
                             bottom = FirefoxTheme.layout.space.static50,
                         ),
-                    shape = ThumbnailShape,
+                    shape = thumbnailShape,
                 ) {
                     Thumbnail(
                         tab = tab,
@@ -250,11 +246,10 @@ private fun TabIcon(
             modifier = Modifier.size(TabHeaderFaviconSize),
         )
     } else {
-        Icon(
-            painter = painterResource(id = iconsR.drawable.mozac_ic_globe_24),
-            contentDescription = null,
-            modifier = Modifier.size(TabHeaderFaviconSize),
-            tint = MaterialTheme.colorScheme.onSurface,
+        Favicon(
+            url = tab.url,
+            size = TabHeaderFaviconSize,
+            isPrivate = tab.private,
         )
     }
 }
@@ -313,7 +308,6 @@ private fun CloseButton(
  * @param tab Tab, containing the thumbnail to be displayed.
  * @param size Size of the thumbnail.
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun Thumbnail(
     tab: TabsTrayItem.Tab,
@@ -327,7 +321,7 @@ private fun Thumbnail(
                 testTag = TabsTrayTestTag.TAB_ITEM_THUMBNAIL
             }
             .fillMaxSize(),
-        shape = ThumbnailShape,
+        shape = thumbnailShape,
     )
 }
 

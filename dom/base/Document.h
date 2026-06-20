@@ -66,6 +66,7 @@
 #include "nsDebug.h"
 #include "nsGkAtoms.h"
 #include "nsHashKeys.h"
+#include "nsHashtablesFwd.h"
 #include "nsIChannel.h"
 #include "nsIChannelEventSink.h"
 #include "nsIClassifiedChannel.h"
@@ -198,7 +199,6 @@ struct LangGroupFontPrefs;
 class PendingFullscreenEvent;
 class PermissionDelegateHandler;
 class PresShell;
-class ScrollTimelineAnimationTracker;
 class ServoStyleSet;
 enum class StyleOrigin : uint8_t;
 class SMILAnimationController;
@@ -237,6 +237,7 @@ class DocumentType;
 class DOMImplementation;
 class DOMIntersectionObserver;
 class DOMStringList;
+class EditContext;
 class Event;
 class EventListener;
 struct FailedCertSecurityInfo;
@@ -274,6 +275,7 @@ class Selection;
 class ServiceWorkerDescriptor;
 class ShadowRoot;
 class SimpleContentList;
+class SpeculationRules;
 class SVGDocument;
 class SVGElement;
 class SVGSVGElement;
@@ -562,6 +564,7 @@ class Document : public nsINode,
   friend class DocumentOrShadowRoot;
   friend class LinkedList<Document>;
   friend class LinkedListElement<Document>;
+  friend class AutoRestoreCloningForSVGUse;
 
  protected:
   Document(const char* aContentType, LoadedAsData aLoadedAsData);
@@ -710,6 +713,8 @@ class Document : public nsINode,
 
   virtual void SetSuppressParserErrorConsoleMessages(bool aSuppress) {}
   virtual bool SuppressParserErrorConsoleMessages() { return false; }
+
+  NS_IMPL_FROMNODE_HELPER(Document, IsDocument())
 
   // nsINode
   void InsertChildBefore(
@@ -1099,7 +1104,11 @@ class Document : public nsINode,
     //   are completing the initial about:blank load
     // - and Document::EndLoad was already called, so the method is almost done
     //   (we're likely called from there right now).
-    return InitialAboutBlankLoadCompleting() && !IsExpectingEndLoad();
+    // - and we are the initial document that should load sync. Specifically,
+    //   we are not IsInitialButExplicitlyOpened (bug 2041104).
+    bool ret = InitialAboutBlankLoadCompleting() && !IsExpectingEndLoad() &&
+               IsInitialDocument();
+    return ret;
   }
 
   void SetLoadedAsData(bool aLoadedAsData, bool aConsiderForMemoryReporting);
@@ -1572,6 +1581,10 @@ class Document : public nsINode,
    */
   void TearingDownEditor();
 
+  EditContext* GetActiveEditContext() const { return mActiveEditContext; }
+  // https://w3c.github.io/edit-context/#dfn-update-the-text-edit-context
+  MOZ_CAN_RUN_SCRIPT void UpdateTextEditContext();
+
   void SetKeyPressEventModel(uint16_t aKeyPressEventModel);
 
   // Gets the next form number.
@@ -1947,10 +1960,27 @@ class Document : public nsINode,
 
   bool TopLayerContains(Element&) const;
 
+  // https://fullscreen.spec.whatwg.org/#fullscreen-element-ready-check
+  enum class ElementReadyCheckResult {
+    // error is false, in the Fullscreen API requestFullscreen algorithm
+    eOk,
+    // Shall not abort early during synchronous phase of requestFullscreen, but
+    // will during ApplyFullscreen.
+    // Not yet spec'ed.
+    eKeyboardLockOnly,
+    // Request was for an element that already is the fullscreenElement and the
+    // keyboard lock status is also the same
+    eSame,
+    // Element Ready check failed
+    eErrorPromiseRejected
+  };
+
   // Do the "fullscreen element ready check" from the fullscreen spec.
-  // It returns true if the given element is allowed to go into fullscreen.
-  // It is responsive to dispatch "fullscreenerror" event when necessary.
-  bool FullscreenElementReadyCheck(FullscreenRequest&);
+  // see https://fullscreen.spec.whatwg.org/#fullscreen-element-ready-check
+  // It returns ElementReadyCheckResult::eOk if the given element is allowed to
+  // go into fullscreen. It is responsive to dispatch "fullscreenerror" event
+  // when necessary.
+  ElementReadyCheckResult FullscreenElementReadyCheck(FullscreenRequest&);
 
   /**
    * When this is called on content process, this asynchronously requests that
@@ -1971,8 +2001,7 @@ class Document : public nsINode,
  private:
   void RequestFullscreenInContentProcess(UniquePtr<FullscreenRequest> aRequest,
                                          bool aApplyFullscreenDirectly);
-  void RequestFullscreenInParentProcess(UniquePtr<FullscreenRequest> aRequest,
-                                        bool aApplyFullscreenDirectly);
+  void RequestFullscreenInParentProcess(UniquePtr<FullscreenRequest> aRequest);
 
   // Pushes aElement onto the top layer
   void TopLayerPush(Element&);
@@ -2918,19 +2947,6 @@ class Document : public nsINode,
   // If HasAnimationController is true, this is guaranteed to return non-null.
   SMILAnimationController* GetAnimationController();
 
-  // Gets the tracker for scroll-driven animations that are waiting to start.
-  // Returns nullptr if there is no scroll-driven animation tracker for this
-  // document which will be the case if there have never been any scroll-driven
-  // animations in the document.
-  ScrollTimelineAnimationTracker* GetScrollTimelineAnimationTracker() {
-    return mScrollTimelineAnimationTracker;
-  }
-
-  // Gets the tracker for scroll-driven animations that are waiting to start and
-  // creates it if it doesn't already exist. As a result, the return value
-  // will never be nullptr.
-  ScrollTimelineAnimationTracker* GetOrCreateScrollTimelineAnimationTracker();
-
   /**
    * Prevents user initiated events from being dispatched to the document and
    * subdocuments.
@@ -3364,6 +3380,9 @@ class Document : public nsINode,
   // features values changing.
   void NotifyMediaFeatureValuesChanged();
 
+  // Returns cached value of dom.image.sizes_auto.enabled, so that
+  // changing the pref while the document is loaded doesn't cause issues.
+  bool AutoSizesEnabled() const { return mAutoSizesEnabled; }
   // Observe loading=lazy sizes=auto image for size changes.
   void ObserveAutoSizesImage(HTMLImageElement& aElement);
   void UnobserveAutoSizesImage(HTMLImageElement& aElement);
@@ -3390,9 +3409,15 @@ class Document : public nsINode,
   void FlushPendingLinkUpdates();
 
   bool HasWarnedAbout(DeprecatedOperations aOperation) const;
-  void WarnOnceAbout(
+  void WarnOnceAbout(DeprecatedOperations aOperation, bool asError = false,
+                     const nsTArray<nsString>& aParams = nsTArray<nsString>(),
+                     const mozilla::SourceLocation& aLocation =
+                         mozilla::JSCallingLocation::Get()) const;
+  void WarnOnceAndReportAbout(
       DeprecatedOperations aOperation, bool asError = false,
-      const nsTArray<nsString>& aParams = nsTArray<nsString>()) const;
+      const nsTArray<nsString>& aParams = nsTArray<nsString>(),
+      const mozilla::JSCallingLocation& aLocation =
+          mozilla::JSCallingLocation::Get()) const;
 
 #define DOCUMENT_WARNING(_op) e##_op,
   enum DocumentWarnings {
@@ -3611,6 +3636,14 @@ class Document : public nsINode,
   HTMLCollection* Anchors();
   TimeStamp LastFocusTime() const;
   void SetLastFocusTime(const TimeStamp& aFocusTime);
+
+  void SetFocusNavigationStartingPoint(nsIContent* aContent,
+                                       bool aWillBeRemoved = false);
+  nsIContent* GetFocusNavigationStartingPoint() const {
+    return mFocusNavigationStartingPoint;
+  }
+  bool WasFocusedElementRemoved() const { return mWasFocusedElementRemoved; }
+
   // Event handlers are all on nsINode already
   bool MozSyntheticDocument() const { return IsSyntheticDocument(); }
   Element* GetCurrentScript();
@@ -3623,28 +3656,27 @@ class Document : public nsINode,
     return !GetFullscreenError(aCallerType);
   }
 
+  // Picture-in-Picture API
+  bool PictureInPictureEnabled();
+  Element* GetPictureInPictureElementInternal() const;
+  void SetPictureInPictureElement(Element* aElement);
+  already_AddRefed<Promise> ExitPictureInPicture(ErrorResult& aRv);
+
   void GetWireframeWithoutFlushing(bool aIncludeNodes, Nullable<Wireframe>&);
 
   MOZ_CAN_RUN_SCRIPT void GetWireframe(bool aIncludeNodes,
                                        Nullable<Wireframe>&);
 
-  // https://html.spec.whatwg.org/#close-entire-popover-list
-  MOZ_CAN_RUN_SCRIPT void CloseEntirePopoverList(PopoverAttributeState aMode,
-                                                 bool aFocusPreviousElement,
-                                                 bool aFireEvents);
-
-  // Hides all popovers until the given end point, see
-  // https://html.spec.whatwg.org/multipage/popover.html#hide-all-popovers-until
-  MOZ_CAN_RUN_SCRIPT void HideAllPopoversUntil(nsINode& aEndpoint,
-                                               bool aFocusPreviousElement,
-                                               bool aFireEvents);
-
-  // Hides all popovers, until the given end point, see
   // https://html.spec.whatwg.org/#hide-popover-stack-until
-  MOZ_CAN_RUN_SCRIPT void HidePopoverStackUntil(PopoverAttributeState aMode,
-                                                nsINode& aEndpoint,
-                                                bool aFocusPreviousElement,
-                                                bool aFireEvents);
+  MOZ_CAN_RUN_SCRIPT void HidePopoverStackUntil(
+      Element* aEndpoint, PopoverAttributeState aStackType,
+      bool aFocusPreviousElement, bool aFireEvents);
+
+  // Hides hint then auto popover stacks until the given endpoint.
+  // https://html.spec.whatwg.org/#hide-popovers-until
+  MOZ_CAN_RUN_SCRIPT void HidePopoversUntil(Element* aEndpoint,
+                                            bool aFocusPreviousElement,
+                                            bool aFireEvents);
 
   // Hides the given popover element, see
   // https://html.spec.whatwg.org/multipage/popover.html#hide-popover-algorithm
@@ -3657,7 +3689,9 @@ class Document : public nsINode,
   // popover opened in mode is in the given state.
   // See https://html.spec.whatwg.org/multipage/popover.html#auto-popover-list
   // See https://html.spec.whatwg.org/#showing-hint-popover-list
-  nsTArray<Element*> PopoverListOf(PopoverAttributeState aMode) const;
+  nsTArray<RefPtr<Element>> PopoverListOf(PopoverAttributeState aMode) const;
+  bool IsInPopoverListOf(const Element& aElement,
+                         PopoverAttributeState aMode) const;
 
   // Return document's popover list's last element of a particular mode.
   // See
@@ -3666,6 +3700,21 @@ class Document : public nsINode,
 
   void AddPopoverToTopLayer(Element&);
   void RemovePopoverFromTopLayer(Element&);
+
+  Element* PopoverHintStackParent() const;
+  void SetPopoverHintStackParent(Element* aParent);
+
+  bool IsShowingPopover() const { return mShowingPopover; }
+  void SetShowingPopover(bool aShowing) { mShowingPopover = aShowing; }
+
+  uint32_t HidingPopoverNestingCount() const {
+    return mHidingPopoverNestingCount;
+  }
+  void IncrementHidingPopoverNestingCount() { ++mHidingPopoverNestingCount; }
+  void DecrementHidingPopoverNestingCount() {
+    MOZ_ASSERT(mHidingPopoverNestingCount > 0);
+    --mHidingPopoverNestingCount;
+  }
 
   Element* GetTopLayerTop();
   // Return the fullscreen element in the top layer
@@ -3739,7 +3788,11 @@ class Document : public nsINode,
    */
   already_AddRefed<nsRange> CaretRangeFromPoint(int32_t aX, int32_t aY);
 
-  Element* GetScrollingElement();
+  MOZ_CAN_RUN_SCRIPT Element* GetScrollingElement();
+  // Like GetScrollingElement, but does not flush pending layout. Callers get
+  // an answer based on the current (possibly stale) frame state; if accuracy
+  // matters, callers should just call GetScrollingElement.
+  Element* GetScrollingElementNoFlush();
   // A way to check whether a given element is what would get returned from
   // GetScrollingElement.  It can be faster than comparing to the return value
   // of GetScrollingElement() due to being able to avoid flushes in various
@@ -4065,7 +4118,7 @@ class Document : public nsINode,
   void UpdateLastRememberedSizes();
 
   // Dispatch a runnable related to the document.
-  nsresult Dispatch(already_AddRefed<nsIRunnable>&& aRunnable) const;
+  nsresult Dispatch(already_AddRefed<nsIRunnable> aRunnable) const;
 
   // The URLs passed to this function should match what
   // JS::DescribeScriptedCaller() returns, since this API is used to
@@ -4316,6 +4369,9 @@ class Document : public nsINode,
 
   void AppendAutoFocusCandidateToTopDocument(Element* aAutoFocusCandidate);
 
+  // https://w3c.github.io/edit-context/#dfn-determine-the-active-editcontext
+  EditContext* DetermineActiveEditContext() const;
+
  public:
   void SetSHEntryHasUserInteraction(bool aHasInteraction);
 
@@ -4507,6 +4563,9 @@ class Document : public nsINode,
   static void GetAllInProcessDocuments(
       nsTArray<RefPtr<Document>>& aAllDocuments);
 
+  // Returns true if the document's principals's scheme is "about".
+  bool IsAboutPage() const;
+
  protected:
   // Returns the WindowContext for the document that we will contribute
   // page use counters to.
@@ -4520,9 +4579,6 @@ class Document : public nsINode,
   void EnsureOnloadBlocker();
 
   void SendToConsole(nsCOMArray<nsISecurityConsoleMessage>& aMessages);
-
-  // Returns true if the scheme for the url for this document is "about".
-  bool IsAboutPage() const;
 
   bool ContainsEMEContent();
   bool ContainsMSEContent();
@@ -4800,6 +4856,12 @@ class Document : public nsINode,
   // Helper for GetScrollingElement/IsScrollingElement.
   bool IsPotentiallyScrollable(HTMLBodyElement* aBody);
 
+  // Whether GetScrollingElementImpl / IsPotentiallyScrollableImpl should flush
+  // pending style and frame construction before answering.
+  enum class Flush : bool { No, Yes };
+  Element* GetScrollingElementImpl(Flush);
+  bool IsPotentiallyScrollableImpl(HTMLBodyElement* aBody, Flush);
+
   void MaybeAllowStorageForOpenerAfterUserInteraction();
 
   void MaybeStoreUserInteractionAsPermission();
@@ -4931,6 +4993,12 @@ class Document : public nsINode,
   // container for per-context fonts (downloadable, SVG, etc.)
   RefPtr<FontFaceSet> mFontFaceSet;
 
+  // Points to the focus navigation starting point if the focused element is
+  // removed or becomes non-focusable, so that focus navigation isn't reset when
+  // that happens.
+  // https://html.spec.whatwg.org/#sequential-focus-navigation-starting-point
+  RefPtr<nsIContent> mFocusNavigationStartingPoint;
+
   // Last time this document or a one of its sub-documents was focused.  If
   // focus has never occurred then mLastFocusTime.IsNull() will be true.
   TimeStamp mLastFocusTime;
@@ -4942,7 +5010,8 @@ class Document : public nsINode,
 
   RefPtr<Promise> mReadyForIdle;
 
-  RefPtr<mozilla::dom::FeaturePolicy> mFeaturePolicy;
+  // Lazily created in FeaturePolicy().
+  mutable RefPtr<mozilla::dom::FeaturePolicy> mFeaturePolicy;
 
   // Permission Delegate Handler, lazily-initialized in
   // GetPermissionDelegateHandler
@@ -5270,6 +5339,14 @@ class Document : public nsINode,
   // https://html.spec.whatwg.org/#has-been-revealed
   bool mHasBeenRevealed : 1;
 
+  // Cached value of dom.image.sizes_auto.enabled
+  const bool mAutoSizesEnabled : 1;
+
+  // If false, mFocusNavigationStartingPoint is the previously-focused element.
+  // If true, mFocusNavigationStartingPoint is the previously-focused element's
+  // previous sibling in the flat tree.
+  bool mWasFocusedElementRemoved : 1;
+
   // The fingerprinting protections overrides for this document. The value will
   // override the default enabled fingerprinting protections for this document.
   // This will only get populated if these is one that comes from the local
@@ -5463,6 +5540,9 @@ class Document : public nsINode,
   // mAnonymousContents roots. It's a NAC root, child of the root element.
   RefPtr<Element> mCustomContentContainer;
 
+  // Picture-in-Picture API: tracks the current PiP element
+  RefPtr<Element> mPictureInPictureElement;
+
   uint32_t mBlockDOMContentLoaded;
 
   // Our live MediaQueryLists
@@ -5587,6 +5667,15 @@ class Document : public nsINode,
   // Stack of top layer elements.
   nsTArray<nsWeakPtr> mTopLayer;
 
+  // https://html.spec.whatwg.org/#hint-stack-parent
+  RefPtr<Element> mPopoverHintStackParent;
+
+  // https://html.spec.whatwg.org/#showing-popover
+  bool mShowingPopover = false;
+
+  // https://html.spec.whatwg.org/#hiding-popover-nesting-count
+  uint32_t mHidingPopoverNestingCount = 0;
+
   // Stack of open dialogs
   // https://html.spec.whatwg.org/#open-dialogs-list
   nsTArray<HTMLDialogElement*> mOpenDialogs;
@@ -5601,6 +5690,10 @@ class Document : public nsINode,
 
   RefPtr<DOMImplementation> mDOMImplementation;
 
+  // This document's active edit context
+  // https://w3c.github.io/edit-context/#dfn-active-editcontext
+  RefPtr<EditContext> mActiveEditContext;
+
   RefPtr<ContentList> mImageMaps;
 
   // A set of responsive images keyed by address pointer.
@@ -5613,10 +5706,6 @@ class Document : public nsINode,
   AnimationTimelinesController mTimelinesController;
 
   RefPtr<dom::ScriptLoader> mScriptLoader;
-
-  // Tracker for scroll-driven animations that are waiting to start.
-  // nullptr until GetOrCreateScrollTimelineAnimationTracker is called.
-  RefPtr<ScrollTimelineAnimationTracker> mScrollTimelineAnimationTracker;
 
   // A document "without a browsing context" that owns the content of
   // HTMLTemplateElement.
@@ -5785,8 +5874,8 @@ class Document : public nsINode,
   // Collection of data used by the pageload event.
   PageloadEventData mPageloadEventData;
 
-  // Record page load telemetry
-  void RecordPageLoadEventTelemetry();
+  // Submit the page load event at the end of the document's lifetime.
+  void ReportPageLoadEvent();
 
   // Accumulate JS telemetry collected
   void AccumulateJSTelemetry();
@@ -5816,6 +5905,10 @@ class Document : public nsINode,
 
   nsCOMPtr<nsIURI> mTLSCertificateBindingURI;
 
+  // https://html.spec.whatwg.org/#document-sr-sets
+  nsClassHashtable<nsRefPtrHashKey<nsIScriptElement>, SpeculationRules>
+      mSpeculationRulesFromScript;
+
  public:
   // Needs to be public because the bindings code pokes at it.
   JS::ExpandoAndGeneration mExpandoAndGeneration;
@@ -5838,6 +5931,11 @@ class Document : public nsINode,
                                               const nsAString& aHTML,
                                               const SetHTMLOptions& aOptions,
                                               ErrorResult& aError);
+
+  void RegisterSpeculationRulesFromScript(
+      nsIScriptElement* aScriptElement,
+      UniquePtr<SpeculationRules> aSpeculationRules);
+  void UnregisterSpeculationRules(nsIScriptElement* aScriptElement);
 
   nsIURI* GetTlsCertificateBindingURI() const {
     return mTLSCertificateBindingURI;

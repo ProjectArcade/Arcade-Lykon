@@ -33,7 +33,7 @@ Add your new test to :searchfox:`perfdocs/config.yml <python/mozperftest/perfdoc
 
 Modify the generated documentation using:
 
-``$ ./mach lint -l perfdocs . --fix --warnings --outgoing``
+``$ ./mach perfdocs --generate``
 
 There's currently a `bug <https://bugzilla.mozilla.org/show_bug.cgi?id=1872613>`_
 which will likely cause the command to fail.  Running it a second time should

@@ -48,6 +48,7 @@ static constexpr auto UnicodeExtensionKeyNames() {
   names[UnicodeExtensionKey::Collation] = "co";
   names[UnicodeExtensionKey::CollationCaseFirst] = "kf";
   names[UnicodeExtensionKey::CollationNumeric] = "kn";
+  names[UnicodeExtensionKey::FirstDayOfWeek] = "fw";
   names[UnicodeExtensionKey::HourCycle] = "hc";
   names[UnicodeExtensionKey::NumberingSystem] = "nu";
   return names;
@@ -117,7 +118,8 @@ static void AssertCanonicalLocale(JSContext* cx, const JSLinearString* locale) {
 #endif
 }
 
-static auto ToLanguageId(JSContext* cx, const JSLinearString* locale) {
+mozilla::Maybe<LanguageId> js::intl::ToLanguageId(
+    JSContext* cx, const JSLinearString* locale) {
   AssertCanonicalLocale(cx, locale);
 
   // Tell the analysis the |ToLanguageId| function can't GC. (bug 1588528)
@@ -394,8 +396,7 @@ class LookupMatcherResult final {
 };
 
 void LookupMatcherResult::trace(JSTracer* trc) {
-  TraceNullableRoot(trc, &requestedLocale_,
-                    "LookupMatcherResult::requestedLocale");
+  TraceRoot(trc, &requestedLocale_, "LookupMatcherResult::requestedLocale");
 }
 
 namespace js {
@@ -471,9 +472,22 @@ static bool LookupMatcher(JSContext* cx, AvailableLocaleKind availableLocales,
   return true;
 }
 
+bool js::intl::LookupMatcher(JSContext* cx,
+                             AvailableLocaleKind availableLocales,
+                             LanguageId locale,
+                             mozilla::Maybe<LanguageId>* result) {
+  auto defaultLocale = LanguageId::und();
+  if (!DefaultLocale(cx, &defaultLocale)) {
+    return false;
+  }
+
+  return BestAvailableLocale(cx, availableLocales, locale,
+                             mozilla::Some(defaultLocale), result);
+}
+
 void js::intl::LocaleOptions::trace(JSTracer* trc) {
   for (auto& extension : extensions_) {
-    TraceNullableRoot(trc, &extension, "LocaleOptions::extension");
+    TraceRoot(trc, &extension, "LocaleOptions::extension");
   }
 }
 
@@ -512,7 +526,7 @@ JSLinearString* js::intl::ResolvedLocale::toLocale(JSContext* cx) const {
 
 void js::intl::ResolvedLocale::trace(JSTracer* trc) {
   for (auto& extension : extensions_) {
-    TraceNullableRoot(trc, &extension, "ResolvedLocale::extension");
+    TraceRoot(trc, &extension, "ResolvedLocale::extension");
   }
 }
 
@@ -679,6 +693,11 @@ static bool IsSupportedCalendar(JSContext* cx, LanguageId locale,
       return false;
     }
     auto calendar = keyword.unwrap();
+
+    // Skip deprecated calendar variants.
+    if (calendar == mozilla::MakeStringSpan("islamic-rgsa")) {
+      continue;
+    }
 
     if (StringEqualsAscii(string, calendar.data(), calendar.size())) {
       *result = true;
@@ -876,11 +895,8 @@ JSLinearString* js::intl::DefaultCalendar(JSContext* cx,
  * Return the default numbering system of a locale.
  */
 JSLinearString* js::intl::DefaultNumberingSystem(JSContext* cx,
-                                                 const JSLinearString* locale) {
-  auto langId = ToLanguageId(cx, locale);
-  MOZ_RELEASE_ASSERT(langId, "locale expected to be a valid data locale");
-
-  auto localeStr = langId->toString();
+                                                 LanguageId locale) {
+  auto localeStr = locale.toString();
 
   auto numberingSystem =
       mozilla::intl::NumberingSystem::TryCreate(localeStr.c_str());
@@ -896,6 +912,17 @@ JSLinearString* js::intl::DefaultNumberingSystem(JSContext* cx,
   }
 
   return NewStringCopy<CanGC>(cx, name.unwrap());
+}
+
+/**
+ * Return the default numbering system of a locale.
+ */
+JSLinearString* js::intl::DefaultNumberingSystem(JSContext* cx,
+                                                 const JSLinearString* locale) {
+  auto langId = ToLanguageId(cx, locale);
+  MOZ_RELEASE_ASSERT(langId, "locale expected to be a valid data locale");
+
+  return DefaultNumberingSystem(cx, *langId);
 }
 
 /**
@@ -923,6 +950,10 @@ static bool IsSupported(JSContext* cx, LocaleData localeData, LanguageId locale,
     case UnicodeExtensionKey::CollationNumeric: {
       *result = IsSupportedCollationNumeric(value);
       return true;
+    }
+    case UnicodeExtensionKey::FirstDayOfWeek: {
+      // Not used as an option.
+      break;
     }
     case UnicodeExtensionKey::HourCycle: {
       *result = IsSupportedHourCycle(value);

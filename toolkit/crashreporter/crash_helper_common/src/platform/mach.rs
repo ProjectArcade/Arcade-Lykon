@@ -31,7 +31,7 @@ use thiserror::Error;
 
 use crate::IO_TIMEOUT;
 
-pub(crate) const CHILD_RENDEZVOUS_ANCILLARY_DATA_LEN: usize = 1;
+pub(crate) const PROCESS_RENDEZVOUS_ANCILLARY_DATA_LEN: usize = 1;
 
 pub type Result<T> = result::Result<T, PlatformError>;
 

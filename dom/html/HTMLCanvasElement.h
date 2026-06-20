@@ -114,7 +114,7 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
 
  public:
   explicit HTMLCanvasElement(
-      already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo);
+      already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo);
 
   NS_IMPL_FROMNODE_HTML_WITH_TAG(HTMLCanvasElement, canvas)
 
@@ -333,7 +333,8 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
       CanvasUtils::ImageExtraction aExtractionBehavior, int32_t* aOutFormat,
       gfx::IntSize* aOutImageSize) override;
 
-  MOZ_CAN_RUN_SCRIPT void CallPrintCallback();
+  MOZ_CAN_RUN_SCRIPT void CallPrintCallback(
+      RefPtr<HTMLCanvasPrintState> aPrintState);
 
   virtual void AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
                             const nsAttrValue* aValue,
@@ -429,7 +430,7 @@ class HTMLCanvasPrintState final : public nsWrapperCache {
   virtual JSObject* WrapObject(JSContext* cx,
                                JS::Handle<JSObject*> aGivenProto) override;
 
-  HTMLCanvasElement* GetParentObject() { return mCanvas; }
+  HTMLCanvasElement* GetParentObject();
 
  private:
   ~HTMLCanvasPrintState();

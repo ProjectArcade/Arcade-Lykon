@@ -6,7 +6,7 @@
   file, You can obtain one at http://mozilla.org/MPL/2.0/.
 -->
 
-<resources xmlns:tools="http://schemas.android.com/tools" xmlns:moz="http://mozac.org/tools">
+<resources xmlns:tools="http://schemas.android.com/tools">
   <!-- App name for private browsing mode. %s is the name of the app (for example "Firefox"). -->
   <string name="app_name_private_5">கமுக்க %s</string>
   <!-- App name for private browsing mode. %s is the name of the app (for example "Firefox"). -->
@@ -111,8 +111,6 @@
   <string name="default_locale_text">சாதன மொழியைப் பின்பற்று</string>
   <!-- Placeholder text shown in the search bar before a user enters text -->
   <string name="locale_search_hint">மொழியைத் தேடவும்</string>
-  <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
-  <string name="search_shortcuts_engine_settings">தேடுபொறி அமைவுகள்</string>
   <!--
     Search Fragment
 
@@ -428,8 +426,6 @@
   <string name="edit_bookmark_snackbar_action">தொகு</string>
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">தொகு</string>
-  <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">நகலெடு</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">பகிர்</string>
   <!-- Bookmark overflow menu open in new tab button -->
@@ -449,10 +445,6 @@
   <string name="edit_bookmark_folder_fragment_title">அடைவைத் தொகு</string>
   <!-- Bookmark URL editing field label -->
   <string name="bookmark_url_label">உரளி</string>
-  <!-- Bookmark FOLDER editing field label -->
-  <string name="bookmark_folder_label">அடைவு</string>
-  <!-- Bookmark NAME editing field label -->
-  <string name="bookmark_name_label">பெயர்</string>
   <!-- Bookmark select folder screen title -->
   <string name="bookmark_select_folder_fragment_label">அடைவைத் தேர்</string>
   <!-- Bookmark editing error missing or improper URL -->
@@ -462,8 +454,6 @@
     %1$s is the host part of the URL of the bookmark deleted, if any
   -->
   <string name="bookmark_deletion_snackbar_message">%1$s அழிக்கப்பட்டது</string>
-  <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">செயல்தவிர்</string>
   <!--
     Site Permissions
 
@@ -528,8 +518,6 @@
   <string name="collections_header">திரட்டுகள்</string>
   <!-- Content description (not visible, for screen readers etc.): Opens the collection menu when pressed -->
   <string name="collection_menu_button_content_description">திரட்டு பட்டி</string>
-  <!-- Label to describe what collections are to a new user without any collections -->
-  <string name="no_collections_description2">உங்களுக்கு முக்கியமான விடயங்களைத் திரட்டவும்.\nஎதிர்வரும் விரைவு அணுகலுக்கு ஒத்த தேடல்கள், தளங்கள் மற்றும் தாவல்களை குழுவாகச் சேர்க்கவும்.</string>
   <!-- Title for the "select tabs" step of the collection creator -->
   <string name="create_collection_select_tabs">கீற்றுகளைத் தேர்</string>
   <!-- Title for the "select collection" step of the collection creator -->
@@ -608,8 +596,6 @@
     Text shown in snackbar when user closes a tab
   -->
   <string name="snackbar_tab_closed">கீற்று மூடப்பட்டது</string>
-  <!-- Text shown in snackbar when user closes all tabs -->
-  <string name="snackbar_tabs_closed">கீற்றுகள் மூடப்பட்டன</string>
   <!-- Text shown in snackbar when user closes a private tab -->
   <string name="snackbar_private_tab_closed">கமுக்கக் கீற்று மூடப்பட்டது</string>
   <!-- Text shown in snackbar to undo deleting a tab, top site or collection -->
@@ -935,8 +921,6 @@
   <string name="synced_tabs_no_open_tabs">திறந்த கீற்றுகள் இல்லை</string>
   <!-- Confirmation dialog button text when top sites limit is reached. -->
   <string name="top_sites_max_limit_confirmation_button">சரி, புரிந்தது</string>
-  <!-- Content description for close button in collection placeholder. -->
-  <string name="remove_home_collection_placeholder_content_description">நீக்கு</string>
   <!-- Translations feature -->
 
   <!-- TextField Design System Component -->

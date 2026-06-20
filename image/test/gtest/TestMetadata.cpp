@@ -60,8 +60,8 @@ static void CheckMetadataFrameCount(const ImageTestCase& aTestCase,
     static_cast<nsBMPDecoder*>(decoder.get())->SetIsWithinICO();
   }
 
-  RefPtr<IDecodingTask> task = new AnonymousDecodingTask(
-      WrapNotNull(decoder), /* aResumable */ multiChunk);
+  auto task = MakeRefPtr<AnonymousDecodingTask>(WrapNotNull(decoder),
+                                                /* aResumable */ multiChunk);
 
   task->Run();
 
@@ -135,8 +135,8 @@ static void CheckMetadataCommon(const ImageTestCase& aTestCase,
       DecoderFactory::CreateAnonymousMetadataDecoder(decoderType, aSourceBuffer,
                                                      decoderFlags);
   ASSERT_TRUE(decoder != nullptr);
-  RefPtr<IDecodingTask> task =
-      new AnonymousDecodingTask(WrapNotNull(decoder), /* aResumable */ false);
+  auto task = MakeRefPtr<AnonymousDecodingTask>(WrapNotNull(decoder),
+                                                /* aResumable */ false);
 
   if (aBMPWithinICO == BMPWithinICO::YES) {
     static_cast<nsBMPDecoder*>(decoder.get())->SetIsWithinICO();

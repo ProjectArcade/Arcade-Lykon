@@ -67,6 +67,7 @@ using ARMBuffer = js::jit::AssemblerBufferWithConstantPools<
         .instSize = 4,
         .guardSize = 1,
         .headerSize = 1,
+        .veneerSize = 1,
         .pcBias = 0,
         .alignFillInst = HINT | (NOP << ImmHint_offset),
         .nopFillInst = HINT | (NOP << ImmHint_offset),
@@ -136,13 +137,12 @@ class MozBaseAssembler : public js::jit::AssemblerShared {
   // Propagate OOM errors.
   BufferOffset allocLiteralLoadEntry(size_t numInst, unsigned numPoolEntries,
 				     uint8_t* inst, uint8_t* data,
-				     const LiteralDoc& doc = LiteralDoc(),
-				     ARMBuffer::PoolEntry* pe = nullptr)
+				     const LiteralDoc& doc = LiteralDoc())
   {
     MOZ_ASSERT(inst);
     MOZ_ASSERT(numInst == 1);	/* If not, then fix disassembly */
     BufferOffset offset = armbuffer_.allocEntry(numInst, numPoolEntries, inst,
-                                                data, pe);
+                                                data);
     propagateOOM(offset.assigned());
 #ifdef JS_DISASM_ARM64
     Instruction* instruction = armbuffer_.getInstOrNull(offset);
@@ -187,11 +187,16 @@ class MozBaseAssembler : public js::jit::AssemblerShared {
       // The target label will in any case be printed if we have it.
       //
       // The format of the instruction disassembly is /.*#.*/.  Strip the # and later.
-      size_t i;
+      size_t sharp = 0;
       const size_t BUFLEN = sizeof(buffer)-1;
-      for ( i=0 ; i < BUFLEN && buffer[i] && buffer[i] != '#' ; i++ )
-	;
-      buffer[i] = 0;
+      for (size_t i = 0; i < BUFLEN && buffer[i]; i++) {
+        if (buffer[i] == '#') {
+          sharp = i;
+        }
+      }
+      if (sharp) {
+        buffer[sharp] = 0;
+      }
 
       SprintfLiteral(labelBuf, "-> %d%s", target.doc, !target.bound ? "f" : "");
       hasTarget = false;
@@ -314,7 +319,7 @@ class MozBaseAssembler : public js::jit::AssemblerShared {
  public:
   // Static interface used by IonAssemblerBufferWithConstantPools.
   static void InsertIndexIntoTag(uint8_t* load, uint32_t index);
-  static bool PatchConstantPoolLoad(void* loadAddr, void* constPoolAddr);
+  static void PatchConstantPoolLoad(void* loadAddr, void* constPoolAddr);
   static void PatchShortRangeBranchToVeneer(ARMBuffer*, unsigned rangeIdx, BufferOffset deadline,
                                             BufferOffset veneer);
   static uint32_t PlaceConstantPoolBarrier(int offset);

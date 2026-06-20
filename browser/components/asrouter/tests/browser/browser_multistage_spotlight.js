@@ -267,6 +267,39 @@ add_task(async function test_spotlight_closes_on_WindowIsClosing() {
   await BrowserTestUtils.closeWindow(otherWin);
 });
 
+add_task(async function test_showSpotlightDialog_requires_browser_element() {
+  // showSpotlightDialog expects a <browser> XUL element
+  let message = (await PanelTestProvider.getMessages()).find(
+    m => m.id === "MULTISTAGE_SPOTLIGHT_MESSAGE"
+  );
+
+  let win = await Spotlight.showSpotlightDialog(window, message);
+  Assert.strictEqual(
+    win,
+    false,
+    "showSpotlightDialog returns false when passed a chrome window"
+  );
+  Assert.ok(
+    !gBrowser.selectedBrowser.documentGlobal.gDialogBox.isOpen,
+    "No dialog was opened when a chrome Window was passed"
+  );
+
+  let browser = gBrowser.selectedBrowser;
+  let dialogPromise = Spotlight.showSpotlightDialog(browser, message);
+  const [dialogWin] = await TestUtils.topicObserved("subdialog-loaded");
+  Assert.ok(
+    browser.documentGlobal.gDialogBox.isOpen,
+    "Dialog opened when passed a browser element"
+  );
+  dialogWin.close();
+  let dialog = await dialogPromise;
+  Assert.notStrictEqual(
+    dialog,
+    false,
+    "showSpotlightDialog returns for a browser element"
+  );
+});
+
 add_task(async function test_spotlight_modal_fullsize_and_nonzero() {
   let message = (await PanelTestProvider.getMessages()).find(
     m => m.id === "MULTISTAGE_SPOTLIGHT_MESSAGE"

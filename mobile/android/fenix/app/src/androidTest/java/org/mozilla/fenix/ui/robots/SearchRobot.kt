@@ -7,6 +7,8 @@
 package org.mozilla.fenix.ui.robots
 
 import android.util.Log
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
@@ -34,7 +36,9 @@ import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.matcher.IntentMatchers
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.By.textContains
 import androidx.test.uiautomator.UiSelector
+import androidx.test.uiautomator.Until
 import mozilla.components.compose.browser.toolbar.concept.BrowserToolbarTestTags.ADDRESSBAR_EDIT_MODE
 import mozilla.components.compose.browser.toolbar.concept.BrowserToolbarTestTags.ADDRESSBAR_EDIT_MODE_HORIZONTAL_DIVIDER
 import mozilla.components.compose.browser.toolbar.concept.BrowserToolbarTestTags.ADDRESSBAR_SEARCH_BOX
@@ -48,11 +52,9 @@ import org.mozilla.fenix.helpers.Constants.RETRY_COUNT
 import org.mozilla.fenix.helpers.Constants.SPEECH_RECOGNITION
 import org.mozilla.fenix.helpers.Constants.TAG
 import org.mozilla.fenix.helpers.DataGenerationHelper.getStringResource
-import org.mozilla.fenix.helpers.MatcherHelper.assertUIObjectExists
 import org.mozilla.fenix.helpers.MatcherHelper.itemContainingText
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithDescription
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithResId
-import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdContainingText
 import org.mozilla.fenix.helpers.SessionLoadedIdlingResource
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTime
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTimeShort
@@ -60,6 +62,7 @@ import org.mozilla.fenix.helpers.TestHelper.appContext
 import org.mozilla.fenix.helpers.TestHelper.appName
 import org.mozilla.fenix.helpers.TestHelper.mDevice
 import org.mozilla.fenix.helpers.TestHelper.packageName
+import org.mozilla.fenix.helpers.ext.waitNotNull
 import mozilla.components.browser.toolbar.R as toolbarR
 import mozilla.components.feature.qr.R as qrR
 
@@ -209,6 +212,10 @@ class SearchRobot(private val composeTestRule: ComposeTestRule) {
             closeSoftKeyboard()
             Log.i(TAG, "verifySearchSuggestionsAreDisplayed: Performed \"Close soft keyboard\" action.")
             Log.i(TAG, "verifySearchSuggestionsAreDisplayed: Waiting for $waitingTime ms until $searchSuggestion search suggestion exists.")
+            composeTestRule.waitUntilAtLeastOneExists(
+                hasTestTag("mozac.awesomebar.suggestion") and hasText(searchSuggestion, substring = true),
+                waitingTime,
+            )
             composeTestRule.onAllNodesWithTag("mozac.awesomebar.suggestion")
                 .assertAny(hasText(searchSuggestion, substring = true))
             Log.i(TAG, "verifySearchSuggestionsAreDisplayed: Verified $searchSuggestion search suggestion exists.")
@@ -428,10 +435,15 @@ class SearchRobot(private val composeTestRule: ComposeTestRule) {
         Log.i(TAG, "tapOutsideToDismissSearchBar: Clicked outside the search bar")
     }
 
+    @OptIn(ExperimentalTestApi::class)
     fun longClickToolbar() {
+        Log.i(TAG, "longClickToolbar: Trying to perform \"Close soft keyboard\" action")
+        closeSoftKeyboard()
+        Log.i(TAG, "longClickToolbar: Performed \"Close soft keyboard\" action")
         composeTestRule.waitForIdle()
+        mDevice.waitForIdle()
         Log.i(TAG, "longClickToolbar: Trying to perform long click on the toolbar")
-        composeTestRule.onNodeWithTag("ADDRESSBAR_SEARCH_BOX").performTouchInput { longClick() }
+        composeTestRule.onNodeWithTag(ADDRESSBAR_SEARCH_BOX).performTouchInput { longClick() }
         Log.i(TAG, "longClickToolbar: Performed long click on the toolbar")
     }
 
@@ -478,8 +490,36 @@ class SearchRobot(private val composeTestRule: ComposeTestRule) {
         composeTestRule.waitUntilAtLeastOneExists(hasTestTag(ADDRESSBAR_SEARCH_BOX), waitingTime)
         Log.i(TAG, "verifyTypedToolbarText: Waited for $waitingTime until the edit mode toolbar search box exists")
         Log.i(TAG, "verifyTypedToolbarText: Verifying that text '$expectedText' exists?: $exists")
-        assertUIObjectExists(itemWithResIdContainingText(ADDRESSBAR_SEARCH_BOX, expectedText), exists = exists)
+        val normalizedExpectedText = normalizeWhitespace(expectedText)
+        val actualText = composeTestRule.onNodeWithTag(ADDRESSBAR_SEARCH_BOX)
+            .fetchSemanticsNode()
+            .config
+            .toNormalizedToolbarText()
+
+        assertTrue(
+            "Expected toolbar text '$normalizedExpectedText' to ${if (exists) "exist" else "not exist"} in '$actualText'",
+            if (exists) {
+                actualText.contains(normalizedExpectedText)
+            } else {
+                !actualText.contains(normalizedExpectedText)
+            },
+        )
         Log.i(TAG, "verifyTypedToolbarText: Verification successful.")
+    }
+
+    private fun normalizeWhitespace(text: String): String = text.replace(Regex("\\s+"), " ").trim()
+
+    private fun androidx.compose.ui.semantics.SemanticsConfiguration.toNormalizedToolbarText(): String {
+        val textParts = buildList {
+            getOrNull(SemanticsProperties.Text)?.let { annotations ->
+                addAll(annotations.map { it.text })
+            }
+            getOrNull(SemanticsProperties.EditableText)?.let { editableText ->
+                add(editableText.text)
+            }
+        }
+
+        return normalizeWhitespace(textParts.joinToString(" "))
     }
 
     fun verifySearchBarPosition() {
@@ -515,6 +555,12 @@ class SearchRobot(private val composeTestRule: ComposeTestRule) {
             Log.i(TAG, "deleteSearchKeywordCharacters: Waiting for $waitingTimeShort ms for $appName window to be updated")
             mDevice.waitForWindowUpdate(appName, waitingTimeShort)
             Log.i(TAG, "deleteSearchKeywordCharacters: Waited for $waitingTimeShort ms for $appName window to be updated")
+        }
+    }
+
+    fun verifyTextSelectionOptions(vararg textSelectionOptions: String) {
+        for (textSelectionOption in textSelectionOptions) {
+            mDevice.waitNotNull(Until.findObject(textContains(textSelectionOption)), waitingTime)
         }
     }
 
@@ -626,8 +672,6 @@ private fun clearButton() =
     mDevice.findObject(UiSelector().resourceId("$packageName:id/mozac_browser_toolbar_clear_view"))
 
 private fun searchWrapper() = mDevice.findObject(UiSelector().resourceId("$packageName:id/search_wrapper"))
-
-private fun searchSelectorButton() = itemWithResId("$packageName:id/search_selector")
 
 private fun searchShortcutList() =
     mDevice.findObject(UiSelector().resourceId("$packageName:id/mozac_browser_menu_recyclerView"))

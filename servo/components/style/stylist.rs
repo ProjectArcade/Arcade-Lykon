@@ -8,12 +8,14 @@ use crate::applicable_declarations::{
     ApplicableDeclarationBlock, ApplicableDeclarationList, CascadePriority, ScopeProximity,
 };
 use crate::computed_value_flags::ComputedValueFlags;
-use crate::context::{CascadeInputs, QuirksMode};
+use crate::context::{CascadeInputs, QuirksMode, TreeCountingCaches};
 use crate::custom_properties::ComputedCustomProperties;
 use crate::custom_properties::{parse_name, SpecifiedValue};
 use crate::derives::*;
 use crate::device::Device;
 use crate::dom::TElement;
+#[cfg(feature = "gecko")]
+use crate::dom::TShadowRoot;
 #[cfg(feature = "gecko")]
 use crate::gecko_bindings::structs::{ServoStyleSetSizes, StyleRuleInclusion};
 use crate::invalidation::element::invalidation_map::{
@@ -927,9 +929,11 @@ impl Stylist {
         {
             let mut seen_names = PrecomputedHashSet::default();
             let mut rule_cache_conditions = RuleCacheConditions::default();
+            let mut tree_counting_caches = TreeCountingCaches::default();
             let context = computed::Context::new_for_initial_at_property_value(
                 self,
                 &mut rule_cache_conditions,
+                &mut tree_counting_caches,
             );
 
             for (k, v) in self.custom_property_script_registry().properties().iter() {
@@ -1372,6 +1376,7 @@ impl Stylist {
             &PositionTryFallbacksTryTactic::default(),
             /* rule_cache = */ None,
             &mut RuleCacheConditions::default(),
+            &mut TreeCountingCaches::default(),
         )
     }
 
@@ -1381,6 +1386,7 @@ impl Stylist {
         &self,
         style: &ComputedValues,
         guards: &StylesheetGuards,
+        scope: CascadeLevel,
         element: E,
         fallback_item: &PositionTryFallbacksItem,
     ) -> Option<Arc<ComputedValues>>
@@ -1404,7 +1410,7 @@ impl Stylist {
         };
 
         let fallback_rule = if !name_and_try_tactic.ident.is_empty() {
-            Some(self.lookup_position_try(&name_and_try_tactic.ident.0, element)?)
+            Some(self.lookup_position_try(&name_and_try_tactic.ident.0, scope, element)?)
         } else {
             None
         };
@@ -1453,6 +1459,7 @@ impl Stylist {
                     &name_and_try_tactic.try_tactic,
                     /* rule_cache = */ None,
                     &mut RuleCacheConditions::default(),
+                    &mut TreeCountingCaches::default(),
                 ))
             },
         )
@@ -1482,6 +1489,7 @@ impl Stylist {
         try_tactic: &PositionTryFallbacksTryTactic,
         rule_cache: Option<&RuleCache>,
         rule_cache_conditions: &mut RuleCacheConditions,
+        tree_counting_caches: &mut TreeCountingCaches,
     ) -> Arc<ComputedValues>
     where
         E: TElement,
@@ -1526,6 +1534,7 @@ impl Stylist {
             rule_cache,
             rule_cache_conditions,
             element,
+            tree_counting_caches,
         )
     }
 
@@ -1713,7 +1722,7 @@ impl Stylist {
         E: TElement,
     {
         let mut cur = element;
-        let mut pseudos = SmallVec::new();
+        let mut pseudos = SmallVec::<[_; 2]>::new();
         if let Some(pseudo) = pseudo_element {
             pseudos.push(pseudo.clone());
         }
@@ -1727,7 +1736,8 @@ impl Stylist {
         RuleCollector::new(
             self,
             element,
-            pseudos,
+            cur,
+            &pseudos,
             style_attribute,
             smil_override,
             animation_declarations,
@@ -1831,14 +1841,33 @@ impl Stylist {
     fn lookup_position_try<'a, E>(
         &'a self,
         name: &Atom,
+        scope: CascadeLevel,
         element: E,
     ) -> Option<&'a Arc<Locked<PositionTryRule>>>
     where
         E: TElement + 'a,
     {
-        self.lookup_element_dependent_at_rule(element, |data| {
-            data.extra_data.position_try_rules.get(name)
-        })
+        let mut shadow_root = scope.get_shadow_root_for_scoped(element);
+        // https://drafts.csswg.org/css-shadow/#tree-scoped-name-global
+        // "First search only the tree-scoped names associated with the same root as the tree-scoped reference."
+        while let Some(r) = shadow_root {
+            if let Some(rule) = r
+                .style_data()
+                .map(|data| data.extra_data.position_try_rules.get(name))
+                .flatten()
+            {
+                return Some(rule);
+            }
+            // "If no relevant tree-scoped name is found, and the root is a shadow root, then repeat this search in the root’s host’s node tree (recursively)."
+            shadow_root = r.host().containing_shadow();
+        }
+
+        for (data, _) in self.iter_extra_data_origins() {
+            if let Some(r) = data.position_try_rules.get(name) {
+                return Some(r);
+            }
+        }
+        None
     }
 
     /// Computes the match results of a given element against the set of
@@ -2001,6 +2030,7 @@ impl Stylist {
             /* rule_cache = */ None,
             &mut Default::default(),
             /* element = */ None,
+            &mut TreeCountingCaches::default(),
         )
     }
 

@@ -29,10 +29,10 @@ class AnimationTimelinesController final {
   void AddScrollTimeline(ScrollTimeline& aTimeline);
 
   void WillRefresh();
+  bool UpdateStaleTimelines();
   void UpdateLastRefreshDriverTime();
   void TriggerAllPendingAnimationsNow();
   void UpdateHiddenByContentVisibility();
-  void TrySampleScrollTimelines();
 
  private:
   LinkedList<DocumentTimeline> mDocumentTimelines;

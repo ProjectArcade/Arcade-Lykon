@@ -190,7 +190,8 @@ class KeyframeEffect : public AnimationEffect {
                             JS::Handle<JSObject*> aKeyframes, ErrorResult& aRv);
   void SetKeyframes(nsTArray<Keyframe>&& aKeyframes,
                     const ComputedStyle* aStyle,
-                    const AnimationTimeline* aTimeline);
+                    const AnimationTimeline* aTimeline,
+                    const AnimationRange* aRange);
 
   // Replace the start value of the transition. This is used for updating
   // transitions running on the compositor.
@@ -257,7 +258,8 @@ class KeyframeEffect : public AnimationEffect {
 
   // Update |mProperties| by recalculating from |mKeyframes| using
   // |aComputedStyle| to resolve specified values.
-  // Note: we use |aTimeline| to check if we need to ensure the base styles.
+  // Note: we use |aTimeline| to check if we need to ensure the base styles and
+  // used to check if we have to skip the generated keyframes.
   // If it is nullptr, we use the timeline from |mAnimation|.
   void UpdateProperties(const ComputedStyle* aStyle,
                         const AnimationTimeline* aTimeline = nullptr);
@@ -370,6 +372,9 @@ class KeyframeEffect : public AnimationEffect {
 
   double AnimationsPlayBackRateMultiplier() const;
 
+  void MaybeUpdateKeyframeComputedOffsets(const AnimationTimeline* aTimelne,
+                                          const AnimationRange& aRange);
+
  protected:
   ~KeyframeEffect() override = default;
 
@@ -382,7 +387,8 @@ class KeyframeEffect : public AnimationEffect {
   // Build properties by recalculating from |mKeyframes| using |aComputedStyle|
   // to resolve specified values. This function also applies paced spacing if
   // needed.
-  nsTArray<AnimationProperty> BuildProperties(const ComputedStyle* aStyle);
+  nsTArray<AnimationProperty> BuildProperties(
+      const ComputedStyle* aStyle, const AnimationTimeline* aTimeline);
 
   // Helper for SetTarget() and SetPseudoElement().
   void UpdateTarget(Element* aElement,
@@ -433,6 +439,9 @@ class KeyframeEffect : public AnimationEffect {
 
   // The specified keyframes.
   nsTArray<Keyframe> mKeyframes;
+  // The preprocess extra info for |mKeyframes|, to avoid any unnecessary
+  // passes of |mKeyframes|.
+  KeyframesOffsetHasAny mKeyframesOffsetInfo;
 
   // A set of per-property value arrays, derived from |mKeyframes|.
   nsTArray<AnimationProperty> mProperties;

@@ -123,12 +123,11 @@ class Thread {
   // Allow threads to be moved so that they can be stored in containers.
   Thread(Thread&& aOther);
   Thread& operator=(Thread&& aOther);
-
- private:
   // Disallow copy as that's not sensible for unique resources.
   Thread(const Thread&) = delete;
   void operator=(const Thread&) = delete;
 
+ private:
   // Provide a process global ID to each thread.
   ThreadId id_;
 
@@ -212,7 +211,7 @@ class ThreadTrampoline {
     auto* pack = static_cast<ThreadTrampoline<F, Args...>*>(aPack);
     pack->callMain(std::index_sequence_for<Args...>{});
     js_delete(pack);
-    return 0;
+    return {};
   }
 
   template <size_t... Indices>

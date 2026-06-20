@@ -17,6 +17,7 @@
 #include "nsIWebProgress.h"
 #include "prenv.h"
 #include "nsIDocShellTreeItem.h"
+#include "nsPIDOMWindowInlines.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/ScrollContainerFrame.h"
@@ -619,7 +620,7 @@ void logging::SelChange(dom::Selection* aSelection, DocAccessible* aDocument,
                         int16_t aReason) {
   SelectionType type = aSelection->GetType();
 
-  const char* strType = 0;
+  const char* strType = nullptr;
   if (type == SelectionType::eNormal) {
     strType = "normal";
   } else if (type == SelectionType::eSpellCheck) {

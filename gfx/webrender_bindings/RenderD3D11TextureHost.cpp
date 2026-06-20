@@ -29,19 +29,21 @@ RenderDXGITextureHost::RenderDXGITextureHost(
     const Maybe<layers::GpuProcessTextureId>& aGpuProcessTextureId,
     const uint32_t aArrayIndex, const gfx::SurfaceFormat aFormat,
     const gfx::ColorSpace2 aColorSpace, const gfx::ColorRange aColorRange,
-    const gfx::TransferFunction aTransferFunction, const gfx::IntSize aSize,
+    const gfx::TransferFunction aTransferFunction,
+    const Maybe<gfx::HDRMetadata>& aHDRMetadata, const gfx::IntSize aSize,
     bool aHasKeyedMutex,
     const Maybe<layers::CompositeProcessFencesHolderId>& aFencesHolderId)
     : mHandle(aHandle),
       mGpuProcessTextureId(aGpuProcessTextureId),
       mArrayIndex(aArrayIndex),
-      mSurface(0),
-      mStream(0),
+      mSurface(nullptr),
+      mStream(nullptr),
       mTextureHandle{0},
       mFormat(aFormat),
       mColorSpace(aColorSpace),
       mColorRange(aColorRange),
       mTransferFunction(aTransferFunction),
+      mHDRMetadata(aHDRMetadata),
       mSize(aSize),
       mHasKeyedMutex(aHasKeyedMutex),
       mFencesHolderId(aFencesHolderId),
@@ -150,7 +152,9 @@ size_t RenderDXGITextureHost::GetPlaneCount() const {
   switch (mFormat) {
     case gfx::SurfaceFormat::NV12:
     case gfx::SurfaceFormat::P010:
-    case gfx::SurfaceFormat::P016: {
+    case gfx::SurfaceFormat::P016:
+    case gfx::SurfaceFormat::NV16:
+    case gfx::SurfaceFormat::P210: {
       return 2;
     }
     case gfx::SurfaceFormat::B8G8R8A8:
@@ -172,7 +176,6 @@ size_t RenderDXGITextureHost::GetPlaneCount() const {
     case gfx::SurfaceFormat::YUV420:
     case gfx::SurfaceFormat::YUV420P10:
     case gfx::SurfaceFormat::YUV422P10:
-    case gfx::SurfaceFormat::NV16:
     case gfx::SurfaceFormat::YUY2:
     case gfx::SurfaceFormat::HSV:
     case gfx::SurfaceFormat::Lab:
@@ -541,8 +544,8 @@ void RenderDXGITextureHost::DeleteTextureHandle() {
 
   mTexture = nullptr;
   mKeyedMutex = nullptr;
-  mSurface = 0;
-  mStream = 0;
+  mSurface = nullptr;
+  mStream = nullptr;
 }
 
 GLuint RenderDXGITextureHost::GetGLHandle(uint8_t aChannelIndex) const {
@@ -582,8 +585,8 @@ RenderDXGIYCbCrTextureHost::RenderDXGIYCbCrTextureHost(
     const gfx::IntSize aSizeCbCr,
     const layers::CompositeProcessFencesHolderId aFencesHolderId)
     : mHandles{aHandles[0], aHandles[1], aHandles[2]},
-      mSurfaces{0},
-      mStreams{0},
+      mSurfaces{nullptr},
+      mStreams{nullptr},
       mTextureHandles{0},
       mYUVColorSpace(aYUVColorSpace),
       mColorDepth(aColorDepth),
@@ -837,11 +840,11 @@ void RenderDXGIYCbCrTextureHost::DeleteTextureHandle() {
 
       if (mSurfaces[i]) {
         egl->fDestroySurface(mSurfaces[i]);
-        mSurfaces[i] = 0;
+        mSurfaces[i] = nullptr;
       }
       if (mStreams[i]) {
         egl->fDestroyStreamKHR(mStreams[i]);
-        mStreams[i] = 0;
+        mStreams[i] = nullptr;
       }
     }
   }

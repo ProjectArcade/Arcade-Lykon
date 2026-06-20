@@ -10,6 +10,7 @@
 #include "mozilla/Likely.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/PresShellInlines.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/HTMLSelectElement.h"
 #include "nsContentUtils.h"
@@ -125,7 +126,8 @@ nscoord nsComboboxControlFrame::GetLongestOptionISize(
       nsCaseTransformTextRunFactory::TransformString(
           label, transformedLabel, textTransform,
           textStyle->TextSecurityMaskChar(),
-          /* aCaseTransformsOnly = */ false, language, charsToMergeArray,
+          /* aCaseTransformsOnly = */ false,
+          /* aUseCapitalEsZet = */ false, language, charsToMergeArray,
           deletedCharsArray);
       stringToUse = &transformedLabel;
     }

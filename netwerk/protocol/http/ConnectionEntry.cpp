@@ -40,6 +40,7 @@ ConnectionEntry::ConnectionEntry(nsHttpConnectionInfo* ci,
       mPreferIPv4(false),
       mPreferIPv6(false),
       mUsedForConnection(false),
+      mPendingQProcessingScheduled(false),
       mPendingQSet(aPendingQSet) {
   LOG(("ConnectionEntry::ConnectionEntry this=%p key=%s", this,
        ci->HashKey().get()));
@@ -70,8 +71,8 @@ void ConnectionEntry::RemoveConnectionAttempt(ConnectionAttempt* sock,
   mConnectionAttemptPool->RemoveConnectionAttempt(sock, abandon);
 }
 
-void ConnectionEntry::CloseAllConnectionAttempts(bool aReenqueueTransaction) {
-  mConnectionAttemptPool->CloseAllConnectionAttempts(aReenqueueTransaction);
+void ConnectionEntry::CloseAllConnectionAttempts() {
+  mConnectionAttemptPool->CloseAllConnectionAttempts();
 }
 
 void ConnectionEntry::DisallowHttp2() {
@@ -230,6 +231,12 @@ bool ConnectionEntry::RestrictConnections() {
   // If the restriction is based on a tcp handshake in progress
   // let that connect and then see if it was SPDY or not
   if (mConnectionAttemptPool->UnconnectedConnectionAttempts()) {
+    LOG(
+        ("ConnectionEntry::RestrictConnections %p %s restricted: "
+         "%u unconnected HCA(s) still negotiating (pool length=%zu)\n",
+         this, mConnInfo->HashKey().get(),
+         mConnectionAttemptPool->UnconnectedConnectionAttempts(),
+         mConnectionAttemptPool->Length()));
     return true;
   }
 
@@ -244,7 +251,14 @@ bool ConnectionEntry::RestrictConnections() {
     for (uint32_t index = 0; index < mActiveConns.Length(); ++index) {
       HttpConnectionBase* conn = mActiveConns[index];
       RefPtr<nsHttpConnection> connTCP = do_QueryObject(conn);
-      if ((connTCP && !connTCP->ReportedNPN()) || conn->CanDirectlyActivate()) {
+      bool npnPending = connTCP && !connTCP->ReportedNPN();
+      bool canActivate = conn->CanDirectlyActivate();
+      LOG(
+          ("ConnectionEntry::RestrictConnections %p %s active conn[%u]=%p "
+           "npnPending=%d canActivate=%d dontReuse=%d\n",
+           this, mConnInfo->HashKey().get(), index, conn, npnPending,
+           canActivate, !conn->CanReuse()));
+      if (npnPending || canActivate) {
         confirmedRestrict = true;
         break;
       }
@@ -591,7 +605,7 @@ void ConnectionEntry::MakeAllDontReuseExcept(HttpConnectionBase* conn) {
   // Skip for fallback entries: their DnsAndConnectSockets are for
   // FallbackTransactions whose real transactions are in the H3 entry.
   if (!mConnInfo->GetFallbackConnection()) {
-    CloseAllConnectionAttempts(true);
+    CloseAllConnectionAttempts();
   }
 }
 
@@ -842,6 +856,7 @@ HttpRetParams ConnectionEntry::GetConnectionData() {
   HttpRetParams data;
   data.host = mConnInfo->Origin();
   data.port = mConnInfo->OriginPort();
+  mConnInfo->GetOriginAttributes().CreateSuffix(data.originAttributesSuffix);
   for (uint32_t i = 0; i < mActiveConns.Length(); i++) {
     HttpConnInfo info;
     RefPtr<nsHttpConnection> connTCP = do_QueryObject(mActiveConns[i]);
@@ -907,7 +922,13 @@ Http3ConnectionStatsParams ConnectionEntry::GetHttp3ConnectionStatsData() {
 void ConnectionEntry::LogConnections() {
   LOG(("active conns ["));
   for (HttpConnectionBase* conn : mActiveConns) {
-    LOG(("  %p (ready=%d)", conn, conn->CanDirectlyActivate()));
+    if (conn->CanDirectlyActivate()) {
+      LOG(("  %p (ready=1)", conn));
+    } else {
+      RefPtr<nsHttpConnection> connTCP = do_QueryObject(conn);
+      LOG(("  %p (ready=0 reason=%s)", conn,
+           connTCP ? connTCP->CanDirectlyActivateReason() : "not-tcp-conn"));
+    }
   }
 
   LOG(("] idle conns ["));
@@ -929,6 +950,9 @@ bool ConnectionEntry::RemoveTransFromPendingQ(nsHttpTransaction* aTrans) {
   if (transIndex >= 0) {
     pendingTransInfo = (*infoArray)[transIndex];
     infoArray->RemoveElementAt(transIndex);
+    if (!(aTrans->Caps() & NS_HTTP_URGENT_START)) {
+      mPendingQ.OnPendingTransactionRemovedFromTable();
+    }
   }
 
   if (!pendingTransInfo) {

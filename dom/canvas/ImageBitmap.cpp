@@ -645,7 +645,7 @@ static already_AddRefed<SourceSurface> GetSurfaceFromElement(
 
   RefPtr<SourceSurface> surface = res.GetSourceSurface();
   if (NS_WARN_IF(!surface)) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aRv.ThrowInvalidStateError("The source image could not be decoded");
     return nullptr;
   }
 
@@ -802,7 +802,8 @@ already_AddRefed<SourceSurface> ImageBitmap::PrepareForDrawTarget(
   // PersistentBufferProvider for the canvas, and not for individual
   // SourceSurfaceRecording objects. In such situations, the only thing we can
   // do is clear our cache and extract a new SourceSurface from mData.
-  if (mSurface && mSurface->GetType() == gfx::SurfaceType::RECORDING &&
+  if (mSurface &&
+      mSurface->GetUnderlyingType() == gfx::SurfaceType::RECORDING &&
       !aTarget->IsRecording()) {
     RefPtr<gfx::DataSourceSurface> dataSurface = mSurface->GetDataSurface();
     if (!dataSurface) {
@@ -1077,7 +1078,7 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateImageBitmapInternal(
 
     dataSurface = CropAndCopyDataSourceSurface(dataSurface, cropRect);
     if (NS_WARN_IF(!dataSurface)) {
-      aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+      aRv.ThrowInvalidStateError("Failed to crop source image");
       return nullptr;
     }
 
@@ -1155,7 +1156,7 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
     ErrorResult& aRv) {
   // Check if the image element is completely available or not.
   if (!aImageEl.Complete()) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aRv.ThrowInvalidStateError("Passed-in image has not finished loading");
     return nullptr;
   }
 
@@ -1210,7 +1211,7 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
 
   // Check network state.
   if (aVideoEl.NetworkState() == NETWORK_EMPTY) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aRv.ThrowInvalidStateError("Passed-in video has not loaded any data");
     return nullptr;
   }
 
@@ -1218,7 +1219,7 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
   // Cannot be HTMLMediaElement::HAVE_NOTHING or
   // HTMLMediaElement::HAVE_METADATA.
   if (aVideoEl.ReadyState() <= HAVE_METADATA) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aRv.ThrowInvalidStateError("Passed-in video does not have enough data");
     return nullptr;
   }
 
@@ -1255,8 +1256,13 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
     nsIGlobalObject* aGlobal, HTMLCanvasElement& aCanvasEl,
     const Maybe<IntRect>& aCropRect, const ImageBitmapOptions& aOptions,
     ErrorResult& aRv) {
-  if (aCanvasEl.Width() == 0 || aCanvasEl.Height() == 0) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+  if (aCanvasEl.Width() == 0) {
+    aRv.ThrowInvalidStateError("Passed-in canvas has width 0");
+    return nullptr;
+  }
+
+  if (aCanvasEl.Height() == 0) {
+    aRv.ThrowInvalidStateError("Passed-in canvas has height 0");
     return nullptr;
   }
 
@@ -1428,7 +1434,7 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
     return nullptr;
   }
 
-  window->GetExtantDoc()->WarnOnceAbout(
+  window->GetExtantDoc()->WarnOnceAndReportAbout(
       DeprecatedOperations::eCreateImageBitmapCanvasRenderingContext2D);
 
   // Check write-only mode.
@@ -1444,7 +1450,7 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
 
   const IntSize surfaceSize = surface->GetSize();
   if (surfaceSize.width == 0 || surfaceSize.height == 0) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aRv.ThrowInvalidStateError("Passed-in canvas has width 0 or height 0");
     return nullptr;
   }
 
@@ -1461,7 +1467,8 @@ already_AddRefed<ImageBitmap> ImageBitmap::CreateInternal(
     const Maybe<IntRect>& aCropRect, const ImageBitmapOptions& aOptions,
     ErrorResult& aRv) {
   if (!aImageBitmap.mData) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aRv.ThrowInvalidStateError(
+        "Passed-in ImageBitmap has been closed or transferred");
     return nullptr;
   }
 
@@ -1763,7 +1770,8 @@ static void AsyncCreateImageBitmapFromBlob(Promise* aPromise,
   RefPtr<CreateImageBitmapFromBlob> task = CreateImageBitmapFromBlob::Create(
       aPromise, aGlobal, aBlob, aCropRect, mainThreadEventTarget, aOptions);
   if (NS_WARN_IF(!task)) {
-    aPromise->MaybeReject(NS_ERROR_DOM_INVALID_STATE_ERR);
+    aPromise->MaybeRejectWithInvalidStateError(
+        "Failed to create blob decoding task");
     return;
   }
 
@@ -2339,7 +2347,8 @@ void CreateImageBitmapFromBlob::
   });
 
   if (NS_WARN_IF(NS_FAILED(aStatus))) {
-    mPromise->MaybeReject(NS_ERROR_DOM_INVALID_STATE_ERR);
+    mPromise->MaybeRejectWithInvalidStateError(
+        "The image could not be decoded");
     return;
   }
 

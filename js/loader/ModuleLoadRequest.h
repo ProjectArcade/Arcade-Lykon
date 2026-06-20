@@ -28,9 +28,6 @@ class ModuleLoaderBase;
 class ModuleLoadRequest final : public ScriptLoadRequest {
   ~ModuleLoadRequest();
 
-  ModuleLoadRequest(const ModuleLoadRequest& aOther) = delete;
-  ModuleLoadRequest(ModuleLoadRequest&& aOther) = delete;
-
  public:
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS_INHERITED(ModuleLoadRequest,
@@ -51,6 +48,8 @@ class ModuleLoadRequest final : public ScriptLoadRequest {
   ModuleLoadRequest(ModuleType aModuleType, const SRIMetadata& aIntegrity,
                     nsIURI* aReferrer, LoadContextBase* aContext, Kind aKind,
                     ModuleLoaderBase* aLoader, ModuleLoadRequest* aRootModule);
+  ModuleLoadRequest(const ModuleLoadRequest& aOther) = delete;
+  ModuleLoadRequest(ModuleLoadRequest&& aOther) = delete;
 
   bool IsTopLevel() const override { return mKind == Kind::TopLevel; }
   bool IsStaticImport() const { return mKind == Kind::StaticImport; }

@@ -677,8 +677,8 @@ void TISInputSourceWrapper::InitByInputSourceID(const CFStringRef aID) {
   if (!aID) return;
   const void* keys[] = {kTISPropertyInputSourceID};
   const void* values[] = {aID};
-  CFDictionaryRef filter =
-      ::CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, NULL, NULL);
+  CFDictionaryRef filter = ::CFDictionaryCreate(kCFAllocatorDefault, keys,
+                                                values, 1, nullptr, nullptr);
   NS_ASSERTION(filter, "failed to create the filter");
   mInputSourceList = ::TISCreateInputSourceList(filter, true);
   ::CFRelease(filter);
@@ -1416,12 +1416,13 @@ void TISInputSourceWrapper::WillDispatchKeyboardEvent(
     AlternativeCharCode altCharCodes(cmdedChar, cmdedShiftChar);
     aKeyEvent.mAlternativeCharCodes.AppendElement(altCharCodes);
   }
-  MOZ_LOG(gKeyLog, LogLevel::Info,
-          ("%p   TISInputSourceWrapper::WillDispatchKeyboardEvent, "
-           "hasCmdShiftOnlyChar=%s, isCmdSwitchLayout=%s, isDvorakQWERTY=%s, "
-           "cmdedChar=U+%X, cmdedShiftChar=U+%X",
-           this, TrueOrFalse(hasCmdShiftOnlyChar), TrueOrFalse(isDvorakQWERTY),
-           TrueOrFalse(isDvorakQWERTY), cmdedChar, cmdedShiftChar));
+  MOZ_LOG(
+      gKeyLog, LogLevel::Info,
+      ("%p   TISInputSourceWrapper::WillDispatchKeyboardEvent, "
+       "hasCmdShiftOnlyChar=%s, isCmdSwitchLayout=%s, isDvorakQWERTY=%s, "
+       "cmdedChar=U+%X, cmdedShiftChar=U+%X",
+       this, TrueOrFalse(hasCmdShiftOnlyChar), TrueOrFalse(isCmdSwitchLayout),
+       TrueOrFalse(isDvorakQWERTY), cmdedChar, cmdedShiftChar));
   // Special case for 'SS' key of German layout. See the comment of
   // hasCmdShiftOnlyChar definition for the detail.
   if (hasCmdShiftOnlyChar && originalCmdedShiftChar) {
@@ -1742,8 +1743,8 @@ NSUInteger TextInputHandler::sLastModifierState = 0;
 CFArrayRef TextInputHandler::CreateAllKeyboardLayoutList() {
   const void* keys[] = {kTISPropertyInputSourceType};
   const void* values[] = {kTISTypeKeyboardLayout};
-  CFDictionaryRef filter =
-      ::CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, NULL, NULL);
+  CFDictionaryRef filter = ::CFDictionaryCreate(kCFAllocatorDefault, keys,
+                                                values, 1, nullptr, nullptr);
   NS_ASSERTION(filter, "failed to create the filter");
   CFArrayRef list = ::TISCreateInputSourceList(filter, true);
   ::CFRelease(filter);
@@ -1894,7 +1895,7 @@ bool TextInputHandler::HandleKeyDownEvent(NSEvent* aNativeEvent,
     //       For example, Japanese IME of Apple shows candidate window for
     //       typing window.  They, you can switch the sort order with Tab key.
     //       However, when you choose "Symbol" of the sort order, there may
-    //       be no candiate words.  In this case, IME handles the Tab key
+    //       be no candidate words.  In this case, IME handles the Tab key
     //       actually, but we cannot know it because composition string is
     //       not updated.  So, let's mark eKeyDown event as "processed by IME"
     //       when there is composition string.  This is same as Chrome.
@@ -1953,7 +1954,6 @@ bool TextInputHandler::HandleKeyDownEvent(NSEvent* aNativeEvent,
                                                    currentKeyEvent);
       currentKeyEvent->mKeyPressHandled =
           (status == nsEventStatus_eConsumeNoDefault);
-      currentKeyEvent->mKeyPressDispatched = true;
       MOZ_LOG_KEY_OR_IME(
           LogLevel::Info,
           ("%p TextInputHandler::HandleKeyDownEvent, eKeyPress event has been "
@@ -3218,12 +3218,13 @@ void IMEInputHandler::InitStaticMembers() {
   // Mac Dev Center's document doesn't say how to remove the observer if
   // the second parameter is NULL.
   ::CFNotificationCenterAddObserver(
-      center, NULL, OnCurrentTextInputSourceChange,
-      kTISNotifySelectedKeyboardInputSourceChanged, NULL,
+      center, nullptr, OnCurrentTextInputSourceChange,
+      kTISNotifySelectedKeyboardInputSourceChanged, nullptr,
       CFNotificationSuspensionBehaviorDeliverImmediately);
   // Initiailize with the current keyboard layout
-  OnCurrentTextInputSourceChange(
-      NULL, NULL, kTISNotifySelectedKeyboardInputSourceChanged, NULL, NULL);
+  OnCurrentTextInputSourceChange(nullptr, nullptr,
+                                 kTISNotifySelectedKeyboardInputSourceChanged,
+                                 nullptr, nullptr);
 }
 
 // static
@@ -3333,8 +3334,8 @@ void IMEInputHandler::FlushPendingMethods(nsITimer* aTimer, void* aClosure) {
 CFArrayRef IMEInputHandler::CreateAllIMEModeList() {
   const void* keys[] = {kTISPropertyInputSourceType};
   const void* values[] = {kTISTypeKeyboardInputMode};
-  CFDictionaryRef filter =
-      ::CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, NULL, NULL);
+  CFDictionaryRef filter = ::CFDictionaryCreate(kCFAllocatorDefault, keys,
+                                                values, 1, nullptr, nullptr);
   NS_ASSERTION(filter, "failed to create the filter");
   CFArrayRef list = ::TISCreateInputSourceList(filter, true);
   ::CFRelease(filter);
@@ -3704,8 +3705,7 @@ already_AddRefed<mozilla::TextRangeArray> IMEInputHandler::CreateTextRangeArray(
     NSAttributedString* aAttrString, NSRange& aSelectedRange) {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
-  RefPtr<mozilla::TextRangeArray> textRangeArray =
-      new mozilla::TextRangeArray();
+  auto textRangeArray = MakeRefPtr<mozilla::TextRangeArray>();
 
   // Note that we shouldn't append ranges when composition string
   // is empty because it may cause TextComposition confused.
@@ -5453,13 +5453,12 @@ void TextInputHandlerBase::InitKeyEvent(NSEvent* aNativeKeyEvent,
 
 nsresult TextInputHandlerBase::SynthesizeNativeKeyEvent(
     int32_t aNativeKeyboardLayout, int32_t aNativeKeyCode,
-    uint32_t aModifierFlags, const nsAString& aCharacters,
+    nsIWidget::NativeModifiers aModifierFlags, const nsAString& aCharacters,
     const nsAString& aUnmodifiedCharacters) {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
   uint32_t modifierFlags =
-      nsCocoaUtils::ConvertWidgetModifiersToMacModifierFlags(
-          static_cast<nsIWidget::Modifiers>(aModifierFlags));
+      nsCocoaUtils::ConvertWidgetModifiersToMacModifierFlags(aModifierFlags);
   NSInteger windowNumber = [[mView window] windowNumber];
   bool sendFlagsChangedEvent = IsModifierKey(aNativeKeyCode);
   NSEventType eventType =
@@ -5503,7 +5502,7 @@ NSInteger TextInputHandlerBase::GetWindowLevel() {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
   MOZ_LOG_KEY_OR_IME(LogLevel::Info,
-                     ("%p TextInputHandlerBase::GetWindowLevel, Destryoed()=%s",
+                     ("%p TextInputHandlerBase::GetWindowLevel, Destroyed()=%s",
                       this, TrueOrFalse(Destroyed())));
 
   if (Destroyed()) {

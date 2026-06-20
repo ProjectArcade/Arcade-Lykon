@@ -19,6 +19,7 @@
 #include "mozilla/dom/indexedDB/PBackgroundIDBTransactionChild.h"
 #include "mozilla/dom/indexedDB/PBackgroundIDBVersionChangeTransactionChild.h"
 #include "mozilla/dom/indexedDB/PBackgroundIndexedDBUtilsChild.h"
+#include "mozilla/dom/indexedDB/TransactionOpResult.h"
 #include "nsCOMPtr.h"
 #include "nsTArray.h"
 
@@ -436,21 +437,39 @@ class BackgroundRequestChild final : public BackgroundRequestChildBase,
 
   UniquePtr<JSStructuredCloneData> GetNextCloneData();
 
-  nsCOMPtr<nsIRunnable> HandleResponse(nsresult aResponse);
+  [[nodiscard]] bool DeserializeCloneInfos(
+      nsTArray<SerializedStructuredCloneReadInfo>& aSerialized,
+      nsTArray<StructuredCloneReadInfoChild>& aOut);
 
+  [[nodiscard]]
+  nsCOMPtr<nsIRunnable> HandleResponse(const TransactionOpResult& aResponse);
+
+  [[nodiscard]]
   nsCOMPtr<nsIRunnable> HandleResponse(Key&& aResponse);
 
+  [[nodiscard]]
   nsCOMPtr<nsIRunnable> HandleResponse(nsTArray<Key>&& aResponse);
 
+  [[nodiscard]]
   nsCOMPtr<nsIRunnable> HandleResponse(
       SerializedStructuredCloneReadInfo&& aResponse);
 
+  [[nodiscard]]
   nsCOMPtr<nsIRunnable> HandleResponse(
       nsTArray<SerializedStructuredCloneReadInfo>&& aResponse);
 
+  [[nodiscard]]
+  nsCOMPtr<nsIRunnable> HandleResponse(
+      ObjectStoreGetAllRecordsResponse&& aResponse);
+
+  [[nodiscard]]
+  nsCOMPtr<nsIRunnable> HandleResponse(IndexGetAllRecordsResponse&& aResponse);
+
+  [[nodiscard]]
   nsCOMPtr<nsIRunnable> HandleResponse(
       UndefinedJSHandleValue /* overload selector */);
 
+  [[nodiscard]]
   nsCOMPtr<nsIRunnable> HandleResponse(uint64_t aResponse);
 
   // Wraps |aAction(request, transaction)| in a runnable that first handles

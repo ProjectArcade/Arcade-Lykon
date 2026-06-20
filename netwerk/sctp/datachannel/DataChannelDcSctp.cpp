@@ -161,8 +161,7 @@ bool DataChannelConnectionDcSctp::ResetStreams(nsTArray<uint16_t>& aStreams) {
     DC_DEBUG(("%s: %p Resetting %u", __func__, this, id));
     converted.push_back(StreamID(id));
   }
-  auto result =
-      mDcSctp->ResetStreams(std::span<const StreamID>(converted));
+  auto result = mDcSctp->ResetStreams(std::span<const StreamID>(converted));
   aStreams.Clear();
   return result == ResetStreamsStatus::kPerformed;
 }
@@ -335,8 +334,7 @@ void DataChannelConnectionDcSctp::OnConnectionRestarted() {
 }
 
 void DataChannelConnectionDcSctp::OnStreamsResetFailed(
-    std::span<const StreamID> aOutgoingStreams,
-    absl::string_view aReason) {
+    std::span<const StreamID> aOutgoingStreams, absl::string_view aReason) {
   MOZ_ASSERT(mSTS->IsOnCurrentThread());
   DC_ERROR(("%s: %p", __func__, this));
   // It probably does not make much sense to retry this here. If dcsctp doesn't

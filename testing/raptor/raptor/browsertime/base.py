@@ -31,6 +31,7 @@ BROWSERTIME_PAGELOAD_OUTPUT_TIMEOUT = 120  # 2 minutes
 BROWSERTIME_BENCHMARK_OUTPUT_TIMEOUT = (
     None  # Disable output timeout for benchmark tests
 )
+BROWSERTIME_MAX_ATTEMPTS = 3
 
 
 class Browsertime(Perftest, metaclass=ABCMeta):
@@ -238,7 +239,7 @@ class Browsertime(Perftest, metaclass=ABCMeta):
                 if not os.path.exists(self.browsertime_chromedriver):
                     raise Exception(
                         "Cannot find the chromedriver for the chrome version "
-                        "being tested: %s" % self.browsertime_chromedriver
+                        f"being tested: {self.browsertime_chromedriver}"
                     )
 
             self.driver_paths.extend([
@@ -527,6 +528,8 @@ class Browsertime(Perftest, metaclass=ABCMeta):
         for var, val in self.config.get("environment", {}).items():
             browsertime_options.extend(["--firefox.env", f"{var}={val}"])
 
+        browsertime_options.extend(["--firefox.env", "MOZ_REMOTE_SETTINGS_DEVTOOLS=1"])
+
         # Parse the test commands (if any) from the test manifest
         cmds = evaluate_list_from_string(test.get("test_cmds", "[]"))
         parsed_cmds = [":::".join([str(i) for i in item]) for item in cmds if item]
@@ -658,7 +661,7 @@ class Browsertime(Perftest, metaclass=ABCMeta):
             (
                 "gecko_profile_features",
                 "--firefox.geckoProfilerParams.features",
-                "js,stackwalk,cpu,screenshots,memory",
+                "js,stackwalk,cpu,screenshots,memory,java",
             ),
             (
                 "gecko_profile_threads",
@@ -831,6 +834,10 @@ class Browsertime(Perftest, metaclass=ABCMeta):
         if self.config["gecko_profile"] is True:
             bt_timeout += 5 * 60
 
+        # if etw profiling enabled and instantiated, give browser more time for profiling
+        if self.config.get("etw_profile") and self.etw_profiler:
+            bt_timeout += 5 * 60
+
         # if simpleperf enabled, give browser more time for profiling
         if self.config["simpleperf"] is True:
             bt_timeout += 5 * 60
@@ -958,6 +965,15 @@ class Browsertime(Perftest, metaclass=ABCMeta):
 
         self.run_test_setup(test)
 
+        # xperf profiling is currently only supported in CI as it requires
+        # scheduled tasks that are currently only configured on the
+        # CI machines.
+        if self.config.get("etw_profile"):
+            if not self.config.get("run_local"):
+                self._init_etw_profiling(test)
+            else:
+                LOG.error("ETW profiling is not supported in local runs")
+
         if self.config.get("simpleperf"):
             self._init_simpleperf_profiling(test)
 
@@ -987,6 +1003,7 @@ class Browsertime(Perftest, metaclass=ABCMeta):
         env = dict(os.environ)
         env["PYTHON"] = sys.executable
         env["MINIDUMP_SAVE_PATH"] = str(self.crash_directory)
+        env["MOZ_REMOTE_SETTINGS_DEVTOOLS"] = "1"
         if self.browsertime_video and self.browsertime_ffmpeg:
             ffmpeg_dir = os.path.dirname(os.path.abspath(self.browsertime_ffmpeg))
             old_path = env.setdefault("PATH", "")
@@ -1007,6 +1024,16 @@ class Browsertime(Perftest, metaclass=ABCMeta):
 
         LOG.info("PATH: {}".format(env["PATH"]))
 
+        # Start ETW profiling if enabled before browsertime starts
+        etw_started = False
+        if self.config.get("etw_profile") and self.etw_profiler:
+            try:
+                etw_started = self.etw_profiler.start()
+            except Exception as e:
+                LOG.warning(f"Failed to start ETW profiling: {e}")
+                self.etw_profiler = None  # Disable profiler to skip stop() later
+
+        browsertime_test_failed = False
         try:
             line_matcher = re.compile(r".*(\[.*\])\s+([a-zA-Z]+):\s+(.*)")
 
@@ -1092,32 +1119,61 @@ class Browsertime(Perftest, metaclass=ABCMeta):
                 else:
                     cmd.extend(["--android.usbPowerTesting", "true"])
 
-            mozprocess.run_and_wait(
-                cmd,
-                output_line_handler=_create_line_handler(),
-                env=env,
-                timeout=proc_timeout,
-                timeout_handler=timeout_handler,
-                output_timeout=output_timeout,
-                output_timeout_handler=output_timeout_handler,
-                text=False,
-            )
+            is_browsertime_process_completed = False
+            browsertime_process_attempt_count = 1
 
-            if self.output_timed_out:
-                self.get_failure_screenshot()
-                raise Exception(
-                    f"Browsertime process timed out after waiting {output_timeout} seconds "
-                    "for output"
+            while (
+                not is_browsertime_process_completed
+                and browsertime_process_attempt_count <= BROWSERTIME_MAX_ATTEMPTS
+            ):
+                LOG.info(
+                    f"Running browsertime process, attempt {browsertime_process_attempt_count}/{BROWSERTIME_MAX_ATTEMPTS}"
                 )
-            if self.timed_out:
-                self.get_failure_screenshot()
-                raise Exception(
-                    f"Browsertime process timed out after {proc_timeout} seconds"
+                self.browsertime_failure = ""
+                browsertime_mozprocess = mozprocess.run_and_wait(
+                    cmd,
+                    output_line_handler=_create_line_handler(),
+                    env=env,
+                    timeout=proc_timeout,
+                    timeout_handler=timeout_handler,
+                    output_timeout=output_timeout,
+                    output_timeout_handler=output_timeout_handler,
+                    text=False,
                 )
 
-            if self.browsertime_failure:
-                self.get_failure_screenshot()
-                raise Exception(self.browsertime_failure)
+                if self.output_timed_out:
+                    self.get_failure_screenshot()
+                    raise Exception(
+                        f"Browsertime process timed out after waiting {output_timeout} seconds "
+                        "for output"
+                    )
+                if self.timed_out:
+                    self.get_failure_screenshot()
+                    raise Exception(
+                        f"Browsertime process timed out after {proc_timeout} seconds"
+                    )
+
+                if self.browsertime_failure:
+                    self.get_failure_screenshot()
+
+                if browsertime_mozprocess.returncode != 0:
+                    browsertime_process_attempt_count += 1
+
+                    if browsertime_process_attempt_count <= BROWSERTIME_MAX_ATTEMPTS:
+                        self.browsertime_failure = f"Browsertime process exited with code {browsertime_mozprocess.returncode}"
+                        LOG.warning(
+                            f"Browsertime process exited with code "
+                            f"{browsertime_mozprocess.returncode}, retrying..."
+                        )
+                        continue
+                    else:
+                        self.get_failure_screenshot()
+                        raise Exception(self.browsertime_failure)
+
+                else:
+                    is_browsertime_process_completed = True
+                    LOG.info("Browsertime process completed successfully")
+                    break
 
             # We've run the main browsertime process, now we need to run the
             # browsertime one more time if the profiler wasn't enabled already
@@ -1136,5 +1192,21 @@ class Browsertime(Perftest, metaclass=ABCMeta):
                 )
 
         except Exception as e:
+            browsertime_test_failed = True
             LOG.critical(str(e))
             raise
+
+        finally:
+            if etw_started and self.etw_profiler:
+                try:
+                    # Additionally upload kernel and user ETL files
+                    # for debugging if test fails
+                    self.etw_profiler.stop()
+                    self.etw_profiler.upload_etl(debug=browsertime_test_failed)
+                    self.etw_profiler.symbolicate()
+                    self.etw_profiler.archive()
+                    self.etw_profiler.clean()
+                    etw_started = False
+                    LOG.info("ETW profiling has completed successfully")
+                except Exception as e:
+                    LOG.error(f"Failed to finalize ETW profiling: {e}")

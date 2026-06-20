@@ -476,6 +476,7 @@ add_task(async function testReloadExtension() {
 
 async function testSelectPosition(optionsBrowser, zoom) {
   let popupShownPromise = BrowserTestUtils.waitForSelectPopupShown(window);
+  await SimpleTest.promiseFocus(optionsBrowser);
   await BrowserTestUtils.synthesizeMouseAtCenter("select", {}, optionsBrowser);
   let popup = await popupShownPromise;
   let popupLeft = popup.shadowRoot.querySelector(

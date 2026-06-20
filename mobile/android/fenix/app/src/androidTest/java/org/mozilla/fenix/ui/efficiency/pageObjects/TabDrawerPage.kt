@@ -24,9 +24,39 @@ class TabDrawerPage(composeRule: AndroidComposeTestRule<HomeActivityIntentTestRu
                 NavigationStep.Click(ToolbarSelectors.TAB_COUNTER),
             ),
         )
+
+        NavigationRegistry.register(
+            from = pageName,
+            to = "HomePage",
+            steps = listOf(NavigationStep.PressBack),
+        )
+
+        NavigationRegistry.register(
+            from = pageName,
+            to = "BrowserPage",
+            steps = listOf(NavigationStep.PressBack),
+        )
     }
 
     override fun mozGetSelectorsByGroup(group: String): List<Selector> {
         return TabDrawerSelectors.all.filter { it.groups.contains(group) }
+    }
+
+    fun closeTabWithTitle(title: String): TabDrawerPage {
+        mozClickFirstWithParentText(TabDrawerSelectors.TAB_ITEM_CLOSE, title)
+        return this
+    }
+
+    fun verifyNormalTabsList(): TabDrawerPage {
+        mozWaitUntilAbsent(TabDrawerSelectors.EMPTY_NORMAL_TABS_LIST)
+        mozVerify(TabDrawerSelectors.NORMAL_TABS_LIST)
+        return this
+    }
+
+    fun verifyExistingOpenTabs(vararg urls: String): TabDrawerPage {
+        urls.forEach { url ->
+            mozVerifyAnyHasChildWithText(TabDrawerSelectors.TAB_ITEM_ROOT, url)
+        }
+        return this
     }
 }

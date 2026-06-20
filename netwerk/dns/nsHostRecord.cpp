@@ -85,8 +85,8 @@ bool nsHostKey::operator==(const nsHostKey& other) const {
 }
 
 PLDHashNumber nsHostKey::Hash() const {
-  return AddToHash(HashString(host.get()), HashString(mTrrServer.get()), type,
-                   RES_KEY_FLAGS(flags), af, HashString(originSuffix.get()));
+  return AddToHash(HashString(host), HashString(mTrrServer), type,
+                   RES_KEY_FLAGS(flags), af, HashString(originSuffix));
 }
 
 size_t nsHostKey::SizeOfExcludingThis(
@@ -259,8 +259,16 @@ size_t AddrHostRecord::SizeOfIncludingThis(MallocSizeOf mallocSizeOf) const {
 
 bool AddrHostRecord::HasUsableResultInternal(
     const mozilla::TimeStamp& now, nsIDNSService::DNSFlags queryFlags) const {
-  // don't use cached negative results for high priority queries.
-  if (negative && IsHighPriority(queryFlags)) {
+  // Normally we don't use cached negative results for high priority queries, so
+  // that user-facing lookups get a fresh answer. Happy Eyeballs, however,
+  // issues high priority per-family (A and AAAA) lookups, so this rule would
+  // force a re-resolution of a permanently-negative family on every connection
+  // (e.g. the AAAA lookup on an IPv4-only network), tanking the DNS cache hit
+  // rate. When HE is enabled, reuse the negative result instead; a background
+  // refresh still runs, so a host that gains the missing family is picked up on
+  // a later lookup.
+  if (negative && IsHighPriority(queryFlags) &&
+      !StaticPrefs::network_http_happy_eyeballs_enabled()) {
     return false;
   }
 
@@ -688,9 +696,14 @@ void TypeHostRecord::ResolveComplete() {
         .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
   }
 
+  // Record the lookup time, keyed by whether it was resolved over DoH/TRR or
+  // natively; failed lookups go to a separate metric.
   if (mTRRSuccess) {
-    glean::dns::by_type_succeeded_lookup_time.AccumulateRawDuration(
+    glean::dns::https_rr_lookup_time.Get("doh"_ns).AccumulateRawDuration(
         mTrrDuration);
+  } else if (mNativeSuccess) {
+    glean::dns::https_rr_lookup_time.Get("native"_ns)
+        .AccumulateRawDuration(mNativeDuration);
   } else {
     glean::dns::by_type_failed_lookup_time.AccumulateRawDuration(mTrrDuration);
   }

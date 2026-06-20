@@ -1,8 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
-#ifndef RUSTSDPGLUE_H_
-#define RUSTSDPGLUE_H_
+#ifndef DOM_MEDIA_WEBRTC_SDP_RSDPARSASDPGLUE_H_
+#define DOM_MEDIA_WEBRTC_SDP_RSDPARSASDPGLUE_H_
 
 #include <span>
 #include <string>

@@ -18,6 +18,8 @@ support-files = [
   "file_favicon.png",
   "file_favicon.png^headers^",
   "file_triggeringprincipal_oa.html",
+  "file_newtab_from_popup.html",
+  "file_newtab_from_popup_source.html",
 ]
 
 ["browser_oa_private_browsing_window.js"]
@@ -48,13 +50,9 @@ skip-if = [
   "os == 'win' && standalone", # Bug 2028646
 ]
 
-["browser_privatebrowsing_about_nimbus.js"]
-
 ["browser_privatebrowsing_about_nimbus_dismiss.js"]
 
 ["browser_privatebrowsing_about_nimbus_impressions.js"]
-
-["browser_privatebrowsing_about_nimbus_messaging.js"]
 
 ["browser_privatebrowsing_about_search_banner.js"]
 
@@ -67,9 +65,6 @@ skip-if = [
 ["browser_privatebrowsing_certexceptionsui.js"]
 
 ["browser_privatebrowsing_cleanup.js"]
-skip-if = [
-  "os == 'win' && os_version == '11.26200' && asan", # Bug 2019745
-]
 
 ["browser_privatebrowsing_concurrent.js"]
 run-if = [
@@ -77,9 +72,6 @@ run-if = [
 ]
 
 ["browser_privatebrowsing_context_and_chromeFlags.js"]
-skip-if = [
-  "os == 'win' && os_version == '11.26200' && asan", # Bug 2019745
-]
 
 ["browser_privatebrowsing_crh.js"]
 

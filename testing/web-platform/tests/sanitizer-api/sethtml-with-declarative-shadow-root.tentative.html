@@ -50,7 +50,7 @@
       ["shadowrootserializable", "", "serializable", false],
       ["shadowrootclonable", "", "clonable", false],
       ["shadowrootreferencetarget", "something", "referenceTarget", null],
-      ["shadowrootcustomelementregistry", "", "customElementRegistry", null],
+      ["shadowrootcustomelementregistry", "", "customElementRegistry", customElements],
       ["shadowrootadoptedstylesheets", "style.css", "adoptedStyleSheets", []],
     ]) {
       test((t) => {
@@ -59,7 +59,7 @@
           `<div><template shadowrootmode='open' ${attribute}="${value}"></template></div>`,
           { sanitizer: { removeAttributes: [attribute] } },
         );
-        assert_not_equals(element.firstElementChild.shadowRoot, null);
+        assert_not_equals(element.firstElementChild.shadowRoot, null, `shadowRoot should exist`);
         if (Array.isArray(expectedValue)) {
           assert_array_equals(element.firstElementChild.shadowRoot[property], expectedValue);
         } else {

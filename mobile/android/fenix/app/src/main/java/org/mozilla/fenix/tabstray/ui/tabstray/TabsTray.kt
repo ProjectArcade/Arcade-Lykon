@@ -6,25 +6,19 @@
 
 package org.mozilla.fenix.tabstray.ui.tabstray
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -34,12 +28,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import mozilla.components.browser.storage.sync.TabEntry
@@ -69,9 +61,6 @@ import org.mozilla.fenix.theme.FirefoxTheme
 import mozilla.components.browser.storage.sync.Tab as SyncTab
 import org.mozilla.fenix.tabstray.ui.syncedtabs.OnTabClick as OnSyncedTabClick
 import org.mozilla.fenix.tabstray.ui.syncedtabs.OnTabCloseClick as OnSyncedTabClose
-
-private const val SPACER_BACKGROUND_ALPHA = 0.75f
-private val DefaultStatusBarHeight = 50.dp
 
 /**
  * Top-level UI for displaying the Tabs Tray feature.
@@ -117,10 +106,13 @@ private val DefaultStatusBarHeight = 50.dp
  * @param onInactiveTabsCFRShown Invoked when the inactive tabs CFR is displayed.
  * @param onInactiveTabsCFRClick Invoked when the inactive tabs CFR is clicked.
  * @param onInactiveTabsCFRDismiss Invoked when the inactive tabs CFR is dismissed.
+ * @param onTabGroupOnboardingDismiss Invoked when the tab group onboarding card is dismissed.
  * @param onOpenNewNormalTabClicked Invoked when the fab is clicked in [Page.NormalTabs].
  * @param onOpenNewPrivateTabClicked Invoked when the fab is clicked in [Page.PrivateTabs].
  * @param onSyncedTabsFabClicked Invoked when the fab is clicked in [Page.SyncedTabs].
  * @param onUnlockPbmClick Invoked when user clicks on the Unlock button.
+ * @param trackersBlockedCount The number of trackers blocked to display in the footer card.
+ * @param onPrivacyReportTapped Invoked when the trackers blocked pill is tapped.
  */
 @Suppress("LongMethod", "LongParameterList")
 @Composable
@@ -160,10 +152,13 @@ fun TabsTray(
     onInactiveTabsCFRShown: () -> Unit,
     onInactiveTabsCFRClick: () -> Unit,
     onInactiveTabsCFRDismiss: () -> Unit,
+    onTabGroupOnboardingDismiss: () -> Unit,
     onOpenNewNormalTabClicked: () -> Unit,
     onOpenNewPrivateTabClicked: () -> Unit,
     onSyncedTabsFabClicked: () -> Unit,
     onUnlockPbmClick: () -> Unit,
+    trackersBlockedCount: Int? = null,
+    onPrivacyReportTapped: (() -> Unit)? = null,
 ) {
     val tabsTrayState by tabsTrayStore.stateFlow.collectAsState()
     val shouldShowTabGroupsPage = tabsTrayState.config.tabGroupsEnabled
@@ -180,13 +175,6 @@ fun TabsTray(
             .sumOf { deviceSection: SyncedTabsListItem.DeviceSection -> deviceSection.tabs.size }
     }
 
-    val systemBarsInsets = WindowInsets.systemBars.asPaddingValues()
-    val statusBarHeight = remember(systemBarsInsets) {
-        systemBarsInsets.calculateTopPadding().takeIf { it > 0.dp } ?: DefaultStatusBarHeight
-    }
-
-    val topAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-
     LaunchedEffect(tabsTrayState.selectedPage, shouldShowTabGroupsPage) {
         pagerState.animateScrollToPage(
             Page.pageToPosition(
@@ -197,9 +185,7 @@ fun TabsTray(
     }
 
     Scaffold(
-        modifier = modifier
-            .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection)
-            .testTag(TabsTrayTestTag.TABS_TRAY),
+        modifier = modifier.testTag(TabsTrayTestTag.TABS_TRAY),
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -218,11 +204,10 @@ fun TabsTray(
                 syncedTabCount = syncedTabCount,
                 selectionMode = tabsTrayState.mode,
                 isInDebugMode = tabsTrayState.config.isInDebugMode,
-                statusBarHeight = statusBarHeight,
                 shouldShowTabAutoCloseBanner = tabsTrayState.config.showTabAutoCloseBanner,
                 shouldShowLockPbmBanner = tabsTrayState.privateBrowsing.showLockBanner,
                 shouldShowAddToTabGroupButton = tabsTrayState.config.tabGroupsEnabled,
-                scrollBehavior = topAppBarScrollBehavior,
+                hasTabDataLoaded = tabsTrayState.hasTabDataLoaded,
                 onTabPageIndicatorClicked = onTabPageClick,
                 onSaveToCollectionClick = onSaveToCollectionClick,
                 onShareSelectedTabsClick = onShareSelectedTabsClick,
@@ -246,7 +231,6 @@ fun TabsTray(
             TabManagerFloatingToolbar(
                 tabsTrayStore = tabsTrayStore,
                 isSignedIn = tabsTrayState.sync.isSignedIn,
-                pbmLocked = tabsTrayState.privateBrowsing.isLocked,
                 onOpenNewNormalTabClicked = onOpenNewNormalTabClicked,
                 onOpenNewPrivateTabClicked = onOpenNewPrivateTabClicked,
                 onSyncedTabsFabClicked = onSyncedTabsFabClicked,
@@ -258,7 +242,11 @@ fun TabsTray(
         },
         floatingActionButtonPosition = FabPosition.Center,
     ) { paddingValues ->
-        Box {
+        AnimatedVisibility(
+            visible = tabsTrayState.hasTabDataLoaded,
+            enter = fadeIn(animationSpec = tween()),
+            exit = fadeOut(animationSpec = tween()),
+        ) {
             HorizontalPager(
                 modifier = Modifier
                     .padding(paddingValues)
@@ -276,6 +264,8 @@ fun TabsTray(
                             inactiveTabsExpanded = tabsTrayState.inactiveTabs.isExpanded,
                             displayTabsInGrid = tabsTrayState.config.displayTabsInGrid,
                             dragAndDropEnabled = tabsTrayState.config.tabGroupsDragAndDropEnabled,
+                            liveReorderEnabled = tabsTrayState.config.tabGroupsLiveReorderEnabled,
+                            displayTabGroupOnboarding = tabsTrayState.shouldShowTabGroupOnboarding,
                             onTabClose = onTabClose,
                             shouldShowInactiveTabsAutoCloseDialog = tabsTrayState.inactiveTabs.showAutoCloseDialog,
                             onItemClick = onItemClick,
@@ -292,9 +282,6 @@ fun TabsTray(
                             onInactiveTabsCFRShown = onInactiveTabsCFRShown,
                             onInactiveTabsCFRClick = onInactiveTabsCFRClick,
                             onInactiveTabsCFRDismiss = onInactiveTabsCFRDismiss,
-                            onTabDragStart = {
-                                tabsTrayStore.dispatch(TabsTrayAction.ExitSelectMode)
-                            },
                             onDeleteTabGroupClick = { group ->
                                 tabsTrayStore.dispatch(TabGroupAction.DeleteClicked(group))
                             },
@@ -304,6 +291,10 @@ fun TabsTray(
                             onCloseTabGroupClick = { group ->
                                 tabsTrayStore.dispatch(TabGroupAction.CloseTabGroupClicked(group = group))
                             },
+                            onTabGroupOnboardingDismiss = onTabGroupOnboardingDismiss,
+                            trackersBlockedCount = trackersBlockedCount,
+                            focusEnabled = tabsTrayState.normalTabsState.itemFocusIndicatorEnabled,
+                            onPrivacyReportTapped = onPrivacyReportTapped,
                         )
                     }
 
@@ -353,16 +344,6 @@ fun TabsTray(
                 }
             }
         }
-        Spacer(
-            Modifier
-                .height(statusBarHeight)
-                .fillMaxWidth()
-                .background(
-                    MaterialTheme.colorScheme.surface.copy(
-                        SPACER_BACKGROUND_ALPHA,
-                    ),
-                ),
-        )
     }
 }
 
@@ -409,6 +390,7 @@ private fun TabsTrayPreview(
                     displayTabsInGrid = tabTrayState.displayTabsInGrid,
                     showTabAutoCloseBanner = tabTrayState.showTabAutoCloseBanner,
                 ),
+                hasTabDataLoaded = true,
             ),
         )
     }
@@ -507,6 +489,7 @@ private fun TabsTrayPreview(
             onInactiveTabsCFRShown = {},
             onInactiveTabsCFRClick = {},
             onInactiveTabsCFRDismiss = {},
+            onTabGroupOnboardingDismiss = {},
             onOpenNewNormalTabClicked = {},
             onOpenNewPrivateTabClicked = {},
             onSyncedTabsFabClicked = {

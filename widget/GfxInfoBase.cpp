@@ -630,15 +630,15 @@ nsTArray<gfx::GfxInfoFeatureStatus> GfxInfoBase::GetAllFeatures() {
       gfx::GfxInfoFeatureStatus gfxFeatureStatus;
       gfxFeatureStatus.feature() = i;
       gfxFeatureStatus.status() = status;
-      gfxFeatureStatus.failureId() = failureId;
-      sFeatureStatus->AppendElement(gfxFeatureStatus);
+      gfxFeatureStatus.failureId() = std::move(failureId);
+      sFeatureStatus->AppendElement(std::move(gfxFeatureStatus));
     }
   }
 
   nsTArray<gfx::GfxInfoFeatureStatus> features;
   for (const auto& status : *sFeatureStatus) {
     gfx::GfxInfoFeatureStatus copy = status;
-    features.AppendElement(copy);
+    features.AppendElement(std::move(copy));
   }
   return features;
 }

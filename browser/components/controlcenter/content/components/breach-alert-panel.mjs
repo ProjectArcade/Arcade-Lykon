@@ -18,6 +18,7 @@ export default class BreachAlert extends MozLitElement {
       reflect: true,
     },
     breachStatus: { type: String },
+    breachNames: { type: Array },
   };
 
   constructor() {
@@ -26,20 +27,41 @@ export default class BreachAlert extends MozLitElement {
     this.breachStatus = "disabled";
   }
 
-  _handleCta(_event) {
+  async _handleCta(_event) {
     Glean.trustpanel.breachAlertDiscoveredMonitor.record();
     this.documentGlobal.switchToTabHavingURI(
       "https://monitor.mozilla.org/?utm_medium=referral&utm_source=firefox-desktop&utm_campaign=privacy-panel&utm_content=sign-up-global",
       true
     );
-    // TODO (bug 2024187): Store dismissal
+
+    // Store dismissal when user clicks to check monitor
+    await this._dismissBreach();
+    this.hidden = true;
   }
 
-  _handleDismiss(_event) {
+  async _handleDismiss(_event) {
     Glean.trustpanel.breachAlertDismissed.record({
       breach_status: this.breachStatus,
     });
-    // TODO (bug 2024187): Store dismissal
+
+    // Store dismissal
+    await this._dismissBreach();
+    this.hidden = true;
+  }
+
+  async _dismissBreach() {
+    if (!this.breachNames) {
+      console.warn("Cannot dismiss breach alert: no breach names provided");
+      return;
+    }
+
+    this.dispatchEvent(
+      new CustomEvent("dismissBreachAlert", {
+        detail: { breachNames: this.breachNames },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   render() {
@@ -59,6 +81,7 @@ export default class BreachAlert extends MozLitElement {
         <div class="card">
           <div class="main">
             <img
+              class="fox-icon-legacy"
               src="chrome://browser/content/controlcenter/assets/fox-concern.svg"
               alt=""
             />
@@ -71,6 +94,11 @@ export default class BreachAlert extends MozLitElement {
                 data-l10n-id="trustpanel-breachalerts-anonymous-breached-description"
               ></p>
             </div>
+            <img
+              class="shield-icon"
+              src="chrome://browser/content/controlcenter/assets/breach-alert-shield-warning.svg"
+              alt=""
+            />
           </div>
           <moz-button-group>
             <moz-button

@@ -224,9 +224,7 @@ Maybe<TextureHost::ResourceUpdateOp> AsyncImagePipelineManager::UpdateImageKeys(
   MOZ_ASSERT(aKeys.IsEmpty());
   MOZ_ASSERT(aPipeline);
 
-  TextureHost* previousTexture = aPipeline->mCurrentTexture.get();
-
-  if (aTexture == previousTexture) {
+  if (aTexture == aPipeline->mCurrentTexture.get()) {
     // The texture has not changed, just reuse previous ImageKeys.
     aKeys = aPipeline->mKeys.Clone();
     return Nothing();
@@ -244,6 +242,8 @@ Maybe<TextureHost::ResourceUpdateOp> AsyncImagePipelineManager::UpdateImageKeys(
     return Nothing();
   }
 
+  RefPtr<TextureHost> previousTexture =
+      std::move(aPipeline->mCurrentTexture.get());
   aPipeline->mCurrentTexture = aTexture;
 
   WebRenderTextureHost* wrTexture = aTexture->AsWebRenderTextureHost();
@@ -460,10 +460,6 @@ void AsyncImagePipelineManager::ApplyAsyncImageForPipeline(
       float(aPipeline->mCurrentTexture->GetSize().width),
       float(aPipeline->mCurrentTexture->GetSize().height)};
   computedTransform.rotation = aPipeline->mRotation;
-  // We don't have a frame / per-frame key here, but we can use the pipeline id
-  // and the key kind to create a unique stable key.
-  computedTransform.key = wr::SpatialKey(
-      aPipelineId.mNamespace, aPipelineId.mHandle, wr::SpatialKeyKind::APZ);
   params.computed_transform = &computedTransform;
 
   Maybe<wr::WrSpatialId> referenceFrameId =

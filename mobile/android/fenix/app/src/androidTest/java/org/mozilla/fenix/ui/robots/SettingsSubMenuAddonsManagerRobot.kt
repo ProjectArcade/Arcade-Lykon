@@ -8,6 +8,7 @@ package org.mozilla.fenix.ui.robots
 
 import android.util.Log
 import android.widget.RelativeLayout
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -480,8 +481,16 @@ class SettingsSubMenuAddonsManagerRobot(private val composeTestRule: ComposeTest
             return BrowserRobot.Transition(composeTestRule)
         }
 
+        @OptIn(ExperimentalTestApi::class)
         fun clickDiscoverMoreExtensionsButton(composeTestRule: ComposeTestRule, interact: BrowserRobot.() -> Unit): BrowserRobot.Transition {
             Log.i(TAG, "clickDiscoverMoreExtensionsButton: Trying to click the \"Discover more extensions\" link")
+            mDevice.waitForIdle()
+            composeTestRule.waitUntil(waitingTimeLong) {
+                composeTestRule.onAllNodes(
+                    hasText(getStringResource(R.string.browser_menu_discover_more_extensions)),
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            }
             composeTestRule.onNode(hasText(getStringResource(R.string.browser_menu_discover_more_extensions)), useUnmergedTree = true).performClick()
             Log.i(TAG, "clickDiscoverMoreExtensionsButton: Clicked the \"Discover more extensions\" link")
 
@@ -509,11 +518,14 @@ class SettingsSubMenuAddonsManagerRobot(private val composeTestRule: ComposeTest
     }
 
     private fun allowPermissionToInstall() {
+        // PermissionsDialogFragment disables the "Add" button for ~1s after the dialog is shown.
+        Log.i(TAG, "allowPermissionToInstall: Waiting for the \"Add\" button to be enabled")
+        val allowButton = mDevice.wait(
+            Until.findObject(By.res("$packageName:id/allow_button").enabled(true)),
+            waitingTime,
+        )
         Log.i(TAG, "allowPermissionToInstall: Trying to click the \"Add\" button")
-        itemWithResIdContainingText(
-            "$packageName:id/allow_button",
-            getStringResource(addonsR.string.mozac_feature_addons_permissions_dialog_add),
-        ).click()
+        allowButton.click()
         Log.i(TAG, "allowPermissionToInstall: Clicked the \"Add\" button")
     }
 

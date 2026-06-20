@@ -1,7 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-/* globals windowRoot */
 
 import { gViewController } from "./view-controller.mjs";
 
@@ -217,6 +216,28 @@ export function openOptionsInTab(optionsURL) {
   return false;
 }
 
+export function openAboutSettingsInTab() {
+  let mainWindow = window.windowRoot.window;
+  if ("switchToTabHavingURI" in mainWindow) {
+    let hasAboutSettings = mainWindow.switchToTabHavingURI(
+      "about:settings",
+      false,
+      {
+        ignoreFragment: "whenComparing",
+      }
+    );
+    if (!hasAboutSettings) {
+      let systemPrincipal = Services.scriptSecurityManager.getSystemPrincipal();
+      mainWindow.switchToTabHavingURI("about:preferences", true, {
+        ignoreFragment: "whenComparing",
+        triggeringPrincipal: systemPrincipal,
+      });
+    }
+    return true;
+  }
+  return false;
+}
+
 export function shouldShowPermissionsPrompt(addon) {
   if (!addon.isWebExtension || addon.seen) {
     return false;
@@ -272,6 +293,18 @@ export function isCorrectlySigned(addon) {
   // Add-ons without an "isCorrectlySigned" property are correctly signed as
   // they aren't the correct type for signing.
   return addon.isCorrectlySigned !== false;
+}
+
+export function isUnsignedWarningMessageDisabled() {
+  // While running in automation, in a local build or in a Thunderbird
+  // application instance, allow to hide the unsigned add-on message bars
+  // through the related about:config preference.
+  return (
+    (Cu.isInAutomation ||
+      !lazy.AppConstants.MOZILLA_OFFICIAL ||
+      lazy.AppConstants.MOZ_APP_NAME === "thunderbird") &&
+    Services.prefs.getBoolPref("extensions.ui.disableUnsignedWarnings", false)
+  );
 }
 
 export function isDisabledUnsigned(addon) {
@@ -539,14 +572,11 @@ export async function getAddonMessageInfo(
       type: "error",
     };
   } else if (
-    (Cu.isInAutomation || !lazy.AppConstants.MOZILLA_OFFICIAL) &&
-    Services.prefs.getBoolPref("extensions.ui.disableUnsignedWarnings", false)
+    !isCorrectlySigned(addon) &&
+    // In automation, local builds and Thunderbird application instances
+    // we allow to disable the unsigned addons message bar.
+    !isUnsignedWarningMessageDisabled()
   ) {
-    // In local builds, when this pref is set, pretend the file is correctly
-    // signed even if it isn't so that the UI looks like what users would
-    // normally see.
-    return {};
-  } else if (!isCorrectlySigned(addon)) {
     return {
       linkSumoPage: "unsigned-addons",
       messageId: "details-notification-unsigned2",
@@ -881,7 +911,7 @@ export function openAmoInTab(el, path) {
   }
 
   amoUrl = formatUTMParams("find-more-link-bottom", amoUrl);
-  windowRoot.window.openTrustedLinkIn(amoUrl, "tab");
+  window.windowRoot.window.openTrustedLinkIn(amoUrl, "tab");
 }
 
 // DOMParser instance used by AboutAddonsElementMixin to parse the

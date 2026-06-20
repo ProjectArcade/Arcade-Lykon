@@ -23,10 +23,13 @@ LOCAL_INCLUDES += [
 UNIFIED_SOURCES += [
     "MockMediaResource.cpp",
     "TestAOMDecoder.cpp",
+    "TestAsyncLogger.cpp",
     "TestAudioBuffer.cpp",
+    "TestAudioBufferAddWithScale.cpp",
     "TestAudioBuffers.cpp",
     "TestAudioCallbackDriver.cpp",
     "TestAudioCompactor.cpp",
+    "TestAudioData.cpp",
     "TestAudioDecoderInputTrack.cpp",
     "TestAudioInputSource.cpp",
     "TestAudioMixer.cpp",
@@ -47,7 +50,10 @@ UNIFIED_SOURCES += [
     "TestDeviceInputTrack.cpp",
     "TestDriftCompensation.cpp",
     "TestGMPUtils.cpp",
+    "TestGMPVideoEncodedFrame.cpp",
+    "TestGMPVideoi420Frame.cpp",
     "TestGroupId.cpp",
+    "TestHDRUtils.cpp",
     "TestImageConversion.cpp",
     "TestIntervalSet.cpp",
     "TestMediaCapabilities.cpp",
@@ -67,10 +73,14 @@ UNIFIED_SOURCES += [
     "TestOfflineClockDriver.cpp",
     "TestOggWriter.cpp",
     "TestOpusParser.cpp",
+    "TestPDMFactorySupport.cpp",
+    "TestRemoteImageHolder.cpp",
     "TestRust.cpp",
     "TestSimpleMap.cpp",
+    "TestTelemetryProbesReporter.cpp",
     "TestTimeUnit.cpp",
     "TestUnboundedMPSCQueue.cpp",
+    "TestVideoData.cpp",
     "TestVideoFrameContainer.cpp",
     "TestVideoSegment.cpp",
     "TestVideoSink.cpp",
@@ -91,6 +101,7 @@ if CONFIG["MOZ_WEBRTC"]:
     UNIFIED_SOURCES += [
         "TestAudioInputProcessing.cpp",
         "TestCamerasParent.cpp",
+        "TestH264FmtpParser.cpp",
         "TestRTCStatsTimestampMaker.cpp",
         "TestWebrtcTaskQueueWrapper.cpp",
     ]
@@ -102,11 +113,22 @@ if CONFIG["OS_TARGET"] != "Android":
         "TestGMPRemoveAndDelete.cpp",
     ]
 
+if CONFIG["OS_TARGET"] == "WINNT":
+    LOCAL_INCLUDES += [
+        "/dom/media/platforms/wmf",
+    ]
+    # Not in UNIFIED_SOURCES: WMF.h pulls in <windows.h> which defines a
+    # StrCat macro that conflicts with absl::StrCat in WebRTC unified units.
+    SOURCES += [
+        "TestWMFDeadlock.cpp",
+    ]
+
 if CONFIG["MOZ_WEBRTC"] and CONFIG["OS_TARGET"] != "Android":
     UNIFIED_SOURCES += [
         "TestAudioDeviceEnumerator.cpp",
         "TestPacer.cpp",
         "TestVideoFrameConverter.cpp",
+        "TestWebRTCCodecInfo.cpp",
         "TestWebrtcGmpCodec.cpp",
     ]
 
@@ -155,6 +177,7 @@ LOCAL_INCLUDES += [
     "/dom/media/mp4",
     "/dom/media/platforms",
     "/dom/media/platforms/agnostic",
+    "/dom/media/webaudio",
     "/dom/media/webm",
     "/dom/media/webrtc",
     "/gfx/2d/",

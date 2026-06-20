@@ -205,6 +205,7 @@ EXPORTS.js += [
     "../public/Vector.h",
     "../public/WaitCallbacks.h",
     "../public/Warnings.h",
+    "../public/WasmComponent.h",
     "../public/WasmFeatures.h",
     "../public/WasmModule.h",
     "../public/WeakMap.h",
@@ -339,6 +340,7 @@ if CONFIG["JS_HAS_INTL_API"]:
         "builtin/intl",
         "builtin/temporal",
         "builtin/intl/collator_glue",
+        "builtin/intl/locale_glue",
         "irregexp/properties_glue",
     ]
 

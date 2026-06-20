@@ -9,6 +9,9 @@ const { HttpServer, HTTP_404 } = ChromeUtils.importESModule(
 const { GuardianClient } = ChromeUtils.importESModule(
   "moz-src:///toolkit/components/ipprotection/fxa/GuardianClient.sys.mjs"
 );
+const { IPPFxaAuthProvider } = ChromeUtils.importESModule(
+  "moz-src:///toolkit/components/ipprotection/fxa/IPPFxaAuthProvider.sys.mjs"
+);
 const { JsonSchemaValidator } = ChromeUtils.importESModule(
   "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs"
 );
@@ -105,11 +108,13 @@ add_task(async function test_fetchUserInfo() {
     subscribed: true,
     uid: 42,
     maxBytes: "1073741824",
+    limited_bandwidth: true,
   };
   const DEFAULT_EXPECTED_VALUES = {
     subscribed: true,
     uid: 42,
     maxBytes: BigInt(1073741824),
+    limitedBandwidth: true,
   };
 
   const testcases = [
@@ -124,6 +129,23 @@ add_task(async function test_fetchUserInfo() {
         validEntitlement: true,
         entitlement: {
           ...DEFAULT_EXPECTED_VALUES,
+        },
+      },
+    },
+    {
+      name: "It should default limitedBandwidth to true when missing",
+      sends: ok({
+        subscribed: true,
+        uid: 42,
+        maxBytes: "1073741824",
+      }),
+      expects: {
+        status: 200,
+        error: null,
+        validEntitlement: true,
+        entitlement: {
+          ...DEFAULT_EXPECTED_VALUES,
+          limitedBandwidth: true,
         },
       },
     },
@@ -385,6 +407,7 @@ add_task(async function test_ProxyUsage_fromResponse() {
         validUsage: true,
         max: BigInt("5368709120"),
         remaining: BigInt("4294967296"),
+        unlimited: false,
       },
     },
     {
@@ -398,6 +421,35 @@ add_task(async function test_ProxyUsage_fromResponse() {
         validUsage: true,
         max: BigInt("5368709120"),
         remaining: BigInt("0"),
+        unlimited: false,
+      },
+    },
+    {
+      name: "Unlimited bandwidth (X-Quota-Unlimited: true, no quota headers)",
+      headers: {
+        "X-Quota-Unlimited": "true",
+      },
+      expects: {
+        validUsage: true,
+        max: null,
+        remaining: null,
+        reset: null,
+        unlimited: true,
+      },
+    },
+    {
+      name: "Limited bandwidth (X-Quota-Unlimited: false)",
+      headers: {
+        "X-Quota-Limit": "5368709120",
+        "X-Quota-Remaining": "4294967296",
+        "X-Quota-Reset": "2026-02-01T00:00:00.000Z",
+        "X-Quota-Unlimited": "false",
+      },
+      expects: {
+        validUsage: true,
+        max: BigInt("5368709120"),
+        remaining: BigInt("4294967296"),
+        unlimited: false,
       },
     },
     {
@@ -465,9 +517,18 @@ add_task(async function test_ProxyUsage_fromResponse() {
         expects.remaining,
         `${name}: remaining should match`
       );
-      Assert.ok(
-        usage.reset && typeof usage.reset.epochMilliseconds === "number",
-        `${name}: reset should be Temporal.Instant`
+      if (expects.unlimited) {
+        Assert.equal(usage.reset, null, `${name}: reset should be null`);
+      } else {
+        Assert.ok(
+          usage.reset && typeof usage.reset.epochMilliseconds === "number",
+          `${name}: reset should be Temporal.Instant`
+        );
+      }
+      Assert.equal(
+        usage.unlimited,
+        expects.unlimited,
+        `${name}: unlimited should match`
       );
       return;
     }
@@ -819,6 +880,7 @@ add_task(async function test_ProxyUsage_serialization() {
     max: originalUsage.max.toString(),
     remaining: originalUsage.remaining.toString(),
     reset: originalUsage.reset.toString(),
+    unlimited: originalUsage.unlimited,
   });
 
   Assert.greater(serialized.length, 0, "Serialization produces output");
@@ -827,7 +889,8 @@ add_task(async function test_ProxyUsage_serialization() {
   const deserializedUsage = new ProxyUsage(
     data.max,
     data.remaining,
-    data.reset
+    data.reset,
+    data.unlimited
   );
 
   Assert.equal(
@@ -845,6 +908,99 @@ add_task(async function test_ProxyUsage_serialization() {
     originalUsage.reset.toString(),
     "reset preserved through serialization"
   );
+  Assert.equal(
+    deserializedUsage.unlimited,
+    originalUsage.unlimited,
+    "unlimited preserved through serialization"
+  );
+});
+
+add_task(async function test_ProxyUsage_unlimited_serialization() {
+  const originalUsage = new ProxyUsage(null, null, null, true);
+
+  Assert.equal(originalUsage.max, null, "max defaults to null when unlimited");
+  Assert.equal(
+    originalUsage.remaining,
+    null,
+    "remaining defaults to null when unlimited"
+  );
+  Assert.equal(
+    originalUsage.reset,
+    null,
+    "reset defaults to null when unlimited"
+  );
+
+  const serialized = JSON.stringify({
+    max: originalUsage.max?.toString() ?? null,
+    remaining: originalUsage.remaining?.toString() ?? null,
+    reset: originalUsage.reset?.toString() ?? null,
+    unlimited: originalUsage.unlimited,
+  });
+
+  const data = JSON.parse(serialized);
+  const deserializedUsage = new ProxyUsage(
+    data.max,
+    data.remaining,
+    data.reset,
+    data.unlimited
+  );
+
+  Assert.equal(deserializedUsage.max, null, "max round-trips as null");
+  Assert.equal(
+    deserializedUsage.remaining,
+    null,
+    "remaining round-trips as null"
+  );
+  Assert.equal(deserializedUsage.reset, null, "reset round-trips as null");
+  Assert.equal(
+    deserializedUsage.unlimited,
+    true,
+    "unlimited round-trips as true"
+  );
+});
+
+add_task(async function test_ProxyUsage_equals() {
+  const base = new ProxyUsage(
+    "5368709120",
+    "4294967296",
+    "2026-02-01T00:00:00.000Z"
+  );
+
+  Assert.ok(
+    base.equals(
+      new ProxyUsage("5368709120", "4294967296", "2026-02-01T00:00:00.000Z")
+    ),
+    "Identical limited usages are equal"
+  );
+  Assert.ok(
+    !base.equals(
+      new ProxyUsage("5368709120", "4294967295", "2026-02-01T00:00:00.000Z")
+    ),
+    "Differing remaining is not equal"
+  );
+  Assert.ok(
+    !base.equals(
+      new ProxyUsage("5368709121", "4294967296", "2026-02-01T00:00:00.000Z")
+    ),
+    "Differing max is not equal"
+  );
+  Assert.ok(
+    !base.equals(
+      new ProxyUsage("5368709120", "4294967296", "2026-03-01T00:00:00.000Z")
+    ),
+    "Differing reset is not equal"
+  );
+
+  const unlimited = new ProxyUsage(null, null, null, true);
+  Assert.ok(
+    unlimited.equals(new ProxyUsage(null, null, null, true)),
+    "Two unlimited usages are equal"
+  );
+  Assert.ok(!unlimited.equals(base), "Unlimited and limited are not equal");
+  Assert.ok(!base.equals(unlimited), "Limited and unlimited are not equal");
+
+  Assert.ok(!base.equals(null), "A usage does not equal null");
+  Assert.ok(!base.equals({}), "A usage does not equal a plain object");
 });
 
 add_task(async function test_fetchProxyPass_abort() {

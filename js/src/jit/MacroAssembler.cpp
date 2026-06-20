@@ -3064,10 +3064,10 @@ void MacroAssembler::emitMegamorphicCacheLookupByValueCommon(
   rshiftPtr(Imm32(MegamorphicCache::ShapeHashShift2), scratch2);
   xorPtr(scratch2, outEntryPtr);
 
-  if constexpr (std::is_same<IdOperandType, ValueOperand>::value) {
+  if constexpr (std::is_same_v<IdOperandType, ValueOperand>) {
     loadAtomOrSymbolAndHash(id, scratch1, scratch2, cacheMiss);
   } else {
-    static_assert(std::is_same<IdOperandType, Register>::value);
+    static_assert(std::is_same_v<IdOperandType, Register>);
     movePtr(id, scratch1);
     loadAtomHash(scratch1, scratch2, nullptr);
   }
@@ -3357,11 +3357,11 @@ void MacroAssembler::emitMegamorphicCachedSetSlot(
   rshiftPtr(Imm32(MegamorphicSetPropCache::ShapeHashShift2), scratch2);
   xorPtr(scratch2, scratch3);
 
-  if constexpr (std::is_same<IdType, ValueOperand>::value) {
+  if constexpr (std::is_same_v<IdType, ValueOperand>) {
     loadAtomOrSymbolAndHash(id, scratch1, scratch2, &cacheMiss);
     addPtr(scratch2, scratch3);
   } else {
-    static_assert(std::is_same<IdType, PropertyKey>::value);
+    static_assert(std::is_same_v<IdType, PropertyKey>);
     addPtr(Imm32(HashPropertyKeyThreadSafe(id)), scratch3);
     movePropertyKey(id, scratch1);
   }
@@ -3759,19 +3759,10 @@ void MacroAssembler::timeClip(FloatRegister time, FloatRegister output) {
   MOZ_ASSERT(Assembler::HasRoundInstruction(RoundingMode::TowardsZero),
              "requires runtime call");
 
-  constexpr double MaxTimeMagnitude = 8.64e15;
+  constexpr double MaxTimeMagnitude = js::EndOfTime;
+  static_assert(js::StartOfTime < 0 && -js::StartOfTime == js::EndOfTime);
 
-#if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
-  if (HasAVX()) {
-    absDouble(time, output);
-  } else {
-    // Pre-AVX |absDouble| requires input == output.
-    moveDouble(time, output);
-    absDouble(output, output);
-  }
-#else
   absDouble(time, output);
-#endif
 
   ScratchDoubleScope fpscratch(*this);
   loadConstantDouble(MaxTimeMagnitude, fpscratch);
@@ -3804,19 +3795,10 @@ void MacroAssembler::timeClip(FloatRegister time, FloatRegister output,
   MOZ_ASSERT(!Assembler::HasRoundInstruction(RoundingMode::TowardsZero),
              "use rounding instructions instead of runtime call");
 
-  constexpr double MaxTimeMagnitude = 8.64e15;
+  constexpr double MaxTimeMagnitude = js::EndOfTime;
+  static_assert(js::StartOfTime < 0 && -js::StartOfTime == js::EndOfTime);
 
-#if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
-  if (HasAVX()) {
-    absDouble(time, output);
-  } else {
-    // Pre-AVX |absDouble| requires input == output.
-    moveDouble(time, output);
-    absDouble(output, output);
-  }
-#else
   absDouble(time, output);
-#endif
 
   ScratchDoubleScope fpscratch(*this);
   loadConstantDouble(MaxTimeMagnitude, fpscratch);
@@ -3898,11 +3880,7 @@ void MacroAssembler::loadDOMExpandoValueGuardGeneration(
     Register obj, ValueOperand output,
     JS::ExpandoAndGeneration* expandoAndGeneration, uint64_t generation,
     Label* fail) {
-  loadPtr(Address(obj, ProxyObject::offsetOfReservedSlots()),
-          output.scratchReg());
-  loadValue(Address(output.scratchReg(),
-                    js::detail::ProxyReservedSlots::offsetOfPrivateSlot()),
-            output);
+  loadValue(Address(obj, ProxyObject::offsetOfPrivateSlot()), output);
 
   // Guard the ExpandoAndGeneration* matches the proxy's ExpandoAndGeneration
   // privateSlot.
@@ -6191,10 +6169,9 @@ static ReturnCallTrampolineData MakeReturnCallTrampoline(MacroAssembler& masm) {
   ReturnCallTrampolineData data;
 
   {
-#if defined(JS_CODEGEN_ARM) || defined(JS_CODEGEN_ARM64)
+#if defined(JS_CODEGEN_ARM) || defined(JS_CODEGEN_ARM64) || \
+    defined(JS_CODEGEN_RISCV64)
     AutoForbidPoolsAndNops afp(&masm, 1);
-#elif defined(JS_CODEGEN_RISCV64)
-    BlockTrampolinePoolScope block_trampoline_pool(&masm, 1);
 #endif
 
     // Build simple trampoline code: load the instance slot from the frame,
@@ -8375,9 +8352,11 @@ void MacroAssembler::emitPreBarrierFastPath(MIRType type, Register temp1,
   branchTestPtr(Assembler::NonZero, temp2, temp1, noBarrier);
 }
 
-void MacroAssembler::emitValueReadBarrierFastPath(
-    ValueOperand value, Register cell, Register temp1, Register temp2,
-    Register temp3, Register temp4, Label* barrier) {
+void MacroAssembler::emitWeapMapBarrierFastPath(ValueOperand value,
+                                                Register cell, Register temp1,
+                                                Register temp2, Register temp3,
+                                                Register temp4,
+                                                Label* barrier) {
   Label done;
 
   // No barrier needed for non-GC types
@@ -8393,6 +8372,10 @@ void MacroAssembler::emitValueReadBarrierFastPath(
   // If the GC thing is in the nursery, we don't need to barrier it.
   branchPtr(Assembler::NotEqual, Address(chunk, gc::ChunkStoreBufferOffset),
             ImmWord(0), &done);
+
+  // If the GC thing is a symbol then we always need to branch to the out of
+  // line barrier to do the atom marking bitmap part.
+  branchTestSymbol(Assembler::Equal, value, barrier);
 
   // Load the mark word and bit index for the black bit.
   Register markWord = temp2;
@@ -8427,9 +8410,13 @@ void MacroAssembler::emitValueReadBarrierFastPath(
   // If the gray bit is set, then we *do* need a barrier.
   branchTestPtr(Assembler::NonZero, markWord, mask, barrier);
 
-  // Otherwise, we don't need a barrier unless we're in the middle of
-  // an incremental GC.
-  branchTestNeedsMarkingBarrierAnyZone(Assembler::NonZero, barrier, temp1);
+  // Otherwise, the tenured cell needs a barrier only if its zone is being
+  // marked by an incremental GC.
+  Register zone = temp2;
+  loadPtr(Address(chunk, gc::ChunkZoneOffset), zone);
+  branchTest32(Assembler::NonZero,
+               Address(zone, Zone::offsetOfNeedsMarkingBarrier()), Imm32(0x1),
+               barrier);
   bind(&done);
 }
 
@@ -9826,6 +9813,11 @@ void MacroAssembler::maybeLoadIteratorFromShape(Register obj, Register dest,
   computeEffectiveAddress(BaseIndex(nativeIterator, temp3, ScalePointer,
                                     NativeIterator::offsetOfFirstProperty()),
                           nativeIterator);
+
+  if constexpr (sizeof(PropertyIndex) != alignof(GCPtr<Shape*>)) {
+    addPtr(Imm32(alignof(GCPtr<Shape*>) - 1), nativeIterator);
+    andPtr(Imm32(-int32_t(alignof(GCPtr<Shape*>))), nativeIterator);
+  }
 
   Register expectedProtoShape = nativeIterator;
 

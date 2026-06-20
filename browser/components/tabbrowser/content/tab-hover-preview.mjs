@@ -296,9 +296,6 @@ class TabPanel extends HoverPanel {
   /** @type {DOMElement|null} */
   #addNoteButton;
 
-  /** @type {DOMElement|null} */
-  #optimiseButton;
-
   constructor(panel, panelSet) {
     super(panel, panelSet);
 
@@ -341,15 +338,6 @@ class TabPanel extends HoverPanel {
     this.#addNoteButton.addEventListener("click", () =>
       this.#openTabNotePanel()
     );
-
-    this.#optimiseButton = this.win.document.createElement("toolbarbutton");
-    this.#optimiseButton.className = "tab-preview-optimise subviewbutton";
-    this.#optimiseButton.setAttribute(
-      "image",
-      "chrome://global/skin/icons/performance.svg"
-    );
-    this.#optimiseButton.setAttribute("label", "Optimise RAM");
-    this.#optimiseButton.addEventListener("click", () => this.#optimiseTab());
   }
 
   /**
@@ -405,6 +393,10 @@ class TabPanel extends HoverPanel {
       this.panelElement.state == "open" ||
       this.panelElement.state == "showing"
     ) {
+      // Remove stale listener from previous activation to prevent
+      // duplicate popupshown events when moveToAnchor re-triggers
+      // the popup lifecycle during the "showing" state.
+      this.panelElement.removeEventListener("popupshowing", this);
       this.#updatePreview();
     } else {
       this.panelSet.panelOpener.execute(() => {
@@ -448,23 +440,6 @@ class TabPanel extends HoverPanel {
     this.#tab?.removeEventListener("TabAttrModified", this);
     this.#tab = null;
     this.#thumbnailElement = null;
-
-    if (this.#optimiseButton) {
-      this.#optimiseButton.remove();
-    }
-    this.panelElement.removeAttribute("interactive");
-
-    const memoryContainer = this.panelElement.querySelector(
-      ".tab-preview-memory-container"
-    );
-    if (memoryContainer) {
-      memoryContainer.setAttribute("hidden", "true");
-      memoryContainer.classList.remove("high-memory");
-      const memoryEl = memoryContainer.querySelector(".tab-preview-memory");
-      if (memoryEl) {
-        memoryEl.textContent = "";
-      }
-    }
   }
 
   get hoverTargets() {
@@ -646,9 +621,6 @@ class TabPanel extends HoverPanel {
       this.#addNoteButton.remove();
     }
 
-    let hasInteractive = !!this.#interactiveArea.childNodes.length;
-    this.panelElement.toggleAttribute("interactive", hasInteractive);
-
     let thumbnailContainer = this.panelElement.querySelector(
       ".tab-preview-thumbnail-container"
     );
@@ -671,114 +643,7 @@ class TabPanel extends HoverPanel {
       );
     }
 
-    this.#updateMemory(this.#tab);
     this.#movePanel();
-  }
-
-  async #updateMemory(tab) {
-    if (!tab || tab !== this.#tab) {
-      return;
-    }
-    const memoryContainer = this.panelElement.querySelector(
-      ".tab-preview-memory-container"
-    );
-    if (!memoryContainer) {
-      return;
-    }
-    const memoryEl = memoryContainer.querySelector(".tab-preview-memory");
-    if (!memoryEl) {
-      return;
-    }
-
-    try {
-      const pids = this.win.gBrowser.getTabPids(tab);
-      if (!pids || !pids.length) {
-        memoryContainer.setAttribute("hidden", "true");
-        memoryContainer.classList.remove("high-memory");
-        memoryEl.textContent = "";
-        this.#optimiseButton.remove();
-        let hasInteractive = !!this.#interactiveArea.childNodes.length;
-        this.panelElement.toggleAttribute("interactive", hasInteractive);
-        return;
-      }
-
-      const procInfo = await ChromeUtils.requestProcInfo();
-      if (tab !== this.#tab) {
-        return;
-      }
-
-      let totalMemory = 0;
-      let matched = false;
-
-      if (pids.includes(procInfo.pid)) {
-        totalMemory += procInfo.memory;
-        matched = true;
-      }
-
-      if (procInfo.children) {
-        for (const child of procInfo.children) {
-          if (pids.includes(child.pid)) {
-            totalMemory += child.memory;
-            matched = true;
-          }
-        }
-      }
-
-      if (matched && totalMemory > 0) {
-        const formatted = this.#formatBytes(totalMemory);
-        memoryEl.textContent = `Memory usage: ${formatted}`;
-        memoryContainer.removeAttribute("hidden");
-
-        const isHigh = totalMemory > 150 * 1024 * 1024;
-        memoryContainer.classList.toggle("high-memory", isHigh);
-        this.#optimiseButton.classList.toggle("suggested-action", isHigh);
-        this.#optimiseButton.setAttribute(
-          "label",
-          isHigh ? "Optimise RAM (High Usage)" : "Optimise RAM"
-        );
-        this.#interactiveArea.append(this.#optimiseButton);
-      } else {
-        memoryContainer.setAttribute("hidden", "true");
-        memoryContainer.classList.remove("high-memory");
-        memoryEl.textContent = "";
-        this.#optimiseButton.remove();
-      }
-    } catch (e) {
-      console.error(e);
-      memoryContainer.setAttribute("hidden", "true");
-      memoryContainer.classList.remove("high-memory");
-      memoryEl.textContent = "";
-      this.#optimiseButton.remove();
-    }
-
-    let hasInteractive = !!this.#interactiveArea.childNodes.length;
-    this.panelElement.toggleAttribute("interactive", hasInteractive);
-  }
-
-  async #optimiseTab() {
-    if (!this.#tab) {
-      return;
-    }
-    const tab = this.#tab;
-    this.deactivate(tab, { force: true });
-    await this.win.gBrowser.prepareDiscardBrowser(tab);
-    this.win.gBrowser.discardBrowser(tab, true);
-  }
-
-  #formatBytes(bytes) {
-    if (bytes < 1024) {
-      return `${bytes} B`;
-    }
-    const kb = bytes / 1024;
-    if (kb < 1024) {
-      return `${kb.toFixed(0)} KB`;
-    }
-    const mb = kb / 1024;
-    if (mb < 1024) {
-      return `${mb.toFixed(0)} MB`;
-    }
-    const gb = mb / 1024;
-    return `${gb.toFixed(1)} GB`;
   }
 
   #movePanel() {

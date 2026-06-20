@@ -16,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.tooling.preview.Preview
 import mozilla.components.browser.state.state.createTab
 import org.mozilla.fenix.tabgroups.TabGroupRow
@@ -26,7 +25,10 @@ import org.mozilla.fenix.tabstray.ui.tabitems.TabGroupMenuButton
 import org.mozilla.fenix.tabstray.ui.tabitems.TabListBorderMiddleItemShape
 import org.mozilla.fenix.tabstray.ui.tabitems.TabListFirstItemShape
 import org.mozilla.fenix.tabstray.ui.tabitems.TabListLastItemShape
+import org.mozilla.fenix.tabstray.ui.tabitems.TabListShapeInfo
 import org.mozilla.fenix.tabstray.ui.tabitems.TabListSingleItemShape
+import org.mozilla.fenix.tabstray.ui.tabitems.TabsTrayItemSelectionState
+import org.mozilla.fenix.tabstray.ui.tabitems.tabListItemShapeStyling
 import org.mozilla.fenix.theme.FirefoxTheme
 
 /**
@@ -65,19 +67,30 @@ fun TabGroupList(
                 items = groups,
                 key = { _, group -> group.id },
             ) { index, group ->
-                val itemShape = when {
-                    groups.size == 1 -> TabListSingleItemShape
-                    index == 0 -> TabListFirstItemShape
-                    index == groups.lastIndex -> TabListLastItemShape
-                    else -> TabListBorderMiddleItemShape
+                val selectionState = TabsTrayItemSelectionState(
+                    isFocused = group.isFocused,
+                )
+                val tabShapeInfo = when {
+                    groups.size == 1 -> TabListShapeInfo(TabListSingleItemShape, true)
+                    index == 0 -> TabListShapeInfo(TabListFirstItemShape, true)
+                    index == groups.lastIndex -> TabListShapeInfo(TabListLastItemShape, true)
+                    else -> TabListShapeInfo(TabListBorderMiddleItemShape, false)
                 }
 
                 TabGroupRow(
                     tabGroup = group,
                     onClick = { onTabGroupClick(group) },
                     modifier = Modifier
-                        .clip(itemShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                        .tabListItemShapeStyling(
+                            tabShapeInfo = tabShapeInfo,
+                            selectionState = TabsTrayItemSelectionState(
+                                isFocused = group.isFocused,
+                                multiSelectEnabled = false,
+                                focusEnabled = true,
+                            ),
+                        ),
+                    selectionState = selectionState,
                     trailingContent = {
                         TabGroupMenuButton(
                             includeCloseOption = false,

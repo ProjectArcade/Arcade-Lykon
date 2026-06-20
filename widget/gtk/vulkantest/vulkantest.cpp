@@ -17,6 +17,10 @@
 
 #ifdef __linux__
 #  include <sys/sysmacros.h>
+#elif defined(XP_SOLARIS) || defined(__sun)
+#  include <sys/mkdev.h>  // major(), minor() for st_rdev
+#elif defined(XP_FREEBSD) || defined(XP_OPENBSD) || defined(XP_NETBSD)
+#  include <sys/types.h>  // major(), minor() for st_rdev (BSD)
 #endif
 
 #if defined(MOZ_ASAN) || defined(FUZZING)
@@ -131,13 +135,27 @@ struct DeviceCandidate {
   int matchesRenderer;
 };
 
+static int DeviceTypePriority(VkPhysicalDeviceType t) {
+  switch (t) {
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+      return 3;
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+      return 2;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static int CompareCandidates(const void* a, const void* b) {
   const DeviceCandidate* p1 = (const DeviceCandidate*)a;
   const DeviceCandidate* p2 = (const DeviceCandidate*)b;
   if (p1->matchesRenderer != p2->matchesRenderer) {
     return p2->matchesRenderer - p1->matchesRenderer;
   }
-  return (int)(p2->props.deviceType) - (int)(p1->props.deviceType);
+  return DeviceTypePriority(p2->props.deviceType) -
+         DeviceTypePriority(p1->props.deviceType);
 }
 
 static int GetDeviceCodecs(const InstanceFunctions* aInst,

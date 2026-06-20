@@ -12,20 +12,18 @@
 #ifndef XSIMD_BATCH_HPP
 #define XSIMD_BATCH_HPP
 
+#include "../config/xsimd_arch.hpp"
+#include "../config/xsimd_config.hpp"
+#include "../config/xsimd_macros.hpp"
+#include "../memory/xsimd_alignment.hpp"
+#include "./xsimd_batch_fwd.hpp"
+#include "./xsimd_utils.hpp"
+
 #include <cassert>
 #include <complex>
 
-#include "../config/xsimd_arch.hpp"
-#include "../memory/xsimd_alignment.hpp"
-#include "./xsimd_utils.hpp"
-
 namespace xsimd
 {
-    template <typename T, class A, bool... Values>
-    struct batch_bool_constant;
-    template <class T, class A = default_arch>
-    class batch;
-
     namespace types
     {
         template <class T, class A>
@@ -131,6 +129,29 @@ namespace xsimd
         XSIMD_INLINE batch(T val0, T val1, Ts... vals) noexcept;
         XSIMD_INLINE explicit batch(batch_bool_type const& b) noexcept;
         XSIMD_INLINE batch(register_type reg) noexcept;
+
+        /* Re-expose the conversion to register_type at the most-derived
+         * level. Some compilers fail to invoke the conversion inherited from
+         * types::simd_register when a batch is fed to an intrinsic defined as
+         * a macro (e.g. certain GCC shift/mul_lo imm intrinsics), because the
+         * textual C-style cast inside the macro does not traverse the alias
+         * inheritance chain.
+         *
+         * NOTE: this has to be a redefined member, not a using-declaration of
+         * `simd_register<T, A>::operator register_type`. The using-decl is
+         * evaluated at class-template instantiation, but `simd_register<T, A>`
+         * is only specialised (and therefore only carries `operator
+         * register_type`) for *supported* (T, A) pairs — for unsupported
+         * pairs the generic `simd_register` is empty and a using-decl would
+         * fail to compile. A redefined member is only instantiated when
+         * actually called, which keeps unsupported batches well-formed up to
+         * the point a user tries to use them. */
+        XSIMD_INLINE operator register_type() const noexcept
+        {
+            return this->data;
+        }
+
+        XSIMD_INLINE register_type to_native() const noexcept;
 
         template <class U>
         XSIMD_NO_DISCARD static XSIMD_INLINE batch broadcast(U val) noexcept;
@@ -286,7 +307,7 @@ namespace xsimd
         XSIMD_INLINE batch logical_or(batch const& other) const noexcept;
     };
 
-#if __cplusplus < 201703L
+#if XSIMD_CPP_VERSION < 201703L
     template <class T, class A>
     constexpr std::size_t batch<T, A>::size;
 #endif
@@ -300,7 +321,7 @@ namespace xsimd
      * @tparam T the type of the predicated values.
      * @tparam A the architecture this batch is tied too.
      **/
-    template <class T, class A = default_arch>
+    template <class T, class A>
     class batch_bool : public types::get_bool_simd_register_t<T, A>
     {
         using base_type = types::get_bool_simd_register_t<T, A>;
@@ -323,6 +344,8 @@ namespace xsimd
 
         template <class Tp>
         XSIMD_INLINE batch_bool(Tp const*) = delete;
+
+        XSIMD_INLINE register_type to_native() const noexcept;
 
         // memory operators
         XSIMD_INLINE void store_aligned(bool* mem) const noexcept;
@@ -366,7 +389,7 @@ namespace xsimd
         static XSIMD_INLINE register_type make_register(std::index_sequence<>, V... v) noexcept;
     };
 
-#if __cplusplus < 201703L
+#if XSIMD_CPP_VERSION < 201703L
     template <class T, class A>
     constexpr std::size_t batch_bool<T, A>::size;
 #endif
@@ -512,7 +535,7 @@ namespace xsimd
         real_batch m_imag;
     };
 
-#if __cplusplus < 201703L
+#if XSIMD_CPP_VERSION < 201703L
     template <class T, class A>
     constexpr std::size_t batch<std::complex<T>, A>::size;
 #endif
@@ -525,6 +548,14 @@ namespace xsimd
                       "Please use batch<std::complex<T>, A> initialized from xtl::xcomplex instead");
     };
 #endif
+
+    // Forward declarations: the AVX/AVX2 masked load/store kernels (pulled in
+    // by xsimd_isa.hpp below) reference make_sized_batch_t<T, N>::arch_type
+    // before xsimd_traits.hpp — which carries the full definition — is included.
+    template <typename T, std::size_t N>
+    struct make_sized_batch;
+    template <typename T, std::size_t N>
+    using make_sized_batch_t = typename make_sized_batch<T, N>::type;
 }
 
 #include "../arch/xsimd_isa.hpp"
@@ -744,7 +775,7 @@ namespace xsimd
         }
         else
         {
-            kernel::store_masked<A, T, U, Values...>(mem, *this, mask, mode, A {});
+            kernel::store_masked<A>(mem, *this, mask, mode, A {});
         }
     }
 
@@ -807,6 +838,15 @@ namespace xsimd
     {
         detail::static_check_supported_config<T, A>();
         return kernel::first(*this, A {});
+    }
+
+    /**
+     * Cast to the underlying native intrinsic register type.
+     */
+    template <class T, class A>
+    XSIMD_INLINE auto batch<T, A>::to_native() const noexcept -> register_type
+    {
+        return static_cast<register_type>(*this);
     }
 
     /******************************
@@ -1138,6 +1178,15 @@ namespace xsimd
     {
         detail::static_check_supported_config<T, A>();
         return kernel::first(*this, A {});
+    }
+
+    /**
+     * Cast to the underlying native intrinsic register type.
+     */
+    template <class T, class A>
+    XSIMD_INLINE auto batch_bool<T, A>::to_native() const noexcept -> register_type
+    {
+        return static_cast<register_type>(*this);
     }
 
     /***********************************

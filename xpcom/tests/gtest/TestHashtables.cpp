@@ -117,7 +117,7 @@ class EntityToUnicodeEntry : public PLDHashEntryHdr {
   }
   static const char* KeyToPointer(const char* aEntity) { return aEntity; }
   static PLDHashNumber HashKey(const char* aEntity) {
-    return mozilla::HashString(aEntity);
+    return mozilla::HashString(aEntity, strlen(aEntity));
   }
   enum { ALLOW_MEMMOVE = true };
 
@@ -236,7 +236,7 @@ MozExternalRefCountType IFoo::Release() {
 }
 
 nsresult IFoo::QueryInterface(const nsIID& aIID, void** aResult) {
-  nsISupports* rawPtr = 0;
+  nsISupports* rawPtr = nullptr;
   nsresult status = NS_OK;
 
   if (aIID.Equals(NS_GET_IID(IFoo)))

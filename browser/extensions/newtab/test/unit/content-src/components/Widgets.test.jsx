@@ -10,6 +10,7 @@ import {
 import { Lists } from "content-src/components/Widgets/Lists/Lists";
 import { actionTypes as at } from "common/Actions.mjs";
 import { FocusTimer } from "content-src/components/Widgets/FocusTimer/FocusTimer";
+import { BaseContext } from "content-src/lib/BaseContext";
 
 const PREF_WIDGETS_ENABLED = "widgets.enabled";
 const PREF_WIDGETS_LISTS_ENABLED = "widgets.lists.enabled";
@@ -17,6 +18,7 @@ const PREF_WIDGETS_SYSTEM_LISTS_ENABLED = "widgets.system.lists.enabled";
 const PREF_WIDGETS_TIMER_ENABLED = "widgets.focusTimer.enabled";
 const PREF_WIDGETS_SYSTEM_TIMER_ENABLED = "widgets.system.focusTimer.enabled";
 const PREF_WIDGETS_SPORTS_WIDGET_ENABLED = "widgets.sportsWidget.enabled";
+const PREF_WIDGETS_CLOCKS_ENABLED = "widgets.clocks.enabled";
 const PREF_WIDGETS_FEEDBACK_ENABLED = "widgets.feedback.enabled";
 const PREF_WIDGETS_HIDE_ALL_TOAST_ENABLED = "widgets.hideAllToast.enabled";
 
@@ -213,8 +215,8 @@ describe("<Widgets>", () => {
 
       assert.equal(
         setPrefCalls.length,
-        3,
-        `should dispatch three SetPref actions, got ${setPrefCalls.length}.`
+        4,
+        `should dispatch four SetPref actions, got ${setPrefCalls.length}.`
       );
 
       const listsPrefCall = setPrefCalls.find(
@@ -225,6 +227,9 @@ describe("<Widgets>", () => {
       );
       const sportsPrefCall = setPrefCalls.find(
         call => call.args[0].data?.name === PREF_WIDGETS_SPORTS_WIDGET_ENABLED
+      );
+      const clocksPrefCall = setPrefCalls.find(
+        call => call.args[0].data?.name === PREF_WIDGETS_CLOCKS_ENABLED
       );
 
       assert.ok(listsPrefCall, "should dispatch SetPref for lists");
@@ -246,6 +251,13 @@ describe("<Widgets>", () => {
         sportsPrefCall.args[0].data.value,
         false,
         "should set sports widget pref to false"
+      );
+
+      assert.ok(clocksPrefCall, "should dispatch SetPref for clocks");
+      assert.equal(
+        clocksPrefCall.args[0].data.value,
+        false,
+        "should set clocks pref to false"
       );
     });
 
@@ -261,8 +273,8 @@ describe("<Widgets>", () => {
 
       assert.equal(
         setPrefCalls.length,
-        3,
-        "should dispatch three SetPref actions"
+        4,
+        "should dispatch four SetPref actions"
       );
 
       const listsPrefCall = setPrefCalls.find(
@@ -273,6 +285,9 @@ describe("<Widgets>", () => {
       );
       const sportsPrefCall = setPrefCalls.find(
         call => call.args[0].data?.name === PREF_WIDGETS_SPORTS_WIDGET_ENABLED
+      );
+      const clocksPrefCall = setPrefCalls.find(
+        call => call.args[0].data?.name === PREF_WIDGETS_CLOCKS_ENABLED
       );
 
       assert.ok(listsPrefCall, "should dispatch SetPref for lists");
@@ -294,6 +309,13 @@ describe("<Widgets>", () => {
         sportsPrefCall.args[0].data.value,
         false,
         "should set sports widget pref to false"
+      );
+
+      assert.ok(clocksPrefCall, "should dispatch SetPref for clocks");
+      assert.equal(
+        clocksPrefCall.args[0].data.value,
+        false,
+        "should set clocks pref to false"
       );
     });
 
@@ -309,8 +331,8 @@ describe("<Widgets>", () => {
 
       assert.equal(
         setPrefCalls.length,
-        3,
-        "should dispatch three SetPref actions"
+        4,
+        "should dispatch four SetPref actions"
       );
 
       const listsPrefCall = setPrefCalls.find(
@@ -321,6 +343,9 @@ describe("<Widgets>", () => {
       );
       const sportsPrefCall = setPrefCalls.find(
         call => call.args[0].data?.name === PREF_WIDGETS_SPORTS_WIDGET_ENABLED
+      );
+      const clocksPrefCall = setPrefCalls.find(
+        call => call.args[0].data?.name === PREF_WIDGETS_CLOCKS_ENABLED
       );
 
       assert.ok(listsPrefCall, "should dispatch SetPref for lists");
@@ -342,6 +367,13 @@ describe("<Widgets>", () => {
         sportsPrefCall.args[0].data.value,
         false,
         "should set sports widget pref to false"
+      );
+
+      assert.ok(clocksPrefCall, "should dispatch SetPref for clocks");
+      assert.equal(
+        clocksPrefCall.args[0].data.value,
+        false,
+        "should set clocks pref to false"
       );
     });
 
@@ -382,8 +414,8 @@ describe("<Widgets>", () => {
       assert.ok(hideAllAction, "should dispatch WIDGETS_HIDE_ALL event");
       assert.equal(
         hideAllAction.data.widget_size,
-        "medium",
-        "widget_size should be medium when widgets.system.maximized is false"
+        "large",
+        "widget_size should be large when widgets.system.maximized is false"
       );
 
       const listsTarget = hideAllAction.data.targets.find(
@@ -398,7 +430,7 @@ describe("<Widgets>", () => {
       assert.equal(timerTarget.active, true);
     });
 
-    it("should dispatch WIDGETS_HIDE_ALL with medium size when widgets are maximized", () => {
+    it("should dispatch WIDGETS_HIDE_ALL with large size when widgets are maximized", () => {
       const maximizedState = {
         ...state,
         Prefs: {
@@ -435,8 +467,8 @@ describe("<Widgets>", () => {
       assert.ok(hideAllAction, "should dispatch WIDGETS_HIDE_ALL");
       assert.equal(
         hideAllAction.data.widget_size,
-        "medium",
-        "should report medium size when maximized"
+        "large",
+        "should report large size when maximized"
       );
       maximizedStore.dispatch.restore();
     });
@@ -553,8 +585,8 @@ describe("<Widgets>", () => {
       assert.ok(hideAllAction, "should dispatch WIDGETS_HIDE_ALL");
       assert.equal(
         hideAllAction.data.widget_size,
-        "medium",
-        "widget_size should be medium when maximized"
+        "large",
+        "widget_size should be large when maximized"
       );
 
       maximizedStore.dispatch.restore();
@@ -702,7 +734,7 @@ describe("<Widgets>", () => {
       assert.ok(openLink, "should dispatch OPEN_LINK");
       assert.ok(containerAction, "should dispatch WIDGETS_CONTAINER_ACTION");
       assert.equal(containerAction.data.action_type, "feedback");
-      assert.equal(containerAction.data.widget_size, "medium");
+      assert.equal(containerAction.data.widget_size, "large");
 
       store.dispatch.restore();
     });
@@ -1106,7 +1138,7 @@ describe("<Widgets>", () => {
       );
       assert.equal(containerAction.data.action_type, "change_size_all");
       assert.equal(containerAction.data.action_value, "maximize_widgets");
-      assert.equal(containerAction.data.widget_size, "medium");
+      assert.equal(containerAction.data.widget_size, "large");
     });
 
     it("should dispatch WIDGETS_CONTAINER_ACTION with correct values when toggling from maximized", () => {
@@ -1155,8 +1187,8 @@ describe("<Widgets>", () => {
       );
       assert.equal(
         containerAction.data.widget_size,
-        "small",
-        "should report new size (small) after minimizing"
+        "medium",
+        "should report new size (medium) after minimizing"
       );
 
       maximizedStore.dispatch.restore();
@@ -1175,6 +1207,9 @@ describe("<Widgets>", () => {
             [PREF_WIDGETS_SYSTEM_LISTS_ENABLED]: true,
             [PREF_WIDGETS_TIMER_ENABLED]: true,
             [PREF_WIDGETS_SYSTEM_TIMER_ENABLED]: true,
+            "widgets.system.weather.enabled": true,
+            "widgets.system.sportsWidget.enabled": true,
+            "widgets.system.clocks.enabled": true,
             "widgets.system.weatherForecast.enabled": true,
             "weather.display": "detailed",
             showWeather: true,
@@ -1227,7 +1262,142 @@ describe("<Widgets>", () => {
           "#widgets-header-context-panel panel-item"
         );
 
-        assert.equal(menuButtons.length, 2, "should render two menu items");
+        assert.equal(menuButtons.length, 3, "should render three menu items");
+      });
+
+      it("should call openWidgetsPanel when the manage widgets menu item is clicked", () => {
+        const openWidgetsPanel = sinon.stub();
+        const novaStore = createStore(combineReducers(reducers), NOVA_STATE);
+        const novaWrapper = mount(
+          <BaseContext.Provider value={{ openWidgetsPanel }}>
+            <Provider store={novaStore}>
+              <Widgets />
+            </Provider>
+          </BaseContext.Provider>
+        );
+
+        novaWrapper
+          .find("panel-item[data-l10n-id='newtab-widget-section-menu-manage']")
+          .prop("onClick")({
+          preventDefault: () => {},
+        });
+
+        assert.calledOnce(openWidgetsPanel);
+      });
+
+      it("should render the Add widgets button when at least one widget is not enabled", () => {
+        const novaWrapper = mount(
+          <WrapWithProvider state={NOVA_STATE}>
+            <Widgets />
+          </WrapWithProvider>
+        );
+        assert.ok(
+          novaWrapper.find(".widgets-add-button").exists(),
+          "should render the Add widgets placeholder card"
+        );
+      });
+
+      it("should not render the Add widgets button when every widget is enabled", () => {
+        const allEnabledState = {
+          ...NOVA_STATE,
+          Prefs: {
+            ...NOVA_STATE.Prefs,
+            values: {
+              ...NOVA_STATE.Prefs.values,
+              "widgets.weather.enabled": true,
+              "widgets.system.weather.enabled": true,
+              "widgets.sportsWidget.enabled": true,
+              "widgets.system.sportsWidget.enabled": true,
+              "widgets.clocks.enabled": true,
+              "widgets.system.clocks.enabled": true,
+            },
+          },
+        };
+        const novaWrapper = mount(
+          <WrapWithProvider state={allEnabledState}>
+            <Widgets />
+          </WrapWithProvider>
+        );
+        assert.ok(
+          !novaWrapper.find(".widgets-add-button").exists(),
+          "should not render the Add widgets placeholder card"
+        );
+      });
+
+      it("should not render the Add widgets button when Nova is disabled", () => {
+        const noNovaState = {
+          ...NOVA_STATE,
+          Prefs: {
+            ...NOVA_STATE.Prefs,
+            values: { ...NOVA_STATE.Prefs.values, "nova.enabled": false },
+          },
+        };
+        const novaWrapper = mount(
+          <WrapWithProvider state={noNovaState}>
+            <Widgets />
+          </WrapWithProvider>
+        );
+        assert.ok(
+          !novaWrapper.find(".widgets-add-button").exists(),
+          "should not render the Add widgets placeholder card outside Nova"
+        );
+      });
+
+      it("should call openWidgetsPanel when the Add widgets button is clicked", () => {
+        const openWidgetsPanel = sinon.stub();
+        const novaStore = createStore(combineReducers(reducers), NOVA_STATE);
+        sinon.spy(novaStore, "dispatch");
+        const novaWrapper = mount(
+          <BaseContext.Provider value={{ openWidgetsPanel }}>
+            <Provider store={novaStore}>
+              <Widgets />
+            </Provider>
+          </BaseContext.Provider>
+        );
+
+        novaWrapper.find(".widgets-add-button").prop("onClick")({
+          preventDefault: () => {},
+        });
+
+        assert.calledOnce(openWidgetsPanel);
+        const userEvent = novaStore.dispatch
+          .getCalls()
+          .map(c => c.args[0])
+          .find(
+            a =>
+              a.type === at.TELEMETRY_USER_EVENT &&
+              a.data?.event === "SHOW_PERSONALIZE"
+          );
+        assert.ok(
+          userEvent,
+          "should dispatch SHOW_PERSONALIZE telemetry event"
+        );
+        novaStore.dispatch.restore();
+      });
+
+      it("should match the largest current widget size on the Add widgets button", () => {
+        const maximizedState = {
+          ...NOVA_STATE,
+          Prefs: {
+            ...NOVA_STATE.Prefs,
+            values: {
+              ...NOVA_STATE.Prefs.values,
+              "widgets.maximized": true,
+              "widgets.lists.size": "large",
+              "widgets.focusTimer.size": "large",
+              "widgets.weather.size": "large",
+            },
+          },
+        };
+        const novaWrapper = mount(
+          <WrapWithProvider state={maximizedState}>
+            <Widgets />
+          </WrapWithProvider>
+        );
+        assert.ok(
+          novaWrapper.find(".widgets-add-button.large-widget").exists(),
+          "should size the Add widgets button to large when widgets are large"
+        );
       });
 
       it("should dispatch hide widget actions from the Nova header menu", () => {

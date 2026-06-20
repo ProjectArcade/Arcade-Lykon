@@ -15,6 +15,9 @@ class TextFormatUpdateEvent final : public Event {
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_CYCLE_COLLECTION_CLASS_INHERITED(TextFormatUpdateEvent, Event)
 
+  TextFormatUpdateEvent(EventTarget* aOwner, const nsAString& aType,
+                        const TextFormatUpdateEventInit& aOptions);
+
   static already_AddRefed<TextFormatUpdateEvent> Constructor(
       const GlobalObject& aGlobal, const nsAString& aType,
       const TextFormatUpdateEventInit& aOptions);
@@ -22,12 +25,11 @@ class TextFormatUpdateEvent final : public Event {
   JSObject* WrapObjectInternal(JSContext* aCx,
                                JS::Handle<JSObject*> aGivenProto) override;
 
-  void GetTextFormats(nsTArray<RefPtr<TextFormat>>& aRetVal) {}
+  void GetTextFormats(nsTArray<RefPtr<TextFormat>>& aRetVal);
 
  private:
-  explicit TextFormatUpdateEvent(EventTarget* aOwner)
-      : Event(aOwner, nullptr, nullptr) {}
   ~TextFormatUpdateEvent() = default;
+  nsTArray<RefPtr<TextFormat>> mTextFormats;
 };
 
 }  // namespace mozilla::dom

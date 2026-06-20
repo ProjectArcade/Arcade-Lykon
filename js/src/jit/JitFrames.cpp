@@ -388,6 +388,9 @@ static void OnLeaveBaselineFrame(JSContext* cx, const JSJitFrameIter& frame,
   BaselineFrame* baselineFrame = frame.baselineFrame();
   bool returnFromThisFrame = jit::DebugEpilogue(cx, baselineFrame, pc, frameOk);
   if (returnFromThisFrame) {
+    if (!baselineFrame->hasReturnValue()) {
+      baselineFrame->setReturnValue(UndefinedValue());
+    }
     rfe->kind = ExceptionResumeKind::ForcedReturnBaseline;
     rfe->framePointer = frame.fp();
     rfe->stackPointer = reinterpret_cast<uint8_t*>(baselineFrame);
@@ -1416,7 +1419,7 @@ static void TraceTrampolineNativeFrame(JSTracer* trc,
   }
 }
 
-static void TraceJitActivation(JSTracer* trc, JitActivation* activation) {
+void TraceJitFrames(JSTracer* trc, JitActivation* activation) {
 #ifdef CHECK_OSIPOINT_REGISTERS
   if (JitOptions.checkOsiPointRegisters) {
     // GC can modify spilled registers, breaking our register checks.
@@ -1425,8 +1428,6 @@ static void TraceJitActivation(JSTracer* trc, JitActivation* activation) {
     activation->setCheckRegs(false);
   }
 #endif
-
-  activation->trace(trc);
 
   // This is used for sanity checking continuity of the sequence of wasm stack
   // maps as we unwind.  It has no functional purpose.
@@ -1473,7 +1474,7 @@ static void TraceJitActivation(JSTracer* trc, JitActivation* activation) {
       gc::AssertRootMarkingPhase(trc);
       MOZ_ASSERT(frames.isWasm());
       uint8_t* nextPC = frames.resumePCinCurrentFrame();
-      MOZ_ASSERT(nextPC != 0);
+      MOZ_ASSERT(nextPC != nullptr);
       wasm::WasmFrameIter& wasmFrameIter = frames.asWasm();
 #ifdef ENABLE_WASM_JSPI
       if (wasmFrameIter.currentFrameStackSwitched()) {
@@ -1494,7 +1495,7 @@ static void TraceJitActivation(JSTracer* trc, JitActivation* activation) {
 }
 
 #ifdef ENABLE_WASM_JSPI
-static void TraceWasmSuspendedContStacks(JSContext* cx, JSTracer* trc) {
+void TraceWasmSuspendedContStacks(JSContext* cx, JSTracer* trc) {
   gc::AssertRootMarkingPhase(trc);
 
   // If we're tenuring, then unconditionally trace all suspended stacks. This
@@ -1507,24 +1508,13 @@ static void TraceWasmSuspendedContStacks(JSContext* cx, JSTracer* trc) {
     return;
   }
 
-  for (wasm::ContStack* stack : cx->wasm().stacks()) {
+  cx->wasm().contStacks().forEachAllocatedStack([trc](wasm::ContStack* stack) {
     if (stack->canResume()) {
       stack->traceSuspended(trc);
     }
-  }
+  });
 }
 #endif
-
-void TraceJitActivations(JSContext* cx, JSTracer* trc) {
-  for (JitActivationIterator activations(cx); !activations.done();
-       ++activations) {
-    TraceJitActivation(trc, activations->asJit());
-  }
-
-#ifdef ENABLE_WASM_JSPI
-  TraceWasmSuspendedContStacks(cx, trc);
-#endif
-}
 
 void TraceWeakJitActivationsInSweepingZones(JSContext* cx, JSTracer* trc) {
   for (JitActivationIterator activation(cx); !activation.done(); ++activation) {
@@ -1561,11 +1551,12 @@ void UpdateJitActivationsForMinorGC(JSRuntime* rt) {
     }
   }
 #ifdef ENABLE_WASM_JSPI
-  for (wasm::ContStack* stack : cx->wasm().stacks()) {
-    if (stack->canResume()) {
-      stack->updateSuspendedForMovingGC(nursery);
-    }
-  }
+  cx->wasm().contStacks().forEachAllocatedStack(
+      [&nursery](wasm::ContStack* stack) {
+        if (stack->canResume()) {
+          stack->updateSuspendedForMovingGC(nursery);
+        }
+      });
 #endif
 }
 
@@ -1584,11 +1575,12 @@ void UpdateJitActivationsForCompactingGC(JSRuntime* rt) {
     }
   }
 #ifdef ENABLE_WASM_JSPI
-  for (wasm::ContStack* stack : cx->wasm().stacks()) {
-    if (stack->canResume()) {
-      stack->updateSuspendedForMovingGC(nursery);
-    }
-  }
+  cx->wasm().contStacks().forEachAllocatedStack(
+      [&nursery](wasm::ContStack* stack) {
+        if (stack->canResume()) {
+          stack->updateSuspendedForMovingGC(nursery);
+        }
+      });
 #endif
 }
 

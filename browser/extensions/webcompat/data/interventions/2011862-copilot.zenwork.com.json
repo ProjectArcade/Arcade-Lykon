@@ -1,7 +1,7 @@
 {
   "label": "copilot.zenwork.com",
   "bugs": {
-    "2007641": {
+    "2011862": {
       "issue": "broken-interactive-elements",
       "matches": ["*://copilot.zenwork.com/*"]
     }
@@ -11,7 +11,7 @@
       "platforms": ["all"],
       "content_scripts": {
         "all_frames": true,
-        "js": ["bug2011862-copilot.zenwork.com-fix-chatbot.js"]
+        "js": ["define_MozAppearance.js"]
       }
     }
   ]

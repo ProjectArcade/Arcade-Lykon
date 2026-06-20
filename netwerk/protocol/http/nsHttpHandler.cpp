@@ -131,6 +131,7 @@
 
 #define ACCEPT_HEADER_STYLE "text/css,*/*;q=0.1"
 #define ACCEPT_HEADER_JSON "application/json,*/*;q=0.5"
+#define ACCEPT_HEADER_TEXT "text/plain,*/*;q=0.5"
 #define ACCEPT_HEADER_ALL "*/*"
 
 #define UA_PREF(_pref) UA_PREF_PREFIX _pref
@@ -280,6 +281,9 @@ nsHttpHandler::nsHttpHandler()
       mSpdyPingTimeout(PR_SecondsToInterval(
           StaticPrefs::network_http_http2_ping_timeout())) {
   LOG(("Creating nsHttpHandler [this=%p].\n", this));
+
+  mAuthCache->Init();
+  mPrivateAuthCache->Init();
 
   mUserAgentOverride.SetIsVoid(true);
 
@@ -764,6 +768,8 @@ nsresult nsHttpHandler::AddStandardRequestHeaders(
     accept.Assign(ACCEPT_HEADER_STYLE);
   } else if (aContentPolicyType == ExtContentPolicy::TYPE_JSON) {
     accept.Assign(ACCEPT_HEADER_JSON);
+  } else if (aContentPolicyType == ExtContentPolicy::TYPE_TEXT) {
+    accept.Assign(ACCEPT_HEADER_TEXT);
   } else {
     accept.Assign(ACCEPT_HEADER_ALL);
   }
@@ -1066,7 +1072,7 @@ void nsHttpHandler::BuildUserAgent() {
     mUserAgent += ' ';
     mUserAgent += mCompatFirefox;
   }
-  if (!isFirefox && !mCompatFirefoxEnabled) {
+  if (!isFirefox) {
     // App portion
     mUserAgent += ' ';
     mUserAgent += mAppName;
@@ -1136,11 +1142,22 @@ void nsHttpHandler::InitUserAgentComponents() {
           (androidVersion.Length() >= 2 && std::isdigit(androidVersion[0]) &&
            (androidVersion[1] == u'.' || std::isdigit(androidVersion[1]))));
 
+  // Normalize: strip any minor-version suffix (everything from the first '.'
+  // onward, including the '.'). Some OEM firmwares report Build.VERSION.RELEASE
+  // as e.g. "14.0" while stock AOSP reports "14"; that variance splits the
+  // population into fingerprintable subsets without conveying any useful
+  // information about the OS. Bug 2043395.
+  int32_t dotIdx = androidVersion.FindChar(u'.');
+  if (dotIdx >= 0) {
+    androidVersion.Truncate(dotIdx);
+  }
+
   // Spoof version "Android 10" for Android OS versions < 10 to reduce their
   // fingerprintable user information. For Android OS versions >= 10, report
   // the real OS version because some enterprise websites only want to permit
-  // clients with recent OS version (like bug 1876742). Two leading digits
-  // in the version string means the version number is >= 10.
+  // clients with recent OS version (like bug 1876742). After the truncation
+  // above, all versions are bare integers; two digits means the version is
+  // >= 10.
   mPlatform += " ";
   if (NS_SUCCEEDED(rv) && androidVersion.Length() >= 2 &&
       std::isdigit(androidVersion[0]) && std::isdigit(androidVersion[1])) {
@@ -2243,6 +2260,12 @@ nsHttpHandler::GetRfpUserAgent(nsACString& value) {
 }
 
 NS_IMETHODIMP
+nsHttpHandler::GetDocumentAcceptHeader(nsACString& value) {
+  value = mDocumentAcceptHeader;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 nsHttpHandler::GetAppName(nsACString& value) {
   value = mLegacyAppName;
   return NS_OK;
@@ -2809,6 +2832,9 @@ bool nsHttpHandler::IsBeforeLastActiveTabLoadOptimization(
 
 void nsHttpHandler::ExcludeHttp2OrHttp3Internal(
     const nsHttpConnectionInfo* ci) {
+  if (ci->GetHappyEyeballsEnabled()) {
+    return;
+  }
   LOG(("nsHttpHandler::ExcludeHttp2OrHttp3Internal ci=%s",
        ci->HashKey().get()));
   // The excluded list needs to be stayed synced between parent process and

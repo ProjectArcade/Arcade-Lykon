@@ -709,9 +709,9 @@ void DateFillLocalTimeSlots(DateObject* dateObj);
 double DateNow(JSContext* cx);
 double DateParse(JSContext* cx, const JSString* str);
 double DateLocalTimeToUTC(JSContext* cx, int64_t localTime);
-double DateYearFromTime(JSContext* cx, double utcTime);
-double DateMonthFromTime(JSContext* cx, double utcTime);
-double DateDateFromTime(JSContext* cx, double utcTime);
+void DateYearFromTime(JSContext* cx, double utcTime, JS::Value* result);
+void DateMonthFromTime(JSContext* cx, double utcTime, JS::Value* result);
+void DateDateFromTime(JSContext* cx, double utcTime, JS::Value* result);
 JSObject* NewDateObject(JSContext* cx, double utcTime);
 
 JSAtom* AtomizeStringNoGC(JSContext* cx, JSString* str);
@@ -741,7 +741,7 @@ void AssertMapObjectHash(JSContext* cx, MapObject* obj, const Value* value,
 
 void AssertPropertyLookup(NativeObject* obj, PropertyKey id, uint32_t slot);
 
-void WeakMapValueReadBarrier(gc::TenuredCell* cell, Zone* zone);
+void WeakMapValueReadBarrier(gc::TenuredCell* cell, Zone* mapZone);
 
 // Functions used when JS_MASM_VERBOSE is enabled.
 void AssumeUnreachable(const char* output);

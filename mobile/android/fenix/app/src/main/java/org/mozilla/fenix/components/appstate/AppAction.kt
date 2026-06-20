@@ -9,6 +9,7 @@ import mozilla.components.browser.state.search.SearchEngine
 import mozilla.components.browser.state.state.content.DownloadState
 import mozilla.components.concept.storage.BookmarkNode
 import mozilla.components.concept.sync.TabData
+import mozilla.components.feature.protection.dashboard.TrackersBlockedCategory
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.top.sites.TopSite
 import mozilla.components.lib.crash.Crash.NativeCodeCrash
@@ -23,6 +24,7 @@ import org.mozilla.fenix.browser.StandardSnackbarError
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.setup.checklist.ChecklistItem
+import org.mozilla.fenix.components.appstate.sports.SportsWidgetState
 import org.mozilla.fenix.components.appstate.webcompat.WebCompatState
 import org.mozilla.fenix.components.metrics.MetricsUtils
 import org.mozilla.fenix.home.bookmarks.Bookmark
@@ -34,6 +36,7 @@ import org.mozilla.fenix.home.recentsyncedtabs.RecentSyncedTabState
 import org.mozilla.fenix.home.recenttabs.RecentTab
 import org.mozilla.fenix.home.recentvisits.RecentlyVisitedItem
 import org.mozilla.fenix.home.sports.MatchCard
+import org.mozilla.fenix.home.sports.SportCardErrorState
 import org.mozilla.fenix.library.history.PendingDeletionHistory
 import org.mozilla.fenix.messaging.MessagingState
 import org.mozilla.fenix.wallpapers.Wallpaper
@@ -61,6 +64,11 @@ sealed class AppAction : Action {
      * Updates whether the first frame of the homescreen has been [drawn].
      */
     data class UpdateFirstFrameDrawn(val drawn: Boolean) : AppAction()
+
+    /**
+     * Updates whether the fox peek animation should play on the next homepage view.
+     */
+    data class UpdateShowFoxPeekAnimation(val ready: Boolean) : AppAction()
     data class AddNonFatalCrash(val crash: NativeCodeCrash) : AppAction()
     data class RemoveNonFatalCrash(val crash: NativeCodeCrash) : AppAction()
     object RemoveAllNonFatalCrashes : AppAction()
@@ -69,7 +77,6 @@ sealed class AppAction : Action {
         val topSites: List<TopSite>,
         val mode: BrowsingMode,
         val collections: List<TabCollection>,
-        val showCollectionPlaceholder: Boolean,
         val recentTabs: List<RecentTab>,
         val bookmarks: List<Bookmark>,
         val recentHistory: List<RecentlyVisitedItem>,
@@ -117,8 +124,6 @@ sealed class AppAction : Action {
      * Removes a set of items, previously marked for removal, to be displayed again in the UI.
      */
     data class UndoPendingDeletionSet(val historyItems: Set<PendingDeletionHistory>) : AppAction()
-
-    data object RemoveCollectionsPlaceholder : AppAction()
 
     /**
      * Action dispatched when the user has authenticated with their account.
@@ -817,11 +822,33 @@ sealed class AppAction : Action {
     }
 
     /**
-     * Updates the total count of trackers blocked for the privacy report.
-     *
-     * @property count The new count of trackers blocked.
+     * [AppAction]s related to the the trackers blocked state.
      */
-    data class UpdateTrackersBlockedCount(val count: Int) : AppAction()
+    sealed class BlockedTrackersAction : AppAction() {
+        /**
+         * Updates the total count of trackers blocked for the privacy report.
+         *
+         * @property count The new count of trackers blocked.
+         */
+        data class UpdateTrackersBlockedCount(val count: Int) : BlockedTrackersAction()
+
+        /**
+         * Updates the details about what trackers have been blocked this week.
+         *
+         * @property blockedTrackerCategories The list of trackers blocked this week as a tracker category split.
+         */
+        data class UpdateTrackersBlockedThisWeek(
+            val blockedTrackerCategories: List<TrackersBlockedCategory>,
+        ) : BlockedTrackersAction()
+
+        /**
+         * Updates the earliest date for which we have information about blocked trackers.
+         *
+         * @property date The earliest date for which we have information about blocked trackers as a Unix time stamp.
+         * May be `null` if this information is not available.
+         */
+        data class UpdateEarliestTrackingDate(val date: Long?) : BlockedTrackersAction()
+    }
 
     /**
      * [AppAction]s related to the sports widget.
@@ -856,9 +883,90 @@ sealed class AppAction : Action {
         /**
          * Dispatched when new match card data is available for the homepage sports widget.
          *
-         * @property matchCardState The new [MatchCard] to display, or null if no match
+         * @property matchCardStates The new [MatchCard]s to display, or empty if no match
          * should be shown.
          */
-        data class MatchCardStateUpdated(val matchCardState: MatchCard?) : SportsWidgetAction()
+        data class MatchCardStateUpdated(val matchCardStates: List<MatchCard>) : SportsWidgetAction()
+
+        /**
+         * Dispatched when the set of teams eliminated from the tournament changes,
+         * derived from the latest fetched match data. Drives the eliminated-team
+         * styling in the country selector bottom sheet.
+         *
+         * @property countryCodes ISO codes of teams flagged eliminated in the last response.
+         */
+        data class EliminatedCountriesUpdated(val countryCodes: Set<String>) : SportsWidgetAction()
+
+        /**
+         * Dispatched when the sport widget's debug tool visibility changes.
+         *
+         * @property visible Whether the debug tool should be displayed.
+         */
+        data class DebugToolVisibilityChanged(val visible: Boolean) : SportsWidgetAction()
+
+        /**
+         * Dispatched when the user toggles the world cup started override setting in the sport widget's debug tool.
+         * This overrides [SportsWidgetState.hasWorldCupStarted] and should be used for debug only.
+         *
+         * @property hasWorldCupStartedOverride Whether the world cup has started.
+         */
+        data class WorldCupStartedOverrideUpdated(val hasWorldCupStartedOverride: Boolean) : SportsWidgetAction()
+
+        /**
+         * Dispatched when the user toggles the skip follow team setting in the sport widget's debug tool.
+         * This should be used for debug only.
+         *
+         * @property hasSkippedFollowTeam Whether the user skipped the "Follow your team" card.
+         */
+        data class SkipFollowTeamUpdated(val hasSkippedFollowTeam: Boolean) : SportsWidgetAction()
+
+        /**
+         * Dispatched to request a fetch of the latest match data from the sports API.
+         * Triggered by manual user refresh or when the selected countries change.
+         */
+        data object FetchMatches : SportsWidgetAction()
+
+        /**
+         * Dispatched when a match data fetch fails.
+         *
+         * @property error The [SportCardErrorState] describing the failure.
+         */
+        data class FetchFailed(val error: SportCardErrorState) : SportsWidgetAction()
+
+        /**
+         * Dispatched to clear any active [SportsWidgetState.errorState] without otherwise
+         * touching widget data. Used on resume to retire a stale ConnectionInterrupted
+         * banner once the device is back online and there's no fetch to schedule (e.g.
+         * during the pre-7-day countdown phase).
+         */
+        data object ErrorStateCleared : SportsWidgetAction()
+
+        /**
+         * Dispatched when the user toggles the one week to the world cup override setting
+         * in the sport widget's debug tool. This overrides [SportsWidgetState.isOneWeekToWorldCup] and should
+         * be used for debug only.
+         *
+         * @property isOneWeekToWorldCupOverride Whether it's one week to the World Cup.
+         */
+        data class OneWeekToWorldCupOverrideUpdated(val isOneWeekToWorldCupOverride: Boolean) : SportsWidgetAction()
+    }
+
+    /**
+     * [SnackbarAction]s related to the IP Protection feature.
+     */
+    sealed class IPProtectionSnackbarAction : SnackbarAction() {
+        /**
+         * Dispatched when IP Protection feature experienced a connection error.
+         *
+         * @property title The title to display in the snackbar.
+         */
+        data class ConnectionError(val title: String) : IPProtectionSnackbarAction()
+
+        /**
+         * Dispatched when IP Protection feature experienced a connection error.
+         *
+         * @property title The title to display in the snackbar.
+         */
+        data class DataLimitReached(val title: String) : IPProtectionSnackbarAction()
     }
 }

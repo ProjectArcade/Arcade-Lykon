@@ -33,6 +33,33 @@ add_setup(async () => {
 });
 
 /**
+ * Asserts that the location label and the "choose location" button both point
+ * at the file path input that is actually rendered, so the input stays labelled
+ * whether the default or custom input is shown.
+ *
+ * @param {Element} turnOnScheduledBackups the turn-on-scheduled-backups element
+ * @param {Element} expectedInput the file path input expected to be rendered
+ */
+function assertLocationInputLabelled(turnOnScheduledBackups, expectedInput) {
+  let shadow = turnOnScheduledBackups.shadowRoot;
+  let label = shadow.getElementById("backup-location-label");
+  let button = shadow.getElementById("backup-location-filepicker-button");
+
+  Assert.ok(expectedInput, "Expected file path input should be rendered");
+  Assert.ok(expectedInput.id, "Rendered file path input should have an id");
+  Assert.equal(
+    label.getAttribute("for"),
+    expectedInput.id,
+    "Location label should be associated with the rendered input"
+  );
+  Assert.equal(
+    button.getAttribute("aria-controls"),
+    expectedInput.id,
+    "Choose location button should control the rendered input"
+  );
+}
+
+/**
  * Tests that the turn on scheduled backups dialog can set
  * browser.backup.scheduled.enabled to true from the settings page.
  */
@@ -79,17 +106,14 @@ add_task(async function test_turn_on_scheduled_backups_confirm() {
     );
     Assert.ok(scheduledPrefVal, "Scheduled backups pref should be true");
 
-    let legacyEvents = TelemetryTestUtils.getEvents(
-      {
-        category: "browser.backup",
-        method: "toggle_on",
-        object: "BackupService",
-      },
-      { process: "parent" }
-    );
-    Assert.equal(legacyEvents.length, 1, "Found the toggle_on legacy event.");
     let events = Glean.browserBackup.toggleOn.testGetValue();
     Assert.equal(events.length, 1, "Found the toggleOn Glean event.");
+
+    Assert.equal(
+      Glean.browserBackup.schedulerToggleSource.testGetValue(),
+      "preferences",
+      "scheduler_toggle_source is credited to 'preferences' when enabled from the settings page."
+    );
 
     // Reset scheduled backups again for subsequent tests.
     Services.prefs.clearUserPref(SCHEDULED_BACKUPS_ENABLED_PREF);
@@ -155,9 +179,10 @@ add_task(async function test_turn_on_custom_location_filepicker() {
       filePathButton,
       "Button for choosing a file path should be found"
     );
+    assertLocationInputLabelled(turnOnScheduledBackups, filePathInputDefault);
 
     // Next, verify the filepicker and updated dialog
-    let inputUpdatePromise = BrowserTestUtils.waitForCondition(
+    let inputUpdatePromise = TestUtils.waitForCondition(
       () => turnOnScheduledBackups.filePathInputCustomEl
     );
 
@@ -176,6 +201,7 @@ add_task(async function test_turn_on_custom_location_filepicker() {
       PathUtils.filename(mockCustomParentDir),
       "Input should display file path from filepicker"
     );
+    assertLocationInputLabelled(turnOnScheduledBackups, filePathInputCustom);
 
     // Now close the dialog by confirming choices and verify that backup settings are saved
     let confirmButton = turnOnScheduledBackups.confirmButtonEl;
@@ -206,31 +232,9 @@ add_task(async function test_turn_on_custom_location_filepicker() {
       recursive: true,
     });
 
-    let legacyEvents = TelemetryTestUtils.getEvents(
-      {
-        category: "browser.backup",
-        method: "toggle_on",
-        object: "BackupService",
-      },
-      { process: "parent" }
-    );
-    Assert.equal(legacyEvents.length, 1, "Found the toggle_on legacy event.");
     let events = Glean.browserBackup.toggleOn.testGetValue();
     Assert.equal(events.length, 1, "Found the toggleOn Glean event.");
 
-    legacyEvents = TelemetryTestUtils.getEvents(
-      {
-        category: "browser.backup",
-        method: "change_location",
-        object: "BackupService",
-      },
-      { process: "parent" }
-    );
-    Assert.equal(
-      legacyEvents.length,
-      1,
-      "Found the change_location legacy event."
-    );
     events = Glean.browserBackup.changeLocation.testGetValue();
     Assert.equal(events.length, 1, "Found the changeLocation Glean event.");
 
@@ -315,31 +319,9 @@ add_task(async function test_turn_on_scheduled_backups_encryption() {
       "BackupService was called to enable encryption and received the expected argument"
     );
 
-    let legacyEvents = TelemetryTestUtils.getEvents(
-      {
-        category: "browser.backup",
-        method: "toggle_on",
-        object: "BackupService",
-      },
-      { process: "parent" }
-    );
-    Assert.equal(legacyEvents.length, 1, "Found the toggle_on legacy event.");
     let events = Glean.browserBackup.toggleOn.testGetValue();
     Assert.equal(events.length, 1, "Found the toggleOn Glean event.");
 
-    legacyEvents = TelemetryTestUtils.getEvents(
-      {
-        category: "browser.backup",
-        method: "password_added",
-        object: "BackupService",
-      },
-      { process: "parent" }
-    );
-    Assert.equal(
-      legacyEvents.length,
-      1,
-      "Found the password_added legacy event."
-    );
     events = Glean.browserBackup.passwordAdded.testGetValue();
     Assert.equal(events.length, 1, "Found the passwordAdded Glean event.");
 
@@ -433,7 +415,7 @@ add_task(async function test_turn_on_scheduled_backups_encryption_error() {
       "Scheduled backups pref should still be false"
     );
 
-    await BrowserTestUtils.waitForCondition(
+    await TestUtils.waitForCondition(
       () => !!turnOnScheduledBackups.errorEl,
       "Error should be displayed to the user"
     );
@@ -605,7 +587,7 @@ add_task(async function test_embedded_component_persistent_data_filepicker() {
     await filePickerShownPromise;
     await turnOnScheduledBackups.updateComplete;
 
-    await BrowserTestUtils.waitForCondition(
+    await TestUtils.waitForCondition(
       () =>
         settings.backupServiceState.embeddedComponentPersistentData?.path !==
         undefined,
@@ -764,7 +746,7 @@ add_task(
         await filePickerShownPromise;
         await turnOnScheduledBackups.updateComplete;
 
-        await BrowserTestUtils.waitForCondition(
+        await TestUtils.waitForCondition(
           () =>
             settings.backupServiceState.embeddedComponentPersistentData
               ?.path !== undefined,
@@ -782,7 +764,7 @@ add_task(
         dialog.close();
         await closedPromise;
 
-        await BrowserTestUtils.waitForCondition(
+        await TestUtils.waitForCondition(
           () =>
             Object.keys(
               settings.backupServiceState.embeddedComponentPersistentData

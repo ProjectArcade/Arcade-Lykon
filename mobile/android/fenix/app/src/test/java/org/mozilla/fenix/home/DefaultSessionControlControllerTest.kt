@@ -27,7 +27,6 @@ import mozilla.components.service.nimbus.messaging.Message
 import mozilla.components.support.test.robolectric.testContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -47,9 +46,10 @@ import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.appstate.setup.checklist.ChecklistItem
+import org.mozilla.fenix.components.share.ShareSource
 import org.mozilla.fenix.components.usecases.FenixBrowserUseCases
+import org.mozilla.fenix.components.usecases.ShareUseCases
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.helpers.FenixGleanTestRule
 import org.mozilla.fenix.home.bookmarks.Bookmark
 import org.mozilla.fenix.home.recenttabs.RecentTab
@@ -61,8 +61,10 @@ import org.mozilla.fenix.utils.Settings
 import org.mozilla.fenix.wallpapers.Wallpaper
 import org.mozilla.fenix.wallpapers.WallpaperState
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.File
 import java.lang.ref.WeakReference
+import kotlin.test.assertNotNull
 import mozilla.components.feature.tab.collections.Tab as ComponentTab
 
 @RunWith(RobolectricTestRunner::class) // For gleanTestRule
@@ -87,6 +89,7 @@ class DefaultSessionControlControllerTest {
     private val selectTabUseCase: TabsUseCases = mockk(relaxed = true)
     private val fenixBrowserUseCases: FenixBrowserUseCases = mockk(relaxed = true)
     private val settings: Settings = mockk(relaxed = true)
+    private val shareUseCases: ShareUseCases = mockk(relaxed = true)
     private val searchEngine = SearchEngine(
         id = "test",
         name = "Test Engine",
@@ -116,7 +119,6 @@ class DefaultSessionControlControllerTest {
             expandedCollections = emptySet(),
             mode = BrowsingMode.Normal,
             topSites = emptyList(),
-            showCollectionPlaceholder = true,
             recentTabs = emptyList(),
             bookmarks = emptyList(),
         )
@@ -125,7 +127,7 @@ class DefaultSessionControlControllerTest {
             every { id } returns R.id.homeFragment
         }
         every { activity.components.settings } returns settings
-        every { activity.settings() } returns settings
+        every { activity.components.settings } returns settings
         every { activity.filesDir } returns filesDir
     }
 
@@ -326,11 +328,13 @@ class DefaultSessionControlControllerTest {
     }
 
     @Test
-    fun handleCollectionShareTabsClicked() {
+    fun `WHEN handleCollectionShareTabsClicked is called THEN share use case is invoked with the collection items and title as subject`() {
+        val collectionTitle = "Reading list"
         val collection = mockk<TabCollection> {
             every { tabs } returns emptyList()
-            every { title } returns ""
+            every { title } returns collectionTitle
         }
+
         createController().handleCollectionShareTabsClicked(collection)
 
         assertNotNull(Collections.shared.testGetValue())
@@ -339,9 +343,11 @@ class DefaultSessionControlControllerTest {
         assertEquals(null, recordedEvents.single().extra)
 
         verify {
-            navController.navigate(
-                match<NavDirections> { it.actionId == R.id.action_global_shareFragment },
-                null,
+            shareUseCases.shareItems(
+                items = emptyList(),
+                source = ShareSource.HOME,
+                subject = collectionTitle,
+                navigateToShareFragment = any(),
             )
         }
     }
@@ -475,19 +481,6 @@ class DefaultSessionControlControllerTest {
                 match<NavDirections> { it.actionId == R.id.action_global_tabManagementFragment },
                 null,
             )
-        }
-    }
-
-    @Test
-    fun handleRemoveCollectionsPlaceholder() {
-        createController().handleRemoveCollectionsPlaceholder()
-
-        val recordedEvents = Collections.placeholderCancel.testGetValue()!!
-        assertEquals(1, recordedEvents.size)
-        assertEquals(null, recordedEvents.single().extra)
-        verify {
-            settings.showCollectionsPlaceholderOnHome = false
-            appStore.dispatch(AppAction.RemoveCollectionsPlaceholder)
         }
     }
 
@@ -704,6 +697,7 @@ class DefaultSessionControlControllerTest {
             appStore = appStore,
             navControllerRef = WeakReference(navController),
             viewLifecycleScope = TestScope(),
+            shareUseCases = shareUseCases,
             showAddSearchWidgetPrompt = { showAddSearchWidgetPromptCalled = true },
             requestSetDefaultBrowserPrompt = { requestSetDefaultBrowserPromptCalled = true },
         ).apply {

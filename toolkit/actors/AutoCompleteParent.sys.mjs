@@ -205,15 +205,16 @@ export class AutoCompleteParent extends JSWindowActorParent {
       return;
     }
 
+    if (!this.browsingContext.canOpenModalPicker) {
+      return;
+    }
+
     let browser = this.browsingContext.top.embedderElement;
-    let window = browser.documentGlobal;
-    // Also check window top in case this is a sidebar.
-    if (
-      Services.focus.activeWindow !== window.top &&
-      Services.focus.focusedWindow.top !== window.top
-    ) {
-      // We were sent a message from a window or tab that went into the
-      // background, so we'll ignore it for now.
+
+    let tabbrowser = browser.getTabBrowser();
+    if (tabbrowser && tabbrowser.selectedBrowser != browser) {
+      // Overly cautious check, because AsyncTabSwitcher might delay
+      // deactivating our browser.
       return;
     }
 
@@ -224,11 +225,6 @@ export class AutoCompleteParent extends JSWindowActorParent {
     // the layout varies according to different result type
     this.openedPopup.setAttribute("resultstyles", [...resultStyles].join(" "));
     this.openedPopup.hidden = false;
-    // don't allow the popup to become overly narrow
-    this.openedPopup.style.setProperty(
-      "--panel-width",
-      Math.max(100, rect.width) + "px"
-    );
     this.openedPopup.style.direction = dir;
 
     AutoCompleteResultView.setResults(this, results);

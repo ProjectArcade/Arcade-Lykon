@@ -27,7 +27,6 @@ import mozilla.telemetry.glean.testing.GleanTestRule
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -52,6 +51,7 @@ import org.mozilla.fenix.webcompat.fake.FakeWebCompatReporterMoreInfoSender
 import org.mozilla.fenix.webcompat.store.WebCompatReporterAction
 import org.mozilla.fenix.webcompat.store.WebCompatReporterState
 import org.mozilla.fenix.webcompat.store.WebCompatReporterStore
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class) // for GleanTestRule
 class WebCompatReporterSubmissionMiddlewareTest {
@@ -89,6 +89,7 @@ class WebCompatReporterSubmissionMiddlewareTest {
                     userFacingName = "",
                     userFacingDescription = "",
                     branchSlug = "",
+                    isRollout = false,
                 ),
                 EnrolledExperiment(
                     featureIds = listOf(),
@@ -96,6 +97,7 @@ class WebCompatReporterSubmissionMiddlewareTest {
                     userFacingName = "",
                     userFacingDescription = "",
                     branchSlug = "",
+                    isRollout = false,
                 ),
             ),
             experimentBranchLambda = { it },
@@ -302,6 +304,7 @@ class WebCompatReporterSubmissionMiddlewareTest {
                     userFacingName = "",
                     userFacingDescription = "",
                     branchSlug = "",
+                    isRollout = false,
                 ),
                 EnrolledExperiment(
                     featureIds = listOf(),
@@ -309,6 +312,7 @@ class WebCompatReporterSubmissionMiddlewareTest {
                     userFacingName = "",
                     userFacingDescription = "",
                     branchSlug = "",
+                    isRollout = false,
                 ),
             ),
             experimentBranchLambda = { it },
@@ -475,6 +479,7 @@ class WebCompatReporterSubmissionMiddlewareTest {
                     userFacingName = "",
                     userFacingDescription = "",
                     branchSlug = "",
+                    isRollout = false,
                 ),
             ),
             experimentBranchLambda = { it },

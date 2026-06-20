@@ -45,15 +45,33 @@ const SIDEBAR_EMPTY_CLOSE_PROMPT_TRIGGER_COUNT = 2;
 const SESSION_STORE_KEY = "ai-window-tab-state";
 
 /**
+ * @typedef {import("chrome://browser/content/aiwindow/components/ai-window/ai-window.mjs").SmartbarInputState} SmartbarInputState
+ *
  * @typedef {{
- *   input: string,
+ *   input: SmartbarInputState,
  *   mode: string,
  *   pageUrl: URL,
  *   conversationId: string,
  *   keepSidebarOpen: boolean,
  *   conversation: ChatConversation,
+ *   modelChoiceId: ?string,
  * }} TabState
  */
+
+/**
+ * Map entry of TabState in #tabStates.
+ *
+ * @typedef {{ state: ?TabState }} TabStateEntry
+ */
+
+export const EMPTY_SMARTBAR_INPUT_STATE = Object.freeze({
+  text: "",
+  mentions: [],
+});
+
+function hasInputContent(input) {
+  return Boolean(input?.text || input?.mentions?.length);
+}
 
 /**
  * Manages state changes of the tabs in AIWindow to keep both the
@@ -70,7 +88,7 @@ export class AIWindowTabStatesManager {
   /**
    * A map of tabs and their states
    *
-   * @type {WeakMap<MozTabbrowserTab, TabState>}
+   * @type {WeakMap<MozTabbrowserTab, TabStateEntry>}
    */
   #tabStates;
   /**
@@ -223,6 +241,11 @@ export class AIWindowTabStatesManager {
     );
 
     this.#window.addEventListener(
+      "ai-window:model-changed",
+      this.#onModelChanged
+    );
+
+    this.#window.addEventListener(
       "ai-window:sidebar-toggle",
       this.#onSidebarToggle
     );
@@ -265,6 +288,11 @@ export class AIWindowTabStatesManager {
     this.#window.removeEventListener(
       "ai-window:conversation-changed",
       this.#onConversationChanged
+    );
+
+    this.#window.removeEventListener(
+      "ai-window:model-changed",
+      this.#onModelChanged
     );
 
     this.#window.removeEventListener(
@@ -376,7 +404,10 @@ export class AIWindowTabStatesManager {
     }
 
     if (!shouldKeepSidebar) {
-      lazy.AIWindowUI.updateSidebarInput(this.#window, "");
+      lazy.AIWindowUI.updateSidebarInput(
+        this.#window,
+        EMPTY_SMARTBAR_INPUT_STATE
+      );
       lazy.AIWindowUI.closeSidebar(this.#window);
       return;
     }
@@ -406,9 +437,24 @@ export class AIWindowTabStatesManager {
     if (tabState?.state) {
       lazy.AIWindowUI.updateSidebarInput(
         this.#window,
-        tabState.state.input ?? ""
+        tabState.state.input ?? EMPTY_SMARTBAR_INPUT_STATE
       );
     }
+    lazy.AIWindowUI.updateSidebarModel(
+      this.#window,
+      this.#resolveTabModelChoice(tabState)
+    );
+  }
+
+  /**
+   * Resolves the model choice override to apply per tab.
+   *
+   * @param {TabStateEntry} tabState
+   * @returns {?string}
+   */
+  #resolveTabModelChoice(tabState) {
+    const storedModelChoiceOverride = tabState.state?.modelChoiceId ?? null;
+    return storedModelChoiceOverride;
   }
 
   /**
@@ -418,7 +464,7 @@ export class AIWindowTabStatesManager {
    * is cached back into the tab state.
    *
    * @param {MozTabbrowserTab} tab
-   * @param {object} tabState
+   * @param {TabStateEntry} tabState
    * @returns {Promise<ChatConversation|null>}
    */
   async #computeConversation(tab, tabState) {
@@ -513,7 +559,7 @@ export class AIWindowTabStatesManager {
       selectedTab === tab &&
       mode === "fullpage" &&
       !isAIWindow &&
-      input &&
+      hasInputContent(input) &&
       conversation &&
       conversation.messages.length;
 
@@ -522,15 +568,19 @@ export class AIWindowTabStatesManager {
     if (needsSidebar) {
       lazy.AIWindowUI.updateSidebarInput(
         this.#window,
-        tabState.state.input ?? ""
+        tabState.state.input ?? EMPTY_SMARTBAR_INPUT_STATE
       );
     }
 
-    // Update the sidebar input when the sidebar ai-window connects
+    // Update the sidebar input and model when the sidebar ai-window connects
     if (mode === "sidebar" && selectedTab === tab) {
       lazy.AIWindowUI.updateSidebarInput(
         this.#window,
-        tabState.state.input ?? ""
+        tabState.state.input ?? EMPTY_SMARTBAR_INPUT_STATE
+      );
+      lazy.AIWindowUI.updateSidebarModel(
+        this.#window,
+        this.#resolveTabModelChoice(tabState)
       );
     }
   };
@@ -587,10 +637,10 @@ export class AIWindowTabStatesManager {
    * Gets the state for the specified tab. Will update the state
    * if a newState is passed in.
    *
-   * @param {*} tab The browser tab to get state for
-   * @param {*} [newState=null] New state to update the tab with
+   * @param {MozTabbrowserTab} tab The browser tab to get state for
+   * @param {?Partial<TabState>} [newState=null] New state to update the tab with
    *
-   * @returns {TabState}
+   * @returns {TabStateEntry}
    *
    * @private
    */
@@ -616,12 +666,15 @@ export class AIWindowTabStatesManager {
       // tab is not stored in the value of the WeakMap
       delete newState.tab;
 
-      const oldState = tabState.state ?? { input: "" };
-      // Set input to "" if oldState.mode is fullpage so the input
+      const oldState = tabState.state ?? { input: EMPTY_SMARTBAR_INPUT_STATE };
+      // Set input to empty if oldState.mode is fullpage so the input
       // is empty when the fullpage mode swaps to sidebar mode. We
       // don't need to track the input state for fullpage mode so
       // it stays empty until it's in sidebar mode.
-      const oldInput = oldState.mode === "fullpage" ? "" : oldState.input;
+      const oldInput =
+        oldState.mode === "fullpage"
+          ? EMPTY_SMARTBAR_INPUT_STATE
+          : oldState.input;
 
       // Overlay the newState to override the oldState values
       tabState.state = {
@@ -633,7 +686,7 @@ export class AIWindowTabStatesManager {
       // Enforce the above: newState may carry an input value, but fullpage
       // mode input should never be stored.
       if (tabState.state.mode === "fullpage") {
-        tabState.state.input = "";
+        tabState.state.input = EMPTY_SMARTBAR_INPUT_STATE;
       }
 
       this.#tabStates.set(tab, tabState);
@@ -710,14 +763,23 @@ export class AIWindowTabStatesManager {
 
   /**
    * Handles ai-window:conversation-changed events dispatched whenever
-   * an ai-window's active conversation is swapped. Triggers starter
-   * prompt loading when the conversation is empty and the current page
-   * URL differs from the one starters were already loaded for.
+   * an ai-window's active conversation is swapped. Keeps the tab state's
+   * conversation in sync with the live ai-window so consumers (e.g. the
+   * empty-close count) read the conversation the user actually engaged with,
+   * then triggers starter prompt loading when the conversation is empty and
+   * the current page URL differs from the one starters were already loaded for.
    *
    * @param {TabStateEvent} event
    */
   #onConversationChanged = event => {
     const { conversation, mode, tab } = event.detail;
+
+    if (tab && conversation) {
+      this.#getTabState(tab, {
+        conversation,
+        conversationId: conversation.id,
+      });
+    }
 
     if (!conversation || conversation.messageCount) {
       return;
@@ -730,6 +792,22 @@ export class AIWindowTabStatesManager {
     }
 
     lazy.AIWindowUI.updateStarterPrompts(this.#window, false, mode, tab);
+  };
+
+  /**
+   * Handles ai-window:model-changed events dispatched when the user selects
+   * a model from the smartbar.
+   *
+   * @param {TabStateEvent} event
+   */
+  #onModelChanged = event => {
+    const { tab, modelChoiceId } = event.detail;
+    const currentTabState = this.#getTabState(tab);
+    if (!currentTabState?.state) {
+      return;
+    }
+
+    this.#getTabState(tab, { ...currentTabState.state, modelChoiceId });
   };
 
   /**
@@ -751,8 +829,6 @@ export class AIWindowTabStatesManager {
       });
     }
 
-    const { conversation } = currentTabState.state;
-
     if (isOpen) {
       if (source === "toggle") {
         lazy.AIWindowUI.openSidebar(
@@ -762,26 +838,40 @@ export class AIWindowTabStatesManager {
       }
       lazy.AIWindowUI.updateSidebarInput(
         this.#window,
-        currentTabState?.state?.input ?? ""
+        currentTabState?.state?.input ?? EMPTY_SMARTBAR_INPUT_STATE
       );
     } else {
-      this.#updateEmptyCloseCount(conversation, isOpen, source);
+      this.#updateEmptyCloseCount(
+        currentTabState?.state?.conversation ?? null,
+        source
+      );
     }
   };
 
   /**
-   * Updates the empty-close count when the sidebar closes. Resets to 0
-   * if the user engaged in a conversation, otherwise increments.
-   * No-op once the prompt trigger count is reached.
+   * Updates the empty-close count when the sidebar closes. A started
+   * conversation means the user engaged with the sidebar, so the count is reset
+   * to 0 to keep the "keep closed" prompt from targeting active users. This
+   * reset runs even once the trigger count is reached, otherwise an engaged user
+   * stays stuck at the trigger and keeps seeing the prompt. An empty close
+   * increments the count, capped at the trigger.
    *
-   * @param {ChatConversation} conversation
-   * @param {boolean} isOpen
+   * @param {?ChatConversation} conversation The closed sidebar's conversation.
    * @param {'close' | 'toggle'} source
    */
-  #updateEmptyCloseCount(conversation, isOpen, source) {
+  #updateEmptyCloseCount(conversation, source) {
+    if (!["close", "toggle"].includes(source)) {
+      return;
+    }
+
+    if (conversation?.messageCount) {
+      if (lazy.sidebarEmptyCloseCount !== 0) {
+        Services.prefs.setIntPref(SIDEBAR_EMPTY_CLOSE_COUNT_PREF, 0);
+      }
+      return;
+    }
+
     if (
-      isOpen ||
-      !["close", "toggle"].includes(source) ||
       lazy.sidebarEmptyCloseCount >= SIDEBAR_EMPTY_CLOSE_PROMPT_TRIGGER_COUNT
     ) {
       return;
@@ -789,7 +879,7 @@ export class AIWindowTabStatesManager {
 
     Services.prefs.setIntPref(
       SIDEBAR_EMPTY_CLOSE_COUNT_PREF,
-      conversation?.messages?.length ? 0 : lazy.sidebarEmptyCloseCount + 1
+      lazy.sidebarEmptyCloseCount + 1
     );
   }
 
@@ -806,12 +896,11 @@ export class AIWindowTabStatesManager {
       return;
     }
 
-    this.#getTabState(tab, { input: "" });
+    this.#getTabState(tab, { input: EMPTY_SMARTBAR_INPUT_STATE });
   };
 
   #onCloseSidebar = () => {
-    lazy.AIWindowUI.closeSidebar(this.#window);
-    this.#updateEmptyCloseCount(null, false, "close");
+    lazy.AIWindowUI.closeSidebar(this.#window, "toggle");
   };
 
   /**
@@ -873,13 +962,15 @@ export class AIWindowTabStatesManager {
             this.#window,
             tabState.state.conversation
           );
-          tabState = this.#getTabState(tab, { input: "" });
+          tabState = this.#getTabState(tab, {
+            input: EMPTY_SMARTBAR_INPUT_STATE,
+          });
         }
 
         if (!isAiWindowUrl && lazy.AIWindowUI.isSidebarOpen(this.#window)) {
           lazy.AIWindowUI.updateSidebarInput(
             this.#window,
-            tabState.state.input ?? ""
+            tabState.state.input ?? EMPTY_SMARTBAR_INPUT_STATE
           );
         }
       },

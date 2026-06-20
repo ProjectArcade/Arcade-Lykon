@@ -114,8 +114,8 @@ static const DWORD sNVIDIABrokenNV12[] = {
 };
 
 extern mozilla::LazyLogModule sPDMLog;
-#define LOG(...) MOZ_LOG(sPDMLog, mozilla::LogLevel::Debug, (__VA_ARGS__))
-#define LOGV(...) MOZ_LOG(sPDMLog, mozilla::LogLevel::Debug, (__VA_ARGS__))
+#define LOG(...) MOZ_LOG_FMT(sPDMLog, mozilla::LogLevel::Debug, __VA_ARGS__)
+#define LOGV(...) MOZ_LOG_FMT(sPDMLog, mozilla::LogLevel::Debug, __VA_ARGS__)
 
 namespace mozilla {
 
@@ -356,12 +356,14 @@ class D3D11DXVA2Manager : public DXVA2Manager {
                            gfx::ColorRange aColorRange,
                            gfx::ColorDepth aColorDepth,
                            gfx::TransferFunction aTransferFunction,
+                           const Maybe<gfx::HDRMetadata>& aHDRMetadata,
                            uint32_t aWidth, uint32_t aHeight) override;
   HRESULT ConfigureForSize(gfx::SurfaceFormat aSurfaceFormat,
                            gfx::YUVColorSpace aColorSpace,
                            gfx::ColorRange aColorRange,
                            gfx::ColorDepth aColorDepth,
                            gfx::TransferFunction aTransferFunction,
+                           const Maybe<gfx::HDRMetadata>& aHDRMetadata,
                            uint32_t aWidth, uint32_t aHeight) override;
 
   bool IsD3D11() override { return true; }
@@ -437,6 +439,7 @@ class D3D11DXVA2Manager : public DXVA2Manager {
   gfx::ColorRange mColorRange = gfx::ColorRange::LIMITED;
   gfx::ColorDepth mColorDepth = gfx::ColorDepth::COLOR_8;
   gfx::TransferFunction mTransferFunction = gfx::TransferFunction::BT709;
+  Maybe<gfx::HDRMetadata> mHDRMetadata;
   gfx::SurfaceFormat mSurfaceFormat;
   std::list<ThreadSafeWeakPtr<layers::IMFSampleWrapper>> mIMFSampleWrappers;
   RefPtr<layers::ZeroCopyUsageInfo> mZeroCopyUsageInfo;
@@ -579,7 +582,7 @@ bool D3D11DXVA2Manager::SupportsConfig(const VideoInfo& aInfo,
       }
     }
   }
-  LOG("Select %s GUID", DecoderGUIDToStr(desc.Guid));
+  LOG("Select {} GUID", DecoderGUIDToStr(desc.Guid));
 
   hr = aOutputType->GetGUID(MF_MT_SUBTYPE, &subtype);
   if (SUCCEEDED(hr)) {
@@ -892,7 +895,7 @@ HRESULT D3D11DXVA2Manager::WrapTextureWithImage(IMFSample* aVideoSample,
   RefPtr<D3D11TextureIMFSampleImage> image = new D3D11TextureIMFSampleImage(
       aVideoSample, texture, arrayIndex, gfx::IntSize(mWidth, mHeight), aRegion,
       format, ToColorSpace2(mYUVColorSpace), mColorRange, mTransferFunction,
-      mColorDepth);
+      mHDRMetadata, mColorDepth);
   image->AllocateTextureClient(mKnowsCompositor, mZeroCopyUsageInfo,
                                mWriteFence);
 
@@ -912,7 +915,7 @@ HRESULT D3D11DXVA2Manager::WrapTextureWithImage(
   RefPtr<D3D11TextureAVFrameImage> image = new D3D11TextureAVFrameImage(
       aTextureWrapper, gfx::IntSize(mWidth, mHeight), aRegion,
       ToColorSpace2(mYUVColorSpace), mColorRange, mTransferFunction,
-      mColorDepth);
+      mHDRMetadata, mColorDepth);
   image->AllocateTextureClient(mKnowsCompositor, mZeroCopyUsageInfo,
                                mWriteFence);
   image.forget(aOutImage);
@@ -1014,6 +1017,7 @@ D3D11DXVA2Manager::ConfigureForSize(IMFMediaType* aInputType,
                                     gfx::ColorRange aColorRange,
                                     gfx::ColorDepth aColorDepth,
                                     gfx::TransferFunction aTransferFunction,
+                                    const Maybe<gfx::HDRMetadata>& aHDRMetadata,
                                     uint32_t aWidth, uint32_t aHeight) {
   GUID subType = {0};
   HRESULT hr = aInputType->GetGUID(MF_MT_SUBTYPE, &subType);
@@ -1027,7 +1031,8 @@ D3D11DXVA2Manager::ConfigureForSize(IMFMediaType* aInputType,
 
   if (subType == mInputSubType && aWidth == mWidth && aHeight == mHeight &&
       mYUVColorSpace == aColorSpace && mColorRange == aColorRange &&
-      mColorDepth == aColorDepth && mTransferFunction == aTransferFunction) {
+      mColorDepth == aColorDepth && mTransferFunction == aTransferFunction &&
+      mHDRMetadata == aHDRMetadata) {
     // If the media type hasn't changed, don't reconfigure.
     return S_OK;
   }
@@ -1100,6 +1105,7 @@ D3D11DXVA2Manager::ConfigureForSize(IMFMediaType* aInputType,
   mColorRange = aColorRange;
   mColorDepth = aColorDepth;
   mTransferFunction = aTransferFunction;
+  mHDRMetadata = aHDRMetadata;
   if (mTextureClientAllocator) {
     mSurfaceFormat = SurfaceFormatFromSubType(subType);
     mTextureClientAllocator->SetPreferredSurfaceFormat(mSurfaceFormat);
@@ -1109,8 +1115,8 @@ D3D11DXVA2Manager::ConfigureForSize(IMFMediaType* aInputType,
     hr = mProcessor->Init(gfx::IntSize(mWidth, mHeight));
     NS_ENSURE_TRUE(SUCCEEDED(hr), hr);
   }
-  LOG("Configured D3D11DXVA2Manager, size=[%u,%u], colorSpace=%hhu, "
-      "colorRange=%hhu, colorDepth=%hhu, transferFunction=%hhu",
+  LOG("Configured D3D11DXVA2Manager, size=[{},{}], colorSpace={}, "
+      "colorRange={}, colorDepth={}, transferFunction={}",
       mWidth, mHeight, static_cast<uint8_t>(mYUVColorSpace),
       static_cast<uint8_t>(mColorRange), static_cast<uint8_t>(mColorDepth),
       static_cast<uint8_t>(mTransferFunction));
@@ -1123,10 +1129,12 @@ D3D11DXVA2Manager::ConfigureForSize(gfx::SurfaceFormat aSurfaceFormat,
                                     gfx::ColorRange aColorRange,
                                     gfx::ColorDepth aColorDepth,
                                     gfx::TransferFunction aTransferFunction,
+                                    const Maybe<gfx::HDRMetadata>& aHDRMetadata,
                                     uint32_t aWidth, uint32_t aHeight) {
   if (aWidth == mWidth && aHeight == mHeight && mYUVColorSpace == aColorSpace &&
       mColorRange == aColorRange && aSurfaceFormat == mSurfaceFormat &&
-      mColorDepth == aColorDepth && mTransferFunction == aTransferFunction) {
+      mColorDepth == aColorDepth && mTransferFunction == aTransferFunction &&
+      mHDRMetadata == aHDRMetadata) {
     // No need to reconfigure if nothing changes.
     return S_OK;
   }
@@ -1139,6 +1147,7 @@ D3D11DXVA2Manager::ConfigureForSize(gfx::SurfaceFormat aSurfaceFormat,
   mColorDepth = aColorDepth;
   mSurfaceFormat = aSurfaceFormat;
   mTransferFunction = aTransferFunction;
+  mHDRMetadata = aHDRMetadata;
   if (mTextureClientAllocator) {
     // mSurfaceFormat here is one of the following:
     // * SurfaceFormat::NV12
@@ -1151,9 +1160,9 @@ D3D11DXVA2Manager::ConfigureForSize(gfx::SurfaceFormat aSurfaceFormat,
   if (isSizeChanged && mProcessor) {
     mProcessor->Init(gfx::IntSize(mWidth, mHeight));
   }
-  LOG("Configured D3D11DXVA2Manager, size=[%u,%u], colorSpace=%hhu, "
-      "colorRange=%hhu, colorDepth=%hhu, transferFunction=%hhu, "
-      "surfaceFormat=%hhd",
+  LOG("Configured D3D11DXVA2Manager, size=[{},{}], colorSpace={}, "
+      "colorRange={}, colorDepth={}, transferFunction={}, "
+      "surfaceFormat={}",
       mWidth, mHeight, static_cast<uint8_t>(mYUVColorSpace),
       static_cast<uint8_t>(mColorRange), static_cast<uint8_t>(mColorDepth),
       static_cast<uint8_t>(mTransferFunction),
@@ -1261,15 +1270,15 @@ HRESULT D3D11DXVA2Manager::CopyTextureToImage(
   D3D11_TEXTURE2D_DESC inDesc;
   aInTexture.mTexture->GetDesc(&inDesc);
 
-  LOG("CopyTextureToImage, inDesc.Format=%d, mYUVColorSpace=%d, "
-      "mColorRange=%d, mColorDepth=%d",
-      inDesc.Format, static_cast<int>(mYUVColorSpace),
+  LOG("CopyTextureToImage, inDesc.Format={}, mYUVColorSpace={}, "
+      "mColorRange={}, mColorDepth={}",
+      static_cast<int>(inDesc.Format), static_cast<int>(mYUVColorSpace),
       static_cast<int>(mColorRange), static_cast<int>(mColorDepth));
 
   RefPtr<D3D11ShareHandleImage> image = new D3D11ShareHandleImage(
       gfx::IntSize(mWidth, mHeight), aInTexture.mRegion,
       ToColorSpace2(mYUVColorSpace), mColorRange, mTransferFunction,
-      mColorDepth);
+      mHDRMetadata, mColorDepth);
 
   if (!image->AllocateTexture(mTextureClientAllocator, mDevice)) {
     LOG("Failed to allocate texture!");
@@ -1287,8 +1296,8 @@ HRESULT D3D11DXVA2Manager::CopyTextureToImage(
   D3D11_TEXTURE2D_DESC outDesc;
   texture->GetDesc(&outDesc);
 
-  LOGV("CopyTexture, inTextureFormat=%d, outTextureFormat=%d", inDesc.Format,
-       outDesc.Format);
+  LOGV("CopyTexture, inTextureFormat={}, outTextureFormat={}",
+       static_cast<int>(inDesc.Format), static_cast<int>(outDesc.Format));
 
   RefPtr<IDXGIKeyedMutex> mutex;
   texture->QueryInterface((IDXGIKeyedMutex**)getter_AddRefs(mutex));
@@ -1378,7 +1387,7 @@ VideoProcessorD3D11* D3D11DXVA2Manager::GetOrCreateVideoProcessor() {
   HRESULT hr = mProcessor->Init(gfx::IntSize(mWidth, mHeight));
   if (FAILED(hr)) {
     mProcessor = nullptr;
-    LOG("Failed to init video processor D3D11, hr=%lx", hr);
+    LOG("Failed to init video processor D3D11, hr={:x}", hr);
   }
   return mProcessor;
 }

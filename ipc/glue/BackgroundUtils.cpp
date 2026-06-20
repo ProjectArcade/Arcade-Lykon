@@ -187,7 +187,7 @@ already_AddRefed<nsIContentSecurityPolicy> CSPInfoToCSP(
   nsresult stackResult;
   nsresult& rv = aOptionalResult ? *aOptionalResult : stackResult;
 
-  RefPtr<nsCSPContext> csp = new nsCSPContext();
+  RefPtr csp = MakeRefPtr<nsCSPContext>();
 
   if (aRequestingDoc) {
     rv = csp->SetRequestContextWithDocument(aRequestingDoc);
@@ -877,6 +877,7 @@ nsresult LoadInfoArgsToLoadInfo(const LoadInfoArgs& loadInfoArgs,
       reservedClientInfo, initialClientInfo, controller,
       loadInfoArgs.securityFlags(), loadInfoArgs.sandboxFlags(),
       loadInfoArgs.contentPolicyType(),
+      loadInfoArgs.serviceWorkerTaintingSynthesized(),
       static_cast<LoadTainting>(loadInfoArgs.tainting()),
 
 #define DEFINE_ARGUMENT(_t, _n, name, _d) loadInfoArgs.name(),

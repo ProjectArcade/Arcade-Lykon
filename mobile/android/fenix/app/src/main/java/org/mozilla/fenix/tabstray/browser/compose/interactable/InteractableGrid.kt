@@ -6,11 +6,11 @@ package org.mozilla.fenix.tabstray.browser.compose.interactable
 
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector2D
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridItemInfo
 import androidx.compose.foundation.lazy.grid.LazyGridItemScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,24 +45,19 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import mozilla.components.compose.base.modifier.thenConditional
 import org.mozilla.fenix.tabstray.browser.compose.TabItemInteractionState
 import org.mozilla.fenix.tabstray.controller.TabInteractionHandler
-
-/**
- * Elevation parameters for interactable tab items.
- */
-private const val ELEVATION_SWIPE_ACTIVE = 10f
-private const val ELEVATION_DRAGGED_ITEM = 1f
-private const val ELEVATION_NO_INTERACTION = 0f
+import org.mozilla.fenix.tabstray.ui.tabitems.Elevation
 
 /**
  * Remember the interactable state for grid items.
  *
  * @param gridState State of the grid.
  * @param tabInteractionHandler Handlers tab interactions such as moves and drag and drop.
- * @param ignoredItems List of keys for non-draggable items.
+ * @param ignoredItems Set of keys for non-draggable items.
+ * @param liveReorderEnabled Whether tab reorders should happen 'live' during a drag.
  * @param onLongPress Optional callback to be invoked when long pressing an item.
- * @param onExitLongPress Optional callback to be invoked when the item is dragged after long press.
  * @param dragAndDropEnabled Whether drag and drop should be considered in the list of candidates.  Note that
  * this is trivially true, but if we use this grid for other pages, the setting is available.
  */
@@ -69,16 +65,16 @@ private const val ELEVATION_NO_INTERACTION = 0f
 fun createGridInteractionState(
     gridState: LazyGridState,
     tabInteractionHandler: TabInteractionHandler,
-    ignoredItems: List<Any>,
+    ignoredItems: Set<Any>,
+    liveReorderEnabled: Boolean,
     onLongPress: (LazyGridItemInfo) -> Unit = {},
-    onExitLongPress: () -> Unit = {},
     dragAndDropEnabled: Boolean = true,
 ): GridInteractionState {
     val scope = rememberCoroutineScope()
     val touchSlop = LocalViewConfiguration.current.touchSlop
     val hapticFeedback = LocalHapticFeedback.current
     val state = remember(gridState) {
-        GridInteractionState(
+        GridInteractionStateImpl(
             gridState = gridState,
             touchSlop = touchSlop,
             tabInteractionHandler = tabInteractionHandler,
@@ -86,11 +82,83 @@ fun createGridInteractionState(
             ignoredItems = ignoredItems,
             onLongPress = onLongPress,
             hapticFeedback = hapticFeedback,
-            onExitLongPress = onExitLongPress,
             dragAndDropEnabled = dragAndDropEnabled,
+            liveReorderEnabled = liveReorderEnabled,
         )
     }
     return state
+}
+
+/**
+ * Stable snapshot interface for a grid's interaction state.
+ */
+@Stable
+interface GridInteractionState {
+    /**  LayoutCoordinates used to map between grid and screen space. */
+    val gridLayoutCoordinates: LayoutCoordinates?
+
+    /**  The currently dragged item.  Can be [InteractionState.Grid.None] */
+    val draggedItem: InteractionState.Grid
+
+    /**  The currently hovered item.  Can be [InteractionState.Grid.None] */
+    val hoveredItem: InteractionState.Grid
+
+    /**  The [Rect] used to display a reorder placement indicator */
+    val highlightedRect: Rect?
+
+    /** The current [InteractionMode], e.g. reordering, scrolling, drag and drop */
+    val interactionMode: InteractionMode.Grid
+
+    /** The previously dragged item's key */
+    val previousKeyOfDraggedItem: TabItemKey?
+
+    /** Cached offset used to animate the item from a cancelled drag back into place */
+    val previousItemAnimatableOffset: Animatable<Offset, AnimationVector2D>
+
+    /** A tab item's size */
+    val itemSize: IntSize?
+
+    /**
+     * Called to update the cached offset of a dragged item by its [LayoutCoordinates]
+     *
+     * @param itemCoordinates the item's layout coordinates
+     */
+    fun onDraggedItemPositioned(itemCoordinates: LayoutCoordinates)
+
+    /**
+     * Computes the offset of an item at a given index.
+     * @param index the item's index
+     */
+    fun computeItemOffset(index: Int): Offset
+
+    /**
+     * Called when a slop threshold has been exceeded to start a drag event.
+     * @param offset The offset for the drag event
+     * @param shouldLongPress Whether long press is needed to initiate a drag event
+     */
+    fun onTouchSlopPassed(offset: Offset, shouldLongPress: Boolean)
+
+    /**
+     * Called when a drag event is updated.
+     * @param offset the latest offset for the drag event
+     * @param preserveSelectMode whether select mode should be preserved
+     */
+    fun onDrag(offset: Offset, preserveSelectMode: Boolean)
+
+    /**
+     * Called when a drag event ends.
+     */
+    fun onDragEnd()
+
+    /**
+     * Called when a drag is cancelled, for example, when a user lets go without performing an action.
+     */
+    fun onDragCancelled()
+
+    /**
+     * Updates the stored layout coordinates in order to map grid space to screen space.
+     */
+    fun updateGridLayoutCoordinates(coordinates: LayoutCoordinates)
 }
 
 /**
@@ -99,15 +167,16 @@ fun createGridInteractionState(
  * @param gridState State of the grid.
  * @param touchSlop Distance in pixels the user can wander until we consider they started dragging.
  * @param scope [CoroutineScope] used for scrolling to the target item.
- * @param hapticFeedback [HapticFeedback] used for performing haptic feedback on item long press.\
+ * @param hapticFeedback [HapticFeedback] used for performing haptic feedback on item long press.
  * @param dragAndDropEnabled: Whether drag and drop is enabled for this grid.  If not enabled, it will be excluded
  * as a candidate for interaction when computing the most likely gesture candidate.
  * @param tabInteractionHandler Handlers tab interactions such as moves and drag and drop.
  * @param onLongPress Optional callback to be invoked when long pressing an item.
- * @param onExitLongPress Optional callback to be invoked when the item is dragged after long press.
  * @param ignoredItems List of keys for non-draggable items.
+ * @param liveReorderEnabled Whether tab reorders should happen 'live' during a drag.
  */
-class GridInteractionState internal constructor(
+@Suppress("LongParameterList")
+class GridInteractionStateImpl internal constructor(
     private val gridState: LazyGridState,
     private val touchSlop: Float,
     private val scope: CoroutineScope,
@@ -115,37 +184,43 @@ class GridInteractionState internal constructor(
     private val dragAndDropEnabled: Boolean,
     private val tabInteractionHandler: TabInteractionHandler,
     private val onLongPress: (LazyGridItemInfo) -> Unit = {},
-    private val onExitLongPress: () -> Unit = {},
-    private val ignoredItems: List<Any> = emptyList(),
-) {
-    internal var gridLayoutCoordinates: LayoutCoordinates? = null
+    private val ignoredItems: Set<Any> = emptySet(),
+    private val liveReorderEnabled: Boolean,
+) : GridInteractionState {
+
+    override var gridLayoutCoordinates: LayoutCoordinates? by mutableStateOf(null)
+        private set
+
     private var cachedDraggedItemLayoutOffset: Offset? = null
 
-    internal var draggedItem by mutableStateOf<InteractionState>(InteractionState.None)
-        private set
-    internal var hoveredItem by mutableStateOf<InteractionState>(InteractionState.None)
-        private set
-    internal var highlightedRect by mutableStateOf<Rect?>(null)
-        private set
-    internal var interactionMode by mutableStateOf<InteractionMode>(InteractionMode.None)
+    override var draggedItem by mutableStateOf<InteractionState.Grid>(InteractionState.Grid.None)
         private set
 
-    internal var moved by mutableStateOf(false)
+    override var hoveredItem by mutableStateOf<InteractionState.Grid>(InteractionState.Grid.None)
         private set
 
-    var scrollJob by mutableStateOf<Job?>(null)
+    override var highlightedRect by mutableStateOf<Rect?>(null)
+        private set
+    override var interactionMode by mutableStateOf<InteractionMode.Grid>(InteractionMode.Grid.None)
+        private set
+    private var moved by mutableStateOf(false)
 
-    val itemSize: IntSize? by lazy {
-        gridState.layoutInfo.visibleItemsInfo.firstOrNull()?.size
-    }
+    override var previousKeyOfDraggedItem by mutableStateOf<TabItemKey?>(null)
+        private set
+    override val previousItemAnimatableOffset = Animatable(Offset.Zero, Offset.VectorConverter)
 
-    internal fun onDraggedItemPositioned(itemCoordinates: LayoutCoordinates) {
+    private var scrollJob by mutableStateOf<Job?>(null)
+
+    override val itemSize: IntSize?
+        get() = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.key !in ignoredItems }?.size
+
+    override fun onDraggedItemPositioned(itemCoordinates: LayoutCoordinates) {
         gridLayoutCoordinates?.let {
             cachedDraggedItemLayoutOffset = it.localPositionOf(itemCoordinates, Offset.Zero)
         }
     }
 
-    internal fun computeItemOffset(index: Int): Offset {
+    override fun computeItemOffset(index: Int): Offset {
         val itemAtIndex = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info -> info.index == index }
         if (itemAtIndex != null) {
             return draggedItem.initialOffset + draggedItem.cumulatedOffset - itemAtIndex.offset.toOffset()
@@ -154,16 +229,11 @@ class GridInteractionState internal constructor(
         return draggedItem.initialOffset + draggedItem.cumulatedOffset - cachedOffset
     }
 
-    internal var previousKeyOfDraggedItem by mutableStateOf<TabItemKey?>(null)
-        private set
-    internal var previousItemAnimatableOffset = Animatable(Offset.Zero, Offset.VectorConverter)
-        private set
-
-    internal fun onTouchSlopPassed(offset: Offset, shouldLongPress: Boolean) {
+    override fun onTouchSlopPassed(offset: Offset, shouldLongPress: Boolean) {
         gridState.findItem(offset)?.also { item ->
             val key = item.key as? String
             key?.let {
-                draggedItem = InteractionState.Active(
+                draggedItem = InteractionState.Grid.Active(
                     index = item.index,
                     key = it,
                     initialOffset = item.offset.toOffset(),
@@ -173,46 +243,62 @@ class GridInteractionState internal constructor(
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                 onLongPress(item)
             }
-            moved = !shouldLongPress
         }
     }
 
-    internal fun onDragEnd() {
-        if (draggedItem is InteractionState.Active) {
+    override fun onDragEnd() {
+        if (draggedItem is InteractionState.Grid.Active) {
             handleDragEnd(interactionMode)
         }
         resetState()
     }
 
-    private fun handleDragEnd(mode: InteractionMode) {
+    override fun updateGridLayoutCoordinates(coordinates: LayoutCoordinates) {
+        gridLayoutCoordinates = coordinates
+    }
+
+    private fun doReorder(mode: InteractionMode.Grid.Reordering) {
+        if (draggedItem.index == gridState.firstVisibleItemIndex) {
+            itemSize?.height?.let {
+                autoScroll(-it.toFloat())
+            }
+        }
+        tabInteractionHandler.onMove(
+            sourceKey = mode.source.key,
+            targetKey = mode.target.key,
+            placeAfter = mode.placeAfter,
+        )
+    }
+
+    private fun handleDragEnd(mode: InteractionMode.Grid) {
         when (mode) {
-            is InteractionMode.DragAndDrop -> {
+            is InteractionMode.Grid.DragAndDrop -> {
                 tabInteractionHandler.onDrop(
                     mode.source.key,
                     mode.target.key,
                 )
             }
 
-            is InteractionMode.Reordering -> {
-                if (draggedItem.index == gridState.firstVisibleItemIndex) {
-                    itemSize?.height?.let {
-                        autoScroll(-it.toFloat())
-                    }
+            is InteractionMode.Grid.Reordering -> {
+                if (!liveReorderEnabled) {
+                    doReorder(mode)
                 }
-                tabInteractionHandler.onMove(
-                    sourceKey = mode.source.key,
-                    targetKey = mode.target.key,
-                    placeAfter = mode.placeAfter,
-                )
+                tabInteractionHandler.onDragCancel()
             }
 
-            is InteractionMode.Scroll, is InteractionMode.None -> {
+            is InteractionMode.Grid.Scroll, is InteractionMode.Grid.None -> {
                 // No action is taken
+                if (moved) {
+                    tabInteractionHandler.onDragCancel()
+                }
             }
         }
     }
 
-    internal fun onDragCancelled() {
+    override fun onDragCancelled() {
+        if (moved) {
+            tabInteractionHandler.onDragCancel()
+        }
         resetState()
     }
 
@@ -227,9 +313,9 @@ class GridInteractionState internal constructor(
         }
     }
 
-    private fun resetState() {
-        if (draggedItem is InteractionState.Active) {
-            val draggingItem = draggedItem as InteractionState.Active
+    private fun animateItems() {
+        if (draggedItem is InteractionState.Grid.Active) {
+            val draggingItem = draggedItem as InteractionState.Grid.Active
             previousKeyOfDraggedItem = draggedItem.key
             val startOffset = computeItemOffset(draggingItem.index)
             scope.launch {
@@ -244,23 +330,35 @@ class GridInteractionState internal constructor(
                 previousKeyOfDraggedItem = null
             }
         }
-        draggedItem = InteractionState.None
-        hoveredItem = InteractionState.None
+    }
+
+    private fun resetState() {
+        animateItems()
+        draggedItem = InteractionState.Grid.None
+        hoveredItem = InteractionState.Grid.None
         highlightedRect = null
-        interactionMode = InteractionMode.None
+        interactionMode = InteractionMode.Grid.None
         moved = false
         scrollJob?.cancel()
         scrollJob = null
-        // onExitLongPress()
     }
 
-    private fun handleReorderingModeOnDrag(mode: InteractionMode.Reordering) {
-        // Update the gesture indicators
-        hoveredItem = InteractionState.None
-        highlightedRect = mode.rect
+    private fun handleReorderingModeOnDrag(mode: InteractionMode.Grid.Reordering) {
+        hoveredItem = InteractionState.Grid.None
+        if (liveReorderEnabled) {
+            doReorder(mode)
+            // Update the dragged item's index as reorders happen
+            val newIndex = gridState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == draggedItem.key }?.index ?: -1
+            if (newIndex != -1) {
+                draggedItem = draggedItem.copyWithNewIndex(newIndex)
+            }
+        } else {
+            // Update the gesture indicator
+            highlightedRect = mode.rect
+        }
     }
 
-    private fun handleDragAndDropModeOnDrag(mode: InteractionMode.DragAndDrop) {
+    private fun handleDragAndDropModeOnDrag(mode: InteractionMode.Grid.DragAndDrop) {
         highlightedRect = null
         if (hoveredItem != mode.target) {
             hoveredItem = mode.target
@@ -269,7 +367,7 @@ class GridInteractionState internal constructor(
 
     private fun handleNoInteractionModeOnDrag(itemOffset: GridItemOffset) {
         highlightedRect = null
-        hoveredItem = InteractionState.None
+        hoveredItem = InteractionState.Grid.None
         val overscroll = findOverscroll(
             draggedItem = draggedItem,
             itemOffset = itemOffset,
@@ -281,7 +379,7 @@ class GridInteractionState internal constructor(
     }
 
     private fun handleScrollInteractionModeOnDrag(itemOffset: GridItemOffset) {
-        hoveredItem = InteractionState.None
+        hoveredItem = InteractionState.Grid.None
         highlightedRect = null
         val overscroll = findOverscroll(
             draggedItem = draggedItem,
@@ -293,14 +391,19 @@ class GridInteractionState internal constructor(
         }
     }
 
-    internal fun onDrag(offset: Offset) {
+    override fun onDrag(offset: Offset, preserveSelectMode: Boolean) {
         draggedItem = draggedItem.incrementCumulatedOffset(offset)
         if (!moved && draggedItem.cumulatedOffset.getDistance() > touchSlop) {
-            onExitLongPress()
+            (draggedItem as? InteractionState.Grid.Active)?.let { active ->
+                tabInteractionHandler.onDragStart(
+                    sourceKey = active.key,
+                    preserveSelectMode = preserveSelectMode,
+                )
+            }
             moved = true
         }
 
-        val draggingItem = draggedItem as? InteractionState.Active ?: return
+        val draggingItem = draggedItem as? InteractionState.Grid.Active ?: return
         val itemOffset = GridItemOffset(
             draggingItem,
             computeItemOffset(draggingItem.index),
@@ -314,22 +417,27 @@ class GridInteractionState internal constructor(
             ignoredItems = ignoredItems,
             dragAndDropEnabled = dragAndDropEnabled,
         )
+        // debounce spurious reorder events
+        // note that repeated, identical scroll events are valid
+        if (mode is InteractionMode.Grid.Reordering && interactionMode == mode) {
+            return
+        }
         interactionMode = mode
 
         when (mode) {
-            is InteractionMode.DragAndDrop -> {
+            is InteractionMode.Grid.DragAndDrop -> {
                 handleDragAndDropModeOnDrag(mode = mode)
             }
 
-            is InteractionMode.Reordering -> {
+            is InteractionMode.Grid.Reordering -> {
                 handleReorderingModeOnDrag(mode = mode)
             }
 
-            is InteractionMode.None -> {
+            is InteractionMode.Grid.None -> {
                 handleNoInteractionModeOnDrag(itemOffset = itemOffset)
             }
 
-            is InteractionMode.Scroll -> {
+            is InteractionMode.Grid.Scroll -> {
                 handleScrollInteractionModeOnDrag(itemOffset = itemOffset)
             }
         }
@@ -340,11 +448,11 @@ private fun determineInteractionMode(
     gridState: LazyGridState,
     draggedItem: InteractionState,
     itemOffset: GridItemOffset,
-    ignoredItems: List<Any>,
+    ignoredItems: Set<Any>,
     dragAndDropEnabled: Boolean,
-): InteractionMode {
-    if (gridState.isScrollInProgress) return InteractionMode.None
-    if (draggedItem is InteractionState.None) return InteractionMode.None
+): InteractionMode.Grid {
+    if (gridState.isScrollInProgress) return InteractionMode.Grid.None
+    if (draggedItem is InteractionState.Grid.None) return InteractionMode.Grid.None
     val topCandidate = gatherCandidates(
         gridState = gridState,
         draggedItemOffset = itemOffset,
@@ -360,13 +468,17 @@ private fun determineInteractionMode(
     val key = topCandidate?.anchorItem?.key as? String
     return when {
         topCandidate == null || key == null -> {
-            InteractionMode.None
+            InteractionMode.Grid.None
+        }
+
+        topCandidate.type is InteractionType.None -> {
+            InteractionMode.Grid.None
         }
 
         topCandidate.type is InteractionType.Overlap -> {
-            InteractionMode.DragAndDrop(
-                source = draggedItem as InteractionState.Active,
-                target = InteractionState.Active(
+            InteractionMode.Grid.DragAndDrop(
+                source = draggedItem as InteractionState.Grid.Active,
+                target = InteractionState.Grid.Active(
                     key = key,
                     index = topCandidate.anchorItem.index,
                     initialOffset = topCandidate.anchorItem.offset.toOffset(),
@@ -375,9 +487,9 @@ private fun determineInteractionMode(
         }
 
         topCandidate.type is InteractionType.LeftGutter -> {
-            InteractionMode.Reordering(
-                source = draggedItem as InteractionState.Active,
-                target = InteractionState.Active(
+            InteractionMode.Grid.Reordering(
+                source = draggedItem as InteractionState.Grid.Active,
+                target = InteractionState.Grid.Active(
                     key = key,
                     index = topCandidate.anchorItem.index,
                     initialOffset = topCandidate.anchorItem.offset.toOffset(),
@@ -388,9 +500,9 @@ private fun determineInteractionMode(
         }
 
         topCandidate.type is InteractionType.RightGutter -> {
-            InteractionMode.Reordering(
-                source = draggedItem as InteractionState.Active,
-                target = InteractionState.Active(
+            InteractionMode.Grid.Reordering(
+                source = draggedItem as InteractionState.Grid.Active,
+                target = InteractionState.Grid.Active(
                     key = key,
                     index = topCandidate.anchorItem.index,
                     initialOffset = topCandidate.anchorItem.offset.toOffset(),
@@ -401,10 +513,10 @@ private fun determineInteractionMode(
         }
 
         topCandidate.type is InteractionType.Scroll -> {
-            InteractionMode.Scroll(topCandidate.type.scroll)
+            InteractionMode.Grid.Scroll(topCandidate.type.scroll)
         }
 
-        else -> InteractionMode.None
+        else -> InteractionMode.Grid.None
     }
 }
 
@@ -433,9 +545,9 @@ internal fun Rect.closestPointTo(offset: Offset): Offset {
 private fun getScrollCandidates(
     gridState: LazyGridState,
     draggedItemOffset: GridItemOffset,
-): List<InteractionCandidate> {
+): List<GridInteractionCandidate> {
     val firstVisible = gridState.layoutInfo.visibleItemsInfo.firstOrNull() ?: return emptyList()
-    val candidates = mutableListOf<InteractionCandidate>()
+    val candidates = mutableListOf<GridInteractionCandidate>()
     val scrollRectSize = Size(
         width = gridState.layoutInfo.viewportSize.width.toFloat(),
         height = firstVisible.size.height / 3.0f,
@@ -448,7 +560,7 @@ private fun getScrollCandidates(
         )
         if (scrollUpRect.bottom > draggedItemOffset.start.y) {
             candidates.add(
-                InteractionCandidate(
+                GridInteractionCandidate(
                     type = InteractionType.Scroll(scroll = draggedItemOffset.start.y.minus(scrollUpRect.bottom)),
                     anchorItem = firstVisible,
                     score = scrollUpRect.closestDistanceTo(draggedItemOffset.center),
@@ -465,7 +577,7 @@ private fun getScrollCandidates(
         )
         if (scrollDownRect.top < draggedItemOffset.end.y) {
             candidates.add(
-                InteractionCandidate(
+                GridInteractionCandidate(
                     type = InteractionType.Scroll(scroll = draggedItemOffset.end.y.minus(scrollDownRect.top)),
                     anchorItem = lastVisible,
                     score = scrollDownRect.closestDistanceTo(draggedItemOffset.center),
@@ -485,9 +597,9 @@ internal fun gatherCandidates(
     gridState: LazyGridState,
     draggedItemOffset: GridItemOffset,
     draggedItem: InteractionState,
-    ignoredItems: List<TabItemKey>,
-): List<InteractionCandidate> {
-    val candidates = mutableListOf<InteractionCandidate>()
+    ignoredItems: Set<TabItemKey>,
+): List<GridInteractionCandidate> {
+    val candidates = mutableListOf<GridInteractionCandidate>()
 
     candidates.addAll(
         elements =
@@ -498,7 +610,7 @@ internal fun gatherCandidates(
     )
 
     for (itemCandidate in gridState.layoutInfo.visibleItemsInfo) {
-        if (itemCandidate.key in ignoredItems || itemCandidate.key == draggedItem.key) continue
+        if (itemCandidate.key in ignoredItems) continue
         val gutterSpacing = gridState.layoutInfo.mainAxisItemSpacing
         val verticalGutterSize = Size(width = gutterSpacing.toFloat(), height = itemCandidate.size.height.toFloat())
 
@@ -507,54 +619,71 @@ internal fun gatherCandidates(
             offset = itemCandidate.offset.toOffset(),
             size = itemCandidate.size.toSize(),
         )
-        // prefer the tab item's center point for scoring over hitting the closest space within the body
-        // or it becomes very difficult to position over the gutters on the edges
-        val distanceToCenter = (bodyRect.center - draggedItemOffset.center).getDistanceSquared()
-        candidates.add(
-            InteractionCandidate(
-                type = InteractionType.Overlap,
-                anchorItem = itemCandidate,
-                score = distanceToCenter,
-            ),
-        )
 
-        // Left gutter candidate
-        val leftGutter = Rect(
-            offset = Offset(
-                itemCandidate.offset.x.toFloat(),
-                itemCandidate.offset.y.toFloat() + gridState.layoutInfo.beforeContentPadding,
-            ),
-            size = verticalGutterSize,
-        )
-        candidates.add(
-            InteractionCandidate(
-                type = InteractionType.LeftGutter(rect = leftGutter),
-                anchorItem = itemCandidate,
-                score = leftGutter.closestDistanceTo(draggedItemOffset.center),
-            ),
-        )
+        // Set up a no-op candidate to prevent stutters if the dragged item is held over its
+        // current position in the grid.  This is most noticeable with live reordering enabled.
+        if (itemCandidate.key == draggedItem.key) {
+            candidates.add(
+                GridInteractionCandidate(
+                    type = InteractionType.None,
+                    anchorItem = itemCandidate,
+                    score = bodyRect.closestDistanceTo(draggedItemOffset.center),
+                ),
+            )
+        } else {
+            // prefer the tab item's center point for scoring over hitting the closest space within the body
+            // or it becomes very difficult to position over the gutters on the edges
+            val distanceToCenter = (bodyRect.center - draggedItemOffset.center).getDistanceSquared()
+            candidates.add(
+                GridInteractionCandidate(
+                    type = InteractionType.Overlap,
+                    anchorItem = itemCandidate,
+                    score = distanceToCenter,
+                ),
+            )
 
-        // Right gutter candidate
-        val rightGutter = Rect(
-            offset = Offset(
-                itemCandidate.endOffset.x.toFloat() + gutterSpacing.toFloat(),
-                itemCandidate.offset.y.toFloat() + gridState.layoutInfo.beforeContentPadding,
-            ),
-            size = verticalGutterSize,
-        )
-        candidates.add(
-            InteractionCandidate(
-                type = InteractionType.RightGutter(rect = rightGutter),
-                anchorItem = itemCandidate,
-                score = rightGutter.closestDistanceTo(draggedItemOffset.center),
-            ),
-        )
+            // Left gutter candidate
+            val leftGutter = Rect(
+                offset = Offset(
+                    itemCandidate.offset.x.toFloat(),
+                    itemCandidate.offset.y.toFloat() + gridState.layoutInfo.beforeContentPadding,
+                ),
+                size = verticalGutterSize,
+            )
+            candidates.add(
+                GridInteractionCandidate(
+                    type = InteractionType.LeftGutter(rect = leftGutter),
+                    anchorItem = itemCandidate,
+                    score = leftGutter.closestDistanceTo(draggedItemOffset.center),
+                ),
+            )
+
+            // Right gutter candidate
+            val rightGutter = Rect(
+                offset = Offset(
+                    itemCandidate.endOffset.x.toFloat() + gutterSpacing.toFloat(),
+                    itemCandidate.offset.y.toFloat() + gridState.layoutInfo.beforeContentPadding,
+                ),
+                size = verticalGutterSize,
+            )
+            candidates.add(
+                GridInteractionCandidate(
+                    type = InteractionType.RightGutter(rect = rightGutter),
+                    anchorItem = itemCandidate,
+                    score = rightGutter.closestDistanceTo(draggedItemOffset.center),
+                ),
+            )
+        }
     }
 
     return candidates
 }
 
-private fun findOverscroll(draggedItem: InteractionState, itemOffset: GridItemOffset, gridState: LazyGridState): Float {
+private fun findOverscroll(
+    draggedItem: InteractionState.Grid,
+    itemOffset: GridItemOffset,
+    gridState: LazyGridState,
+): Float {
     return when {
         draggedItem.cumulatedOffset.y > 0 ->
             (itemOffset.end.y - gridState.layoutInfo.viewportEndOffset).coerceAtLeast(0f)
@@ -593,18 +722,24 @@ fun LazyGridItemScope.InteractableDragItemContainer(
         modifier = Modifier
             .zIndex(
                 if (swipingActive) {
-                    ELEVATION_SWIPE_ACTIVE
+                    Elevation.SWIPE_ACTIVE
                 } else if (key == state.draggedItem.key || key == state.previousKeyOfDraggedItem) {
-                    ELEVATION_DRAGGED_ITEM
+                    Elevation.DRAGGED_ITEM
                 } else {
-                    ELEVATION_NO_INTERACTION
+                    Elevation.NO_INTERACTION
                 },
             )
             .onGloballyPositioned {
                 if (key == state.draggedItem.key) {
                     state.onDraggedItemPositioned(it)
                 }
-            },
+            }
+            .thenConditional(
+                Modifier.animateItem(
+                    placementSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                ),
+                { key != state.draggedItem.key && key != state.previousKeyOfDraggedItem },
+            ),
     ) {
         Box(
             modifier = Modifier.then(
@@ -625,7 +760,7 @@ fun LazyGridItemScope.InteractableDragItemContainer(
                     }
 
                     else -> {
-                        Modifier.animateItem(tween())
+                        Modifier
                     }
                 },
             ),
@@ -661,28 +796,30 @@ private fun LazyGridState.findItem(offset: Offset) =
 /**
  * Detects press, long press and drag gestures.
  * @param reorderState Grid reordering state used for dragging callbacks.
- * @param shouldLongPressToDrag Whether or not an item should be long pressed to start the dragging gesture.
+ * @param isInMultiSelectMode Whether or not multi-select mode is active for the grid being reordered
  */
 fun Modifier.detectGridPressAndDragGestures(
     reorderState: GridInteractionState,
-    shouldLongPressToDrag: Boolean,
-): Modifier = pointerInput(shouldLongPressToDrag) {
-    if (shouldLongPressToDrag) {
-        detectDragGesturesAfterLongPress(
-            onDragStart = { offset -> reorderState.onTouchSlopPassed(offset, true) },
+    isInMultiSelectMode: Boolean,
+): Modifier = pointerInput(isInMultiSelectMode) {
+    // In multi-select mode, drag gestures will be detected without a long press and the reorder state
+    // will attempt to preserve the select mode state.
+    if (isInMultiSelectMode) {
+        detectDragGestures(
+            onDragStart = { offset -> reorderState.onTouchSlopPassed(offset, false) },
             onDrag = { change, dragAmount ->
                 change.consume()
-                reorderState.onDrag(dragAmount)
+                reorderState.onDrag(offset = dragAmount, preserveSelectMode = true)
             },
             onDragEnd = reorderState::onDragEnd,
             onDragCancel = reorderState::onDragCancelled,
         )
     } else {
-        detectDragGestures(
-            onDragStart = { offset -> reorderState.onTouchSlopPassed(offset, false) },
+        detectDragGesturesAfterLongPress(
+            onDragStart = { offset -> reorderState.onTouchSlopPassed(offset, true) },
             onDrag = { change, dragAmount ->
                 change.consume()
-                reorderState.onDrag(dragAmount)
+                reorderState.onDrag(offset = dragAmount, preserveSelectMode = false)
             },
             onDragEnd = reorderState::onDragEnd,
             onDragCancel = reorderState::onDragCancelled,
@@ -696,11 +833,11 @@ private typealias TabItemKey = Any
  * Class representing a grid item's [Offset] values - start, center, and end.
  */
 data class GridItemOffset(
-    val draggedItem: InteractionState.Active,
+    val draggedItem: InteractionState.Grid.Active,
     val draggingItemOffset: Offset,
     val itemSize: IntSize,
 ) {
-    val start by lazy {
+    val start: Offset by lazy {
         draggedItem.initialOffset + draggedItem.cumulatedOffset
     }
 

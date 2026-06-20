@@ -498,35 +498,23 @@ if (
       node.setAttribute("id", "share-tab-button");
       aDocument.l10n.setAttributes(node, "toolbar-button-share-tab");
 
-      node.classList.add("toolbarbutton-1");
+      // share-tab-url-item is needed so BrowserUsageTelemetry can find the
+      // node carrying browsersToShare via .closest(".share-tab-url-item").
+      node.classList.add("toolbarbutton-1", "share-tab-url-item");
 
-      if (AppConstants.platform == "macosx") {
-        node.setAttribute("type", "menu");
+      node.setAttribute("type", "menu");
 
-        let popup = aDocument.createXULElement("menupopup");
-        popup.setAttribute("id", "share-tab-popup");
-        popup.addEventListener("popupshowing", () => {
-          let browser = aDocument.defaultView.gBrowser.selectedBrowser;
-          node.contextBrowserToShare = Cu.getWeakReference(browser);
-          node.browsersToShare = null;
+      let popup = aDocument.createXULElement("menupopup");
+      popup.setAttribute("id", "share-tab-popup");
+      popup.addEventListener("popupshowing", () => {
+        let browser = aDocument.defaultView.gBrowser.selectedBrowser;
+        node.contextBrowserToShare = Cu.getWeakReference(browser);
+        node.browsersToShare = null;
 
-          lazy.SharingUtils.populateShareMenu(popup);
-        });
+        lazy.SharingUtils.populateSharePopup(popup);
+      });
 
-        node.appendChild(popup);
-      } else {
-        node.addEventListener("command", () => {
-          let browser = aDocument.defaultView.gBrowser.selectedBrowser;
-          node.contextBrowserToShare = Cu.getWeakReference(browser);
-          node.browsersToShare = null;
-
-          if (AppConstants.platform == "win") {
-            lazy.SharingUtils.shareOnWindows(node);
-          } else {
-            lazy.SharingUtils.copyLink(node);
-          }
-        });
-      }
+      node.appendChild(popup);
 
       return node;
     },
@@ -611,6 +599,96 @@ if (Services.prefs.getBoolPref("identity.fxaccounts.enabled")) {
           break;
         }
       }
+    },
+  });
+
+  CustomizableWidgets.push({
+    id: "send-tab-button",
+    l10nId: "toolbar-button-send-tab",
+    type: "custom",
+    tabSpecific: true,
+    locationSpecific: true,
+    onBuild(aDocument) {
+      const node = aDocument.createXULElement("toolbarbutton");
+      node.setAttribute("id", this.id);
+      aDocument.l10n.setAttributes(node, "toolbar-button-send-tab");
+
+      node.classList.add("toolbarbutton-1");
+
+      node.setAttribute("type", "menu");
+
+      const enableDisableButton = () => {
+        node.disabled =
+          !aDocument.documentGlobal.gSync.sendTabToolbarButtonShouldBeEnabled(
+            aDocument.documentGlobal.gBrowser.currentURI
+          );
+      };
+
+      Services.obs.addObserver(
+        enableDisableButton,
+        "fxaccounts:devicelist_updated"
+      );
+      Services.obs.addObserver(enableDisableButton, "sync-ui-state:update");
+      Services.prefs.addObserver(
+        "identity.fxaccounts.enabled",
+        enableDisableButton
+      );
+      aDocument.documentGlobal.addEventListener(
+        "TabSelect",
+        enableDisableButton
+      );
+
+      const locationListener = {
+        onLocationChange(_browser, webProgress, _request, _uri) {
+          if (webProgress.isTopLevel) {
+            enableDisableButton();
+          }
+        },
+      };
+      aDocument.documentGlobal.gBrowser.addTabsProgressListener(
+        locationListener
+      );
+
+      enableDisableButton();
+
+      const widgetListener = {
+        onWidgetInstanceRemoved: (aWidgetId, aDoc) => {
+          if (aWidgetId != this.id || aDoc != aDocument) {
+            return;
+          }
+          lazy.CustomizableUI.removeListener(widgetListener);
+          Services.obs.removeObserver(
+            enableDisableButton,
+            "fxaccounts:devicelist_updated"
+          );
+          Services.obs.removeObserver(
+            enableDisableButton,
+            "sync-ui-state:update"
+          );
+          Services.prefs.removeObserver(
+            "identity.fxaccounts.enabled",
+            enableDisableButton
+          );
+          aDocument.documentGlobal.removeEventListener(
+            "TabSelect",
+            enableDisableButton
+          );
+          aDocument.documentGlobal.gBrowser.removeTabsProgressListener(
+            locationListener
+          );
+        },
+      };
+      lazy.CustomizableUI.addListener(widgetListener);
+
+      const popup = aDocument.createXULElement("menupopup");
+      popup.setAttribute("id", "send-tab-popup");
+      popup.addEventListener("popupshowing", () =>
+        aDocument.documentGlobal.gSync.populateSendTabToolbarButton(popup)
+      );
+
+      node.appendChild(popup);
+
+      return node;
     },
   });
 }

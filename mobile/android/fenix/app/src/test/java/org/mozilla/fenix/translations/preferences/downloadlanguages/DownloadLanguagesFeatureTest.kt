@@ -16,6 +16,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mozilla.fenix.wifi.WifiConnectionMonitor
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class DownloadLanguagesFeatureTest {
@@ -51,7 +52,7 @@ class DownloadLanguagesFeatureTest {
                 downloadLanguagesFeature.wifiConnectedListener,
             )
         }
-        Assert.assertNotNull(downloadLanguagesFeature.connectivityManager)
+        assertNotNull(downloadLanguagesFeature.connectivityManager)
     }
 
     @Test

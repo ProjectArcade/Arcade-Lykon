@@ -9,7 +9,6 @@ import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 import { CSSTransition } from "react-transition-group";
 
 function SectionsMgmtPanel({
-  exitEventFired,
   pocketEnabled,
   onSubpanelToggle,
   togglePanel,
@@ -184,13 +183,6 @@ function SectionsMgmtPanel({
     },
     [dispatch, sectionPersonalization]
   );
-
-  // Close followed/blocked topic subpanel when parent menu is closed
-  useEffect(() => {
-    if (exitEventFired && showPanel) {
-      togglePanel();
-    }
-  }, [exitEventFired, showPanel, togglePanel]);
 
   // Notify parent menu when subpanel opens/closes
   useEffect(() => {

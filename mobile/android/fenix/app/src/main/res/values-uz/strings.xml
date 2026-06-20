@@ -6,7 +6,7 @@
   file, You can obtain one at http://mozilla.org/MPL/2.0/.
 -->
 
-<resources xmlns:tools="http://schemas.android.com/tools" xmlns:moz="http://mozac.org/tools">
+<resources xmlns:tools="http://schemas.android.com/tools">
   <!-- App name for private browsing mode. %s is the name of the app (for example "Firefox"). -->
   <string name="app_name_private_5">Maxfiy %s</string>
   <!-- App name for private browsing mode. %s is the name of the app (for example "Firefox"). -->
@@ -168,12 +168,6 @@
   <!-- Browser menu button to open the current page in an external app -->
   <string name="browser_menu_open_app_link">Ilovada ochish</string>
   <!--
-    Browser Toolbar
-
-    Content description for the Home screen button on the browser toolbar
-  -->
-  <string name="browser_toolbar_home">Bosh ekran</string>
-  <!--
     Locale Settings Fragment
 
     Content description for tick mark on selected language
@@ -183,8 +177,6 @@
   <string name="default_locale_text">Qurilma tiliga amal qilish</string>
   <!-- Placeholder text shown in the search bar before a user enters text -->
   <string name="locale_search_hint">Tilni izlash</string>
-  <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
-  <string name="search_shortcuts_engine_settings">Qidiruv tizimi sozlamalari</string>
   <!--
     Search Fragment
 
@@ -475,8 +467,6 @@
   <string name="preference_gestures_website_pull_to_refresh">Yangilash uchun torting</string>
   <!-- Preference for using the dynamic toolbar -->
   <string name="preference_gestures_dynamic_toolbar">Asboblar panelini yashirish uchun aylantiring</string>
-  <!-- Preference for showing the opened tabs by swiping up on the toolbar -->
-  <string name="preference_gestures_swipe_toolbar_show_tabs">Varaqlarni ochish uchun asboblar panelini tepaga suring</string>
   <!--
     Library
 
@@ -495,8 +485,6 @@
   <string name="library_desktop_bookmarks_unfiled">Boshqa xatchoʻplar</string>
   <!-- Option in Library to open History page -->
   <string name="library_history">Tarix</string>
-  <!-- Option in Library to open a new tab -->
-  <string name="library_new_tab">Yangi varaq</string>
   <!-- Settings Page Title -->
   <string name="settings_title">Sozlamalar</string>
   <!-- Content description (not visible, for screen readers etc.): "Close button for library settings" -->
@@ -605,8 +593,6 @@
   <string name="tab_tray_menu_tab_settings">Varaq sozlamalari</string>
   <!-- Text shown in the menu for closing all tabs -->
   <string name="tab_tray_menu_item_close">Ichki varaqlarni yopish</string>
-  <!-- Content description for tabs tray multiselect share button -->
-  <string name="tab_tray_multiselect_share_content_description" tools:ignore="UnusedResources" moz:removedIn="149">Tanlangan varaqlarni ulashish</string>
   <!-- Content description for tabs tray multiselect menu -->
   <string name="tab_tray_multiselect_menu_content_description">Tanlangan varaqlar menyusi</string>
   <!-- Content description (not visible, for screen readers etc.): Removes tab from collection button. Removes the selected tab from collection when pressed -->
@@ -691,8 +677,6 @@
   <string name="edit_bookmark_snackbar_action">TAHRIRLASH</string>
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">Tahrirlash</string>
-  <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">Nusxa olish</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">Ulashish</string>
   <!-- Bookmark overflow menu open in new tab button -->
@@ -716,10 +700,6 @@
   <string name="edit_bookmark_folder_fragment_title">Jildni tahrirlash</string>
   <!-- Bookmark URL editing field label -->
   <string name="bookmark_url_label">URL</string>
-  <!-- Bookmark FOLDER editing field label -->
-  <string name="bookmark_folder_label">JILD</string>
-  <!-- Bookmark NAME editing field label -->
-  <string name="bookmark_name_label">NOMI</string>
   <!-- Bookmark select folder screen title -->
   <string name="bookmark_select_folder_fragment_label">Jildni tanlash</string>
   <!-- Bookmark editing error missing or improper URL -->
@@ -729,8 +709,6 @@
     %1$s is the host part of the URL of the bookmark deleted, if any
   -->
   <string name="bookmark_deletion_snackbar_message">%1$s oʻchirildi</string>
-  <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">BEKOR QILISH</string>
   <!--
     Site Permissions
 
@@ -819,8 +797,6 @@
   <string name="collections_header">Kolleksiyalar</string>
   <!-- Content description (not visible, for screen readers etc.): Opens the collection menu when pressed -->
   <string name="collection_menu_button_content_description">Kolleksiya menyusi</string>
-  <!-- Label to describe what collections are to a new user without any collections -->
-  <string name="no_collections_description2">Siz uchun muhim boʻlgan narsalarni toʻplang.\nKeyinchalik tezkor kirish uchun oʻxshash qidiruvlar, saytlar va varaqlarni birlashtiring.</string>
   <!-- Title for the "select tabs" step of the collection creator -->
   <string name="create_collection_select_tabs">Yorliqlarni tanlash</string>
   <!-- Title for the "select collection" step of the collection creator -->
@@ -920,8 +896,6 @@
     Text shown in snackbar when user closes a tab
   -->
   <string name="snackbar_tab_closed">Varaq yopildi</string>
-  <!-- Text shown in snackbar when user closes all tabs -->
-  <string name="snackbar_tabs_closed">Varaqlar yopildi</string>
   <!-- Text shown in snackbar when user adds a site to shortcuts -->
   <string name="snackbar_added_to_shortcuts">Yorliqlarga qoʻshildi!</string>
   <!-- Text shown in snackbar when user closes a private tab -->
@@ -1466,8 +1440,6 @@
   <string name="firefox_suggest_header" tools:ignore="BrandUsage">Firefox Suggest</string>
   <!-- Default browser card text -->
   <string name="default_browser_experiment_card_text" tools:ignore="BrandUsage">Saytlar, elektron pochta va xabarlar havolalarini Firefoxda avtomatik ravishda ochiladigan qilib sozlang.</string>
-  <!-- Content description for close button in collection placeholder. -->
-  <string name="remove_home_collection_placeholder_content_description">Olib tashlash</string>
   <!-- Content description radio buttons with a link to more information -->
   <string name="radio_preference_info_content_description">Batafsil axborot uchun bosing</string>
   <!-- Content description for the action bar "up" button -->

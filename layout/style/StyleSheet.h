@@ -11,9 +11,7 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/ServoBindingTypes.h"
 #include "mozilla/ServoTypes.h"
-#include "mozilla/StaticPrefs_network.h"
 #include "mozilla/StyleSheetInfo.h"
-#include "mozilla/css/SheetParsingMode.h"
 #include "mozilla/dom/CSSStyleSheetBinding.h"
 #include "mozilla/dom/SRIMetadata.h"
 #include "nsICSSLoaderObserver.h"
@@ -32,7 +30,7 @@ namespace mozilla {
 
 class ServoCSSRuleList;
 class ServoStyleSet;
-class DeclarationBlock;
+struct StyleLockedDeclarationBlock;
 
 using StyleSheetParsePromise = MozPromise</* Dummy */ bool,
                                           /* Dummy */ bool,
@@ -45,14 +43,15 @@ struct StyleRuleChange {
   StyleRuleChange() = delete;
   MOZ_IMPLICIT StyleRuleChange(StyleRuleChangeKind aKind) : mKind(aKind) {}
   // Only relevant for Kind::*Declarations.
-  StyleRuleChange(StyleRuleChangeKind aKind, const DeclarationBlock* aOldBlock,
-                  const DeclarationBlock* aNewBlock)
+  StyleRuleChange(StyleRuleChangeKind aKind,
+                  const StyleLockedDeclarationBlock* aOldBlock,
+                  const StyleLockedDeclarationBlock* aNewBlock)
       : mKind(aKind), mOldBlock(aOldBlock), mNewBlock(aNewBlock) {}
 
   const StyleRuleChangeKind mKind;
   // mOldBlock and mNewBlock can be the same object.
-  const DeclarationBlock* const mOldBlock = nullptr;
-  const DeclarationBlock* const mNewBlock = nullptr;
+  const StyleLockedDeclarationBlock* const mOldBlock = nullptr;
+  const StyleLockedDeclarationBlock* const mNewBlock = nullptr;
 };
 
 namespace css {
@@ -111,8 +110,7 @@ class StyleSheet final : public nsICSSLoaderObserver, public nsWrapperCache {
   using State = StyleSheetState;
 
  public:
-  StyleSheet(css::SheetParsingMode aParsingMode, CORSMode aCORSMode,
-             const dom::SRIMetadata& aIntegrity);
+  StyleSheet(StyleOrigin, CORSMode, const dom::SRIMetadata& aIntegrity);
 
   static already_AddRefed<StyleSheet> Constructor(const dom::GlobalObject&,
                                                   const dom::CSSStyleSheetInit&,
@@ -180,7 +178,6 @@ class StyleSheet final : public nsICSSLoaderObserver, public nsWrapperCache {
 
   void SetOwningNode(nsINode* aOwningNode) { mOwningNode = aOwningNode; }
 
-  css::SheetParsingMode ParsingMode() const { return mParsingMode; }
   dom::CSSStyleSheetParsingMode ParsingModeDOM();
 
   /**
@@ -405,7 +402,7 @@ class StyleSheet final : public nsICSSLoaderObserver, public nsWrapperCache {
   // Remove a document or shadow root from the list of adopters.
   void RemoveAdopter(dom::DocumentOrShadowRoot& aAdopter) {
     // Cannot assert IsConstructed() because this can run after unlink.
-    mAdopters.RemoveElement(&aAdopter);
+    mAdopters.UnorderedRemoveElement(&aAdopter);
   }
 
   const nsTArray<dom::DocumentOrShadowRoot*>& SelfOrAncestorAdopters() const {
@@ -585,15 +582,6 @@ class StyleSheet final : public nsICSSLoaderObserver, public nsWrapperCache {
 
   RefPtr<URLExtraData> mURLData;
   RefPtr<nsIURI> mOriginalSheetURI;
-
-  // mParsingMode controls access to nonstandard style constructs that
-  // are not safe for use on the public Web but necessary in UA sheets
-  // and/or useful in user sheets.
-  //
-  // FIXME(emilio): Given we store the parsed contents in the Inner, this should
-  // probably also move there.
-  css::SheetParsingMode mParsingMode;
-
   State mState;
 
   Atomic<uint32_t, ReleaseAcquire> mAsyncParseBlockers{0};

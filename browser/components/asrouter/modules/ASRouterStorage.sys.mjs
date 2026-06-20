@@ -13,6 +13,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 
 export class ASRouterStorage {
+  // Tracks in-flight IDB write promises so the shutdown blocker can await them.
+  #pendingWrites = new Set();
+
   /**
    * @param storeNames Array of strings used to create all the required stores
    */
@@ -27,6 +30,10 @@ export class ASRouterStorage {
     this.telemetry = telemetry;
   }
 
+  get pendingWriteCount() {
+    return this.#pendingWrites.size;
+  }
+
   get db() {
     if (!this._db) {
       this._db = this.createOrOpenDb().catch(e => {
@@ -35,6 +42,18 @@ export class ASRouterStorage {
       });
     }
     return this._db;
+  }
+
+  _trackedSet(storeName, key, value) {
+    const p = this._set(storeName, key, value).finally(() =>
+      this.#pendingWrites.delete(p)
+    );
+    p.catch(() => {});
+    this.#pendingWrites.add(p);
+  }
+
+  flush() {
+    return Promise.allSettled(this.#pendingWrites);
   }
 
   /**
@@ -49,7 +68,7 @@ export class ASRouterStorage {
         get: this._get.bind(this, storeName),
         getAll: this._getAll.bind(this, storeName),
         getAllKeys: this._getAllKeys.bind(this, storeName),
-        set: this._set.bind(this, storeName),
+        set: this._trackedSet.bind(this, storeName),
         getSharedMessageImpressions:
           this.getSharedMessageImpressions.bind(this),
         getSharedMessageBlocklist: this.getSharedMessageBlocklist.bind(this),

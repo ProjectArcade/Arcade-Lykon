@@ -7,9 +7,16 @@
 requestLongerTimeout(2);
 
 const PAGE_PREFS = "about:preferences";
-const PAGE_PRIVACY = PAGE_PREFS + "#privacy";
+const srdEnabled = Services.prefs.getBoolPref(
+  "browser.settings-redesign.enabled",
+  false
+);
+const PAGE_PRIVACY =
+  PAGE_PREFS + (srdEnabled ? "#passwordsAutofill" : "#privacy");
 const SELECTORS = {
-  reauthCheckbox: "#osReauthCheckbox",
+  reauthCheckbox: srdEnabled
+    ? "#requireOSAuthForPasswords"
+    : "#osReauthCheckbox",
 };
 
 add_setup(async function () {
@@ -17,6 +24,7 @@ add_setup(async function () {
     set: [
       ["test.wait300msAfterTabSwitch", true],
       ["toolkit.osKeyStore.unofficialBuildOnlyLogin", ""],
+      ["signon.rustMirror.enabled", false],
     ],
   });
 

@@ -140,7 +140,7 @@ class FunctionBox;
   F(LexicalScope, LexicalScopeNode)                                       \
   F(LetDecl, DeclarationListNode)                                         \
   F(ImportDecl, BinaryNode)                                               \
-  IF_SOURCE_PHASE_IMPORTS(F(ImportSourceDecl, BinaryNode))                \
+  F(ImportSourceDecl, BinaryNode)                                         \
   F(ImportSpecList, ListNode)                                             \
   F(ImportSpec, BinaryNode)                                               \
   F(ImportNamespaceSpec, UnaryNode)                                       \
@@ -175,7 +175,7 @@ class FunctionBox;
   F(SetThis, BinaryNode)                                                  \
   F(ImportMetaExpr, BinaryNode)                                           \
   F(CallImportExpr, BinaryNode)                                           \
-  IF_SOURCE_PHASE_IMPORTS(F(CallImportSourceExpr, BinaryNode))            \
+  F(CallImportSourceExpr, BinaryNode)                                     \
   F(CallImportSpec, BinaryNode)                                           \
   F(InitExpr, BinaryNode)                                                 \
                                                                           \
@@ -727,9 +727,6 @@ class ParseNode {
   // name guessing.
   bool pn_synthetic_computed : 1;
 
-  ParseNode(const ParseNode& other) = delete;
-  void operator=(const ParseNode& other) = delete;
-
  public:
   explicit ParseNode(ParseNodeKind kind)
       : pn_type(kind),
@@ -741,6 +738,8 @@ class ParseNode {
     JS_PARSE_NODE_ASSERT(ParseNodeKind::Start <= kind);
     JS_PARSE_NODE_ASSERT(kind < ParseNodeKind::Limit);
   }
+  ParseNode(const ParseNode& other) = delete;
+  void operator=(const ParseNode& other) = delete;
 
   ParseNode(ParseNodeKind kind, const TokenPos& pos)
       : pn_type(kind),

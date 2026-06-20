@@ -86,17 +86,14 @@ add_task(async function test_turn_off_scheduled_backups_confirm() {
       );
     });
 
-    let legacyEvents = TelemetryTestUtils.getEvents(
-      {
-        category: "browser.backup",
-        method: "toggle_off",
-        object: "BackupService",
-      },
-      { process: "parent" }
-    );
-    Assert.equal(legacyEvents.length, 1, "Found the toggle_off legacy event.");
     let events = Glean.browserBackup.toggleOff.testGetValue();
     Assert.equal(events.length, 1, "Found the toggleOff Glean event.");
+
+    Assert.equal(
+      Glean.browserBackup.schedulerToggleSource.testGetValue(),
+      "preferences",
+      "scheduler_toggle_source is credited to 'preferences' when disabled from the settings page."
+    );
 
     sandbox.restore();
   });

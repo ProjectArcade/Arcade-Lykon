@@ -373,7 +373,7 @@ class PLDHashTable {
       nullptr;                   // Virtual operations; see below.
   EntryStore mEntryStore;        // (Lazy) entry storage and generation.
   uint16_t mGeneration = 0;      // The storage generation.
-  uint8_t mHashShift;            // Multiplicative hash shift.
+  uint8_t mHashShift = 0;        // Multiplicative hash shift.
   const uint8_t mEntrySize = 0;  // Number of bytes in an entry.
   uint32_t mEntryCount = 0;      // Number of entries in table.
   uint32_t mRemovedCount = 0;    // Removed entry sentinels in table.
@@ -448,6 +448,7 @@ class PLDHashTable {
 
   uint32_t EntrySize() const { return mEntrySize; }
   uint32_t EntryCount() const { return mEntryCount; }
+  bool IsEmpty() const { return mEntryCount == 0; }
   uint32_t Generation() const { return mGeneration; }
 
   // To search for a |key| in |table|, call:
@@ -501,6 +502,13 @@ class PLDHashTable {
   // This function is equivalent to
   // ClearAndPrepareForLength(kDefaultInitialLength).
   void Clear();
+
+  // Removes all entries from the table but keeps the entry storage allocated,
+  // so the table retains its current capacity. Use this instead of Clear()
+  // when the table is about to be re-populated and the repeated free/realloc
+  // of the entry store would be wasteful (e.g. a cache that is invalidated and
+  // rebuilt frequently). Unlike Clear(), the capacity is never reduced.
+  void ClearAndRetainStorage();
 
   // This function clears the table's contents and frees its entry storage,
   // leaving it in a empty state ready to be used again. Afterwards, when the

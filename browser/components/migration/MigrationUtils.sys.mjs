@@ -98,7 +98,7 @@ const MIGRATOR_MODULES = Object.freeze({
   },
   ChromiumEdgeMigrator: {
     moduleURI: "resource:///modules/ChromeProfileMigrator.sys.mjs",
-    platforms: ["macosx", "win"],
+    platforms: ["linux", "macosx", "win"],
   },
   ChromiumEdgeBetaMigrator: {
     moduleURI: "resource:///modules/ChromeProfileMigrator.sys.mjs",
@@ -176,6 +176,7 @@ class MigrationUtils {
         "chrome://browser/content/spotlight.html",
         "about:firefoxview",
       ],
+      remoteTypes: ["parent", "privilegedabout"],
     });
 
     ChromeUtils.defineLazyGetter(this, "IS_LINUX_SNAP_PACKAGE", () => {

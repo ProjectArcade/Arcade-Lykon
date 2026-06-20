@@ -25,6 +25,8 @@
 #include "mozilla/TextEvents.h"
 #include "mozilla/TouchEvents.h"
 #include "mozilla/ViewportUtils.h"
+#include "mozilla/dom/CSSAnimation.h"
+#include "mozilla/dom/CSSTransition.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/DocumentInlines.h"
 #include "mozilla/dom/FragmentOrElement.h"
@@ -42,6 +44,7 @@
 #include "nsIFrame.h"
 #include "nsJSEnvironment.h"
 #include "nsLayoutUtils.h"
+#include "nsPIDOMWindowInlines.h"
 #include "nsPIWindowRoot.h"
 #include "nsRFPService.h"
 
@@ -106,7 +109,7 @@ void Event::InitPresContextData(nsPresContext* aPresContext) {
   mPresContext = aPresContext;
   // Get the explicit original target (if it's anonymous make it null)
   {
-    nsIContent* content = GetTargetFromFrame();
+    nsIContent* content = GetExplicitTargetFromFrame();
     if (content && !content->IsInNativeAnonymousSubtree()) {
       mExplicitOriginalTarget = content;
     } else {
@@ -318,7 +321,7 @@ void Event::ComposedPath(nsTArray<RefPtr<EventTarget>>& aPath) {
 //
 // Get the actual event target node (may have been retargeted for mouse events)
 //
-nsIContent* Event::GetTargetFromFrame() {
+nsIContent* Event::GetExplicitTargetFromFrame() {
   if (!mPresContext) {
     return nullptr;
   }
@@ -329,8 +332,8 @@ nsIContent* Event::GetTargetFromFrame() {
     return nullptr;
   }
 
-  // get the real content
-  return targetFrame->GetContentForEvent(mEvent);
+  // Get the real content rather than proper event target node for mEvent
+  return targetFrame->GetExplicitEventTargetContent(mEvent);
 }
 
 EventTarget* Event::GetExplicitOriginalTarget() const {

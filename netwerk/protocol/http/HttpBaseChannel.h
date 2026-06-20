@@ -161,6 +161,10 @@ class HttpBaseChannel : public nsHashPropertyBag,
   NS_IMETHOD GetBlockAuthPrompt(bool* aValue) override;
   NS_IMETHOD SetBlockAuthPrompt(bool aValue) override;
   NS_IMETHOD GetCanceled(bool* aCanceled) override;
+  NS_IMETHOD GetParentProcessChannelHandle(
+      mozilla::dom::ParentProcessChannelHandle** aValue) override;
+  NS_IMETHOD SetParentProcessChannelHandle(
+      mozilla::dom::ParentProcessChannelHandle* aValue) override;
 
   // nsIEncodedChannel
   NS_IMETHOD GetApplyConversion(bool* value) override;
@@ -274,6 +278,8 @@ class HttpBaseChannel : public nsHashPropertyBag,
   NS_IMETHOD GetBypassProxy(bool* aBypassProxy) override;
   NS_IMETHOD SetBypassProxy(bool aBypassProxy) override;
   bool BypassProxy();
+  NS_IMETHOD GetProxyDNSStrategy(
+      nsIHttpChannelInternal::ProxyDNSStrategy* aStrategy) override;
 
   NS_IMETHOD GetIsTRRServiceChannel(bool* aTRR) override;
   NS_IMETHOD SetIsTRRServiceChannel(bool aTRR) override;
@@ -467,6 +473,7 @@ class HttpBaseChannel : public nsHashPropertyBag,
   nsHttpResponseHead* GetResponseHead() const { return mResponseHead.get(); }
   nsHttpRequestHead* GetRequestHead() { return &mRequestHead; }
   nsHttpHeaderArray* GetResponseTrailers() const {
+    MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread());
     return mResponseTrailers.get();
   }
 
@@ -743,6 +750,8 @@ class HttpBaseChannel : public nsHashPropertyBag,
 
   RefPtr<OpaqueResponseBlocker> mORB;
 
+  RefPtr<mozilla::dom::ParentProcessChannelHandle> mParentProcessChannelHandle;
+
  private:
   // Proxy release all members above on main thread.
   void ReleaseMainThreadOnlyReferences();
@@ -861,7 +870,7 @@ class HttpBaseChannel : public nsHashPropertyBag,
 
   UniquePtr<ProfileChunkedBuffer> mSource;
 
-  uint32_t mLoadFlags{LOAD_NORMAL};
+  Atomic<uint32_t, Relaxed> mLoadFlags{LOAD_NORMAL};
   uint32_t mCaps{0};
 
   ClassOfService mClassOfService;

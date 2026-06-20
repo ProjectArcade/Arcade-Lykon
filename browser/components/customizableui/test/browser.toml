@@ -49,6 +49,9 @@ skip-if = [
 
 ["browser_1880230_hideInNonPrivateBrowsing.js"]
 
+["browser_2041653_non_removable_overflow_reset.js"]
+tags = "overflowable-toolbar"
+
 ["browser_873501_handle_specials.js"]
 
 ["browser_876926_customize_mode_wrapping.js"]
@@ -336,6 +339,8 @@ run-if = [
 
 ["browser_newtab_button_customizemode.js"]
 
+["browser_novaHelpSwitchDevicePromo.js"]
+
 ["browser_open_from_popup.js"]
 
 ["browser_open_in_lazy_tab.js"]
@@ -362,11 +367,15 @@ tags = "fullscreen"
 
 ["browser_panelUINotifications_multiWindow.js"]
 
+["browser_panelUINotifications_novaUpdatePromo.js"]
+
 ["browser_panel_keyboard_navigation.js"]
 
 ["browser_panel_locationSpecific.js"]
 
 ["browser_panel_menulist.js"]
+
+["browser_panel_role_and_label.js"]
 
 ["browser_panel_toggle.js"]
 
@@ -423,9 +432,6 @@ support-files = ["browser_shareurl.html"]
 ["browser_sidebar_position_start.js"]
 
 ["browser_sidebar_toggle.js"]
-skip-if = [
-  "os == 'win' && os_version == '11.26200' && asan", # Bug 2019745
-]
 
 ["browser_switch_to_customize_mode.js"]
 skip-if = [
@@ -449,6 +455,8 @@ skip-if = [
   "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11'",
   "os == 'win'",
 ]
+
+["browser_uidensity_auto_compact.js"]
 
 ["browser_unified_extensions_reset.js"]
 

@@ -24,6 +24,7 @@
 #include "mozilla/dom/NameSpaceConstants.h"
 #include "nsAtom.h"
 #include "nsCycleCollectionParticipant.h"
+#include "nsHTMLTags.h"
 #include "nsHashKeys.h"
 #include "nsString.h"
 
@@ -55,6 +56,9 @@ class NodeInfo final {
    */
   nsAtom* NameAtom() const { return mInner.mName; }
 
+  // Return the bloom filter hash for NameAtom().
+  uint64_t NameBloomFilterHash() const { return mNameBloomHash; }
+
   /*
    * Get the qualified name from this node as a string, the qualified name
    * includes the prefix, if one exists.
@@ -73,6 +77,11 @@ class NodeInfo final {
    * Returns the node's localName as defined in DOM Core
    */
   const nsString& LocalName() const { return mLocalName; }
+
+  /**
+   * Returns an nsHTMLTag value if this is for an HTML element node.
+   */
+  const mozilla::Maybe<const nsHTMLTag>& HTMLTag() const;
 
   /*
    * Get the prefix from this node as a string.
@@ -259,8 +268,9 @@ class NodeInfo final {
 
     uint32_t Hash() const {
       if (!mHash) {
-        mHash.emplace(mName ? mName->hash()
-                            : mozilla::HashString(*mNameString));
+        uint32_t nameHash =
+            mName ? mName->hash() : mozilla::HashString(*mNameString);
+        mHash.emplace(mozilla::AddToHash(nameHash, mNamespaceID, mNodeType));
       }
       return mHash.value();
     }
@@ -299,6 +309,10 @@ class NodeInfo final {
   // localName for the node. This is either equal to mInner.mName, or a
   // void string, depending on mInner.mNodeType.
   nsString mLocalName;
+
+  // Bloom filter hash for the name.
+  uint64_t mNameBloomHash;
+  mutable Maybe<const nsHTMLTag> mHTMLTag;
 };
 
 }  // namespace mozilla::dom

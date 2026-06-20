@@ -1419,8 +1419,7 @@ nsresult TextServicesDocument::CreateFilteredContentIterator(
   // Create a FilteredContentIterator
   // This class wraps the ContentIterator in order to give itself a chance
   // to filter out certain content nodes
-  RefPtr<FilteredContentIterator> filter =
-      new FilteredContentIterator(std::move(composeFilter));
+  RefPtr filter = MakeRefPtr<FilteredContentIterator>(std::move(composeFilter));
   nsresult rv = filter->Init(aAbstractRange);
   if (NS_FAILED(rv)) {
     return rv;
@@ -2386,7 +2385,7 @@ nsresult TextServicesDocument::GetFirstTextNodeInPrevBlock(
     nsIContent** aContent) {
   NS_ENSURE_TRUE(aContent, NS_ERROR_NULL_POINTER);
 
-  *aContent = 0;
+  *aContent = nullptr;
 
   // Save the iterator's current content node so we can restore
   // it when we are done:
@@ -2418,7 +2417,7 @@ nsresult TextServicesDocument::GetFirstTextNodeInNextBlock(
     nsIContent** aContent) {
   NS_ENSURE_TRUE(aContent, NS_ERROR_NULL_POINTER);
 
-  *aContent = 0;
+  *aContent = nullptr;
 
   // Save the iterator's current content node so we can restore
   // it when we are done:

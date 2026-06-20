@@ -853,10 +853,6 @@ Download.prototype = {
     }
 
     if (this.error?.becauseBlockedByReputationCheck) {
-      // We have to record the telemetry in both DownloadsCommon.deleteDownload
-      // and confirmBlock here. The former is for cases where users click
-      // "Remove file" in the download panel and the latter is when
-      // users click "X" button in about:downloads.
       Glean.downloads.userActionOnBlockedDownload[
         this.error.reputationCheckVerdict
       ].accumulateSingleSample(1); // confirm block
@@ -878,6 +874,7 @@ Download.prototype = {
       // data remains stored on disk in the ".part" file.
       await this.saver.removeData();
 
+      this.deleted = true;
       this.hasBlockedData = false;
       this._notifyChange();
     })();
@@ -1445,6 +1442,7 @@ Download.prototype = {
 const kPlainSerializableDownloadProperties = [
   "succeeded",
   "canceled",
+  "deleted",
   "totalBytes",
   "hasPartialData",
   "hasBlockedData",
@@ -1569,6 +1567,12 @@ DownloadSource.prototype = {
   url: null,
 
   /**
+   * True if the body of a large data URI was stripped from url after the
+   * download completed, to avoid holding a large string in memory.
+   */
+  isDataURICleared: false,
+
+  /**
    * String containing the original URL for the download source.
    */
   originalUrl: null,
@@ -1649,6 +1653,10 @@ DownloadSource.prototype = {
    * @return A JavaScript object that can be serialized to JSON.
    */
   toSerializable() {
+    if (this.isDataURICleared) {
+      return null;
+    }
+
     if (this.adjustChannel) {
       // If the callback was used, we can't reproduce this across sessions.
       return null;

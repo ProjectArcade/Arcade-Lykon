@@ -59,7 +59,7 @@ class TextUpdater {
    */
   inline void FireInsertEvent(const nsAString& aText, uint32_t aAddlOffset,
                               nsTArray<RefPtr<AccEvent> >& aEvents) {
-    RefPtr<AccEvent> event = new AccTextChangeEvent(
+    auto event = MakeRefPtr<AccTextChangeEvent>(
         mHyperText, mTextOffset + aAddlOffset, aText, true);
     aEvents.AppendElement(event);
   }
@@ -69,7 +69,7 @@ class TextUpdater {
    */
   inline void FireDeleteEvent(const nsAString& aText, uint32_t aAddlOffset,
                               nsTArray<RefPtr<AccEvent> >& aEvents) {
-    RefPtr<AccEvent> event = new AccTextChangeEvent(
+    auto event = MakeRefPtr<AccTextChangeEvent>(
         mHyperText, mTextOffset + aAddlOffset, aText, false);
     aEvents.AppendElement(event);
   }

@@ -163,14 +163,8 @@ impl StreamParams {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StreamCreateParams {
-    pub input_stream_params: Option<StreamParams>,
-    pub output_stream_params: Option<StreamParams>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StreamInitParams {
     #[serde(with = "serde_bytes")]
     pub stream_name: Option<Vec<u8>>,
     pub input_device: usize,
@@ -219,7 +213,7 @@ pub struct RegisterDeviceCollectionChanged {
 // ServerConn::process_msg doesn't have a catch-all case.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
-    ClientConnect(u32),
+    ClientConnect,
     ClientDisconnect,
 
     ContextGetBackendId,
@@ -232,7 +226,7 @@ pub enum ServerMessage {
     ContextRegisterDeviceCollectionChanged(ffi::cubeb_device_type, bool),
 
     StreamCreate(StreamCreateParams),
-    StreamInit(usize, StreamInitParams),
+    StreamInit(usize),
     StreamDestroy(usize),
 
     StreamStart(usize),

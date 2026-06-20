@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { html } from "chrome://global/content/vendor/lit.all.mjs";
+import { css, html } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 import {
   Decoration,
@@ -23,6 +23,44 @@ import {
   redo as historyRedo,
   undo as historyUndo,
 } from "chrome://browser/content/multilineeditor/prosemirror.bundle.mjs";
+
+function generatePlaceholderKeyframeStyles(placeholderCount) {
+  const segmentDuration = 100 / placeholderCount;
+  const transitionDuration = segmentDuration * 0.2;
+  const exitStart = Math.round(segmentDuration - transitionDuration);
+  const exitEnd = Math.round(segmentDuration);
+  const enterStart = Math.round(100 - transitionDuration);
+
+  return css`
+    @keyframes multiline-editor-placeholder-animation {
+      0% {
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+      }
+      ${exitStart}% {
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+      }
+      ${exitEnd}% {
+        opacity: 0;
+        transform: translateY(-100%);
+        visibility: hidden;
+      }
+      ${enterStart}% {
+        opacity: 0;
+        transform: translateY(100%);
+        visibility: hidden;
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+      }
+    }
+  `;
+}
 
 /**
  * @typedef {object} MultilineEditorPlugin
@@ -51,9 +89,30 @@ export class MultilineEditor extends MozLitElement {
 
   static properties = {
     placeholder: { type: String, reflect: true, fluent: true },
+    placeholderHints: { type: Array, attribute: false },
     readOnly: { type: Boolean, reflect: true, attribute: "readonly" },
     plugins: { type: Array, attribute: false },
     maxLength: { type: Number, attribute: "maxlength" },
+    // ARIA combobox state forwarded from the host to the inner contenteditable.
+    // reflect:false so the host attribute stays the source of truth.
+    ariaControls: { type: String, attribute: "aria-controls", reflect: false },
+    ariaAutoComplete: {
+      type: String,
+      attribute: "aria-autocomplete",
+      reflect: false,
+    },
+    ariaExpanded: { type: String, attribute: "aria-expanded", reflect: false },
+    ariaActiveDescendant: {
+      type: String,
+      attribute: "aria-activedescendant",
+      reflect: false,
+    },
+    ariaHasPopup: { type: String, attribute: "aria-haspopup", reflect: false },
+    showPlaceholderAnimation: {
+      type: Boolean,
+      reflect: true,
+      attribute: "show-placeholder-animation",
+    },
   };
 
   static schema = new Schema({
@@ -64,20 +123,39 @@ export class MultilineEditor extends MozLitElement {
     },
   });
 
+  /**
+   * ARIA state forwarded from the host's reactive Lit properties to the inner
+   * contenteditable. Each entry pairs the property name (used in `updated()`
+   * change detection) with the attribute name applied to the inner element.
+   */
+  static FORWARDED_ARIA = [
+    { prop: "ariaControls", attr: "aria-controls" },
+    { prop: "ariaAutoComplete", attr: "aria-autocomplete" },
+    { prop: "ariaExpanded", attr: "aria-expanded" },
+    { prop: "ariaActiveDescendant", attr: "aria-activedescendant" },
+    { prop: "ariaHasPopup", attr: "aria-haspopup" },
+  ];
+
+  #instanceId = crypto.randomUUID();
+  #placeholderVersion = 0;
+  #placeholderKeyframeStyles = null;
   #pendingValue = "";
   #placeholderPlugin;
   #plugins;
   #suppressInputEvent = false;
   #view;
   #markdownSerializer;
+  #innerRole = null;
 
   constructor() {
     super();
 
     this.placeholder = "";
+    this.placeholderHints = [];
     this.plugins = [];
     this.readOnly = false;
     this.maxLength = 0;
+    this.showPlaceholderAnimation = false;
     this.#placeholderPlugin = this.#createPlaceholderPlugin();
     const plugins = [
       historyPlugin(),
@@ -174,6 +252,47 @@ export class MultilineEditor extends MozLitElement {
     } finally {
       this.#suppressInputEvent = false;
     }
+  }
+
+  /**
+   * The plain-text content of the editor with atom nodes (e.g. mentions)
+   * contributing zero characters. Useful for persisting input alongside a
+   * structured list of inline atoms.
+   *
+   * @type {string}
+   */
+  get plainText() {
+    if (!this.#view) {
+      return this.#pendingValue;
+    }
+    return this.#view.state.doc.textBetween(
+      0,
+      this.#view.state.doc.content.size,
+      "\n",
+      ""
+    );
+  }
+
+  /**
+   * Convert a ProseMirror document position to a text-character offset that
+   * matches `plainText`.
+   *
+   * @param {number} pos
+   * @returns {number}
+   */
+  posToTextOffset(pos) {
+    return this.#textOffsetFromPos(pos, this.#view?.state.doc, "\n", "");
+  }
+
+  /**
+   * Convert a text-character offset (matching `plainText`) to a ProseMirror
+   * document position.
+   *
+   * @param {number} offset
+   * @returns {number}
+   */
+  textOffsetToPos(offset) {
+    return this.#posFromTextOffset(offset);
   }
 
   /**
@@ -280,10 +399,49 @@ export class MultilineEditor extends MozLitElement {
   }
 
   /**
+   * Run ProseMirror's normal paste pipeline with the given DataTransfer's
+   * contents. Used by the context-menu cmd_paste route, which on some
+   * platforms (e.g. Windows) does not reliably reach a contenteditable
+   * inside a shadow DOM — TODO(Bug 2047067), remove once that is fixed.
+   *
+   * `new ClipboardEvent("paste", { clipboardData })` can't be used because
+   * Firefox's ClipboardEventInit dictionary has no clipboardData member, so
+   * the field is dropped and the event arrives at ProseMirror with null
+   * clipboardData. EditorView.pasteText / pasteHTML invoke the same paste
+   * machinery (plugins, history entry) directly.
+   *
+   * @param {DataTransfer} dataTransfer - Clipboard data to paste.
+   */
+  paste(dataTransfer) {
+    if (!this.#view || !dataTransfer) {
+      return;
+    }
+    const htmlData = dataTransfer.getData("text/html");
+    const textData = dataTransfer.getData("text/plain");
+    if (!htmlData && !textData) {
+      return;
+    }
+    this.#view.focus();
+    if (htmlData) {
+      this.#view.pasteHTML(htmlData);
+    } else {
+      this.#view.pasteText(textData);
+    }
+  }
+
+  /**
    * Called when the element is added to the DOM.
    */
   connectedCallback() {
     super.connectedCallback();
+    // Capture a consumer-supplied role for the inner contenteditable before
+    // hiding this host element from the accessibility tree. With
+    // delegatesFocus, screen readers focus the inner contenteditable, so its
+    // role and ARIA state are what get announced.
+    const hostRole = this.getAttribute("role");
+    if (hostRole && hostRole !== "presentation") {
+      this.#innerRole = hostRole;
+    }
     this.setAttribute("role", "presentation");
   }
 
@@ -291,6 +449,7 @@ export class MultilineEditor extends MozLitElement {
    * Called when the element is removed from the DOM.
    */
   disconnectedCallback() {
+    this.#cancelPlaceholderAnimations();
     this.#destroyView();
     this.#pendingValue = "";
     super.disconnectedCallback();
@@ -300,6 +459,7 @@ export class MultilineEditor extends MozLitElement {
    * Called after the element’s DOM has been rendered for the first time.
    */
   firstUpdated() {
+    this.#updatePlaceholderKeyframeStyles();
     this.#createView();
   }
 
@@ -311,10 +471,20 @@ export class MultilineEditor extends MozLitElement {
   updated(changedProps) {
     if (
       changedProps.has("placeholder") ||
+      changedProps.has("placeholderHints") ||
       changedProps.has("plugins") ||
-      changedProps.has("readOnly")
+      changedProps.has("readOnly") ||
+      MultilineEditor.FORWARDED_ARIA.some(({ prop }) => changedProps.has(prop))
     ) {
       this.#refreshView();
+    }
+    if (changedProps.has("showPlaceholderAnimation")) {
+      // Restart or cancel placeholder animation.
+      if (this.showPlaceholderAnimation) {
+        this.#resetPlaceholderAnimation();
+      } else {
+        this.#cancelPlaceholderAnimations();
+      }
     }
   }
 
@@ -430,6 +600,24 @@ export class MultilineEditor extends MozLitElement {
       attributes: this.#viewAttributes(),
       editable: () => !this.readOnly,
       dispatchTransaction: this.#dispatchTransaction,
+      handleDOMEvents: {
+        contextmenu: (view, event) => {
+          if (this.readOnly) {
+            return false;
+          }
+          // TODO(Bug 2047067): right-clicks on the inner contenteditable show
+          // a native context menu on Windows whose Paste command does not
+          // reach ProseMirror. Forward the event to the host so moz-input-box
+          // can show its menu. Remove this workaround once the platform bug
+          // is fixed.
+          event.preventDefault();
+          const host = view.dom.getRootNode().host;
+          if (host && host != view.dom) {
+            host.dispatchEvent(new PointerEvent("contextmenu", event));
+          }
+          return true;
+        },
+      },
       nodeViews: Object.assign(
         {},
         ...this.plugins.map(plugin => plugin.nodeViews).filter(Boolean)
@@ -529,6 +717,36 @@ export class MultilineEditor extends MozLitElement {
     return true;
   }
 
+  #createPlaceholderHints() {
+    const placeholderCount = this.placeholderHints.length + 1;
+
+    const hints = document.createElement("ul");
+    hints.id = `placeholder-hints-${this.#instanceId}-${this.#placeholderVersion}`;
+    hints.className = "placeholder-hints";
+    hints.setAttribute("role", "presentation");
+    hints.style.setProperty(
+      "--multiline-editor-placeholder-count",
+      placeholderCount
+    );
+
+    const placeholder = document.createElement("li");
+    placeholder.textContent = this.placeholder;
+    placeholder.style.setProperty("--multiline-editor-placeholder-index", 0);
+    hints.appendChild(placeholder);
+
+    for (const [index, hint] of this.placeholderHints.entries()) {
+      const hintItem = document.createElement("li");
+      hintItem.textContent = hint;
+      hintItem.style.setProperty(
+        "--multiline-editor-placeholder-index",
+        index + 1
+      );
+      hints.appendChild(hintItem);
+    }
+
+    return hints;
+  }
+
   /**
    * Creates a plugin that shows a placeholder when the editor is empty.
    *
@@ -541,9 +759,22 @@ export class MultilineEditor extends MozLitElement {
           if (
             doc.childCount !== 1 ||
             !doc.firstChild.isTextblock ||
-            doc.firstChild.content.size !== 0 ||
-            !this.placeholder
+            doc.firstChild.content.size !== 0
           ) {
+            return null;
+          }
+
+          if (this.placeholderHints.length) {
+            return DecorationSet.create(doc, [
+              Decoration.widget(1, () => this.#createPlaceholderHints(), {
+                key: `placeholder-hints-${this.#instanceId}-${this.#placeholderVersion}`,
+                side: -1,
+                ignoreSelection: true,
+              }),
+            ]);
+          }
+
+          if (!this.placeholder) {
             return null;
           }
 
@@ -614,11 +845,64 @@ export class MultilineEditor extends MozLitElement {
       return;
     }
 
+    this.#placeholderVersion++;
+    this.#updatePlaceholderKeyframeStyles();
     this.#view.setProps({
       attributes: this.#viewAttributes(),
       editable: () => !this.readOnly,
     });
     this.#view.dispatch(this.#view.state.tr);
+  }
+
+  /**
+   * Resets placeholder animations to their starting position.
+   *
+   * When the placeholder animation is re-enabled the cached placeholder
+   * elements retain animation state and must be reset.
+   */
+  #resetPlaceholderAnimation() {
+    const animations = this.#getPlaceholderAnimations();
+    // The `ready` promise rejects with an AbortError if the animation is
+    // cancelled before it becomes ready.
+    Promise.all(animations.map(animation => animation.ready))
+      .then(() => {
+        for (const animation of animations) {
+          animation.currentTime = 0;
+        }
+      })
+      .catch(() => {});
+  }
+
+  #cancelPlaceholderAnimations() {
+    const animations = this.#getPlaceholderAnimations();
+    for (const animation of animations) {
+      animation.cancel();
+    }
+  }
+
+  #getPlaceholderAnimations() {
+    const placeholderHints =
+      this.renderRoot.querySelector(".placeholder-hints");
+    if (!placeholderHints) {
+      return [];
+    }
+    return [...placeholderHints.querySelectorAll("li")].flatMap(
+      placeholderHint => placeholderHint.getAnimations()
+    );
+  }
+
+  #updatePlaceholderKeyframeStyles() {
+    if (!this.placeholderHints.length) {
+      return;
+    }
+    if (!this.#placeholderKeyframeStyles) {
+      this.#placeholderKeyframeStyles = new CSSStyleSheet();
+      this.renderRoot.adoptedStyleSheets.push(this.#placeholderKeyframeStyles);
+    }
+    const keyframeStyles = generatePlaceholderKeyframeStyles(
+      this.placeholderHints.length + 1
+    );
+    this.#placeholderKeyframeStyles.replaceSync(keyframeStyles.cssText);
   }
 
   #textToDoc(text, schema) {
@@ -629,11 +913,16 @@ export class MultilineEditor extends MozLitElement {
     return schema.node("doc", null, paragraphs);
   }
 
-  #textOffsetFromPos(pos, doc = this.#view?.state.doc) {
+  #textOffsetFromPos(
+    pos,
+    doc = this.#view?.state.doc,
+    blockSeparator = "\n",
+    leafText = "\n"
+  ) {
     if (!doc) {
       return 0;
     }
-    return doc.textBetween(0, pos, "\n", "\n").length;
+    return doc.textBetween(0, pos, blockSeparator, leafText).length;
   }
 
   #posFromTextOffset(offset, doc = this.#view?.state.doc) {
@@ -690,12 +979,32 @@ export class MultilineEditor extends MozLitElement {
   }
 
   #viewAttributes() {
-    return {
+    const attrs = {
       "aria-label": this.placeholder,
-      "aria-multiline": "true",
       "aria-readonly": this.readOnly ? "true" : "false",
-      role: "textbox",
     };
+
+    if (this.#innerRole) {
+      // Combobox is a single-line widget per ARIA; omit aria-multiline so the
+      // role's semantics aren't muddled.
+      attrs.role = this.#innerRole;
+    } else {
+      attrs.role = "textbox";
+      attrs["aria-multiline"] = "true";
+    }
+
+    for (const { prop, attr } of MultilineEditor.FORWARDED_ARIA) {
+      const value = this[prop];
+      if (value != null) {
+        attrs[attr] = value;
+      }
+    }
+
+    if (this.placeholderHints.length) {
+      attrs["aria-describedby"] =
+        `placeholder-hints-${this.#instanceId}-${this.#placeholderVersion}`;
+    }
+    return attrs;
   }
 
   render() {

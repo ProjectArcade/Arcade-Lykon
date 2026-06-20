@@ -17,5 +17,5 @@ interface IPProtectionDelegate {
      *
      * @param info The current [IPProtectionHandler.StateInfo].
      */
-    fun onStateChanged(info: IPProtectionHandler.StateInfo) {}
+    fun onStateChanged(info: IPProtectionHandler.StateInfo)
 }

@@ -722,3 +722,65 @@ add_task(async function test_resolve_error_id_nss_fallthrough() {
 
   _testOnlyClearRegistry();
 });
+
+add_task(async function test_dns_not_found_what_can_you_do_items() {
+  const { initializeRegistry, getErrorConfig, _testOnlyClearRegistry } =
+    ChromeUtils.importESModule(REGISTRY_URL);
+
+  _testOnlyClearRegistry();
+  initializeRegistry();
+
+  const config = getErrorConfig("dnsNotFound");
+  Assert.ok(config, "dnsNotFound should be registered");
+
+  const items = config.customNetError?.whatCanYouDoItems;
+  Assert.ok(
+    Array.isArray(items),
+    "dnsNotFound customNetError should have a whatCanYouDoItems array"
+  );
+  Assert.equal(items.length, 3, "whatCanYouDoItems should have 3 entries");
+  Assert.ok(
+    items.includes("neterror-http-empty-response"),
+    "whatCanYouDoItems should include neterror-http-empty-response"
+  );
+  Assert.ok(
+    items.includes("neterror-dns-not-found-hint-check-network-2"),
+    "whatCanYouDoItems should include neterror-dns-not-found-hint-check-network-2"
+  );
+  Assert.ok(
+    items.includes("neterror-dns-not-found-hint-firewall-2"),
+    "whatCanYouDoItems should include neterror-dns-not-found-hint-firewall-2"
+  );
+
+  _testOnlyClearRegistry();
+});
+
+add_task(async function test_sec_error_ca_cert_invalid_registered() {
+  const { initializeRegistry, getErrorConfig, _testOnlyClearRegistry } =
+    ChromeUtils.importESModule(REGISTRY_URL);
+
+  _testOnlyClearRegistry();
+  initializeRegistry();
+
+  const config = getErrorConfig("SEC_ERROR_CA_CERT_INVALID");
+  Assert.ok(config, "SEC_ERROR_CA_CERT_INVALID should be registered");
+  Assert.equal(config.category, "cert", "Should be in the cert category");
+  Assert.ok(
+    config.buttons.showAddException,
+    "Should show the exception button"
+  );
+  Assert.ok(config.buttons.showAdvanced, "Should show the advanced section");
+  Assert.equal(config.hasNoUserFix, true, "Should have no user fix");
+  Assert.equal(
+    config.advanced.whyDangerous.dataL10nId,
+    "fp-certerror-invalid-cert-why-dangerous",
+    "Should use the invalid cert why-dangerous l10n id"
+  );
+  Assert.equal(
+    config.advanced.whatCanYouDo.dataL10nId,
+    "fp-certerror-untrusted-issuer-what-can-you-do-body",
+    "Should reuse the untrusted issuer what-can-you-do l10n id"
+  );
+
+  _testOnlyClearRegistry();
+});

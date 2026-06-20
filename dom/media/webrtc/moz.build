@@ -36,6 +36,7 @@ EXPORTS += [
 ]
 
 SOURCES += [
+    "CodecInfo.cpp",
     "CubebDeviceEnumerator.cpp",
 ]
 
@@ -51,6 +52,7 @@ if CONFIG["MOZ_WEBRTC"]:
     ]
     EXPORTS.mozilla.dom += ["RTCIdentityProviderRegistrar.h"]
     UNIFIED_SOURCES += [
+        "H264FmtpParser.cpp",
         "MediaEngineRemoteVideoSource.cpp",
         "MediaEngineWebRTCAudio.cpp",
         "RTCCertificate.cpp",
@@ -84,7 +86,6 @@ if CONFIG["MOZ_WEBRTC_SIGNALING"]:
         "sdp",
         "transportbridge",
         "/third_party/libwebrtc",
-        "/third_party/abseil-cpp",
     ]
 
     if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
@@ -115,6 +116,10 @@ EXPORTS.mozilla += [
 ]
 EXPORTS.mozilla.dom += [
     "RTCCertificate.h",
+]
+EXPORTS.mozilla.media.webrtc += [
+    "CodecInfo.h",
+    "H264FmtpParser.h",
 ]
 
 include("/ipc/chromium/chromium-config.mozbuild")

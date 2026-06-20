@@ -241,7 +241,7 @@ class TextInputSelectionController final : public nsSupportsWeakReference,
   ~TextInputSelectionController() = default;
 
  public:
-  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS_FINAL
   NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(TextInputSelectionController,
                                            nsISelectionController)
 
@@ -475,16 +475,12 @@ TextInputSelectionController::SetCaretReadOnly(bool aReadOnly) {
   if (!presShell) {
     return NS_ERROR_FAILURE;
   }
-  RefPtr<nsCaret> caret = presShell->GetCaret();
-  if (!caret) {
-    return NS_ERROR_FAILURE;
-  }
 
   if (!mFrameSelection) {
     return NS_ERROR_FAILURE;
   }
 
-  caret->SetCaretReadOnly(aReadOnly);
+  presShell->SetCaretReadOnly(aReadOnly);
   return NS_OK;
 }
 
@@ -503,9 +499,15 @@ TextInputSelectionController::GetCaretVisible(bool* _retval) {
   if (!presShell) {
     return NS_ERROR_FAILURE;
   }
-  RefPtr<nsCaret> caret = presShell->GetCaret();
+  RefPtr<nsCaret> caret = presShell->GetOriginalCaret();
   if (!caret) {
     return NS_ERROR_FAILURE;
+  }
+  // If the caret is for another selection, our caret is hidden.
+  Selection* selection = caret->GetSelection();
+  if (!selection || selection->GetFrameSelection() != mFrameSelection) {
+    *_retval = false;
+    return NS_OK;
   }
   *_retval = caret->IsVisible();
   return NS_OK;
@@ -522,12 +524,7 @@ TextInputSelectionController::SetCaretVisibilityDuringSelection(
   if (!presShell) {
     return NS_ERROR_FAILURE;
   }
-  RefPtr<nsCaret> caret = presShell->GetCaret();
-  if (!caret) {
-    return NS_ERROR_FAILURE;
-  }
-
-  caret->SetVisibilityDuringSelection(aVisibility);
+  presShell->SetCaretVisibilityDuringSelection(aVisibility);
   return NS_OK;
 }
 
@@ -1475,7 +1472,7 @@ nsresult TextControlState::InitializeSelection(PresShell* aPresShell) {
   //      to its internal array.
   Selection* selection = mSelCon->GetSelection(SelectionType::eNormal);
   if (selection) {
-    RefPtr<nsCaret> caret = aPresShell->GetCaret();
+    RefPtr<nsCaret> caret = aPresShell->GetOriginalCaret();
     if (caret) {
       selection->AddSelectionListener(caret);
     }
@@ -1484,7 +1481,7 @@ nsresult TextControlState::InitializeSelection(PresShell* aPresShell) {
 
   // If an editor exists from before, prepare it for usage
   if (mTextEditor) {
-    nsContentUtils::AddScriptRunner(new PrepareEditorEvent(*this));
+    nsContentUtils::AddScriptRunner(MakeAndAddRef<PrepareEditorEvent>(*this));
   }
 
   return NS_OK;

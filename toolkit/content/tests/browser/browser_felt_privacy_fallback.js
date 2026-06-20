@@ -66,9 +66,10 @@ add_task(async function test_registered_ssl_error() {
     // Call resolveErrorID directly with a mocked SSL_ERROR_RX_RECORD_TOO_LONG
     // input. initializeRegistry populates the full registry so that scenario 1
     // (direct match) correctly resolves the registered error.
-    const { resolveErrorID } = ChromeUtils.importESModule(
-      "chrome://global/content/errors/error-lookup.mjs"
-    );
+    const { resolveErrorID, getResolvedErrorConfig } =
+      ChromeUtils.importESModule(
+        "chrome://global/content/errors/error-lookup.mjs"
+      );
     const { initializeRegistry } = ChromeUtils.importESModule(
       "chrome://global/content/errors/error-registry.mjs"
     );
@@ -82,6 +83,29 @@ add_task(async function test_registered_ssl_error() {
       }),
       "SSL_ERROR_RX_RECORD_TOO_LONG",
       "Should resolve to the registered error, not fall back to nssFailure2"
+    );
+
+    // An unregistered SSL error falling through to nssFailure2 should expose
+    // its runtime errorCodeString via mapCustomNetErrorConfigToParams.
+    const UNREGISTERED_CODE = "SSL_ERROR_DECRYPT_ERROR_ALERT";
+    const mockErrorInfo = new content.Object();
+    mockErrorInfo.errorCodeString = UNREGISTERED_CODE;
+    netErrorCard.errorInfo = mockErrorInfo;
+
+    const config = getResolvedErrorConfig("nssFailure2", {
+      hostname: "example.com",
+      errorInfo: mockErrorInfo,
+      noConnectivity: false,
+      offline: false,
+    });
+    const params = netErrorCard.mapCustomNetErrorConfigToParams(
+      config.customNetError,
+      config
+    );
+    Assert.equal(
+      params.errorCode,
+      UNREGISTERED_CODE,
+      "mapCustomNetErrorConfigToParams should use the runtime errorCodeString for unregistered SSL errors"
     );
   });
 

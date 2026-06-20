@@ -4,23 +4,29 @@
 
 package org.mozilla.fenix.home.logo
 
-import android.view.ViewGroup
-import org.mozilla.fenix.ext.settings
+import android.content.Context
 import org.mozilla.fenix.longfox.LongFoxFeatureApi
 
 /**
- * Wire up clicks on the home screen logo to the long fox feature, if enabled.
+ * Controller for launching the LongFox feature.
  */
 class LogoController(
     private val longFoxFeature: LongFoxFeatureApi,
-    private val container: ViewGroup?,
-    private val longFoxEnabled: Boolean = container?.context?.settings()?.longfoxEnabled == true,
+    private val context: Context,
+    private val longFoxEnabled: Boolean,
 ) {
 
     /**
-     * When the logo is long clicked, decide whether to launch the LongFox feature.
+     * When the longfox entry point text is clicked, launch the LongFox feature.
      */
-    fun handleLogoLongClicked() {
-        if (container != null && longFoxEnabled) longFoxFeature.start(container = container)
+    fun handleLongfoxEntryPointClicked() {
+        if (longFoxEnabled) longFoxFeature.start(context)
+    }
+
+    /**
+     * When the longfox entry point is shown, record the telemetry event.
+     */
+    fun handleLongfoxEntryPointShown() {
+        longFoxFeature.onEntryPointShown()
     }
 }

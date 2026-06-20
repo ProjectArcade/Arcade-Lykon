@@ -599,9 +599,7 @@ template <XDRMode mode>
   MOZ_TRY(xdr->codeUint32(stencil.specifier.rawDataRef()));
   MOZ_TRY(xdr->codeUint32(stencil.firstUnsupportedAttributeKey.rawDataRef()));
   MOZ_TRY(XDRVectorContent(xdr, stencil.attributes));
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
   MOZ_TRY(xdr->codeUint8(reinterpret_cast<uint8_t*>(&stencil.phase)));
-#endif
 
   return Ok();
 }
@@ -1120,7 +1118,7 @@ XDRResult StencilXDR::codeSourceData(XDRState<mode>* const xdr,
   // The actual logic reads either the compressed or uncompressed raw data.
   // Neither of compression nor uncompression should be performed.
   mozilla::Maybe<ScriptSource::GenericReader> reader;
-  if (mode == XDR_ENCODE && ss->hasSourceText()) {
+  if (mode == XDR_ENCODE) {
     reader.emplace(ss);
   }
 

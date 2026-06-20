@@ -10,6 +10,7 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::typed_om::{KeywordValue, NumericType, NumericValue, ToTyped, TypedValue, UnitValue};
 use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
 use crate::values::generics::position::IsTreeScoped;
 use crate::Atom;
@@ -18,17 +19,11 @@ pub use cssparser::{SourceLocation, Token};
 use precomputed_hash::PrecomputedHash;
 use selectors::parser::SelectorParseErrorKind;
 use std::fmt::{self, Debug, Write};
-use style_traits::{
-    CssString, CssWriter, KeywordValue, MathSum, NumericValue, ParseError, StyleParseErrorKind,
-    ToCss, ToTyped, TypedValue, UnitValue,
-};
+use style_traits::{CssString, CssWriter, ParseError, StyleParseErrorKind, ToCss};
 use thin_vec::ThinVec;
 use to_shmem::impl_trivial_to_shmem;
 
-#[cfg(feature = "gecko")]
-pub use crate::gecko::url::CssUrl;
-#[cfg(feature = "servo")]
-pub use crate::servo::url::CssUrl;
+pub use crate::url::CssUrl;
 
 pub mod animated;
 pub mod computed;
@@ -36,6 +31,7 @@ pub mod distance;
 pub mod generics;
 pub mod resolved;
 pub mod specified;
+pub mod tagged_numeric;
 
 /// A CSS float value.
 pub type CSSFloat = f32;
@@ -99,30 +95,11 @@ where
 }
 
 /// Serialize a number with calc, and NaN/infinity handling (if enabled)
-pub fn serialize_number<W>(v: f32, was_calc: bool, dest: &mut CssWriter<W>) -> fmt::Result
+pub fn serialize_number<W>(v: f32, dest: &mut CssWriter<W>) -> fmt::Result
 where
     W: Write,
 {
-    serialize_specified_dimension(v, "", was_calc, dest)
-}
-
-/// Reify a number with calc.
-pub fn reify_number(v: f32, was_calc: bool, dest: &mut ThinVec<TypedValue>) -> Result<(), ()> {
-    let numeric_value = NumericValue::Unit(UnitValue {
-        value: v,
-        unit: CssString::from("number"),
-    });
-
-    // https://drafts.css-houdini.org/css-typed-om-1/#reify-a-math-expression
-    if was_calc {
-        dest.push(TypedValue::Numeric(NumericValue::Sum(MathSum {
-            values: ThinVec::from([numeric_value]),
-        })));
-    } else {
-        dest.push(TypedValue::Numeric(numeric_value));
-    }
-
-    Ok(())
+    serialize_specified_dimension(v, "", /* was_calc = */ false, dest)
 }
 
 /// Serialize a specified dimension with unit, calc, and NaN/infinity handling (if enabled)
@@ -473,26 +450,15 @@ where
     dest.write_char('%')
 }
 
-/// Reify a percentage with calc.
-pub fn reify_percentage(
-    value: CSSFloat,
-    was_calc: bool,
-    dest: &mut ThinVec<TypedValue>,
-) -> Result<(), ()> {
+/// Reify a percentage.
+pub fn reify_percentage(value: CSSFloat, dest: &mut ThinVec<TypedValue>) -> Result<(), ()> {
     let numeric_value = NumericValue::Unit(UnitValue {
+        numeric_type: NumericType::percent(),
         value: value * 100.,
         unit: CssString::from("percent"),
     });
 
-    // https://drafts.css-houdini.org/css-typed-om-1/#reify-a-math-expression
-    if was_calc {
-        dest.push(TypedValue::Numeric(NumericValue::Sum(MathSum {
-            values: ThinVec::from([numeric_value]),
-        })));
-    } else {
-        dest.push(TypedValue::Numeric(numeric_value));
-    }
-
+    dest.push(TypedValue::Numeric(numeric_value));
     Ok(())
 }
 

@@ -57,8 +57,9 @@
 #include "mozilla/ComputedStyle.h"
 #include "mozilla/EnumSet.h"
 #include "mozilla/EventForwards.h"
+#include "mozilla/LayoutStructs.h"
 #include "mozilla/Maybe.h"
-#include "mozilla/ReflowInput.h"
+#include "mozilla/ReflowOutput.h"
 #include "mozilla/RelativeTo.h"
 #include "mozilla/Result.h"
 #include "mozilla/SmallPointerArray.h"
@@ -147,6 +148,7 @@ class nsDisplayList;
 class nsDisplayListBuilder;
 class nsDisplayListSet;
 class PresShell;
+struct ReflowInput;
 class ScrollContainerFrame;
 class ServoRestyleState;
 class WidgetGUIEvent;
@@ -589,9 +591,9 @@ static void ReleaseValue(T* aPropertyValue) {
     return nsQueryFrame::class##_id;                                           \
   }
 
-#define NS_IMPL_FRAMEARENA_HELPERS(class)                             \
-  void* class ::operator new(size_t sz, mozilla::PresShell* aShell) { \
-    return aShell->AllocateFrame(nsQueryFrame::class##_id, sz);       \
+#define NS_IMPL_FRAMEARENA_HELPERS(class)                              \
+  void* class ::operator new(size_t sz, mozilla::PresShell * aShell) { \
+    return aShell->AllocateFrame(nsQueryFrame::class##_id, sz);        \
   }
 
 #define NS_DECL_ABSTRACT_FRAME(class)                                         \
@@ -614,7 +616,7 @@ namespace mozilla {
 struct MOZ_RAII FrameDestroyContext {
   explicit FrameDestroyContext(PresShell* aPs) : mPresShell(aPs) {}
 
-  void AddAnonymousContent(already_AddRefed<nsIContent>&& aContent) {
+  void AddAnonymousContent(already_AddRefed<nsIContent> aContent) {
     if (RefPtr<nsIContent> content = aContent) {
       mAnonymousContent.AppendElement(std::move(content));
     }
@@ -1670,6 +1672,7 @@ class nsIFrame : public nsQueryFrame {
    * Return whether any radii are nonzero.
    */
   static bool ComputeBorderRadii(const mozilla::BorderRadius&,
+                                 const mozilla::CornerShapeRect&,
                                  const nsSize& aFrameSize,
                                  const nsSize& aBorderArea, Sides aSkipSides,
                                  nsRectCornerRadii&);
@@ -2377,7 +2380,56 @@ class nsIFrame : public nsQueryFrame {
   bool ShouldHandleSelectionMovementEvents();
 
  public:
-  virtual nsIContent* GetContentForEvent(const mozilla::WidgetEvent*) const;
+  /**
+   * Return a content node for handling an event on this frame.
+   * - If this is a frame for a generated content, return the parent of the
+   * generated content.
+   * - If this is a image frame for an image map and the event is fired in an
+   * <area>, return the <area>.
+   * Different from GetEventTargetContent, this may return a `Text` node if the
+   * event uses the coordinates and over a `Text`.
+   *
+   * FYI: When you override this method, you should add `using
+   * nsIFrame::GetExplicitEventTargetContent` not to hide the following
+   * overload.
+   */
+  virtual nsIContent* GetExplicitEventTargetContent(
+      const mozilla::WidgetEvent* = nullptr) const;
+
+  /**
+   * Return a content node for handling an event on this frame.
+   * - If this is a frame for a generated content, return the parent of the
+   * generated content.
+   * - If this is a image frame for an image map and the event is fired in an
+   * <area>, return the <area>.
+   * Different from GetEventTargetContent, this may return a `Text` node if the
+   * event uses the coordinates and over a `Text`.
+   */
+  nsIContent* GetExplicitEventTargetContent(
+      const mozilla::WidgetEvent& aEvent) const {
+    return GetExplicitEventTargetContent(&aEvent);
+  }
+
+  /**
+   * Return a content node which may be the target of the event if and only if
+   * the event should be handled by this frame. The result is the same as
+   * the result of GetExplicitEventTargetContent() or its flattened tree parent
+   * element if the result is not an element and the event target should be an
+   * element node.
+   */
+  nsIContent* GetEventTargetContent(
+      const mozilla::WidgetEvent* = nullptr) const;
+
+  /**
+   * Return a content node which may be the target of the event if and only if
+   * the event should be handled by this frame. The result is the same as
+   * the result of GetExplicitEventTargetContent() or its flattened tree parent
+   * element if the result is not an element and the event target should be an
+   * element node.
+   */
+  nsIContent* GetEventTargetContent(const mozilla::WidgetEvent& aEvent) const {
+    return GetEventTargetContent(&aEvent);
+  }
 
   // This structure keeps track of the content node and offsets associated with
   // a point; there is a primary and a secondary offset associated with any
@@ -2663,6 +2715,8 @@ class nsIFrame : public nsQueryFrame {
    * Exceptions: TableColGroupFrame children.
    */
   void MarkSubtreeDirty();
+
+  void MarkPrincipalChildrenDirty();
 
   /**
    * Get the min-content intrinsic inline size of the frame.  This must be
@@ -3640,9 +3694,17 @@ class nsIFrame : public nsQueryFrame {
 
   /**
    * Returns true if the frame is an instance of nsBlockFrame or one of its
-   * subclasses.
+   * subclasses. Note: This uses a slow do_QueryFrame call when |this| is not
+   * nsBlockFrame itself, but a subclass of nsBlockFrame.
    */
   bool IsBlockFrameOrSubclass() const;
+
+  /**
+   * Returns true if the frame is an instance of nsInlineFrame or one of its
+   * subclasses. Note: This uses a slow do_QueryFrame call when |this| is not
+   * nsInlineFrame itself, but a subclass of nsInlineFrame.
+   */
+  bool IsInlineFrameOrSubclass() const;
 
   /**
    * Returns true if the frame is an instance of nsImageFrame or one of its
@@ -4492,6 +4554,29 @@ class nsIFrame : public nsQueryFrame {
   template <typename T>
   bool RemoveProperty(FrameProperties::Descriptor<T> aProperty) {
     return mProperties.Remove(aProperty, this);
+  }
+
+  /**
+   * Set the releasable property with a given value if it doesn't already exist;
+   * otherwise, return the existing value.
+   *
+   * Note: As the name suggests, this will behave properly only for properties
+   * declared with NS_DECLARE_FRAME_PROPERTY_RELEASABLE!
+   */
+  template <typename T, typename... Params>
+  T* GetOrCreateReleasableProperty(FrameProperties::Descriptor<T> aProperty,
+                                   Params&&... aParams) {
+    bool found;
+    using DataType = std::remove_pointer_t<FrameProperties::PropertyType<T>>;
+    DataType* prop = GetProperty(aProperty, &found);
+    if (found) {
+      MOZ_ASSERT(prop, "this property should only store non-null values");
+      return prop;
+    }
+    prop = new DataType{aParams...};
+    NS_ADDREF(prop);
+    AddProperty(aProperty, prop);
+    return prop;
   }
 
   /**

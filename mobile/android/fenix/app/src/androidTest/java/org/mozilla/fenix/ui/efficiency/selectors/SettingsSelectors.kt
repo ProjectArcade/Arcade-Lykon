@@ -11,6 +11,15 @@ import org.mozilla.fenix.ui.efficiency.helpers.Selector
 import org.mozilla.fenix.ui.efficiency.helpers.SelectorStrategy
 
 object SettingsSelectors {
+    // Present on Settings and its sub-screens; absent once back on Home/Browser. Used as the
+    // anchor for backing out of nested Settings via PressBackUntilGone.
+    val NAVIGATION_TOOLBAR = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_RES_ID,
+        value = "navigationToolbar",
+        description = "the settings navigation toolbar",
+        groups = listOf(),
+    )
+
     val GO_BACK_BUTTON = Selector(
         strategy = SelectorStrategy.ESPRESSO_BY_CONTENT_DESC,
         value = "Navigate up",
@@ -200,7 +209,64 @@ object SettingsSelectors {
         groups = listOf("aboutSection", "aboutFirefox", "requiresScroll"),
     )
 
+    val SEARCH_DEFAULT_SUMMARY = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Google",
+        description = "the Search default summary",
+        groups = listOf("defaultValues"),
+    )
+
+    val TABS_DEFAULT_SUMMARY = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Close manually",
+        description = "the Tabs default summary",
+        groups = listOf("defaultValues"),
+    )
+
+    val ETP_DEFAULT_SUMMARY = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Standard",
+        description = "the Enhanced Tracking Protection default summary",
+        groups = listOf("defaultValues"),
+    )
+
+    val NOTIFICATIONS_DEFAULT_SUMMARY = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Allowed",
+        description = "the Notifications default summary",
+        groups = listOf("defaultValues"),
+    )
+
+    val SET_AS_DEFAULT_BROWSER_BUTTON = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Set as default browser",
+        description = "the Set as default browser button",
+        groups = listOf("defaultValues"),
+    )
+
+    val DOWNLOADS_BUTTON = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Downloads",
+        description = "the Downloads button",
+        groups = listOf("advancedSettingsSection", "defaultValues"),
+    )
+
+    val OPEN_LINKS_IN_APPS_DEFAULT_SUMMARY = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "Ask before opening",
+        description = "the Open links in apps default summary",
+        groups = listOf("defaultValues"),
+    )
+
+    val HTTPS_ONLY_MODE_ON_ALL_TABS_SUMMARY = Selector(
+        strategy = SelectorStrategy.UIAUTOMATOR_WITH_TEXT,
+        value = "On in all tabs",
+        description = "HTTPS-Only Mode summary - On in all tabs",
+        groups = listOf(),
+    )
+
     val all = listOf(
+        NAVIGATION_TOOLBAR,
         GO_BACK_BUTTON,
         GENERAL_HEADING,
         SETTINGS_TITLE,
@@ -228,5 +294,13 @@ object SettingsSelectors {
         ABOUT_FIREFOX_BUTTON,
         ABOUT_SECTION_TITLE,
         RATE_ON_GOOGLE_PLAY_BUTTON,
+        SEARCH_DEFAULT_SUMMARY,
+        TABS_DEFAULT_SUMMARY,
+        ETP_DEFAULT_SUMMARY,
+        NOTIFICATIONS_DEFAULT_SUMMARY,
+        SET_AS_DEFAULT_BROWSER_BUTTON,
+        DOWNLOADS_BUTTON,
+        OPEN_LINKS_IN_APPS_DEFAULT_SUMMARY,
+        HTTPS_ONLY_MODE_ON_ALL_TABS_SUMMARY,
     )
 }

@@ -57,7 +57,7 @@ class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
 
   static void ShutdownVideoBridge();
 
-  bool OnManagerThread();
+  static bool OnManagerThread();
   static void Dispatch(already_AddRefed<nsIRunnable> aRunnable);
 
   // Can be called from manager thread only
@@ -66,24 +66,22 @@ class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
   const dom::ContentParentId& GetContentId() const { return mContentId; }
 
  protected:
-  PRemoteDecoderParent* AllocPRemoteDecoderParent(
+  already_AddRefed<PRemoteDecoderParent> AllocPRemoteDecoderParent(
       const RemoteDecoderInfoIPDL& aRemoteDecoderInfo,
       const CreateDecoderParams::OptionSet& aOptions,
       const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
       const Maybe<uint64_t>& aMediaEngineId,
       const Maybe<TrackingId>& aTrackingId, PRemoteCDMParent* aCDM);
-  bool DeallocPRemoteDecoderParent(PRemoteDecoderParent* actor);
 
   already_AddRefed<PRemoteEncoderParent> AllocPRemoteEncoderParent(
       const EncoderConfig& aConfig);
 
-  PMFMediaEngineParent* AllocPMFMediaEngineParent();
-  bool DeallocPMFMediaEngineParent(PMFMediaEngineParent* actor);
+  already_AddRefed<PMFMediaEngineParent> AllocPMFMediaEngineParent();
 
-  PMFCDMParent* AllocPMFCDMParent(const nsAString& aKeySystem);
-  bool DeallocPMFCDMParent(PMFCDMParent* actor);
+  already_AddRefed<PMFCDMParent> AllocPMFCDMParent(const nsAString& aKeySystem);
 
-  PRemoteCDMParent* AllocPRemoteCDMParent(const nsAString& aKeySystem);
+  already_AddRefed<PRemoteCDMParent> AllocPRemoteCDMParent(
+      const nsAString& aKeySystem);
 
   mozilla::ipc::IPCResult RecvReadback(const SurfaceDescriptorGPUVideo& aSD,
                                        SurfaceDescriptor* aResult);

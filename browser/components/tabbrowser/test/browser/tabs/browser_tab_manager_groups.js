@@ -44,6 +44,7 @@ function forgetSavedTabGroups() {
  * @returns {Promise<PanelView>}
  */
 async function openTabsMenu(win = window) {
+  await BrowserTestUtils.ensureWindowActivated(win);
   let viewShown = BrowserTestUtils.waitForEvent(
     win.document.getElementById("allTabsMenu-allTabsView"),
     "ViewShown"
@@ -255,7 +256,7 @@ add_task(async function test_groupsViewShowMore() {
   }
 
   let allTabsMenu = await openTabsMenu();
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () =>
       allTabsMenu.querySelectorAll(
         "#allTabsMenu-groupsView .all-tabs-group-item"
@@ -301,7 +302,7 @@ add_task(async function test_groupsViewShowMore() {
     !subView.querySelector("#allTabsMenu-groupsViewShowMore"),
     "Show more button should not be shown in sub view"
   );
-  await EventUtils.synthesizeMouseAtCenter(subViewItems[1], {}, window);
+  EventUtils.synthesizeMouseAtCenter(subViewItems[1], {}, window);
   ok(
     groups.at(-1).tabs[0].selected,
     "last created group's tab is selected after clicking second item in groups sub view"
@@ -350,7 +351,7 @@ add_task(async function test_tabGroupsViewContextMenu_savedGroups() {
   menu.querySelector("#saved-tab-group-context-menu_openInThisWindow").click();
   menu.hidePopup();
   await waitForGroup;
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () =>
       !allTabsMenu.querySelector(
         `#allTabsMenu-groupsView .all-tabs-group-saved-group[data-tab-group-id="${savedGroupId}"]`
@@ -379,7 +380,7 @@ add_task(async function test_tabGroupsViewContextMenu_savedGroups() {
   menu.querySelector("#saved-tab-group-context-menu_delete").click();
   menu.hidePopup();
 
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () =>
       !allTabsMenu.querySelector(
         `#allTabsMenu-groupsView [data-tab-group-id="${savedGroupId}"]`
@@ -531,7 +532,7 @@ add_task(async function test_tabGroupsViewContextMenu_openGroups() {
     "wait for tab group to be deleted"
   );
   info("waiting for menu sync");
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () =>
       !allTabsMenu.querySelector(
         `#allTabsMenu-groupsView [data-tab-group-id="${groupId}"]`

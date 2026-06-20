@@ -57,7 +57,8 @@ class nsAnimationManager final
 
   // Utility function to walk through |aIter| to find the Keyframe with
   // matching offset and timing function but stopping as soon as the offset
-  // differs from |aOffset| (i.e. it assumes a sorted iterator).
+  // differs from |aOffset| (i.e. it assumes a sorted iterator for double
+  // offsets). For TimelineRangeOffset, see the comments in the loop.
   //
   // If a matching Keyframe is found,
   //   Returns true and sets |aIndex| to the index of the matching Keyframe
@@ -70,15 +71,35 @@ class nsAnimationManager final
   //   Keyframe.
   template <class IterType>
   static bool FindMatchingKeyframe(
-      IterType&& aIter, double aOffset,
+      IterType&& aIter, const mozilla::Keyframe::OffsetType& aOffset,
       const mozilla::StyleComputedTimingFunction& aTimingFunctionToMatch,
       mozilla::dom::CompositeOperationOrAuto aCompositionToMatch,
       size_t& aIndex) {
     aIndex = 0;
     for (mozilla::Keyframe& keyframe : aIter) {
       if (keyframe.mOffset.value() != aOffset) {
-        break;
+        // There is an assumption that we handle keyframes with double offsets
+        // first, and they are in sorted order. So when we are searching for a
+        // double offset and the offset is different from the current
+        // |keyframe|, it must be a non-existing Keyframe.
+        if (aOffset.IsPercentageOffset()) {
+          break;
+        }
+
+        // There is an assumption that we handle keyframes with
+        // TimelineRangeOffset after we insert all the keyframes with double
+        // offsets, and the Keyframe with TimelineRangeOffset should be put
+        // after the Keyframes with double offsets. In this case, we search for
+        // the TimelineRangeOffset in the reversed order of Keyframes.
+        // Therefore, if current |keyframe| is is double offset, |offset| must
+        // not exist.
+        if (keyframe.mOffset->IsPercentageOffset()) {
+          break;
+        }
+        ++aIndex;
+        continue;
       }
+
       const bool matches = [&] {
         if (keyframe.mComposite != aCompositionToMatch) {
           return false;

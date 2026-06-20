@@ -19,10 +19,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
-import mozilla.components.browser.state.action.CustomTabListAction
 import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.RecentlyClosedAction
-import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.Engine
 import mozilla.components.concept.engine.translate.ModelManagementOptions
@@ -90,17 +88,25 @@ class DefaultDeleteBrowsingDataControllerTest {
 
     @Test
     fun deleteBrowsingHistory() = runTest(testDispatcher) {
+        val onSuccessSlot = slot<() -> Unit>()
+        val onErrorSlot = slot<(Throwable) -> Unit>()
+        every {
+            engine.clearTrackingProtectionData(
+                onSuccess = capture(onSuccessSlot),
+                onError = capture(onErrorSlot),
+            )
+        } answers { onSuccessSlot.captured.invoke() }
+
         controller.deleteBrowsingHistory()
 
         coVerify(ordering = Ordering.ORDERED) {
             historyStorage.deleteEverything()
-
-            store.dispatch(TabListAction.RemoveAllNormalTabsAction)
-            store.dispatch(TabListAction.RemoveAllPrivateTabsAction)
-            store.dispatch(CustomTabListAction.RemoveAllCustomTabsAction)
             store.dispatch(EngineAction.PurgeHistoryAction)
             store.dispatch(RecentlyClosedAction.RemoveAllClosedTabAction)
+            engine.clearTrackingProtectionData(onSuccess = any(), onError = any())
         }
+        assertTrue(onSuccessSlot.isCaptured)
+        assertTrue(onErrorSlot.isCaptured)
     }
 
     @Test

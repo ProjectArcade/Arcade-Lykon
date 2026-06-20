@@ -73,8 +73,18 @@ class SimpleperfProfile(RaptorProfiling):
             LOG.error(f"perf.data not found at {self.dest_dir}, skipping symbolication")
             return
 
+        if "MOZ_AUTOMATION" in os.environ:
+            profile_archive = Path(
+                self.upload_dir, f"profile_{self.test_config['name']}.zip"
+            )
+
+            try:
+                mode = zipfile.ZIP_DEFLATED
+            except NameError:
+                mode = zipfile.ZIP_STORED
+
         for perf_file in perf_files:
-            profile = perf_file.parent / f"{perf_file.parent.name}.json.gz"
+            profile = perf_file.parent / f"{perf_file.parent.name}.json"
 
             try:
                 result = subprocess.run(
@@ -108,12 +118,18 @@ class SimpleperfProfile(RaptorProfiling):
                 if not profile.exists():
                     LOG.error(f"samply did not produce a profile at {profile}")
                 else:
-                    size = profile.stat().st_size
-                    LOG.info(f"Profile converted: {profile} ({size} bytes)")
+                    LOG.info(
+                        f"Profile converted: {profile} ({profile.stat().st_size} bytes)"
+                    )
+
                     if "MOZ_AUTOMATION" in os.environ:
-                        shutil.move(
-                            profile, self.upload_dir / f"profile_{profile.name}"
-                        )
+                        with zipfile.ZipFile(profile_archive, "a", mode) as zipf:
+                            path_in_zip = f"simpleperf/{profile.name}"
+                            LOG.info(
+                                f"Adding {profile.name} to {profile_archive} as {path_in_zip}"
+                            )
+                            zipf.write(profile, arcname=path_in_zip)
+                            profile.unlink(missing_ok=True)
             finally:
                 perf_file.unlink(missing_ok=True)
                 if perf_file.parent.exists():
@@ -122,6 +138,15 @@ class SimpleperfProfile(RaptorProfiling):
                     for jitdump in perf_file.parent.rglob("jit-*.dump"):
                         jitdump.unlink(missing_ok=True)
 
+        if "MOZ_AUTOMATION" in os.environ:
+            if profile_archive and profile_archive.exists():
+                LOG.info(
+                    f"Profiles archived to: {profile_archive} ({profile_archive.stat().st_size} bytes)"
+                )
+            elif profile_archive:
+                LOG.error(f"Failed to archive profiles to {profile_archive}")
+
     def clean(self):
         if self.breakpad_symbol_dir and self.breakpad_symbol_dir.exists():
             shutil.rmtree(self.breakpad_symbol_dir)
+        super().clean()

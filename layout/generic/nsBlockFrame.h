@@ -40,11 +40,13 @@ enum class LineReflowStatus {
 };
 
 class nsBlockInFlowLineIterator;
+class nsLineLayout;
 namespace mozilla {
 class BlockReflowState;
 class PresShell;
 class ServoRestyleState;
 class ServoStyleSet;
+
 }  // namespace mozilla
 
 /**
@@ -752,6 +754,47 @@ class nsBlockFrame : public nsContainerFrame {
    */
   void ReflowPushedFloats(BlockReflowState& aState,
                           mozilla::OverflowAreas& aOverflowAreas);
+
+  /**
+   * Reflow absolutely positioned descendants of inline frames that serve as
+   * absolute containing blocks in our lines. Must be called after we reflow all
+   * the lines.
+   */
+  void ReflowAbsoluteDescendantsInInlineFrame(nsPresContext* aPresContext,
+                                              const ReflowInput& aReflowInput,
+                                              ReflowOutput& aReflowOutput,
+                                              nsReflowStatus& aStatus);
+
+  /**
+   * Helper for ReflowAbsoluteDescendantsInInlineFrame(). Recursively visit
+   * every inline frame reachable from aFrame via its principal child list, and
+   * call ReflowAbsoluteFramesInInlineFrame() on each. Update aFrame's overflow
+   * areas with the accumulated overflow areas.
+   *
+   * @return accumulated overflow areas from abspos descendants visited under
+   *         aFrame, in aFrame's coordinate space. Or if no abspos descendants
+   *         were visited, return Nothing().
+   */
+  mozilla::Maybe<mozilla::OverflowAreas>
+  WalkInlineDescendantsToReflowAbsoluteFrames(nsIFrame* aFrame,
+                                              nsPresContext* aPresContext,
+                                              const ReflowInput& aReflowInput,
+                                              nsReflowStatus& aStatus);
+
+  /**
+   * Helper for WalkInlineDescendantsToReflowAbsoluteFrames(). Reflow the
+   * absolutely positioned frames if aInlineFrame is an absolute containing
+   * block.
+   *
+   * @param aInlineFrame inline-level frame that forms the absolute containing
+   *        block.
+   * @return overflow areas from aInlineFrame's abspos kids, in
+   *         aInlineFrame's coordinate space. Or if no abspos descendants were
+   *         visited, return Nothing().
+   */
+  mozilla::Maybe<mozilla::OverflowAreas> ReflowAbsoluteFramesInInlineFrame(
+      nsInlineFrame* aInlineFrame, nsPresContext* aPresContext,
+      const ReflowInput& aReflowInput, nsReflowStatus& aStatus);
 
   /**
    * Find any trailing BR clear from the last line of this block (or from its

@@ -18,6 +18,7 @@
 #include "mozilla/HoldDropJSObjects.h"
 #include "mozilla/OwningNonNull.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/dom/AutoEntryScript.h"
 #include "mozilla/dom/BindingUtils.h"
 #include "mozilla/dom/DOMException.h"
@@ -432,7 +433,14 @@ void Promise::MaybeResolve(JSContext* aCx, JS::Handle<JS::Value> aValue) {
   NS_ASSERT_OWNINGTHREAD(Promise);
 
   JS::Rooted<JSObject*> p(aCx, PromiseObj());
-  if (!p || !JS::ResolvePromise(aCx, p, aValue)) {
+#ifdef NIGHTLY_BUILD
+  const bool ok = p && (StaticPrefs::dom_promise_experimental_safe_resolve()
+                            ? JS::SafeResolve(aCx, p, aValue)
+                            : JS::ResolvePromise(aCx, p, aValue));
+#else
+  const bool ok = p && JS::ResolvePromise(aCx, p, aValue);
+#endif
+  if (!ok) {
     // Now what?  There's nothing sane to do here.
     JS_ClearPendingException(aCx);
   }
@@ -572,7 +580,7 @@ class PromiseNativeHandlerShim final : public PromiseNativeHandler {
     return PromiseNativeHandler_Binding::Wrap(aCx, this, aGivenProto, aWrapper);
   }
 
-  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS_FINAL
   NS_DECL_CYCLE_COLLECTION_CLASS(PromiseNativeHandlerShim)
 };
 

@@ -317,10 +317,6 @@ bool WebGLContext::CreateAndInitGL(
       // Request and prefer ES2 context for WebGL1.
       flags |= gl::CreateContextFlags::PREFER_EXACT_VERSION;
     }
-
-    if (!StaticPrefs::webgl_1_allow_core_profiles()) {
-      flags |= gl::CreateContextFlags::REQUIRE_COMPAT_PROFILE;
-    }
   }
 
   {
@@ -2170,7 +2166,7 @@ uint64_t AvailGroups(const uint64_t totalAvailItems,
 
 const char* WebGLContext::FuncName() const {
   const char* ret;
-  if (MOZ_LIKELY(mFuncScope)) {
+  if (mFuncScope) [[likely]] {
     ret = mFuncScope->mFuncName;
   } else {
     ret = "<unknown function>";

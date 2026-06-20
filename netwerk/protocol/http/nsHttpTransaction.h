@@ -171,19 +171,61 @@ class nsHttpTransaction final : public nsAHttpTransaction,
 
   bool Connected() const { return mConnected; }
 
-  void SetHappyEyeballsProxy(nsAHttpTransaction* aProxy) {
-    mHappyEyeballsProxy = aProxy;
+  // Exposes mRequestStream to ZeroRttHandle so Happy Eyeballs racing
+  // attempts can drive 0-RTT by reading directly from it (seeking to
+  // per-attempt offsets) without mutating any of the transaction's
+  // own 0-RTT flags.
+  nsIInputStream* RequestStream() const { return mRequestStream; }
+
+  // Called by ZeroRttHandle::ReadSegments each time a racer HT
+  // successfully forwards early-data bytes on this txn's behalf.
+  // Mirrors the EARLY_NONE → EARLY_SENT transition the non-HE
+  // ReadSegments path does inline when m0RTTInProgress and
+  // *countRead > 0. Idempotent: later ReadSegments rounds / racer
+  // attempts are no-ops once the disposition has advanced past
+  // EARLY_NONE.
+  void MarkEarlyDataSent() {
+    if (mEarlyDataDisposition == EARLY_NONE) {
+      mEarlyDataDisposition = EARLY_SENT;
+    }
   }
-  nsAHttpTransaction* HappyEyeballsProxy() const {
-    return mHappyEyeballsProxy.get();
-  }
+
+  // Called by ZeroRttHandle::Finish0RTT once 0-RTT has completed on
+  // behalf of the HE path. In the non-HE flow Do0RTT()+Finish0RTT()
+  // are driven by nsHttpConnection against the transaction that did
+  // its own ReadSegments, so m0RTTInProgress is true when we enter.
+  // In the HE path the HappyEyeballsTransaction did all of that on
+  // its racer and this txn's own 0-RTT flags were never set — so
+  // we can't reuse Finish0RTT() (its m0RTTInProgress assert would
+  // fire). Flip the flags that outlive 0-RTT and that downstream
+  // code still reads on the real txn:
+  //   * both: mEarlyDataWasAvailable = true so
+  //     ShouldRestartOn0RttError in Close() can map a later 0-RTT
+  //     TLS alert (BAD_MAC / PROTOCOL_VERSION / UNEXPECTED) into a
+  //     restart instead of a channel failure.
+  //   * accept: mEarlyDataDisposition = EARLY_ACCEPTED so
+  //     HandleContentStart tags the response and a 425 is mapped to
+  //     EARLY_425 for retry.
+  //   * reject: mDoNotTryEarlyData = true so a later restart of this
+  //     txn won't re-attempt 0-RTT.
+  // mConnected / mSecurityInfo / fallback-timers are intentionally
+  // left alone — the real txn's ReadSegments path initializes them
+  // once Adopt() attaches the conn and dispatch kicks in, and HE's
+  // fast-fallback timers live on the HappyEyeballsConnectionAttempt,
+  // not on this transaction.
+  void FinishAdopted0RTT(bool aRestart);
+
+  // Remove all SSL session tokens keyed by aSecInfo->GetPeerId() so a 0-RTT
+  // restart starts a fresh handshake instead of looping on the rejected ticket.
+  void RemoveSSLTokens(nsITransportSecurityInfo* aSecInfo);
+
   uint64_t BrowserId() override { return mBrowserId; }
 
   void SetHttpTrailers(nsCString& aTrailers);
 
   bool IsWebsocketUpgrade();
 
-  void OnProxyConnectComplete(int32_t aResponseCode) override;
+  void OnProxyConnectComplete(ProxyConnectResponseHead* aResponseHead) override;
   void SetFlat407Headers(const nsACString& aHeaders);
 
   void UpdateConnectionInfo(nsHttpConnectionInfo* aConnInfo);
@@ -208,6 +250,16 @@ class nsHttpTransaction final : public nsAHttpTransaction,
 
   void SetIsTRRTransaction() override { mIsTRRTransaction = true; }
   bool IsTRRTransaction() { return mIsTRRTransaction; }
+
+  // Used by the HE speculative path to propagate the failed-handshake
+  // security info onto the real transaction whose mConnection was never
+  // set (so its own MaybeRefreshSecurityInfo skips). Without this the
+  // channel's GetSecurityInfo returns null on TLS handshake failures
+  // routed through the speculative racer.
+  void SetSecurityInfo(nsITransportSecurityInfo* aSecurityInfo) {
+    MutexAutoLock lock(mLock);
+    mSecurityInfo = aSecurityInfo;
+  }
 
  private:
   friend class DeleteHttpTransaction;
@@ -594,7 +646,12 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   } mEarlyDataDisposition{EARLY_NONE};
 
   HttpTrafficCategory mTrafficCategory{HttpTrafficCategory::eInvalid};
-  Atomic<int32_t> mProxyConnectResponseCode{0};
+  // Shared pointer to the full CONNECT response head, owned by the connection.
+  // Held here only so it survives the transaction being detached from the
+  // connection; copying the RefPtr is just an addref rather than a deep copy
+  // of the header array on every request. See bug 2045419.
+  RefPtr<ProxyConnectResponseHead> mProxyConnectResponseHead
+      MOZ_GUARDED_BY(mLock);
 
   nsCOMPtr<nsICancelable> mDNSRequest;
   Atomic<uint32_t, Relaxed> mHTTPSSVCReceivedStage{HTTPSSVC_NOT_USED};
@@ -626,6 +683,7 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   bool mSupportsHTTP3 = false;
   Atomic<bool, Relaxed> mIsForWebTransport{false};
   bool mIsResettingForTunnelConn = false;
+  Maybe<bool> mIsWebsocketUpgrade;
 
   bool mResumptionAttempted = false;
   void OnPSKResumptionAccepted() override;
@@ -646,7 +704,6 @@ class nsHttpTransaction final : public nsAHttpTransaction,
       MOZ_GUARDED_BY(mLock);
 
   nsAutoCString mUrl;
-  RefPtr<nsAHttpTransaction> mHappyEyeballsProxy;
 };
 
 }  // namespace mozilla::net

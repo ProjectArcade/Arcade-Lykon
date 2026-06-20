@@ -5,8 +5,10 @@ package org.mozilla.fenix.ui.robots
 
 import android.net.Uri
 import android.util.Log
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -27,6 +29,7 @@ import mozilla.components.compose.browser.toolbar.concept.BrowserToolbarTestTags
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.menu.MenuDialogTestTag.DESKTOP_SITE_OFF
 import org.mozilla.fenix.components.menu.MenuDialogTestTag.DESKTOP_SITE_ON
+import org.mozilla.fenix.components.menu.compose.CustomTabMenuTestTags
 import org.mozilla.fenix.helpers.Constants.TAG
 import org.mozilla.fenix.helpers.DataGenerationHelper.getStringResource
 import org.mozilla.fenix.helpers.MatcherHelper.assertUIObjectExists
@@ -101,9 +104,14 @@ class CustomTabRobot(private val composeTestRule: ComposeTestRule) {
         Log.i(TAG, "verifyCustomTabCloseButton: Verified that the close custom tab button is displayed")
     }
 
+    @OptIn(ExperimentalTestApi::class)
     fun verifyCustomTabToolbarTitle(title: String) {
         Log.i(TAG, "verifyCustomTabToolbarTitle: Trying to verify that the custom tab title: $title is displayed")
-        composeTestRule.onNodeWithText(title, substring = true, useUnmergedTree = true).assertIsDisplayed()
+        composeTestRule.waitUntil(waitingTime) {
+            composeTestRule.onAllNodes(hasText(title, substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        composeTestRule.onNodeWithText(title, substring = true, useUnmergedTree = true).assertExists()
         Log.i(TAG, "verifyCustomTabToolbarTitle: Verified that the custom tab title: $title is displayed")
     }
 
@@ -184,6 +192,18 @@ class CustomTabRobot(private val composeTestRule: ComposeTestRule) {
             waitingTime = waitingTime,
         )
 
+    fun verifyBookmarkThisPageButton() {
+        Log.i(TAG, "verifyBookmarkThisPageButton: Trying to verify that the \"Bookmark this page\" button is displayed")
+        composeTestRule.bookmarkPageButton().assertIsDisplayed()
+        Log.i(TAG, "verifyBookmarkThisPageButton: Verified that the \"Bookmark this page\" button is displayed")
+    }
+
+    fun verifyEditBookmarkButton() {
+        Log.i(TAG, "verifyEditBookmarkButton: Trying to verify that the \"Edit bookmark\" button is displayed")
+        composeTestRule.editBookmarkButton().assertIsDisplayed()
+        Log.i(TAG, "verifyEditBookmarkButton: Verified that the \"Edit bookmark\" button is displayed")
+    }
+
     fun verifySwitchToDesktopSiteButton() {
         Log.i(TAG, "verifySwitchToDesktopSiteButton: Trying to verify that the \"Desktop site\" button is displayed.")
         composeTestRule.desktopSiteButton().assertIsDisplayed()
@@ -206,6 +226,12 @@ class CustomTabRobot(private val composeTestRule: ComposeTestRule) {
         Log.i(TAG, "clickSwitchToDesktopSiteButton: Trying to click the \"Desktop site\" button.")
         composeTestRule.desktopSiteButton().performClick()
         Log.i(TAG, "clickSwitchToDesktopSiteButton: Clicked the \"Desktop site\" button.")
+    }
+
+    fun clickBookmarkThisPageButton() {
+        Log.i(TAG, "clickBookmarkThisPageButton: Trying to click the \"Bookmark this page\" button from the custom tab main menu.")
+        composeTestRule.bookmarkPageButton().performClick()
+        Log.i(TAG, "clickBookmarkThisPageButton: Clicked the \"Bookmark this page\" button from the custom tab main menu.")
     }
 
     class Transition(private val composeTestRule: ComposeTestRule) {
@@ -256,6 +282,15 @@ class CustomTabRobot(private val composeTestRule: ComposeTestRule) {
 
             ShareOverlayRobot().interact()
             return ShareOverlayRobot.Transition()
+        }
+
+        fun clickEditBookmarkButton(interact: BookmarksRobot.() -> Unit): BookmarksRobot.Transition {
+            Log.i(TAG, "clickEditBookmarkButton: Trying to click the \"Edit bookmark\" button from the custom tab main menu.")
+            composeTestRule.editBookmarkButton().performClick()
+            Log.i(TAG, "clickEditBookmarkButton: Clicked the \"Edit bookmark\" button from the custom tab main menu.")
+
+            BookmarksRobot(composeTestRule).interact()
+            return BookmarksRobot.Transition(composeTestRule)
         }
 
         fun clickFindInPageButton(interact: FindInPageRobot.() -> Unit): FindInPageRobot.Transition {
@@ -348,6 +383,10 @@ private fun ComposeTestRule.enabledDesktopSiteButton() = onNodeWithTag(DESKTOP_S
 private fun ComposeTestRule.disabledDesktopSiteButton() = onNodeWithTag(DESKTOP_SITE_OFF)
 
 private fun ComposeTestRule.findInPageButton() = onNodeWithContentDescription(getStringResource(R.string.browser_menu_find_in_page))
+
+private fun ComposeTestRule.bookmarkPageButton() = onNodeWithTag(CustomTabMenuTestTags.BOOKMARK_PAGE_ITEM)
+
+private fun ComposeTestRule.editBookmarkButton() = onNodeWithTag(CustomTabMenuTestTags.EDIT_BOOKMARK_PAGE_ITEM)
 
 private fun ComposeTestRule.backButton() = onNodeWithText("Back")
 

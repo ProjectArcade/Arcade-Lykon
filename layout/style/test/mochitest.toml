@@ -13,9 +13,12 @@ prefs = [
   "layout.css.field-sizing.enabled=true",
   "layout.css.anchor-positioning.enabled=true",
   "layout.css.anchor-positioning.position-try-order.enabled=true",
+  "layout.css.attr.enabled=true",
   "layout.css.scroll-state.enabled=true",
   "layout.css.style-queries.enabled=true",
   "layout.css.text-box.enabled=true",
+  "layout.css.link-parameters.enabled=true",
+  "layout.css.ellipse-corners.enabled=true"
 ]
 support-files = [
   "animation_utils.js",
@@ -689,6 +692,8 @@ fail-if = [
 ["test_stylesheet_additions.html"]
 
 ["test_stylesheet_clone_font_face.html"]
+
+["test_stylesheet_deleteRule.html"]
 
 ["test_supports_rules.html"]
 

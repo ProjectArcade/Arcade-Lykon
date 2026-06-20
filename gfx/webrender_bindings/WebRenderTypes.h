@@ -112,32 +112,6 @@ inline gfx::SurfaceFormat ImageFormatToSurfaceFormat(ImageFormat aFormat) {
   }
 }
 
-// This extra piece of data is used to differentiate when spatial nodes that are
-// created by Gecko that have the same mFrame and PerFrameKey. This currently
-// only occurs with sticky display list items that are also zoomable, which
-// results in Gecko creating both a sticky spatial node, and then a property
-// animated reference frame for APZ
-enum class SpatialKeyKind : uint32_t {
-  Transform,
-  Perspective,
-  Scroll,
-  Sticky,
-  ImagePipeline,
-  APZ,
-  ViewTransition,
-  SCOrigin,
-};
-
-// Construct a unique, persistent spatial key based on the frame tree pointer,
-// per-frame key and a spatial key kind. For now, this covers all the ways Gecko
-// creates spatial nodes. In future, we may need to be more clever with the
-// SpatialKeyKind.
-inline wr::SpatialTreeItemKey SpatialKey(uint64_t aFrame, uint32_t aPerFrameKey,
-                                         SpatialKeyKind aKind) {
-  return wr::SpatialTreeItemKey{
-      aFrame, uint64_t(aPerFrameKey) | (uint64_t(aKind) << 32)};
-}
-
 struct ImageDescriptor : public wr::WrImageDescriptor {
   // We need a default constructor for ipdl serialization.
   ImageDescriptor() {
@@ -418,35 +392,6 @@ static inline wr::LayoutSize ToLayoutSize(
   return ls;
 }
 
-static inline wr::ComplexClipRegion ToComplexClipRegion(
-    const gfx::RoundedRect& rect) {
-  wr::ComplexClipRegion ret;
-  ret.rect = ToLayoutRect(rect.rect);
-  ret.radii.top_left = ToLayoutSize(LayoutDeviceSize::FromUnknownSize(
-      rect.corners.radii[mozilla::eCornerTopLeft]));
-  ret.radii.top_right = ToLayoutSize(LayoutDeviceSize::FromUnknownSize(
-      rect.corners.radii[mozilla::eCornerTopRight]));
-  ret.radii.bottom_left = ToLayoutSize(LayoutDeviceSize::FromUnknownSize(
-      rect.corners.radii[mozilla::eCornerBottomLeft]));
-  ret.radii.bottom_right = ToLayoutSize(LayoutDeviceSize::FromUnknownSize(
-      rect.corners.radii[mozilla::eCornerBottomRight]));
-  ret.mode = wr::ClipMode::Clip;
-  return ret;
-}
-
-static inline wr::ComplexClipRegion SimpleRadii(const wr::LayoutRect& aRect,
-                                                float aRadii) {
-  wr::ComplexClipRegion ret;
-  wr::LayoutSize radii{aRadii, aRadii};
-  ret.rect = aRect;
-  ret.radii.top_left = radii;
-  ret.radii.top_right = radii;
-  ret.radii.bottom_left = radii;
-  ret.radii.bottom_right = radii;
-  ret.mode = wr::ClipMode::Clip;
-  return ret;
-}
-
 static inline wr::LayoutSize ToLayoutSize(
     const mozilla::LayoutDeviceIntSize& size) {
   return ToLayoutSize(LayoutDeviceSize(size));
@@ -488,6 +433,11 @@ static inline wr::BorderSide ToBorderSide(const gfx::DeviceColor& color,
 static inline wr::BorderRadius EmptyBorderRadius() {
   wr::BorderRadius br;
   PodZero(&br);
+  // PodZero leaves shape_* at 0.0, but the round (default) shape is K=1.0.
+  br.shape_top_left = 1.0f;
+  br.shape_top_right = 1.0f;
+  br.shape_bottom_left = 1.0f;
+  br.shape_bottom_right = 1.0f;
   return br;
 }
 
@@ -499,26 +449,50 @@ static inline wr::BorderRadius ToBorderRadius(
   br.top_right = ToLayoutSize(topRight);
   br.bottom_left = ToLayoutSize(bottomLeft);
   br.bottom_right = ToLayoutSize(bottomRight);
+
+  br.shape_top_left = 1.0f;
+  br.shape_top_right = 1.0f;
+  br.shape_bottom_left = 1.0f;
+  br.shape_bottom_right = 1.0f;
   return br;
+}
+
+static inline void SetCornerShapes(wr::BorderRadius& aRadius, float aTopLeftK,
+                                   float aTopRightK, float aBottomRightK,
+                                   float aBottomLeftK) {
+  aRadius.shape_top_left = aTopLeftK;
+  aRadius.shape_top_right = aTopRightK;
+  aRadius.shape_bottom_right = aBottomRightK;
+  aRadius.shape_bottom_left = aBottomLeftK;
 }
 
 static inline wr::BorderRadius ToBorderRadius(
     const gfx::RectCornerRadii& aRadii) {
-  return ToBorderRadius(
-      LayoutDeviceSize::FromUnknownSize(aRadii.TopLeft()),
-      LayoutDeviceSize::FromUnknownSize(aRadii.TopRight()),
-      LayoutDeviceSize::FromUnknownSize(aRadii.BottomLeft()),
-      LayoutDeviceSize::FromUnknownSize(aRadii.BottomRight()));
+  auto br =
+      ToBorderRadius(LayoutDeviceSize::FromUnknownSize(aRadii.TopLeft()),
+                     LayoutDeviceSize::FromUnknownSize(aRadii.TopRight()),
+                     LayoutDeviceSize::FromUnknownSize(aRadii.BottomLeft()),
+                     LayoutDeviceSize::FromUnknownSize(aRadii.BottomRight()));
+  SetCornerShapes(br, aRadii.mShapeK[mozilla::eCornerTopLeft],
+                  aRadii.mShapeK[mozilla::eCornerTopRight],
+                  aRadii.mShapeK[mozilla::eCornerBottomRight],
+                  aRadii.mShapeK[mozilla::eCornerBottomLeft]);
+  return br;
 }
 
 static inline wr::BorderRadius ToBorderRadius(const nsRectCornerRadii& aRadii,
                                               int32_t aAppUnitsPerDevPixel) {
-  return ToBorderRadius(
+  auto br = ToBorderRadius(
       LayoutDeviceSize::FromAppUnits(aRadii.TopLeft(), aAppUnitsPerDevPixel),
       LayoutDeviceSize::FromAppUnits(aRadii.TopRight(), aAppUnitsPerDevPixel),
       LayoutDeviceSize::FromAppUnits(aRadii.BottomLeft(), aAppUnitsPerDevPixel),
       LayoutDeviceSize::FromAppUnits(aRadii.BottomRight(),
                                      aAppUnitsPerDevPixel));
+  SetCornerShapes(br, aRadii.mShapeK[mozilla::eCornerTopLeft],
+                  aRadii.mShapeK[mozilla::eCornerTopRight],
+                  aRadii.mShapeK[mozilla::eCornerBottomRight],
+                  aRadii.mShapeK[mozilla::eCornerBottomLeft]);
+  return br;
 }
 
 static inline wr::ComplexClipRegion ToComplexClipRegion(
@@ -529,6 +503,29 @@ static inline wr::ComplexClipRegion ToComplexClipRegion(
       ToLayoutRect(LayoutDeviceRect::FromAppUnits(aRect, aAppUnitsPerDevPixel));
   ret.radii = ToBorderRadius(aRadii, aAppUnitsPerDevPixel);
   ret.mode = ClipMode::Clip;
+  return ret;
+}
+
+static inline wr::ComplexClipRegion ToComplexClipRegion(
+    const gfx::RoundedRect& rect) {
+  wr::ComplexClipRegion ret;
+  ret.rect = ToLayoutRect(rect.rect);
+  ret.radii = ToBorderRadius(rect.corners);
+  ret.mode = wr::ClipMode::Clip;
+  return ret;
+}
+
+static inline wr::ComplexClipRegion SimpleRadii(const wr::LayoutRect& aRect,
+                                                float aRadii) {
+  wr::ComplexClipRegion ret;
+  wr::LayoutSize radii{aRadii, aRadii};
+  ret.rect = aRect;
+  ret.radii = EmptyBorderRadius();
+  ret.radii.top_left = radii;
+  ret.radii.top_right = radii;
+  ret.radii.bottom_left = radii;
+  ret.radii.bottom_right = radii;
+  ret.mode = wr::ClipMode::Clip;
   return ret;
 }
 

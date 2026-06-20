@@ -876,6 +876,38 @@ bool JSRope::hash(uint32_t* outHash) const {
   return true;
 }
 
+bool JSRope::hashPrefix(size_t budget, uint32_t* outHash) const {
+  Vector<const JSString*, 8, SystemAllocPolicy> nodeStack;
+  const JSString* str = this;
+
+  *outHash = 0;
+
+  while (budget > 0) {
+    if (str->isRope()) {
+      if (!nodeStack.append(str->asRope().rightChild())) {
+        return false;
+      }
+      str = str->asRope().leftChild();
+    } else {
+      AutoCheckCannotGC nogc;
+      const auto& s = str->asLinear();
+      size_t toHash = std::min(s.length(), budget);
+      if (s.hasLatin1Chars()) {
+        AddStringToHash(outHash, s.latin1Chars(nogc), toHash);
+      } else {
+        AddStringToHash(outHash, s.twoByteChars(nogc), toHash);
+      }
+      budget -= toHash;
+      if (nodeStack.empty()) {
+        break;
+      }
+      str = nodeStack.popCopy();
+    }
+  }
+
+  return true;
+}
+
 #if defined(DEBUG) || defined(JS_JITSPEW) || defined(JS_CACHEIR_SPEW)
 void JSRope::dumpOwnRepresentationFields(js::JSONPrinter& json) const {
   json.beginObjectProperty("leftChild");
@@ -2549,7 +2581,7 @@ static JSString* NewStringFromBuffer(JSContext* cx, BufferT&& buffer,
   } else {
     // Note: |buffer| is either a StringBuffer* or a RefPtr<StringBuffer>, so
     // ensure we have a RefPtr.
-    RefPtr<mozilla::StringBuffer> bufferRef(std::move(buffer));
+    RefPtr<mozilla::StringBuffer> bufferRef(std::forward<BufferT>(buffer));
     Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(bufferRef), length);
     str = JSLinearString::new_<CanGC, CharT>(cx, &owned, gc::Heap::Default);
   }
@@ -2591,7 +2623,8 @@ static JSString* NewStringFromUTF8Buffer(JSContext* cx, BufferT&& buffer,
   JS::SmallestEncoding encoding = JS::FindSmallestEncoding(utf8);
   if (encoding == JS::SmallestEncoding::ASCII) {
     // ASCII case can use the string buffer as Latin1 buffer.
-    return NewStringFromBuffer<Latin1Char>(cx, std::move(buffer), length);
+    return NewStringFromBuffer<Latin1Char>(cx, std::forward<BufferT>(buffer),
+                                           length);
   }
 
   // Non-ASCII case cannot use the string buffer.

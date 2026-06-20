@@ -8,12 +8,6 @@ const BASELINE_PREF = "privacy.trackingprotection.allow_list.baseline.enabled";
 const CONVENIENCE_PREF =
   "privacy.trackingprotection.allow_list.convenience.enabled";
 
-add_setup(async function () {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.settings-redesign.enabled", true]],
-  });
-});
-
 add_task(async function test_etp_reset_buttons_update_category() {
   await SpecialPowers.pushPrefEnv({
     set: [[CAT_PREF, "standard"]],
@@ -93,7 +87,7 @@ add_task(async function test_custom_allow_list_controls_match_old_behavior() {
   );
   synthesizeClick(baselineCheckbox);
   await baselinePrefChange;
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => !convenienceCheckbox.parentDisabled,
     "Custom convenience checkbox enabled once baseline rechecked"
   );

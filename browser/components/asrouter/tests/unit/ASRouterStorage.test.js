@@ -121,10 +121,20 @@ describe("ASRouterStorage", () => {
       testStorage = storage.getDbTable("storage_test");
     });
     it("should reverse key value parameters for put", async () => {
-      await testStorage.set("key", "value");
+      testStorage.set("key", "value");
+      await storage.flush();
 
       assert.calledOnce(storeStub.put);
       assert.calledWith(storeStub.put, "value", "key");
+    });
+    it("flush should await all in-flight writes", async () => {
+      testStorage.set("key1", "a");
+      testStorage.set("key2", "b");
+      assert.equal(storage.pendingWriteCount, 2);
+      await storage.flush();
+
+      assert.calledTwice(storeStub.put);
+      assert.equal(storage.pendingWriteCount, 0);
     });
     it("should return the correct value for get", async () => {
       storeStub.get.withArgs("foo").resolves("foo");

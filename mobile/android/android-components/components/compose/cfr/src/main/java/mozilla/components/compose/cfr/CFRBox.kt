@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -72,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import mozilla.components.compose.base.button.FilledButton
 import mozilla.components.compose.base.button.IconButton
 import mozilla.components.compose.base.theme.AcornTheme
 import mozilla.components.compose.cfr.CFRPopup.IndicatorDirection
@@ -594,8 +593,8 @@ object CFRDefaults {
      * The shape of the CFR
      */
     @Composable
-    fun cfrShape(cornerRadius: Dp = 12.dp): Shape {
-        return RoundedCornerShape(cornerRadius)
+    fun cfrShape(): Shape {
+        return MaterialTheme.shapes.medium
     }
 
     /**
@@ -671,15 +670,14 @@ private fun SampleButtonWithCFR(
         },
         state = state,
     ) {
-        Button(
+        FilledButton(
+            text = buttonText,
             onClick = {
                 scope.launch {
                     state.show()
                 }
             },
-        ) {
-            Text(text = buttonText)
-        }
+        )
     }
 
     DisposableEffect(Unit) {

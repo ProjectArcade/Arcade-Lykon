@@ -6,6 +6,10 @@
 
 #include "nsISupportsPrimitives.h"
 #include "nsArrayUtils.h"
+#include "nsComponentManagerUtils.h"
+#include "nsMenuPopupFrame.h"
+#include "nsDeviceContext.h"
+#include "mozilla/dom/XULPopupElement.h"
 #include "MOZDynamicCursor.h"
 #include "nsIAppStartup.h"
 #include "nsIDOMWindowUtils.h"
@@ -49,6 +53,7 @@
 #include "nsPIDOMWindow.h"
 #include "nsThreadUtils.h"
 #include "nsMenuBarX.h"
+#include "nsMenuGroupOwnerX.h"
 #include "nsMenuUtilsX.h"
 #include "nsStyleConsts.h"
 #include "nsLayoutUtils.h"
@@ -386,7 +391,7 @@ void nsCocoaWindow::UnsuspendAsyncCATransactions() {
 
 nsresult nsCocoaWindow::SynthesizeNativeKeyEvent(
     int32_t aNativeKeyboardLayout, int32_t aNativeKeyCode,
-    uint32_t aModifierFlags, const nsAString& aCharacters,
+    nsIWidget::NativeModifiers aModifierFlags, const nsAString& aCharacters,
     const nsAString& aUnmodifiedCharacters,
     nsISynthesizedEventCallback* aCallback) {
   AutoSynthesizedEventCallbackNotifier notifier(aCallback);
@@ -397,7 +402,7 @@ nsresult nsCocoaWindow::SynthesizeNativeKeyEvent(
 
 nsresult nsCocoaWindow::SynthesizeNativeMouseEvent(
     LayoutDeviceIntPoint aPoint, NativeMouseMessage aNativeMessage,
-    MouseButton aButton, nsIWidget::Modifiers aModifierFlags,
+    MouseButton aButton, nsIWidget::NativeModifiers aModifierFlags,
     nsISynthesizedEventCallback* aCallback) {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
@@ -500,10 +505,31 @@ nsresult nsCocoaWindow::SynthesizeNativeMouseEvent(
   NS_OBJC_END_TRY_BLOCK_RETURN(NS_ERROR_FAILURE);
 }
 
+nsresult nsCocoaWindow::SynthesizeNativeMouseMove(
+    LayoutDeviceIntPoint aPoint, nsISynthesizedEventCallback* aCallback) {
+  if (GetNativePointerLockedMode()) {
+    AutoSynthesizedEventCallbackNotifier notifier(aCallback);
+    sNativeLockedPoint = aPoint - WidgetToScreenOffset();
+
+    WidgetMouseEvent event(true, eMouseMove, this, WidgetMouseEvent::eReal);
+    event.mRefPoint = sNativeLockedPoint;
+    event.mTimeStamp = nsCocoaUtils::GetEventTimeStamp(0);
+    event.mMovement = Some(LayoutDeviceIntPoint(0, 0));
+    DispatchInputEvent(&event);
+
+    return NS_OK;
+  }
+
+  return SynthesizeNativeMouseEvent(
+      aPoint, NativeMouseMessage::Move, mozilla::MouseButton::eNotPressed,
+      nsIWidget::NativeModifiers::NO_MODIFIERS, aCallback);
+}
+
 nsresult nsCocoaWindow::SynthesizeNativeMouseScrollEvent(
     mozilla::LayoutDeviceIntPoint aPoint, uint32_t aNativeMessage,
-    double aDeltaX, double aDeltaY, double aDeltaZ, uint32_t aModifierFlags,
-    uint32_t aAdditionalFlags, nsISynthesizedEventCallback* aCallback) {
+    double aDeltaX, double aDeltaY, double aDeltaZ,
+    nsIWidget::NativeModifiers aModifierFlags, uint32_t aAdditionalFlags,
+    nsISynthesizedEventCallback* aCallback) {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
   AutoSynthesizedEventCallbackNotifier notifier(aCallback);
@@ -522,7 +548,7 @@ nsresult nsCocoaWindow::SynthesizeNativeMouseScrollEvent(
           ? kCGScrollEventUnitLine
           : kCGScrollEventUnitPixel;
   CGEventRef cgEvent = CGEventCreateScrollWheelEvent(
-      NULL, units, 3, (int32_t)aDeltaY, (int32_t)aDeltaX, (int32_t)aDeltaZ);
+      nullptr, units, 3, (int32_t)aDeltaY, (int32_t)aDeltaX, (int32_t)aDeltaZ);
   if (!cgEvent) {
     return NS_ERROR_FAILURE;
   }
@@ -915,8 +941,8 @@ void nsCocoaWindow::GetCompositorWidgetInitData(
   MOZ_RELEASE_ASSERT(childEndpoint.IsValid());
 
   // Create our mNativeLayerRootRemoteMacParent.
-  RefPtr<NativeLayerRootRemoteMacParent> nativeLayerRemoteParent =
-      new NativeLayerRootRemoteMacParent(mNativeLayerRoot);
+  auto nativeLayerRemoteParent =
+      MakeRefPtr<NativeLayerRootRemoteMacParent>(mNativeLayerRoot);
 
   // Bind the parent endpoint compositor thread.
   MOZ_ASSERT(CompositorThread());
@@ -2867,7 +2893,44 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
   NSPoint locationInWindow =
       nsCocoaUtils::EventLocationForWindow(aMouseEvent, [self window]);
 
-  outGeckoEvent->mRefPoint = [self convertWindowCoordinates:locationInWindow];
+  // If the pointer is locked, we need to track the reference point ourselves,
+  // because EventStateManager uses the mouse event's mRefPoint to determine
+  // whether the pointer needs to be re-centered.
+  if (const auto& nativePointerLockMode =
+          nsCocoaWindow::GetNativePointerLockedMode()) {
+    outGeckoEvent->mRefPoint = nsCocoaWindow::GetNativeLockedPoint();
+    WidgetMouseEvent* widgetMouseEvent = outGeckoEvent->AsMouseEvent();
+    if (widgetMouseEvent && widgetMouseEvent->mMessage == eMouseMove) {
+      Maybe<LayoutDeviceIntPoint> movement;
+      // If pointer lock is active with |unadjustedMovement: true|, source
+      // unaccelerated mouse delta directly from the underlying CGEvent and
+      // stash it on the WidgetMouseEvent. MouseEvent::movementX/Y will then
+      // return this value verbatim instead of computing a delta from the warped
+      // cursor position, which carries OS mouse acceleration.
+      // https://w3c.github.io/pointerlock/#pointerlockoptions-dictionary
+      if (*nativePointerLockMode ==
+          nsIWidget::NativePointerLockMode::Unadjusted) {
+        if (CGEventRef cgEvent = [aMouseEvent CGEvent]) {
+          movement.emplace(
+              int32_t(CGEventGetIntegerValueField(
+                  cgEvent, kCGEventUnacceleratedPointerMovementX)),
+              int32_t(CGEventGetIntegerValueField(
+                  cgEvent, kCGEventUnacceleratedPointerMovementY)));
+        }
+      }
+
+      // Fallback to use the deltaX/Y if we don't request unadjusted movement or
+      // fail to get the unadjusted movement from the CGEvent.
+      if (!movement) {
+        movement.emplace(int32_t(aMouseEvent.deltaX),
+                         int32_t(aMouseEvent.deltaY));
+      }
+
+      widgetMouseEvent->mMovement = std::move(movement);
+    }
+  } else {
+    outGeckoEvent->mRefPoint = [self convertWindowCoordinates:locationInWindow];
+  }
 
   WidgetMouseEventBase* mouseEvent = outGeckoEvent->AsMouseEventBase();
   mouseEvent->mButtons = 0;
@@ -3016,6 +3079,31 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
   }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+// Override NSResponder's default undo:/redo: implementations. The defaults
+// look up the responder's undoManager property and silently no-op when it is
+// nil, which it always is in Gecko (we use our own TransactionManager rather
+// than NSUndoManager). Without this override, clicking Edit > Undo or Edit >
+// Redo in the macOS system menu bar would dispatch through the responder
+// chain, be "claimed" by the default NSResponder implementation, and do
+// nothing. Forwarding via menuItemHit: routes the click through Gecko's
+// command system, which fires cmd_undo / cmd_redo on the focused editor
+// (bug 2040844).
+//
+// The standard Edit menu items have action=@selector(undo:)/(redo:) with
+// target=nil (see nsMenuItemX.mm) so that macOS 26+ injects SF Symbol icons
+// and so that native NSText fields inside NSSavePanel/NSOpenPanel sheets keep
+// receiving these actions natively when they are the first responder. Those
+// sheets are not in this view's responder chain, so the overrides below only
+// kick in when ChildView is the first responder -- i.e. when focus is in
+// Gecko content or chrome.
+- (void)undo:(id)aSender {
+  [nsMenuBarX::sNativeEventTarget menuItemHit:aSender];
+}
+
+- (void)redo:(id)aSender {
+  [nsMenuBarX::sNativeEventTarget menuItemHit:aSender];
 }
 
 - (void)unmarkText {
@@ -3174,6 +3262,18 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
 #endif  // #if !defined(RELEASE_OR_BETA) || defined(DEBUG)
 
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
+
+  // Handle fn+f (Globe+F) to toggle fullscreen. We must intercept this before
+  // the TextInputHandler processes it, otherwise it gets treated as normal 'f'
+  // character input.
+  if ([theEvent keyCode] == kVK_ANSI_F &&
+      ([theEvent modifierFlags] &
+       NSEventModifierFlagDeviceIndependentFlagsMask) ==
+          NSEventModifierFlagFunction) {
+    [[self window] toggleFullScreen:nil];
+    return;
+  }
+
   if (mGeckoChild) {
     if (mTextInputHandler) {
       sUniqueKeyEventId++;
@@ -3960,6 +4060,36 @@ static NSURL* GetPasteLocation(NSPasteboard* aPasteboard, bool aUseFallback) {
       [aPasteboard setString:[pasteboardOutputDict valueForKey:aType]
                      forType:aType];
     } else if ([aType
+                   isEqualToString:
+                       [UTIHelper
+                           stringFromPboardType:
+                               (NSString*)kPasteboardTypeFilePromiseContent]]) {
+      // The Carbon file promise protocol requires that we provide the
+      // content type UTI so Finder can recognize this as a valid file
+      // promise and use the promise-based drop path (which positions
+      // the file icon at the drop coordinates on the desktop).
+      nsCOMPtr<nsISupports> mimeDataWrapper;
+      if (NS_SUCCEEDED(currentTransferable->GetTransferData(
+              kImageRequestMime, getter_AddRefs(mimeDataWrapper)))) {
+        nsCOMPtr<nsISupportsString> mimeStr =
+            do_QueryInterface(mimeDataWrapper);
+        if (mimeStr) {
+          nsAutoString mimeType;
+          mimeStr->GetData(mimeType);
+          if (!mimeType.IsEmpty()) {
+            NSString* nsMimeType = nsCocoaUtils::ToNSString(mimeType);
+            CFStringRef uti = UTTypeCreatePreferredIdentifierForTag(
+                kUTTagClassMIMEType, (CFStringRef)nsMimeType, nullptr);
+            if (uti) {
+              [aPasteboard setData:[(NSString*)uti
+                                       dataUsingEncoding:NSUTF8StringEncoding]
+                           forType:aType];
+              CFRelease(uti);
+            }
+          }
+        }
+      }
+    } else if ([aType
                    isEqualToString:[UTIHelper stringFromPboardType:
                                                   (NSString*)kUTTypeFileURL]] ||
                [aType isEqualToString:
@@ -4031,23 +4161,30 @@ static NSURL* GetPasteLocation(NSPasteboard* aPasteboard, bool aUseFallback) {
           continue;
         }
 
+        // Report the created file's URL back to the pasteboard. For
+        // kPasteboardTypeFileURLPromise, this is required by the Carbon
+        // file promise protocol — without it, Finder cannot associate
+        // the new file with the drop point and won't position it at
+        // the correct coordinates on the desktop.
+        nsCOMPtr<nsIFile> file = do_QueryInterface(fileDataPrimitive);
+        if (!file) {
+          continue;
+        }
+        nsAutoCString finalPath;
+        file->GetNativePath(finalPath);
+        NSString* filePath =
+            [NSString stringWithUTF8String:(const char*)finalPath.get()];
+        NSString* fileURLString =
+            [[NSURL fileURLWithPath:filePath] absoluteString];
         if ([aType
                 isEqualToString:[UTIHelper
                                     stringFromPboardType:(NSString*)
                                                              kUTTypeFileURL]]) {
-          // In case of a file URL we need to populate the pasteboard with the
-          // path to the file.
-          nsCOMPtr<nsIFile> file = do_QueryInterface(fileDataPrimitive);
-          if (!file) {
-            continue;
-          }
-          nsAutoCString finalPath;
-          file->GetNativePath(finalPath);
-          NSString* filePath =
-              [NSString stringWithUTF8String:(const char*)finalPath.get()];
+          [aPasteboard setString:fileURLString forType:aType];
+        } else {
           [aPasteboard
-              setString:[[NSURL fileURLWithPath:filePath] absoluteString]
-                forType:aType];
+              setData:[fileURLString dataUsingEncoding:NSUTF8StringEncoding]
+              forType:aType];
         }
       }
     } else if ([aType
@@ -4355,12 +4492,23 @@ nsresult nsCocoaWindow::RestoreHiDPIMode() {
 - (id<mozAccessible>)accessible {
   if (!mGeckoChild) return nil;
 
+  NSWindow* window = [self window];
+  if ([window isKindOfClass:[PopupWindow class]]) {
+    if (![(PopupWindow*)window usePopover]) {
+      // Don't create represented view relationship for non-native popovers.
+      // Rely on the gecko heirarchy instead.
+      return nil;
+    }
+  }
+
   id<mozAccessible> nativeAccessible = nil;
 
   nsAutoRetainCocoaObject kungFuDeathGrip(self);
   RefPtr<nsCocoaWindow> geckoChild(mGeckoChild);
   RefPtr<a11y::LocalAccessible> accessible = geckoChild->GetWindowAccessible();
-  if (!accessible) return nil;
+  if (!accessible) {
+    return nil;
+  }
 
   accessible->GetNativeInterface((void**)&nativeAccessible);
 
@@ -4547,10 +4695,18 @@ void ChildViewMouseTracker::OnDestroyWindow(NSWindow* aWindow) {
 
 void ChildViewMouseTracker::MouseEnteredWindow(NSEvent* aEvent) {
   NSWindow* window = aEvent.window;
-  if (!window.ignoresMouseEvents) {
-    sWindowUnderMouse = window;
-    ReEvaluateMouseEnterState(aEvent);
+  if (window.ignoresMouseEvents) {
+    return;
   }
+  // NSTrackingActiveAlways can deliver spurious mouseEntered: to windows on
+  // inactive Spaces. Accepting them clobbers the global sWindowUnderMouse and
+  // causes hover flicker when Firefox windows span multiple Spaces or
+  // displays (Bug 1854862).
+  if (!window.isOnActiveSpace) {
+    return;
+  }
+  sWindowUnderMouse = window;
+  ReEvaluateMouseEnterState(aEvent);
 }
 
 void ChildViewMouseTracker::MouseExitedWindow(NSEvent* aEvent) {
@@ -4721,6 +4877,8 @@ void nsCocoaWindow::DestroyNativeWindow() {
 
   MOZ_ASSERT(mWindowMadeHere,
              "We shouldn't be trying to destroy a window we didn't create.");
+
+  UnlockNativePointer();
 
   // Clear our class state that is keyed off of mWindow. It's our last
   // chance! This ensures that other nsCocoaWindow instances are not waiting
@@ -5033,6 +5191,11 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
     mWindow.backgroundColor = NSColor.clearColor;
     mWindow.opaque = NO;
 
+    // Enable NSPopover for panel popup types when preference is enabled
+    if ([mWindow isKindOfClass:[PopupWindow class]] && ShouldUseNSPopover()) {
+      [(PopupWindow*)mWindow setAllowPopover];
+    }
+
     // When multiple spaces are in use and the browser is assigned to a
     // particular space, override the "Assign To" space and display popups on
     // the active space. Does not work with multiple displays. See
@@ -5049,6 +5212,36 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
     mWindow.collectionBehavior =
         mWindow.collectionBehavior | NSWindowCollectionBehaviorCanJoinAllSpaces;
   }
+
+  // Set an explicit fullscreen collection behavior before any display so
+  // that AppKit never needs to consult `_implicitlyAllowsFullScreenPrimary`
+  // while rendering. That internal heuristic has been observed to flip its
+  // return value mid-display on macOS 15.3 in background-only (LSUIElement)
+  // processes, which causes a `_NSThemeFullScreenButton` to be inserted
+  // into the titlebar while AppKit is enumerating the titlebar's subviews
+  // -- producing a "Collection was mutated while being enumerated" crash
+  // in `NSViewUpdateVibrancyForSubtree` (bug 2031249, bug 2038980).
+  //
+  // Default to FullScreenPrimary | FullScreenAllowsTiling for resizable
+  // titled top-level windows -- that matches what AppKit's heuristic
+  // returns for those windows today, so the green window-control button
+  // keeps its fullscreen-enter arrows. Non-resizable titled windows
+  // default to Auxiliary | DisallowsTiling, which gives them the "+"
+  // zoom glyph (they typically aren't fullscreen-capable anyway).
+  // SetSupportsNativeFullscreen() can later override based on the XUL
+  // `macnativefullscreen` attribute.
+  if ((mWindowType == WindowType::TopLevel ||
+       mWindowType == WindowType::Dialog) &&
+      (features & NSWindowStyleMaskTitled)) {
+    NSWindowCollectionBehavior fsBehavior =
+        (features & NSWindowStyleMaskResizable)
+            ? (NSWindowCollectionBehaviorFullScreenPrimary |
+               NSWindowCollectionBehaviorFullScreenAllowsTiling)
+            : (NSWindowCollectionBehaviorFullScreenAuxiliary |
+               NSWindowCollectionBehaviorFullScreenDisallowsTiling);
+    mWindow.collectionBehavior |= fsBehavior;
+  }
+
   mWindow.contentMinSize = NSMakeSize(60, 60);
 
   // Make the window use CoreAnimation from the start, so that we don't
@@ -5077,7 +5270,7 @@ void nsCocoaWindow::Destroy() {
 
   nsCOMPtr<nsIWidget> kungFuDeathGrip(this);
 
-  // Deal with the possiblity that we're being destroyed while running modal.
+  // Deal with the possibility that we're being destroyed while running modal.
   if (mModal) {
     SetModal(false);
   }
@@ -5238,6 +5431,34 @@ void nsCocoaWindow::SetModal(bool aModal) {
 
 bool nsCocoaWindow::IsRunningAppModal() { return [NSApp _isRunningAppModal]; }
 
+static void SyncPopoverBounds(NSPopover* aPopover,
+                              nsMenuPopupFrame* aPopupFrame) {
+  if (!aPopover || !aPopover.shown || !aPopupFrame) {
+    return;
+  }
+  NSWindow* popoverWindow = aPopover.contentViewController.view.window;
+  if (!popoverWindow) {
+    return;
+  }
+
+  // Synchronize the popup frame's internal bounds with the actual bounds that
+  // macOS calculated for the popover.
+  NSView* contentView = popoverWindow.contentView;
+  NSRect contentFrame = [contentView convertRect:contentView.bounds toView:nil];
+  NSRect windowFrame = [popoverWindow convertRectToScreen:contentFrame];
+
+  CGFloat backingScale = popoverWindow.backingScaleFactor;
+  mozilla::LayoutDeviceIntRect devPixRect =
+      nsCocoaUtils::CocoaRectToGeckoRectDevPix(windowFrame, backingScale);
+
+  nsPresContext* presContext = aPopupFrame->PresContext();
+  mozilla::CSSIntPoint cssPos =
+      presContext->DevPixelsToIntCSSPixels(devPixRect.TopLeft());
+
+  aPopupFrame->MoveTo(mozilla::CSSPoint(cssPos.x, cssPos.y),
+                      /* aUpdateAttrs */ false);
+}
+
 // Hide or show this window
 void nsCocoaWindow::Show(bool aState) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
@@ -5253,6 +5474,11 @@ void nsCocoaWindow::Show(bool aState) {
   }
 
   mWindow.isBeingShown = aState;
+  // isBeingShown is a transient flag that must be cleared on every exit path.
+  // If it stays set, isVisibleOrBeingShown gets stuck reporting true, which
+  // makes IsVisible() lie and causes the early-return guard above to refuse a
+  // later Show(true).
+  auto resetBeingShown = MakeScopeExit([&] { mWindow.isBeingShown = NO; });
   if (aState && !mWasShown) {
     mWasShown = true;
   }
@@ -5302,6 +5528,49 @@ void nsCocoaWindow::Show(bool aState) {
         [mWindow orderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;
+      if (ShouldShowAsNSPopover() && nativeParentWindow) {
+        nsMenuPopupFrame* popupFrame = GetPopupFrame();
+        NSRectEdge preferredEdge = nsCocoaUtils::PopupPositionToNSRectEdge(
+            popupFrame->GetAlignmentPosition());
+        nsRect anchorRectAppUnits = popupFrame->GetUntransformedAnchorRect();
+        nsPresContext* pc = popupFrame->PresContext();
+        int32_t appUnitsPerDevPixel = pc->AppUnitsPerDevPixel();
+        mozilla::DesktopToLayoutDeviceScale desktopToLayoutScale =
+            pc->DeviceContext()->GetDesktopToDeviceScale();
+        mozilla::DesktopIntRect popupAnchorRectScaled =
+            mozilla::DesktopIntRect::RoundOut(
+                mozilla::LayoutDeviceRect::FromAppUnits(anchorRectAppUnits,
+                                                        appUnitsPerDevPixel) /
+                desktopToLayoutScale);
+        // Taking the now correctly scaled anchor rect and turning it into a
+        // gecko rect this accounts for the y-axis inversion that cocoa needs,
+        // as the origin is in the bottom left. This rect is in screen space
+        NSRect cocoaScreenRect =
+            nsCocoaUtils::GeckoRectToCocoaRect(popupAnchorRectScaled);
+        // We take the screen space rect and convert it to window space
+        // coordinates, as NSPopover requires the coordinates to be in view
+        // space and inside the view. If the coordinates are outside our view,
+        // the popover will fail silently
+        NSRect windowRect =
+            [nativeParentWindow convertRectFromScreen:cocoaScreenRect];
+        NSView* parentView = [nativeParentWindow contentView];
+        // We take the window space rect and convert it to view space for the
+        // specific parent view
+        NSRect positioningRect = [parentView convertRect:windowRect
+                                                fromView:nil];
+        bool shouldHideAnchor =
+            popupFrame->PopupElement().GetBoolAttr(nsGkAtoms::hidepopovertail);
+        [(PopupWindow*)mWindow showPopoverRelativeToRect:positioningRect
+                                                  ofView:parentView
+                                           preferredEdge:preferredEdge
+                                            hiddenAnchor:shouldHideAnchor];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wobjc-method-access"
+        SyncPopoverBounds([(PopupWindow*)mWindow popover], popupFrame);
+#pragma clang diagnostic pop
+        // Exit early here since the popover is now shown.
+        return;
+      }
       // If our popup window is a non-native context menu, tell the OS (and
       // other programs) that a menu has opened.  This is how the OS knows to
       // close other programs' context menus when ours open.
@@ -5321,6 +5590,7 @@ void nsCocoaWindow::Show(bool aState) {
       }
     } else {
       NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+      EnsureFrameIsOnScreen();
       if (mWindowType == WindowType::TopLevel &&
           [mWindow respondsToSelector:@selector(setAnimationBehavior:)]) {
         NSWindowAnimationBehavior behavior;
@@ -5375,7 +5645,11 @@ void nsCocoaWindow::Show(bool aState) {
     if (mWindowType == WindowType::Popup && nativeParentWindow) {
       [nativeParentWindow removeChildWindow:mWindow];
     }
-
+    // Handle NSPopover hiding or traditional window hiding
+    if ([mWindow isKindOfClass:[PopupWindow class]] &&
+        [(PopupWindow*)mWindow usePopover]) {
+      [(PopupWindow*)mWindow closePopover];
+    }
     [mWindow orderOut:nil];
     // If our popup window is a non-native context menu, tell the OS (and
     // other programs) that a menu has closed.
@@ -5387,8 +5661,6 @@ void nsCocoaWindow::Show(bool aState) {
                         object:@"org.mozilla.gecko.PopupWindow"];
     }
   }
-
-  mWindow.isBeingShown = NO;
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
@@ -5424,6 +5696,24 @@ bool nsCocoaWindow::ShouldUseOffMainThreadCompositing() {
     return false;
   }
   return nsIWidget::ShouldUseOffMainThreadCompositing();
+}
+
+bool nsCocoaWindow::ShouldUseNSPopover() const {
+  // Use NSPopover for panel popups when the preference is enabled
+  // But not for detached popups - they should use traditional window logic
+  return mWindowType == WindowType::Popup && mPopupType == PopupType::Panel &&
+         mozilla::StaticPrefs::widget_macos_native_popovers();
+}
+
+bool nsCocoaWindow::ShouldShowAsNSPopover() const {
+  if (!ShouldUseNSPopover()) {
+    return false;
+  }
+  nsMenuPopupFrame* popupFrame = GetPopupFrame();
+  return [mWindow isKindOfClass:[PopupWindow class]] &&
+         [(PopupWindow*)mWindow usePopover] && popupFrame &&
+         popupFrame->ShouldFollowAnchor() &&
+         !popupFrame->PopupElement().GetBoolAttr(nsGkAtoms::nonnative);
 }
 
 TransparencyMode nsCocoaWindow::GetTransparencyMode() {
@@ -5491,6 +5781,40 @@ void nsCocoaWindow::ConstrainPosition(DesktopIntPoint& aPoint) {
   aPoint = ConstrainPositionToBounds(aPoint, {width, height}, screenRect);
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+void nsCocoaWindow::EnsureFrameIsOnScreen() {
+  if (!mWindow || mWindowType != WindowType::TopLevel || mInFullScreenMode) {
+    return;
+  }
+
+  // If [NSWindow screen] is non-nil, the window's frame intersects an
+  // attached NSScreen and is reachable through normal user gestures, so
+  // there is nothing to do. When it is nil the frame doesn't intersect any
+  // attached screen: the window is still present in the NSApp window list
+  // (so it appears in the Window menu and Dock submenu) but cannot be
+  // brought forward, which is the case we defend against below.
+  if (mWindow.screen) {
+    return;
+  }
+
+  NSScreen* mainScreen = NSScreen.mainScreen;
+  if (!mainScreen) {
+    return;
+  }
+
+  NSRect screenFrame = mainScreen.visibleFrame;
+  NSRect frame = mWindow.frame;
+
+  frame.size.width = std::min(frame.size.width, screenFrame.size.width);
+  frame.size.height = std::min(frame.size.height, screenFrame.size.height);
+  frame.origin.x =
+      screenFrame.origin.x + (screenFrame.size.width - frame.size.width) / 2;
+  frame.origin.y =
+      screenFrame.origin.y + (screenFrame.size.height - frame.size.height) / 2;
+
+  [mWindow setFrame:frame display:NO];
+  UpdateBounds();
 }
 
 void nsCocoaWindow::SetSizeConstraints(const SizeConstraints& aConstraints) {
@@ -6380,6 +6704,18 @@ void nsCocoaWindow::DoResize(double aX, double aY, double aWidth,
   // title bar doesn't immediately get repainted and is displayed in
   // the wrong place, leading to a visual jump.
   [mWindow setFrame:newFrame display:YES];
+  if (ShouldUseNSPopover() && [(PopupWindow*)mWindow usePopover]) {
+    [(PopupWindow*)mWindow updatePopoverContent];
+    // A popover won't resize by setting the frame
+    // as it's size is calculated based on the content size
+    // Therefore the content size has to be changed as well
+    NSSize contentSize = NSMakeSize(aWidth, aHeight);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wobjc-method-access"
+    [[(PopupWindow*)mWindow popover] setContentSize:contentSize];
+    SyncPopoverBounds([(PopupWindow*)mWindow popover], GetPopupFrame());
+#pragma clang diagnostic pop
+  }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
@@ -6569,7 +6905,7 @@ nsresult nsCocoaWindow::SetTitle(const nsAString& aTitle) {
 // The drag manager has let us know that something related to a drag has
 // occurred in this window. It could be any number of things, ranging from
 // a drop, to a drag enter/leave, or a drag over event. The actual event
-// is passed in |aMessage| and is passed along to our event hanlder so Gecko
+// is passed in |aMessage| and is passed along to our event handler so Gecko
 // knows about it.
 bool nsCocoaWindow::DragEvent(unsigned int aMessage,
                               mozilla::gfx::Point aMouseGlobal,
@@ -6987,11 +7323,24 @@ void nsCocoaWindow::SetSupportsNativeFullscreen(
     // want to do this for primary application windows. We'll set the
     // relevant macnativefullscreen attribute on those, which will lead to us
     // being called with aSupportsNativeFullscreen set to `true` here.
+    //
+    // Always set both the Primary/Auxiliary and AllowsTiling/DisallowsTiling
+    // bits explicitly, even when the resulting state matches the window's
+    // creation-time default. Leaving any of the four bits unset would let
+    // AppKit fall back to `_implicitlyAllowsFullScreenPrimary`, which is
+    // non-deterministic in background-only processes and triggers the
+    // mid-display titlebar mutation that caused bug 2031249.
     NSWindowCollectionBehavior newBehavior = [mWindow collectionBehavior];
+    newBehavior &= ~(NSWindowCollectionBehaviorFullScreenPrimary |
+                     NSWindowCollectionBehaviorFullScreenAuxiliary |
+                     NSWindowCollectionBehaviorFullScreenAllowsTiling |
+                     NSWindowCollectionBehaviorFullScreenDisallowsTiling);
     if (aSupportsNativeFullscreen) {
-      newBehavior |= NSWindowCollectionBehaviorFullScreenPrimary;
+      newBehavior |= NSWindowCollectionBehaviorFullScreenPrimary |
+                     NSWindowCollectionBehaviorFullScreenAllowsTiling;
     } else {
-      newBehavior &= ~NSWindowCollectionBehaviorFullScreenPrimary;
+      newBehavior |= NSWindowCollectionBehaviorFullScreenAuxiliary |
+                     NSWindowCollectionBehaviorFullScreenDisallowsTiling;
     }
     [mWindow setCollectionBehavior:newBehavior];
   }
@@ -7213,6 +7562,82 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   // Resizing might have changed our zoom state.
   DispatchSizeModeEvent();
   ReportSizeEvent();
+}
+
+void nsCocoaWindow::LockNativePointer(
+    NativePointerLockMode aNativePointerLockMode) {
+  if (!StaticPrefs::dom_pointer_lock_native_lock_enabled()) {
+    return;
+  }
+
+  if (GetNativePointerLockedMode()) {
+    MOZ_ASSERT(*GetNativePointerLockedMode() == aNativePointerLockMode,
+               "Should not call LockNativePointer() with a different mode "
+               "whenthe pointer is already locked");
+    MOZ_ASSERT(sNativeLockedWindow);
+    // XXX Maybe we should avoid calling LockNativePointer() again when the
+    // content changes the pointer lock element while the pointer is already
+    // locked.
+    return;
+  }
+
+  MOZ_ASSERT(!sNativeLockedWindow);
+
+  sNativeLockedWindow = this;
+  sNativePointerLockMode.emplace(aNativePointerLockMode);
+  CGAssociateMouseAndMouseCursorPosition(false);
+}
+
+void nsCocoaWindow::UnlockNativePointer() {
+  if (NS_WARN_IF(!GetNativePointerLockedMode())) {
+    MOZ_ASSERT(!sNativeLockedWindow);
+    MOZ_ASSERT(sNativeLockedPoint == LayoutDeviceIntPoint(0, 0));
+    return;
+  }
+  if (sNativeLockedWindow != this) {
+    return;
+  }
+
+  sNativeLockedWindow = nullptr;
+  sNativePointerLockMode.reset();
+  CGAssociateMouseAndMouseCursorPosition(true);
+  sNativeLockedPoint = LayoutDeviceIntPoint(0, 0);
+}
+
+void nsCocoaWindow::SetNativePointerLockMode(
+    NativePointerLockMode aNativePointerLockMode) {
+  if (NS_WARN_IF(!GetNativePointerLockedMode())) {
+    MOZ_ASSERT(!sNativeLockedWindow);
+    MOZ_ASSERT(sNativeLockedPoint == LayoutDeviceIntPoint(0, 0));
+    return;
+  }
+  if (NS_WARN_IF(sNativeLockedWindow != this)) {
+    return;
+  }
+  sNativePointerLockMode.ref() = aNativePointerLockMode;
+}
+
+bool nsCocoaWindow::SupportsUnadjustedMovement() {
+  return StaticPrefs::dom_pointer_lock_native_lock_enabled();
+}
+
+/* static */ Maybe<nsIWidget::NativePointerLockMode>
+    nsCocoaWindow::sNativePointerLockMode;
+/* static */ LayoutDeviceIntPoint nsCocoaWindow::sNativeLockedPoint;
+/* static */ nsCocoaWindow* nsCocoaWindow::sNativeLockedWindow = nullptr;
+
+/* static */
+const Maybe<nsIWidget::NativePointerLockMode>&
+nsCocoaWindow::GetNativePointerLockedMode() {
+  MOZ_ASSERT_IF(sNativePointerLockMode,
+                StaticPrefs::dom_pointer_lock_native_lock_enabled());
+  return sNativePointerLockMode;
+}
+
+/* static */
+LayoutDeviceIntPoint nsCocoaWindow::GetNativeLockedPoint() {
+  MOZ_ASSERT(GetNativePointerLockedMode());
+  return sNativeLockedPoint;
 }
 
 - (void)windowDidResize:(NSNotification*)aNotification {
@@ -7459,6 +7884,13 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   }
   mGeckoWindow->FinishCurrentTransitionIfMatching(
       nsCocoaWindow::TransitionType::Deminiaturize);
+
+  // When deminiaturizing a window, the activation events that cause it to
+  // persist its size are not sent by default. This means that if you
+  // deminiaturize a window and then open a new window, the new window
+  // will not necessarily be the size of the deminiaturized window as you'd
+  // expect. See bug 429952.
+  [self sendToplevelActivateEvents];
 }
 
 - (BOOL)windowShouldZoom:(NSWindow*)window toFrame:(NSRect)proposedFrame {
@@ -7650,7 +8082,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
   mTrackingArea = nil;
   mViewWithTrackingArea = nil;
   mDirtyRect = NSZeroRect;
-  mBeingShown = NO;
   mTouchBar = nil;
   mIsAnimationSuppressed = NO;
 
@@ -7726,22 +8157,34 @@ static NSImage* GetMenuMaskImage() {
 - (NSTouchBar*)makeTouchBar {
   [mTouchBar release];
   mTouchBar = [[nsTouchBar alloc] init];
-  if (mTouchBar) {
+  if (mTouchBar && !sTouchBarIsInitialized) {
     sTouchBarIsInitialized = YES;
+    // The menu bar may have been built before the Touch Bar was initialized,
+    // in which case the "Customize Touch Bar" item was hidden and its trailing
+    // separator was never added. Unhide the item and add the separator now so
+    // the menu matches what CreateApplicationMenu would have produced.
+    if (sApplicationMenu) {
+      NSMenuItem* touchBarItem =
+          [sApplicationMenu itemWithTag:eCommand_ID_TouchBar];
+      if (touchBarItem) {
+        [touchBarItem setHidden:NO];
+        NSInteger touchBarIndex = [sApplicationMenu indexOfItem:touchBarItem];
+        NSInteger separatorIndex = touchBarIndex + 1;
+        BOOL hasSeparator = separatorIndex < [sApplicationMenu numberOfItems] &&
+                            [[sApplicationMenu
+                                itemAtIndex:separatorIndex] isSeparatorItem];
+        if (touchBarIndex != -1 && !hasSeparator) {
+          [sApplicationMenu insertItem:[NSMenuItem separatorItem]
+                               atIndex:separatorIndex];
+        }
+      }
+    }
   }
   return mTouchBar;
 }
 
-- (void)setIsBeingShown:(BOOL)aValue {
-  mBeingShown = aValue;
-}
-
-- (BOOL)isBeingShown {
-  return mBeingShown;
-}
-
 - (BOOL)isVisibleOrBeingShown {
-  return [super isVisible] || mBeingShown;
+  return [super isVisible] || self.isBeingShown;
 }
 
 - (void)setIsAnimationSuppressed:(BOOL)aValue {
@@ -7977,6 +8420,8 @@ static const NSString* kStateCollectionBehavior = @"collectionBehavior";
   [self tryToPerform:aSelector with:nil];
 }
 
+#ifdef ACCESSIBILITY
+
 - (id)accessibilityAttributeValue:(NSString*)attribute {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
@@ -8035,6 +8480,31 @@ static const NSString* kStateCollectionBehavior = @"collectionBehavior";
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
 }
 
+- (id)accessibilityHitTest:(NSPoint)point {
+  if (!mozilla::a11y::ShouldA11yBeEnabled())
+    return [super accessibilityHitTest:point];
+
+  if ([self isKindOfClass:[PopupWindow class]] &&
+      ![(PopupWindow*)self usePopover]) {
+    // If this is a non-native popover we have to manually find
+    // the gecko accessible associated with this widget
+    // and call `accessibilityHitTest` on it.
+    id<mozAccessible> nativeAccessible = nil;
+
+    RefPtr<nsCocoaWindow> geckoChild =
+        static_cast<nsCocoaWindow*>([self.mainChildView widget]);
+    RefPtr<a11y::LocalAccessible> accessible =
+        geckoChild->GetWindowAccessible();
+    if (accessible) {
+      accessible->GetNativeInterface((void**)&nativeAccessible);
+    }
+
+    return [nativeAccessible accessibilityHitTest:point];
+  }
+
+  return [super accessibilityHitTest:point];
+}
+
 - (BOOL)isAccessibilityElement {
   if (!mozilla::a11y::ShouldA11yBeEnabled())
     return [super isAccessibilityElement];
@@ -8047,6 +8517,8 @@ static const NSString* kStateCollectionBehavior = @"collectionBehavior";
 - (void)releaseJSObjects {
   [mTouchBar releaseJSObjects];
 }
+
+#endif
 
 @end
 
@@ -8395,12 +8867,25 @@ static CGFloat DefaultTitlebarHeight() {
   if (!self) {
     return nil;
   }
-
+  mPopover = nil;
+  mPopoverViewController = nil;
+  mUsePopover = NO;
   mIsContextMenu = false;
 
   return self;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
+}
+
+- (void)dealloc {
+  if (mPopover) {
+    ChildViewMouseTracker::OnDestroyWindow(
+        mPopover.contentViewController.view.window);
+  }
+
+  [mPopover release];
+  [mPopoverViewController release];
+  [super dealloc];
 }
 
 // Override the private API _backdropBleedAmount. This determines how much the
@@ -8460,6 +8945,129 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
 
 - (void)setIsContextMenu:(BOOL)flag {
   mIsContextMenu = flag;
+}
+
+- (void)setAllowPopover {
+  mUsePopover = YES;
+
+  if (!mPopover) {
+    mPopover = [[NSPopover alloc] init];
+
+    // Use NSPopoverBehaviorApplicationDefined to prevent auto-closing
+    // when other popovers are opened, and to respect the disable_autohide
+    // preference
+    mPopover.behavior = NSPopoverBehaviorApplicationDefined;
+    mPopover.delegate = self;
+
+    // Create view controller that will contain our content view
+    mPopoverViewController = [[NSViewController alloc] init];
+
+    NSView* contentView = self.contentView;
+    if (contentView) {
+      // Ensure the content view is properly configured
+      [contentView
+          setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+
+      mPopoverViewController.view = contentView;
+      mPopover.contentViewController = mPopoverViewController;
+
+      // Set popover size to match our window content size
+      NSRect contentRect = [contentView frame];
+      if (contentRect.size.width > 0 && contentRect.size.height > 0) {
+        [mPopover setContentSize:contentRect.size];
+      }
+    }
+  }
+}
+
+- (BOOL)usePopover {
+  return mUsePopover;
+}
+
+- (void)showPopoverRelativeToRect:(NSRect)positioningRect
+                           ofView:(NSView*)positioningView
+                    preferredEdge:(NSRectEdge)preferredEdge
+                     hiddenAnchor:(BOOL)hiddenAnchor {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+  if (!mPopover) {
+    return;
+  }
+
+  // Close existing popover if it's already shown
+  if (mPopover.shown) {
+    [mPopover close];
+  }
+
+  // Force content update before showing
+  [self updatePopoverContent];
+
+  if (mPopoverViewController.view) {
+    mPopover.behavior = NSPopoverBehaviorApplicationDefined;
+
+    // This is a hidden API that prevents the popover from showing its arrow
+    // pointing to the anchor.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wobjc-method-access"
+    [mPopover setShouldHideAnchor:hiddenAnchor];
+#pragma clang diagnostic pop
+
+    [mPopover showRelativeToRect:positioningRect
+                          ofView:positioningView
+                   preferredEdge:preferredEdge];
+  }
+
+  NSWindow* popoverWindow = mPopover.contentViewController.view.window;
+  [popoverWindow setAcceptsMouseMovedEvents:YES];
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (void)closePopover {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  if (mPopover && mPopover.shown) {
+    [mPopover close];
+  }
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (void)updatePopoverContent {
+  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+  if (!mPopover || !mPopoverViewController) {
+    return;
+  }
+
+  NSView* contentView = self.contentView;
+  if (!contentView) {
+    return;
+  }
+  // Ensure proper hit testing for hover events
+  [contentView setWantsLayer:YES];
+  [contentView setAcceptsTouchEvents:YES];
+
+  // Update the popover content view to match current window content
+  mPopoverViewController.view = contentView;
+
+  // Update popover size to match content
+  NSRect contentRect = [contentView frame];
+  if (contentRect.size.width > 0 && contentRect.size.height > 0) {
+    mPopover.contentSize = contentRect.size;
+  }
+
+  NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+- (NSPopover*)popover {
+  return mPopover;
+}
+
+// When shown as a native NSPopover, the content lives in the popover's own
+// window and this backing window is never ordered front, so [super isVisible]
+// is NO. Report a shown popover as visible so IsVisible() stays correct once
+// the transient isBeingShown flag has been cleared.
+- (BOOL)isVisibleOrBeingShown {
+  return [super isVisibleOrBeingShown] || (mPopover && mPopover.shown);
 }
 
 - (BOOL)canBecomeMainWindow {

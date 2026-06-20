@@ -25,16 +25,7 @@ using namespace js;
 // FinalizationRecordObject
 
 const JSClassOps FinalizationRecordObject::classOps_ = {
-    nullptr,   // addProperty
-    nullptr,   // delProperty
-    nullptr,   // enumerate
-    nullptr,   // newEnumerate
-    nullptr,   // resolve
-    nullptr,   // mayResolve
-    finalize,  // finalize
-    nullptr,   // call
-    nullptr,   // construct
-    nullptr,   // trace
+    .finalize = finalize,
 };
 
 const JSClass FinalizationRecordObject::class_ = {
@@ -155,16 +146,8 @@ const JSClass FinalizationRegistryObject::protoClass_ = {
 };
 
 const JSClassOps FinalizationRegistryObject::classOps_ = {
-    nullptr,                               // addProperty
-    nullptr,                               // delProperty
-    nullptr,                               // enumerate
-    nullptr,                               // newEnumerate
-    nullptr,                               // resolve
-    nullptr,                               // mayResolve
-    FinalizationRegistryObject::finalize,  // finalize
-    nullptr,                               // call
-    nullptr,                               // construct
-    FinalizationRegistryObject::trace,     // trace
+    .finalize = FinalizationRegistryObject::finalize,
+    .trace = FinalizationRegistryObject::trace,
 };
 
 const ClassSpec FinalizationRegistryObject::classSpec_ = {
@@ -268,10 +251,14 @@ void FinalizationRegistryObject::trace(JSTracer* trc, JSObject* obj) {
 
 void FinalizationRegistryObject::traceWeak(JSTracer* trc,
                                            bool* hasSymbolRegistrations) {
-  // Trace and update the contents of the registrations map's keys, which
-  // are weakly held.
+  // Trace and update the contents of the registrations map's keys, which are
+  // weakly held. Remove any old records that have been queued or cleaned up.
+  MOZ_ASSERT(recordsWithoutToken());
   MOZ_ASSERT(registrations());
   MOZ_ASSERT(hasSymbolRegistrations);
+
+  recordsWithoutToken()->mutableEraseIf(
+      [](FinalizationRecordObject* record) { return !record->isRegistered(); });
 
   for (auto iter = registrations()->modIter(); !iter.done(); iter.next()) {
     auto result = TraceWeakEdge(trc, &iter.getMutable().mutableKey(),
@@ -284,8 +271,19 @@ void FinalizationRegistryObject::traceWeak(JSTracer* trc,
         oomUnsafe.crash("FinalizationRegistryObject::traceWeak");
       }
       iter.remove();
-    } else if (result.finalTarget().isSymbol()) {
-      *hasSymbolRegistrations = true;
+    } else {
+      if (result.finalTarget().isSymbol()) {
+        *hasSymbolRegistrations = true;
+      }
+
+      FinalizationRecordVector& records = iter.get().value();
+      records.mutableEraseIf([](FinalizationRecordObject* record) {
+        return !record->isRegistered();
+      });
+
+      if (records.empty()) {
+        iter.remove();
+      }
     }
   }
 
@@ -637,16 +635,8 @@ const JSClass FinalizationQueueObject::class_ = {
 };
 
 const JSClassOps FinalizationQueueObject::classOps_ = {
-    nullptr,                            // addProperty
-    nullptr,                            // delProperty
-    nullptr,                            // enumerate
-    nullptr,                            // newEnumerate
-    nullptr,                            // resolve
-    nullptr,                            // mayResolve
-    FinalizationQueueObject::finalize,  // finalize
-    nullptr,                            // call
-    nullptr,                            // construct
-    FinalizationQueueObject::trace,     // trace
+    .finalize = FinalizationQueueObject::finalize,
+    .trace = FinalizationQueueObject::trace,
 };
 
 /* static */

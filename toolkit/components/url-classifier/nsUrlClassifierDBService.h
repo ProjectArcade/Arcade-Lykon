@@ -53,7 +53,7 @@ nsresult TablesToResponse(const nsACString& tables);
 }  // namespace safebrowsing
 
 namespace net {
-class AsyncUrlChannelClassifier;
+class AntiTrackingChannelClassifierUtils;
 }
 
 }  // namespace mozilla
@@ -64,7 +64,7 @@ class nsUrlClassifierDBService final : public nsIUrlClassifierDBService,
                                        public nsIURIClassifier,
                                        public nsIUrlClassifierInfo,
                                        public nsIObserver {
-  friend class mozilla::net::AsyncUrlChannelClassifier;
+  friend class mozilla::net::AntiTrackingChannelClassifierUtils;
 
  public:
   class FeatureHolder;
@@ -247,12 +247,12 @@ class nsUrlClassifierDBServiceWorker final : public nsIUrlClassifierDBService {
 
   TableUpdateArray mTableUpdates;
 
-  uint32_t mUpdateWaitSec;
+  uint32_t mUpdateWaitSec = 0;
 
   // Stores the last results that triggered a table update.
   ConstCacheResultArray mLastResults;
 
-  nsresult mUpdateStatus;
+  nsresult mUpdateStatus = NS_OK;
   nsTArray<nsCString> mUpdateTables;
 
   // The mUpdateObserver will be accessed by both the main thread and the worker

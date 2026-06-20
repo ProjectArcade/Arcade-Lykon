@@ -322,11 +322,14 @@ impl Global {
     /// - `hal_texture` must be created from `device_id` corresponding raw handle.
     /// - `hal_texture` must be created respecting `desc`
     /// - `hal_texture` must be initialized
+    /// - The `initial_state` must match the actual driver-side state of
+    ///   the wrapped resource at the moment of wrap.
     pub unsafe fn create_texture_from_hal(
         &self,
         hal_texture: Box<dyn hal::DynTexture>,
         device_id: DeviceId,
         desc: &resource::TextureDescriptor,
+        initial_state: wgt::TextureUses,
         id_in: Option<id::TextureId>,
     ) -> (id::TextureId, Option<resource::CreateTextureError>) {
         profiling::scope!("Device::create_texture_from_hal");
@@ -338,7 +341,7 @@ impl Global {
         let error = 'error: {
             let device = self.hub.devices.get(device_id);
 
-            let texture = match device.create_texture_from_hal(hal_texture, desc) {
+            let texture = match device.create_texture_from_hal(hal_texture, desc, initial_state) {
                 Ok(texture) => texture,
                 Err(error) => break 'error error,
             };
@@ -2064,7 +2067,7 @@ impl Global {
         self.hub.queues.remove(queue_id);
     }
 
-    /// `op.callback` is guaranteed to be called.
+    /// `op.callback` is always called, even in case of errors.
     pub fn buffer_map_async(
         &self,
         buffer_id: id::BufferId,
@@ -2077,20 +2080,17 @@ impl Global {
 
         let hub = &self.hub;
 
-        let map_result = match hub.buffers.get(buffer_id).get() {
-            Ok(buffer) => buffer.map_async(offset, size, op),
-            Err(e) => Err((op, e.into())),
+        let buffer = match hub.buffers.get(buffer_id).get() {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                if let Some(callback) = op.callback {
+                    callback(Err(err.clone().into()));
+                }
+                return Err(err.into());
+            }
         };
 
-        match map_result {
-            Ok(submission_index) => Ok(submission_index),
-            Err((mut operation, err)) => {
-                if let Some(callback) = operation.callback.take() {
-                    callback(Err(err.clone()));
-                }
-                Err(err)
-            }
-        }
+        buffer.map_async(offset, size, op)
     }
 
     pub fn buffer_get_mapped_range(

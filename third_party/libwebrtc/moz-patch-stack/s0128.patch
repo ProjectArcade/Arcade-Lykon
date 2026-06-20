@@ -1,30 +1,31 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Mon, 29 Dec 2025 13:18:00 -0600
-Subject: Bug 2006933 - (fix-932f274e86) don't include rtc_error.h, forward
- declare RTCError
+Date: Fri, 30 Jan 2026 18:55:00 +0000
+Subject: Bug 2005262 - better logging in
+ ModuleRtpRtcpImpl2::RegisterRtpHeaderExtension. r=ng
 
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/fb61f91d422c3d77545d0d10778314eb958fc8c6
+Differential Revision: https://phabricator.services.mozilla.com/D281051
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/b44955c4c033ebaf31b40701f12f7cb0dc035ba8
 ---
- api/rtp_parameters.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ modules/rtp_rtcp/source/rtp_rtcp_impl2.cc | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
 
-diff --git a/api/rtp_parameters.h b/api/rtp_parameters.h
-index ef57479371..de82b3484d 100644
---- a/api/rtp_parameters.h
-+++ b/api/rtp_parameters.h
-@@ -24,7 +24,6 @@
- #include "absl/strings/string_view.h"
- #include "api/media_types.h"
- #include "api/priority.h"
--#include "api/rtc_error.h"
- #include "api/rtp_transceiver_direction.h"
- #include "api/video/resolution.h"
- #include "api/video_codecs/scalability_mode.h"
-@@ -32,6 +31,7 @@
- #include "rtc_base/system/rtc_export.h"
+diff --git a/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc b/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc
+index 53b0edca26..8d56ca17fb 100644
+--- a/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc
++++ b/modules/rtp_rtcp/source/rtp_rtcp_impl2.cc
+@@ -593,9 +593,14 @@ void ModuleRtpRtcpImpl2::SetExtmapAllowMixed(bool extmap_allow_mixed) {
+ void ModuleRtpRtcpImpl2::RegisterRtpHeaderExtension(absl::string_view uri,
+                                                     RtpHeaderExtensionId id) {
+   RTC_CHECK(rtp_sender_ != nullptr);
++  RTC_LOG(LS_INFO) << "RegisterRtpHeaderExtension uri:'" << uri
++                   << "' id: " << id;
+   bool registered =
+       rtp_sender_->packet_generator.RegisterRtpHeaderExtension(uri, id);
+-  RTC_CHECK(registered);
++  if (!registered) {
++    RTC_LOG(LS_WARNING) << "RegisterRtpHeaderExtension failed to register uri:'" << uri << "' id: " << id;
++  }
++  RTC_DCHECK(registered);
+ }
  
- namespace webrtc {
-+class RTCError;
- class StringBuilder;
- 
- using CodecParameterMap = std::map<std::string, std::string>;
+ void ModuleRtpRtcpImpl2::DeregisterSendRtpHeaderExtension(

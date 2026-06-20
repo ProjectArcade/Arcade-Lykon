@@ -7,14 +7,12 @@ const { AIWindowUI } = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/ui/modules/AIWindowUI.sys.mjs"
 );
 
-const FIRSTRUN_URL = "chrome://browser/content/aiwindow/firstrun.html";
-
 async function navigateAndWait(win, url) {
   await BrowserTestUtils.loadURIString({
     browser: win.gBrowser.selectedTab.linkedBrowser,
     uriString: url,
   });
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => win.gBrowser.selectedBrowser.currentURI.spec === url,
     `Should navigate to ${url}`
   );
@@ -51,7 +49,7 @@ add_task(async function test_firstrun_immersive_view() {
     ],
   });
 
-  const win = await openAIWindow({ waitForTabURL: false });
+  const win = await openAIWindow({ waitForTabURL: "" });
   const chromeRoot = win.document.documentElement;
 
   await navigateAndWait(win, FIRSTRUN_URL);
@@ -93,7 +91,7 @@ add_task(async function test_open_sidebar_immersive_view() {
     ],
   });
 
-  const win = await openAIWindow({ waitForTabURL: false });
+  const win = await openAIWindow({ waitForTabURL: "" });
   const chromeRoot = win.document.documentElement;
   await navigateAndWait(win, FIRSTRUN_URL);
 

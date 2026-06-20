@@ -2,9 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use api::{ColorF, ColorU, GradientStop};
+use api::{ColorF, GradientStop};
 use api::units::{LayoutRect, LayoutSize, LayoutVector2D};
-use std::hash;
 
 mod linear;
 mod radial;
@@ -14,32 +13,9 @@ pub use linear::*;
 pub use radial::*;
 pub use conic::*;
 
-/// A hashable gradient stop that can be used in primitive keys.
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, Copy, Clone, MallocSizeOf, PartialEq)]
-pub struct GradientStopKey {
-    pub offset: f32,
-    pub color: ColorU,
-}
-
-impl GradientStopKey {
-    pub fn empty() -> Self {
-        GradientStopKey {
-            offset: 0.0,
-            color: ColorU::new(0, 0, 0, 0),
-        }
-    }
-}
-
-impl Into<GradientStopKey> for GradientStop {
-    fn into(self) -> GradientStopKey {
-        GradientStopKey {
-            offset: self.offset,
-            color: self.color.into(),
-        }
-    }
-}
+// `GradientStopKey` now lives in `webrender_api` so builder-side interning keys
+// can reference it. Re-exported here to keep existing references working.
+pub use api::key_types::GradientStopKey;
 
 // Convert `stop_keys` into a vector of `GradientStop`s, which is a more
 // convenient representation for the current gradient builder. Compute the
@@ -57,15 +33,6 @@ fn stops_and_min_alpha(stop_keys: &[GradientStopKey]) -> (Vec<GradientStop>, f32
     }).collect();
 
     (stops, min_alpha)
-}
-
-impl Eq for GradientStopKey {}
-
-impl hash::Hash for GradientStopKey {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.offset.to_bits().hash(state);
-        self.color.hash(state);
-    }
 }
 
 // If the gradient is not tiled we know that any content outside of the clip will not
@@ -126,14 +93,14 @@ fn test_struct_sizes() {
     // (b) You made a structure larger. This is not necessarily a problem, but should only
     //     be done with care, and after checking if talos performance regresses badly.
     assert_eq!(mem::size_of::<LinearGradient>(), 72, "LinearGradient size changed");
-    assert_eq!(mem::size_of::<LinearGradientTemplate>(), 128, "LinearGradientTemplate size changed");
-    assert_eq!(mem::size_of::<LinearGradientKey>(), 80, "LinearGradientKey size changed");
+    assert_eq!(mem::size_of::<LinearGradientTemplate>(), 80, "LinearGradientTemplate size changed");
+    assert_eq!(mem::size_of::<LinearGradientKey>(), 72, "LinearGradientKey size changed");
 
     assert_eq!(mem::size_of::<RadialGradient>(), 72, "RadialGradient size changed");
-    assert_eq!(mem::size_of::<RadialGradientTemplate>(), 112, "RadialGradientTemplate size changed");
-    assert_eq!(mem::size_of::<RadialGradientKey>(), 88, "RadialGradientKey size changed");
+    assert_eq!(mem::size_of::<RadialGradientTemplate>(), 80, "RadialGradientTemplate size changed");
+    assert_eq!(mem::size_of::<RadialGradientKey>(), 72, "RadialGradientKey size changed");
 
     assert_eq!(mem::size_of::<ConicGradient>(), 72, "ConicGradient size changed");
-    assert_eq!(mem::size_of::<ConicGradientTemplate>(), 112, "ConicGradientTemplate size changed");
-    assert_eq!(mem::size_of::<ConicGradientKey>(), 88, "ConicGradientKey size changed");
+    assert_eq!(mem::size_of::<ConicGradientTemplate>(), 80, "ConicGradientTemplate size changed");
+    assert_eq!(mem::size_of::<ConicGradientKey>(), 72, "ConicGradientKey size changed");
 }

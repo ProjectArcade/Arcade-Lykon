@@ -31,6 +31,7 @@ enum class SurfaceType : int8_t {
   COREGRAPHICS_CGCONTEXT, /* Surface wrapping a CG context */
   SKIA,                   /* Surface wrapping a Skia bitmap */
   RECORDING,              /* Surface used for recording */
+  CANVAS_RECORDING,       /* Surface used for canvas recording */
   DATA_SHARED,            /* Data surface using shared memory */
   DATA_RECYCLING_SHARED,  /* Data surface using shared memory */
   OFFSET,                 /* Offset */
@@ -83,9 +84,8 @@ enum class SurfaceFormat : int8_t {
   P010,       // Identical to P016 but the 6 least significant bits are 0.
               // With DXGI in theory entirely compatible, however practice has
               // shown that it's not the case.
-  NV16,       // Similar to NV12, but with 4:2:2 chroma subsampling. Technically
-              // 8 bit, but we only use it for 10 bit, and it's really only here
-              // to support the macOS bi-planar 422 formats.
+  NV16,       // Similar to NV12, but with 4:2:2 chroma subsampling.
+  P210,       // Similar to P010, but with 4:2:2 chroma subsampling.
   YUY2,       // Sometimes called YUYV. Single plane / packed YUV 4:2:2 8 bit
               // samples interleaved as Y`0 Cb Y`1 Cr. Since 4 pixels require
               // 64 bits, this can also be considered a 16bpp format, but each
@@ -179,6 +179,7 @@ inline std::optional<SurfaceFormatInfo> Info(const SurfaceFormat aFormat) {
     case SurfaceFormat::P016:
     case SurfaceFormat::P010:
     case SurfaceFormat::NV16:
+    case SurfaceFormat::P210:
     case SurfaceFormat::YUY2:
       info.hasColor = true;
       info.hasAlpha = false;
@@ -246,6 +247,7 @@ inline std::optional<SurfaceFormatInfo> Info(const SurfaceFormat aFormat) {
     case SurfaceFormat::P016:
     case SurfaceFormat::P010:
     case SurfaceFormat::NV16:
+    case SurfaceFormat::P210:
     case SurfaceFormat::YUY2:
     case SurfaceFormat::UNKNOWN:
       break;  // No bytesPerPixel per se.
@@ -335,6 +337,7 @@ static inline int BytesPerPixel(SurfaceFormat aFormat) {
       return 0;
     case SurfaceFormat::P016:
     case SurfaceFormat::P010:
+    case SurfaceFormat::P210:
       // Similar to NV12 but uint16 pixels.
       return 0;
     case SurfaceFormat::UNKNOWN:
@@ -363,6 +366,8 @@ inline bool IsOpaque(SurfaceFormat aFormat) {
     case SurfaceFormat::NV12:
     case SurfaceFormat::P010:
     case SurfaceFormat::P016:
+    case SurfaceFormat::NV16:
+    case SurfaceFormat::P210:
     case SurfaceFormat::YUY2:
       return true;
     case SurfaceFormat::B8G8R8A8:
@@ -375,7 +380,6 @@ inline bool IsOpaque(SurfaceFormat aFormat) {
     case SurfaceFormat::R16G16:
     case SurfaceFormat::YUV420P10:
     case SurfaceFormat::YUV422P10:
-    case SurfaceFormat::NV16:
     case SurfaceFormat::UNKNOWN:
       return false;
   }
@@ -874,18 +878,16 @@ static inline ColorDepth ColorDepthForBitDepth(uint8_t aBitDepth) {
   return depth;
 }
 
-// 10 and 12 bits color depth image are using 16 bits integers for storage
-// As such we need to rescale the value from 10 or 12 bits to 16.
+// 10 and 12 bits color depth image are using 16 bits integers for storage.
+// Data is placed as MSB and texture is sampled within [0 - 1] range.
 static inline uint32_t RescalingFactorForColorDepth(ColorDepth aColorDepth) {
   uint32_t factor = 1;
   switch (aColorDepth) {
     case ColorDepth::COLOR_8:
       break;
     case ColorDepth::COLOR_10:
-      factor = 64;
       break;
     case ColorDepth::COLOR_12:
-      factor = 16;
       break;
     case ColorDepth::COLOR_16:
       break;

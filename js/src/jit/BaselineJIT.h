@@ -221,9 +221,6 @@ class alignas(uintptr_t) BaselineScript final
     // Flag set when compiled for use with Debugger. Handles various
     // Debugger hooks and compiles toggled calls for traps.
     HAS_DEBUG_INSTRUMENTATION = 1 << 0,
-
-    // Flag is set if this script has profiling instrumentation turned on.
-    PROFILER_INSTRUMENTATION_ON = 1 << 1,
   };
 
   // Native code offset for OSR from Baseline Interpreter into Baseline JIT at
@@ -359,7 +356,7 @@ class alignas(uintptr_t) BaselineScript final
 
   void toggleProfilerInstrumentation(bool enable);
   bool isProfilerInstrumentationOn() const {
-    return flags_ & PROFILER_INSTRUMENTATION_ON;
+    return method_->isProfilerInstrumented();
   }
 
   static size_t offsetOfResumeEntriesOffset() {
@@ -397,6 +394,7 @@ JitExecStatus EnterBaselineInterpreterAtBranch(JSContext* cx,
                                                jsbytecode* pc);
 
 bool CanBaselineInterpretScript(JSScript* script);
+bool CanBaselineCompileScript(JSContext* cx, JSScript* script);
 
 // Called by the Baseline Interpreter to compile a script for the Baseline JIT.
 // |res| is set to the native code address in the BaselineScript to jump to, or

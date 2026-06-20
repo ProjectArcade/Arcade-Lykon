@@ -68,10 +68,7 @@ def retrigger_decision_action(parameters, graph_config, input, task_group_id, ta
     task = get_task_definition(task_id)
     task = relativize_datestamps(task)
     create_task_from_def(
-        task,
-        parameters["level"],
-        action_tag="retrigger-decision-task",
-        max_priority="very-low",
+        task, parameters["level"], action_tag="retrigger-decision-task"
     )
 
 
@@ -182,7 +179,6 @@ def retrigger_action(parameters, graph_config, input, task_group_id, task_id):
         decision_task_id,
         action_tag="retrigger-task",
         modifier=modifier,
-        max_priority="very-low",
     )
     logger.info(f"Scheduled {label}{with_downstream}({times} times)")
 
@@ -312,5 +308,4 @@ def retrigger_multiple(parameters, graph_config, input, task_group_id, task_id):
         decision_task_id,
         modifier=modifier,
         action_tag="retrigger-multiple-task",
-        max_priority="very-low",
     )

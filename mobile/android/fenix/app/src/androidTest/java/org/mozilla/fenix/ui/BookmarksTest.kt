@@ -4,12 +4,11 @@
 
 package org.mozilla.fenix.ui
 
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.test.espresso.Espresso.pressBack
 import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
-import org.mozilla.fenix.customannotations.SkipLeaks
+import org.mozilla.fenix.customannotations.Converted
 import org.mozilla.fenix.customannotations.SmokeTest
 import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
@@ -21,13 +20,13 @@ import org.mozilla.fenix.helpers.TestAssetHelper.htmlControlsFormAsset
 import org.mozilla.fenix.helpers.TestHelper.clickSnackbarButton
 import org.mozilla.fenix.helpers.TestHelper.exitMenu
 import org.mozilla.fenix.helpers.TestHelper.verifySnackBarText
-import org.mozilla.fenix.helpers.TestHelper.waitForAppWindowToBeUpdated
 import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
 import org.mozilla.fenix.ui.robots.browserScreen
 import org.mozilla.fenix.ui.robots.composeBookmarksMenu
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.multipleSelectionToolbar
 import org.mozilla.fenix.ui.robots.navigationToolbar
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 class BookmarksTest {
     private val testBookmark = object {
@@ -41,19 +40,23 @@ class BookmarksTest {
 
     private val mockWebServer get() = fenixTestRule.mockWebServer
 
-    @get:Rule
-    val memoryLeaksRule = DetectMemoryLeaksRule()
-
-    @get:Rule
+    @get:Rule(order = 1)
     val composeTestRule =
-        AndroidComposeTestRule(
+        AndroidComposeTestRuleV2(
             HomeActivityIntentTestRule(
                 isMenuRedesignCFREnabled = false,
                 shouldUseBottomToolbar = true,
             ),
         ) { it.activity }
 
+    @get:Rule(order = 2)
+    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
+
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833690
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.BookmarksTest#deleteBookmarkFoldersTest"],
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun deleteBookmarkFoldersTest() {
@@ -97,6 +100,11 @@ class BookmarksTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833691
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.BookmarksTest#editBookmarksNameAndUrlTest"],
+        bug = 2024690,
+        since = "2026-03",
+    )
     @SmokeTest
     @Test
     fun editBookmarksNameAndUrlTest() {
@@ -126,6 +134,10 @@ class BookmarksTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833693
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.BookmarksTest#shareBookmarkTest"],
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun shareBookmarkTest() {
@@ -149,6 +161,10 @@ class BookmarksTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833702
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.BookmarksTest#openMultipleSelectedBookmarksInANewTabTest"],
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun openMultipleSelectedBookmarksInANewTabTest() {
@@ -174,11 +190,15 @@ class BookmarksTest {
             verifyTabTrayIsOpen()
             verifyNormalBrowsingButtonIsSelected()
             verifyNormalTabsList()
-            verifyExistingOpenTabs(webPages[0].url.toString(), webPages[1].url.toString())
+            verifyExistingOpenTabs(webPages[0].title, webPages[1].title)
         }
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833704
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.BookmarksTest#deleteMultipleSelectedBookmarksTest"],
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun deleteMultipleSelectedBookmarksTest() {
@@ -225,6 +245,10 @@ class BookmarksTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833712
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.BookmarksTest#verifySearchForBookmarkedItemsTest"],
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun verifySearchForBookmarkedItemsTest() {
@@ -351,6 +375,7 @@ class BookmarksTest {
         homeScreen(composeTestRule) {
         }.openThreeDotMenu {
         }.clickBookmarksButton {
+            verifyBookmarkTitle(defaultWebPage.title)
             createFolder(bookmarkFolderName)
             verifyFolderTitle(bookmarkFolderName)
             verifyBookmarkTitle(defaultWebPage.title)
@@ -454,7 +479,6 @@ class BookmarksTest {
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2833707
     @Test
-    @SkipLeaks
     fun verifyOpenAllInPrivateTabsTest() {
         val webPages = listOf(
             mockWebServer.getGenericAsset(1),

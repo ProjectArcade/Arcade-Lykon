@@ -7,6 +7,7 @@
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::properties::{NonCustomPropertyId, PropertyId, ShorthandId};
+use crate::typed_om::ToTyped;
 use crate::values::generics::animation as generics;
 use crate::values::generics::position::{IsTreeScoped, TreeScoped};
 use crate::values::specified::{LengthPercentage, NonNegativeNumber, Time};
@@ -16,7 +17,6 @@ use cssparser::{match_ignore_ascii_case, Parser};
 use std::fmt::{self, Write};
 use style_traits::{
     CssWriter, KeywordsCollectFn, ParseError, SpecifiedValueInfo, StyleParseErrorKind, ToCss,
-    ToTyped,
 };
 
 /// A given transition property, that is either `All`, a longhand or shorthand
@@ -176,7 +176,7 @@ impl Parse for AnimationDuration {
 
 /// https://drafts.csswg.org/css-animations/#animation-iteration-count
 #[derive(
-    Copy, Clone, Debug, MallocSizeOf, PartialEq, Parse, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
+    Clone, Debug, MallocSizeOf, PartialEq, Parse, SpecifiedValueInfo, ToCss, ToShmem, ToTyped,
 )]
 pub enum AnimationIterationCount {
     /// A `<number>` value.

@@ -66,8 +66,8 @@ const PREF_URLBAR_DEFAULTS = /** @type {PreferenceDefinition[]} */ ([
   // textbox.  If false, autofill will be disabled.
   ["autoFill", true],
 
-  // Whether enabling adaptive history autofill. This pref is a fallback for the
-  // Nimbus variable `autoFillAdaptiveHistoryEnabled`.
+  // Whether enabling adaptive history autofill. The Nimbus variable
+  // `autoFillAdaptiveHistoryEnabled` writes to this pref via `setPref`.
   ["autoFill.adaptiveHistory.enabled", false],
 
   // Duration in ms to block after backspace penalty. Default: 2 days.
@@ -82,8 +82,8 @@ const PREF_URLBAR_DEFAULTS = /** @type {PreferenceDefinition[]} */ ([
   ["autoFill.dismissalBlockDurationMs", 604800000],
 
   // Minimum char length of the user's search string to enable adaptive history
-  // autofill. This pref is a fallback for the Nimbus variable
-  // `autoFillAdaptiveHistoryMinCharsThreshold`.
+  // autofill. The Nimbus variable `autoFillAdaptiveHistoryMinCharsThreshold`
+  // writes to this pref via `setPref`.
   ["autoFill.adaptiveHistory.minCharsThreshold", 0],
 
   // Threshold for use count of input history that we handle as adaptive history
@@ -183,6 +183,12 @@ const PREF_URLBAR_DEFAULTS = /** @type {PreferenceDefinition[]} */ ([
   // locales. Labels are not shown in other locales but likely will be in the
   // future.
   ["groupLabels.enabled", true],
+
+  // Whether semantic history results are placed in their own result group that
+  // fills only the space left after the other (non-semantic) result groups, so
+  // semantic results never evict them. When false, semantic results share the
+  // general group with plain history results.
+  ["suggest.semanticHistory.separateGroup", false],
 
   // Feature gate pref for important-dates suggestions in the urlbar.
   ["importantDates.featureGate", false],
@@ -423,6 +429,9 @@ const PREF_URLBAR_DEFAULTS = /** @type {PreferenceDefinition[]} */ ([
   // Allow the result menu button to be reached with the Tab key.
   ["resultMenu.keyboardAccessible", true],
 
+  // Timeout in milliseconds before stale rows are removed from the view.
+  ["removeStaleRowsTimeout", 400],
+
   // Feature gate pref for rich suggestions being shown in the urlbar.
   ["richSuggestions.featureGate", true],
 
@@ -644,6 +653,9 @@ const PREF_URLBAR_DEFAULTS = /** @type {PreferenceDefinition[]} */ ([
   // Enable the banner warning the user of breached websites in the trust panel:
   ["trustPanel.breachAlerts", false],
 
+  // Feature gate to show/hide the breach alerts setting in Preferences:
+  ["trustPanel.breachAlerts.featureGate", false],
+
   // Whether unit conversion is enabled.
   ["unitConversion.enabled", false],
 
@@ -795,8 +807,14 @@ const PREF_TYPES = new Map([
  * @param {object} options
  * @param {boolean} options.showSearchSuggestionsFirst
  *   If true, the suggestions group will come before the general group.
+ * @param {boolean} [options.separateSemanticGroup]
+ *   If true, semantic history results get their own group that fills only the
+ *   space left after the other general groups.
  */
-function makeDefaultResultGroups({ showSearchSuggestionsFirst }) {
+function makeDefaultResultGroups({
+  showSearchSuggestionsFirst,
+  separateSemanticGroup = false,
+}) {
   /**
    * @type {ResultGroup}
    */
@@ -828,6 +846,34 @@ function makeDefaultResultGroups({ showSearchSuggestionsFirst }) {
       },
     ],
   };
+
+  // When semantic history has its own group, split the general slot so that
+  // semantic history takes roughly 1 of every 10 of these results (9:1) and
+  // otherwise yields to general results, while filling the space when there
+  // are no general results. Nesting keeps the general group's weight relative
+  // to its siblings (remote tabs, about pages) unchanged.
+  let generalChild = separateSemanticGroup
+    ? {
+        flex: 2,
+        flexChildren: true,
+        children: [
+          {
+            flex: 9,
+            group: lazy.UrlbarUtils.RESULT_GROUP.GENERAL,
+            orderBy: "frecency",
+          },
+          {
+            flex: 1,
+            group: lazy.UrlbarUtils.RESULT_GROUP.SEMANTIC_HISTORY,
+            orderBy: "frecency",
+          },
+        ],
+      }
+    : {
+        flex: 2,
+        group: lazy.UrlbarUtils.RESULT_GROUP.GENERAL,
+        orderBy: "frecency",
+      };
 
   // Prepare the parent group for suggestions and general.
   let mainGroup = {
@@ -875,11 +921,7 @@ function makeDefaultResultGroups({ showSearchSuggestionsFirst }) {
                 flex: 1,
                 group: lazy.UrlbarUtils.RESULT_GROUP.REMOTE_TAB,
               },
-              {
-                flex: 2,
-                group: lazy.UrlbarUtils.RESULT_GROUP.GENERAL,
-                orderBy: "frecency",
-              },
+              generalChild,
               {
                 // We show relatively many about-page results because they're
                 // only added for queries starting with "about:".
@@ -913,8 +955,38 @@ function makeDefaultResultGroups({ showSearchSuggestionsFirst }) {
  * @param {object} options
  * @param {boolean} options.showSearchSuggestionsFirst
  *   If true, the suggestions group will come before the general group.
+ * @param {boolean} [options.separateSemanticGroup]
+ *   If true, semantic history results get their own group that fills only the
+ *   space left after the other general groups.
  */
-function makeSmartBarGroups({ showSearchSuggestionsFirst }) {
+function makeSmartBarGroups({
+  showSearchSuggestionsFirst,
+  separateSemanticGroup = false,
+}) {
+  // See makeDefaultResultGroups for the rationale of this 9:1 split.
+  let generalChild = separateSemanticGroup
+    ? {
+        flex: 2,
+        flexChildren: true,
+        children: [
+          {
+            flex: 9,
+            group: lazy.UrlbarUtils.RESULT_GROUP.GENERAL,
+            orderBy: "frecency",
+          },
+          {
+            flex: 1,
+            group: lazy.UrlbarUtils.RESULT_GROUP.SEMANTIC_HISTORY,
+            orderBy: "frecency",
+          },
+        ],
+      }
+    : {
+        flex: 2,
+        group: lazy.UrlbarUtils.RESULT_GROUP.GENERAL,
+        orderBy: "frecency",
+      };
+
   let mainGroup = {
     flexChildren: true,
     children: [
@@ -960,11 +1032,7 @@ function makeSmartBarGroups({ showSearchSuggestionsFirst }) {
           {
             flexChildren: true,
             children: [
-              {
-                flex: 2,
-                group: lazy.UrlbarUtils.RESULT_GROUP.GENERAL,
-                orderBy: "frecency",
-              },
+              generalChild,
               {
                 flex: 1,
                 group: lazy.UrlbarUtils.RESULT_GROUP.REMOTE_TAB,
@@ -1155,19 +1223,29 @@ class Preferences {
     // This key may be modified per each SAP, and will track the cached groups,
     // any additionally used condition must be added to the key.
     let key = context.sapName;
+    let separateSemanticGroup = this.get(
+      "suggest.semanticHistory.separateGroup"
+    );
+    key += separateSemanticGroup;
     switch (context.sapName) {
       case "urlbar": {
         let showSearchSuggestionsFirst =
           this.#getShowSearchSuggestionsFirst(context);
         key += showSearchSuggestionsFirst;
         return this.#getOrCacheResultGroups(key, () =>
-          makeDefaultResultGroups({ showSearchSuggestionsFirst })
+          makeDefaultResultGroups({
+            showSearchSuggestionsFirst,
+            separateSemanticGroup,
+          })
         );
       }
       case "searchbar": {
         // This is a temporary placeholder until searchbar gets its own config.
         return this.#getOrCacheResultGroups(key, () =>
-          makeDefaultResultGroups({ showSearchSuggestionsFirst: true })
+          makeDefaultResultGroups({
+            showSearchSuggestionsFirst: true,
+            separateSemanticGroup,
+          })
         );
       }
       case "smartbar": {
@@ -1176,7 +1254,10 @@ class Preferences {
           this.#getShowSearchSuggestionsFirst(context);
         key += showSearchSuggestionsFirst;
         return this.#getOrCacheResultGroups(key, () =>
-          makeSmartBarGroups({ showSearchSuggestionsFirst })
+          makeSmartBarGroups({
+            showSearchSuggestionsFirst,
+            separateSemanticGroup,
+          })
         );
       }
       default: {
@@ -1254,6 +1335,7 @@ class Preferences {
         this._map.delete("autoFillAdaptiveHistoryUseCountThreshold");
         return;
       case "showSearchSuggestionsFirst":
+      case "suggest.semanticHistory.separateGroup":
         this.#cachedResultGroups.clear();
         return;
     }

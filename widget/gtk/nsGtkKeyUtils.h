@@ -131,7 +131,7 @@ class KeymapWrapper {
    * GDK's state.
    */
   static guint ConvertWidgetModifierToGdkState(
-      nsIWidget::Modifiers aNativeModifiers);
+      nsIWidget::NativeModifiers aNativeModifiers);
 
   /**
    * InitInputEvent() initializes the aInputEvent with aModifierState.
@@ -316,7 +316,7 @@ class KeymapWrapper {
     INDEX_LEVEL5,
     COUNT_OF_MODIFIER_INDEX
   };
-  guint mModifierMasks[COUNT_OF_MODIFIER_INDEX];
+  guint mModifierMasks[COUNT_OF_MODIFIER_INDEX] = {};
 
   guint GetGdkModifierMask(MappedModifier aModifier) const;
 

@@ -4,7 +4,8 @@
 
 package org.mozilla.fenix.tabgroups
 
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -46,7 +47,7 @@ class TabGroupListTest {
             }
         }
 
-        composeTestRule.onNodeWithTag(TabsTrayTestTag.TAB_GROUP_ROOT)
+        composeTestRule.onNodeWithTag("${TabsTrayTestTag.TAB_GROUP_ROOT}.${group.id}")
             .performClick()
 
         assertTrue(groupClicked)
@@ -109,5 +110,24 @@ class TabGroupListTest {
 
         assertTrue(editClicked)
         assertEquals(group, clickedGroup)
+    }
+
+    @Test
+    fun verifyFocusedTabGroupMarkedSelected() {
+        val group = createTabGroup(title = "Group 1", isFocused = true)
+
+        composeTestRule.setContent {
+            FirefoxTheme {
+                TabGroupList(
+                    groups = listOf(group),
+                    onTabGroupClick = {},
+                    onDeleteTabGroupClick = {},
+                    onEditTabGroupClick = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("${TabsTrayTestTag.TAB_GROUP_ROOT}.${group.id}")
+            .assertIsSelected()
     }
 }

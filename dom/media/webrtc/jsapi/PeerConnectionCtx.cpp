@@ -112,8 +112,7 @@ class DummyAudioProcessing : public AudioProcessing {
     MOZ_CRASH("Unexpected call");
     return kNoError;
   }
-  bool GetLinearAecOutput(
-      std::span<std::array<float, 160>>) const override {
+  bool GetLinearAecOutput(std::span<std::array<float, 160>>) const override {
     MOZ_CRASH("Unexpected call");
     return false;
   }
@@ -443,7 +442,7 @@ void PeerConnectionCtx::UpdateNetworkState(bool online) {
   if (ctx->mPeerConnections.empty()) {
     return;
   }
-  for (auto pc : ctx->mPeerConnections) {
+  for (const auto& pc : ctx->mPeerConnections) {
     pc.second->UpdateNetworkState(online);
   }
 }
@@ -507,8 +506,7 @@ void PeerConnectionCtx::AddPeerConnection(const std::string& aKey,
         GetMediaThreadPool(MediaThreadType::WEBRTC_CALL_THREAD),
         "CallWorker"_ns, supportTailDispatch);
 
-    UniquePtr<webrtc::FieldTrialsView> trials =
-        WrapUnique(new MozTrialsConfig());
+    auto trials = MakeUnique<MozTrialsConfig>();
 
     mSharedWebrtcState = MakeAndAddRef<SharedWebrtcState>(
         std::move(callWorkerThread), std::move(audioStateConfig),

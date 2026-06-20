@@ -19,7 +19,8 @@ using namespace mozilla::dom;
 
 namespace mozilla::dom {
 
-NS_IMPL_CYCLE_COLLECTION(ResponsiveImageSelector, mOwnerNode)
+NS_IMPL_CYCLE_COLLECTION(ResponsiveImageSelector, mOwnerNode,
+                         mSelectedCandidateURL)
 
 static bool ParseInteger(const nsAString& aString, int32_t& aInt) {
   nsContentUtils::ParseHTMLIntegerResultFlags parseResult;
@@ -290,7 +291,8 @@ bool ResponsiveImageSelector::SelectImage(bool aReselect) {
     displayDensity = overrideDPPX;
   }
   if (doc->ShouldResistFingerprinting(RFPTarget::WindowDevicePixelRatio)) {
-    displayDensity = nsRFPService::GetDevicePixelRatioAtZoom(1);
+    displayDensity =
+        nsRFPService::GetDevicePixelRatioAtZoom(pctx->GetFullZoom());
   }
 
   // Per spec, "In a UA-specific manner, choose one image source"

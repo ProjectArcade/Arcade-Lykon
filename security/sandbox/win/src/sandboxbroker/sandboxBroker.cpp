@@ -542,9 +542,8 @@ Result<Ok, mozilla::ipc::LaunchError> SandboxBroker::LaunchApp(
 
   // Create the sandboxed process
   PROCESS_INFORMATION targetInfo = {0};
-  sandbox::ResultCode result;
   DWORD last_error = ERROR_SUCCESS;
-  result =
+  sandbox::ResultCode result =
       sBrokerService->SpawnTarget(aPath, aArguments, aEnvironment,
                                   std::move(mPolicy), &last_error, &targetInfo);
   if (sandbox::SBOX_ALL_OK != result) {
@@ -667,7 +666,7 @@ static sandbox::ResultCode AllowProxyLoadFromBinDir(
   // mozglue.dll, nss3.dll, etc.
   nsAutoString rulePath(*sBinDir);
   rulePath.Append(u"\\*"_ns);
-  return aConfig->AllowExtraDlls(rulePath.get());
+  return aConfig->AllowExtraDll(rulePath.get());
 }
 
 static sandbox::ResultCode AddCigToConfig(
@@ -694,7 +693,7 @@ static sandbox::ResultCode AddCigToConfig(
       }
 
       for (const wchar_t* path : exceptionModules.ref()) {
-        result = aConfig->AllowExtraDlls(path);
+        result = aConfig->AllowExtraDll(path);
         if (result != sandbox::SBOX_ALL_OK) {
           return result;
         }
@@ -935,19 +934,16 @@ static sandbox::ResultCode AddAndConfigureAppContainerProfile(
     return sandbox::SBOX_ERROR_CREATE_APPCONTAINER;
   }
 
-  // The bool parameter is called create_profile, but in fact it tries to create
-  // and then opens if it already exists. So always passing true is fine.
-  bool createOrOpenProfile = true;
   nsAutoString packageName = aPackagePrefix + uniquePackageStr;
   sandbox::ResultCode result =
-      aConfig->AddAppContainerProfile(packageName.get(), createOrOpenProfile);
+      aConfig->AddAppContainerProfile(packageName.get());
   if (result != sandbox::SBOX_ALL_OK) {
     return result;
   }
 
   // This looks odd, but unfortunately holding a scoped_refptr and
   // dereferencing has DCHECKs that cause a linking problem.
-  sandbox::AppContainer* appContainer = aConfig->GetAppContainer().get();
+  sandbox::AppContainer* appContainer = aConfig->GetAppContainer();
   appContainer->SetEnableLowPrivilegeAppContainer(true);
 
   for (auto wkCap : aWellKnownCapabilites) {
@@ -1127,9 +1123,7 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
     isTrellixDllLoaded = !!::GetModuleHandleW(L"fcagff.dll");
 #endif
     if (!isTrellixDllLoaded) {
-      result = config->AddKernelObjectToClose(L"File", L"\\Device\\KsecDD");
-      MOZ_RELEASE_ASSERT(sandbox::SBOX_ALL_OK == result,
-                         "AddKernelObjectToClose should never fail.");
+      config->AddKernelObjectToClose(sandbox::HandleToClose::kKsecDD);
     }
   }
 
@@ -1345,17 +1339,13 @@ void SandboxBroker::SetSecurityLevelForGPUProcess(int32_t aSandboxLevel) {
   sandbox::MitigationFlags initialMitigations =
       sandbox::MITIGATION_BOTTOM_UP_ASLR | sandbox::MITIGATION_HEAP_TERMINATE |
       sandbox::MITIGATION_SEHOP | sandbox::MITIGATION_DEP_NO_ATL_THUNK |
+      sandbox::MITIGATION_EXTENSION_POINT_DISABLE |
       sandbox::MITIGATION_KTM_COMPONENT | sandbox::MITIGATION_FSCTL_DISABLED |
       sandbox::MITIGATION_IMAGE_LOAD_NO_REMOTE |
       sandbox::MITIGATION_IMAGE_LOAD_NO_LOW_LABEL | sandbox::MITIGATION_DEP;
 
   if (StaticPrefs::security_sandbox_gpu_shadow_stack_enabled()) {
     initialMitigations |= sandbox::MITIGATION_CET_COMPAT_MODE;
-  }
-
-  // Bug 2008960 tracks removing the pref if we have seen no issues.
-  if (StaticPrefs::security_sandbox_gpu_extension_point_disable()) {
-    initialMitigations |= sandbox::MITIGATION_EXTENSION_POINT_DISABLE;
   }
 
   sandbox::MitigationFlags delayedMitigations =
@@ -1854,8 +1844,26 @@ bool SandboxBroker::SetSecurityLevelForUtilityProcess(
     case mozilla::ipc::SandboxingKind::UTILITY_AUDIO_DECODING_WMF:
       return BuildUtilitySandbox(config, UtilityAudioDecodingWmfSandboxProps());
 #ifdef MOZ_WMF_MEDIA_ENGINE
-    case mozilla::ipc::SandboxingKind::MF_MEDIA_ENGINE_CDM:
-      return BuildUtilitySandbox(config, UtilityMfMediaEngineCdmSandboxProps());
+    case mozilla::ipc::SandboxingKind::MF_MEDIA_ENGINE_CDM: {
+      if (!BuildUtilitySandbox(config, UtilityMfMediaEngineCdmSandboxProps())) {
+        return false;
+      }
+      // Allow MFTEnumEx to enumerate registered MFT decoders/encoders.
+      auto result = config->AllowRegistryRead(
+          L"HKEY_LOCAL_MACHINE\\Software\\Classes\\MediaFoundation\\*");
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_WARNING("Failed to add MediaFoundation registry rule for MFCDM.");
+      }
+      // MFTEnumEx reads CLSID subkeys to enumerate registered Media Foundation
+      // Transforms. The exact CLSIDs vary per system and are not known at build
+      // time, so a wildcard covering the full CLSID hive is required.
+      result = config->AllowRegistryRead(
+          L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID\\*");
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_WARNING("Failed to add CLSID registry rule for MFCDM.");
+      }
+      return true;
+    }
 #endif
     case mozilla::ipc::SandboxingKind::WINDOWS_UTILS:
       return BuildUtilitySandbox(config, WindowsUtilitySandboxProps());
@@ -2048,9 +2056,6 @@ void SandboxBroker::ApplyLoggingConfig() {
 
   // Add dummy rules, so that we can log in the interception code.
   // We already have a file interception set up for the client side of pipes.
-  // Also, passing just "dummy" for file system policy causes win_utils.cc
-  // IsReparsePoint() to loop.
-  (void)config->AllowNamedPipes(L"dummy");
   (void)config->AllowRegistryRead(L"HKEY_CURRENT_USER\\dummy");
 }
 

@@ -81,6 +81,7 @@ class GLImage;
 class SharedRGBImage;
 #ifdef MOZ_WIDGET_ANDROID
 class SurfaceTextureImage;
+class AndroidImageReaderImage;
 #elif defined(XP_DARWIN)
 class MacIOSurfaceImage;
 #elif MOZ_WIDGET_GTK
@@ -170,6 +171,9 @@ class Image {
   virtual GPUVideoImage* AsGPUVideoImage() { return nullptr; }
 #ifdef MOZ_WIDGET_ANDROID
   virtual SurfaceTextureImage* AsSurfaceTextureImage() { return nullptr; }
+  virtual AndroidImageReaderImage* AsAndroidImageReaderImage() {
+    return nullptr;
+  }
 #endif
 #ifdef XP_DARWIN
   virtual MacIOSurfaceImage* AsMacIOSurfaceImage() { return nullptr; }
@@ -771,6 +775,7 @@ struct PlanarYCbCrData {
   gfx::YUVColorSpace mYUVColorSpace = gfx::YUVColorSpace::Default;
   gfx::ColorSpace2 mColorPrimaries = gfx::ColorSpace2::UNKNOWN;
   gfx::TransferFunction mTransferFunction = gfx::TransferFunction::BT709;
+  Maybe<gfx::HDRMetadata> mHDRMetadata;
   gfx::ColorRange mColorRange = gfx::ColorRange::LIMITED;
   gfx::ChromaSubsampling mChromaSubsampling = gfx::ChromaSubsampling::FULL;
 

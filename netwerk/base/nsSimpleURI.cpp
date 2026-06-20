@@ -40,7 +40,8 @@ NS_IMPL_CI_INTERFACE_GETTER0(nsSimpleURI)
 NS_IMPL_ADDREF(nsSimpleURI)
 NS_IMPL_RELEASE(nsSimpleURI)
 NS_INTERFACE_TABLE_HEAD(nsSimpleURI)
-  NS_INTERFACE_TABLE(nsSimpleURI, nsIURI, nsISerializable)
+  NS_INTERFACE_TABLE(nsSimpleURI, nsIURI, nsISerializable,
+                     nsIIPCSerializableURI, nsIURIWithSizeOf)
   NS_INTERFACE_TABLE_TO_MAP_SEGUE
   NS_IMPL_QUERY_CLASSINFO(nsSimpleURI)
   NS_INTERFACE_MAP_ENTRY_CONCRETE(nsSimpleURI)
@@ -168,6 +169,8 @@ nsSimpleURI::GetSpec(nsACString& result) {
   return NS_OK;
 }
 
+uint32_t nsSimpleURI::SpecHash() { return CachedSpecHash(mSpec); }
+
 // result may contain unescaped UTF-8 characters
 NS_IMETHODIMP
 nsSimpleURI::GetSpecIgnoringRef(nsACString& result) {
@@ -239,6 +242,7 @@ nsresult nsSimpleURI::SetSpecInternal(const nsACString& aSpec,
   // unless it's required so we can share the (potentially very large data: URI)
   // string buffer.
   mSpec = std::move(spec);
+  ResetSpecHash();
   mPathSep = mSpec.FindChar(':');
   MOZ_ASSERT(mPathSep != kNotFound, "A colon should be in this string");
   mQuerySep = kNotFound;
@@ -393,7 +397,19 @@ nsresult nsSimpleURI::SetPathQueryRefInternal() {
   MOZ_ASSERT(mRefSep == kNotFound);
 
   // Initialize `mQuerySep` and `mRefSep` if those components are present.
-  int32_t pathEnd = mSpec.FindCharInSet("?#", PathStart());
+  // Two single-char FindChar scans are used instead of FindCharInSet("?#")
+  // because each is SIMD-accelerated, which outperforms the set lookup. See
+  // bug 2045537 for the discussion and profiling.
+  const int32_t queryPos = mSpec.FindChar('?', PathStart());
+  const int32_t refPos = mSpec.FindChar('#', PathStart());
+  int32_t pathEnd;
+  if (queryPos == kNotFound) {
+    pathEnd = refPos;
+  } else if (refPos == kNotFound) {
+    pathEnd = queryPos;
+  } else {
+    pathEnd = queryPos < refPos ? queryPos : refPos;
+  }
   if (pathEnd != kNotFound) {
     if (mSpec.CharAt(pathEnd) == '?') {
       mQuerySep = pathEnd;

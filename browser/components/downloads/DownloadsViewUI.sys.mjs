@@ -43,6 +43,13 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "A DLP agent"
 );
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "safeBrowsingAllowOverride",
+  "browser.safebrowsing.allowOverride",
+  true
+);
+
 import { Integration } from "resource://gre/modules/Integration.sys.mjs";
 
 Integration.downloads.defineESModuleGetter(
@@ -199,7 +206,9 @@ export var DownloadsViewUI = {
     // Only show "unblock" for blocked (dirty) items that have not been
     // confirmed and have temporary data:
     contextMenu.querySelector(".downloadUnblockMenuItem").hidden =
-      state != DOWNLOAD_DIRTY || !element.classList.contains("temporary-block");
+      state != DOWNLOAD_DIRTY ||
+      !element.classList.contains("temporary-block") ||
+      !lazy.safeBrowsingAllowOverride;
 
     // Can only remove finished/failed/canceled/blocked downloads.
     contextMenu.querySelector(".downloadRemoveFromHistoryMenuItem").hidden = ![
@@ -996,10 +1005,15 @@ DownloadsViewUI.DownloadElementShell.prototype = {
 
   showDeletedOrMissing() {
     this.element.removeAttribute("exists");
-    let label =
-      lazy.DownloadsCommon.strings[
-        this.download.deleted ? "fileDeleted" : "fileMovedOrMissing"
-      ];
+    let stringKey;
+    if (this.download.deleted && this.download.error?.becauseBlocked) {
+      stringKey = "fileBlockedAndDeleted";
+    } else if (this.download.deleted) {
+      stringKey = "fileDeleted";
+    } else {
+      stringKey = "fileMovedOrMissing";
+    }
+    let label = lazy.DownloadsCommon.strings[stringKey];
     this.showStatusWithDetails(label, label);
     this.hideButton();
   },
@@ -1091,12 +1105,13 @@ DownloadsViewUI.DownloadElementShell.prototype = {
         return !!referrer && referrer.asciiSpec != "about:blank";
       }
       case "downloadsCmd_confirmBlock":
+        return this.download.hasBlockedData;
       case "downloadsCmd_chooseUnblock":
       case "downloadsCmd_chooseOpen":
       case "downloadsCmd_unblock":
       case "downloadsCmd_unblockAndSave":
       case "downloadsCmd_unblockAndOpen":
-        return this.download.hasBlockedData;
+        return this.download.hasBlockedData && lazy.safeBrowsingAllowOverride;
       case "downloadsCmd_cancel":
         return this.download.hasPartialData || !this.download.stopped;
       case "downloadsCmd_open":

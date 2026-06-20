@@ -69,8 +69,7 @@ void MediaTransportHandlerIPC::Initialize() {
               [this, self = RefPtr<MediaTransportHandlerIPC>(this)](
                   mozilla::ipc::Endpoint<mozilla::dom::PMediaTransportChild>&&
                       aEndpoint) {
-                RefPtr<MediaTransportChild> child =
-                    new MediaTransportChild(this);
+                RefPtr child = MakeRefPtr<MediaTransportChild>(this);
                 aEndpoint.Bind(child);
                 mChild = child;
 
@@ -290,7 +289,8 @@ void MediaTransportHandlerIPC::RemoveTransportsExcept(
                                         aTransportIds.end());
   mInitPromise->Then(
       mThread, __func__,
-      [=, this, self = RefPtr<MediaTransportHandlerIPC>(this)](bool /*dummy*/) {
+      [this, self = RefPtr<MediaTransportHandlerIPC>(this),
+       transportIds = std::move(transportIds)](bool /*dummy*/) {
         if (mChild) {
           mChild->SendRemoveTransportsExcept(transportIds);
         }
@@ -449,10 +449,11 @@ mozilla::ipc::IPCResult MediaTransportChild::RecvOnEncryptedSending(
 }
 
 mozilla::ipc::IPCResult MediaTransportChild::RecvOnStateChange(
-    const string& transportId, const TransportLayer::State& state) {
+    const string& transportId, const TransportLayer::State& state,
+    nsTArray<nsTArray<uint8_t>>&& remoteCerts) {
   MutexAutoLock lock(mMutex);
   if (mUser) {
-    mUser->OnStateChange(transportId, state);
+    mUser->OnStateChange(transportId, state, std::move(remoteCerts));
   }
   return ipc::IPCResult::Ok();
 }

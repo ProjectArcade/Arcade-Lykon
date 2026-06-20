@@ -63,10 +63,9 @@ using namespace mozilla::ipc;
 namespace mozilla {
 namespace gmp {
 
-#define GMP_CHILD_LOG(loglevel, x, ...) \
-  MOZ_LOG(                              \
-      GetGMPLog(), (loglevel),          \
-      ("GMPChild[pid=%d] " x, (int)base::GetCurrentProcId(), ##__VA_ARGS__))
+#define GMP_CHILD_LOG(loglevel, x, ...)                       \
+  MOZ_LOG_FMT(GetGMPLog(), (loglevel), "GMPChild[pid={}] " x, \
+              (int)base::GetCurrentProcId(), ##__VA_ARGS__)
 
 #define GMP_CHILD_LOG_DEBUG(x, ...) \
   GMP_CHILD_LOG(LogLevel::Debug, x, ##__VA_ARGS__)
@@ -89,7 +88,7 @@ GMPChild::~GMPChild() {
 
 bool GMPChild::Init(const nsAString& aPluginPath, const char* aParentBuildID,
                     mozilla::ipc::UntypedEndpoint&& aEndpoint) {
-  GMP_CHILD_LOG_DEBUG("%s pluginPath=%s useXpcom=%d, useNativeEvent=%d",
+  GMP_CHILD_LOG_DEBUG("{} pluginPath={} useXpcom={}, useNativeEvent={}",
                       __FUNCTION__, NS_ConvertUTF16toUTF8(aPluginPath).get(),
                       GMPProcessChild::UseXPCOM(),
                       GMPProcessChild::UseNativeEventProcessing());
@@ -150,7 +149,7 @@ void GMPChild::Shutdown() {
 
 mozilla::ipc::IPCResult GMPChild::RecvProvideStorageId(
     const nsCString& aStorageId) {
-  GMP_CHILD_LOG_DEBUG("%s", __FUNCTION__);
+  GMP_CHILD_LOG_DEBUG("{}", __FUNCTION__);
   mStorageId = aStorageId;
   return IPC_OK();
 }
@@ -514,7 +513,7 @@ static auto ToCString(const nsTArray<std::pair<nsCString, nsCString>>& aPairs) {
 }
 
 mozilla::ipc::IPCResult GMPChild::RecvStartPlugin(const nsString& aAdapter) {
-  GMP_CHILD_LOG_DEBUG("%s", __FUNCTION__);
+  GMP_CHILD_LOG_DEBUG("{}", __FUNCTION__);
 
   nsAutoCString libPath;
   if (!GetUTF8LibPath(libPath)) {
@@ -523,7 +522,7 @@ mozilla::ipc::IPCResult GMPChild::RecvStartPlugin(const nsString& aAdapter) {
         NS_ConvertUTF16toUTF8(mPluginPath));
 
 #ifdef XP_WIN
-    GMP_CHILD_LOG(LogLevel::Error, "Failed to get lib path with error(%lu).",
+    GMP_CHILD_LOG(LogLevel::Error, "Failed to get lib path with error({}).",
                   GetLastError());
 #endif
     return IPC_FAIL(this, "Failed to get lib path.");
@@ -535,7 +534,7 @@ mozilla::ipc::IPCResult GMPChild::RecvStartPlugin(const nsString& aAdapter) {
   mGMPLoader = MakeUnique<GMPLoader>();
 #if defined(MOZ_SANDBOX) && !defined(XP_MACOSX)
   if (!mGMPLoader->CanSandbox()) {
-    GMP_CHILD_LOG_DEBUG("%s Can't sandbox GMP, failing", __FUNCTION__);
+    GMP_CHILD_LOG_DEBUG("{} Can't sandbox GMP, failing", __FUNCTION__);
     delete platformAPI;
     return IPC_FAIL(this, "Can't sandbox GMP.");
   }
@@ -544,7 +543,7 @@ mozilla::ipc::IPCResult GMPChild::RecvStartPlugin(const nsString& aAdapter) {
   GMPAdapter* adapter = nullptr;
   if (aAdapter.EqualsLiteral("chromium")) {
     auto&& paths = MakeCDMHostVerificationPaths(libPath);
-    GMP_CHILD_LOG_DEBUG("%s CDM host paths=%s", __func__,
+    GMP_CHILD_LOG_DEBUG("{} CDM host paths={}", __func__,
                         ToCString(paths).get());
     adapter = new ChromiumCDMAdapter(std::move(paths));
   }
@@ -573,7 +572,7 @@ mozilla::ipc::IPCResult GMPChild::RecvStartPlugin(const nsString& aAdapter) {
 MessageLoop* GMPChild::GMPMessageLoop() { return mGMPMessageLoop; }
 
 void GMPChild::ActorDestroy(ActorDestroyReason aWhy) {
-  GMP_CHILD_LOG_DEBUG("%s reason=%d", __FUNCTION__, aWhy);
+  GMP_CHILD_LOG_DEBUG("{} reason={}", __FUNCTION__, static_cast<int>(aWhy));
 
 #if defined(XP_LINUX) && defined(MOZ_SANDBOX)
   DestroySandboxProfiler();
@@ -628,45 +627,26 @@ void GMPChild::ProcessingError(Result aCode, const char* aReason) {
   }
 }
 
-PGMPTimerChild* GMPChild::AllocPGMPTimerChild() {
-  return new GMPTimerChild(this);
-}
-
-bool GMPChild::DeallocPGMPTimerChild(PGMPTimerChild* aActor) {
-  MOZ_ASSERT(mTimerChild == static_cast<GMPTimerChild*>(aActor));
-  mTimerChild = nullptr;
-  return true;
-}
-
 GMPTimerChild* GMPChild::GetGMPTimers() {
-  if (!mTimerChild) {
-    PGMPTimerChild* sc = SendPGMPTimerConstructor();
-    if (!sc) {
-      return nullptr;
-    }
-    mTimerChild = static_cast<GMPTimerChild*>(sc);
+  if (auto* timer = SingleManagedOrNull(ManagedPGMPTimerChild())) {
+    return static_cast<GMPTimerChild*>(timer);
   }
-  return mTimerChild;
-}
-
-PGMPStorageChild* GMPChild::AllocPGMPStorageChild() {
-  return new GMPStorageChild(this);
-}
-
-bool GMPChild::DeallocPGMPStorageChild(PGMPStorageChild* aActor) {
-  mStorage = nullptr;
-  return true;
+  auto timerChild = MakeRefPtr<GMPTimerChild>(this);
+  if (!SendPGMPTimerConstructor(timerChild)) {
+    return nullptr;
+  }
+  return timerChild.get();
 }
 
 GMPStorageChild* GMPChild::GetGMPStorage() {
-  if (!mStorage) {
-    PGMPStorageChild* sc = SendPGMPStorageConstructor();
-    if (!sc) {
-      return nullptr;
-    }
-    mStorage = static_cast<GMPStorageChild*>(sc);
+  if (auto* storage = SingleManagedOrNull(ManagedPGMPStorageChild())) {
+    return static_cast<GMPStorageChild*>(storage);
   }
-  return mStorage;
+  auto storageChild = MakeRefPtr<GMPStorageChild>(this);
+  if (!SendPGMPStorageConstructor(storageChild)) {
+    return nullptr;
+  }
+  return storageChild.get();
 }
 
 mozilla::ipc::IPCResult GMPChild::RecvCrashPluginNow() {

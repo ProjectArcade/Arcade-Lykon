@@ -33,8 +33,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -65,6 +63,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import mozilla.components.compose.base.Switch
 import mozilla.components.compose.base.badge.BADGE_SIZE_SMALL
 import mozilla.components.compose.base.badge.BadgedIcon
 import mozilla.components.compose.base.button.RadioButton
@@ -475,7 +474,8 @@ fun RadioButtonListItem(
  * @param maxDescriptionLines An optional maximum number of lines for the description text to span.
  * @param enabled Controls the enabled state of the list item. When `false`, the list item will not
  * be clickable.
- * @param showSwitchAfter [Boolean] That indicates whether the [RadioButton] is after the [ListItem].
+ * @param showSwitchAfter [Boolean] That indicates whether the [Switch] is after the [ListItem].
+ * @param belowListItemContent Optional composable rendered below the description text.
  * @param onClick Called when the user clicks the [Switch].
  */
 @Composable
@@ -488,6 +488,7 @@ fun SwitchListItem(
     maxDescriptionLines: Int = 1,
     enabled: Boolean = true,
     showSwitchAfter: Boolean = false,
+    belowListItemContent: @Composable ColumnScope.() -> Unit = {},
     onClick: (Boolean) -> Unit,
 ) {
     val switch: @Composable RowScope.() -> Unit = {
@@ -495,7 +496,6 @@ fun SwitchListItem(
             checked = checked,
             onCheckedChange = onClick,
             enabled = enabled,
-            colors = SwitchDefaults.colors(),
             modifier = Modifier
                 .clearAndSetSemantics {},
         )
@@ -512,6 +512,7 @@ fun SwitchListItem(
         maxDescriptionLines = maxDescriptionLines,
         enabled = enabled,
         onClick = { onClick(!checked) },
+        belowListItemContent = belowListItemContent,
         beforeListItemAction = if (showSwitchAfter) EmptyListItemSlot else switch,
         afterListItemAction = if (showSwitchAfter) switch else EmptyListItemSlot,
     )

@@ -1243,6 +1243,12 @@ PK11_UnwrapPrivKey(PK11SlotInfo *slot, PK11SymKey *wrappingKey,
         return NULL;
     }
 
+    if (usageCount < 0 ||
+        usageCount > (int)(PR_ARRAY_SIZE(keyTemplate) - 8)) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return NULL;
+    }
+
     if (idValue) {
         ck_id = PK11_MakeIDFromPubKey(idValue);
         if (!ck_id) {
@@ -1365,7 +1371,7 @@ PK11_UnwrapPrivKey(PK11SlotInfo *slot, PK11SymKey *wrappingKey,
         return NULL;
     }
     SECITEM_FreeItem(param_free, PR_TRUE);
-    privKey = pk11_MakePrivKey(slot, nullKey, PR_FALSE, privKeyID, wincx);
+    privKey = pk11_MakePrivKey(slot, nullKey, !perm /*isOwner*/, privKeyID, wincx);
     if (!privKey) {
         goto loser;
     }

@@ -14,6 +14,7 @@
 #include "mozilla/dom/PromiseNativeHandler.h"
 #include "mozilla/dom/ScriptSettings.h"
 #include "nsPIDOMWindow.h"
+#include "nsPIDOMWindowInlines.h"
 
 namespace mozilla::dom {
 
@@ -152,7 +153,7 @@ void ModelContext::GetTools(JSContext* aCx, nsTArray<ModelContextTool>& aRetval,
 class InvokeToolHandler final : public PromiseNativeHandler,
                                 public AbortFollower {
  public:
-  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS_FINAL
   NS_DECL_CYCLE_COLLECTION_CLASS_AMBIGUOUS(InvokeToolHandler,
                                            PromiseNativeHandler)
 

@@ -264,6 +264,11 @@ class WebRenderBridgeParent final : public PWebRenderBridgeParent,
     return aFontKey.mNamespace == mLateInit->mIdNamespace;
   }
 
+  bool OwnsExternalImageId(const wr::ExternalImageId& aId) const {
+    return static_cast<uint32_t>(wr::AsUint64(aId) >> 32) ==
+           mLateInit->mIdNamespace.mHandle;
+  }
+
   void FlushRendering(wr::RenderReasons aReasons, bool aBlocking);
 
   /**
@@ -531,11 +536,11 @@ class WebRenderBridgeParent final : public PWebRenderBridgeParent,
   Maybe<ScreenPixelsRequest> mScreenPixelsRequest;
 #endif
 
-  uint32_t mBoolParameterBits;
+  uint32_t mBoolParameterBits = 0;
   uint16_t mBlobTileSize = 256;
   wr::RenderReasons mSkippedCompositeReasons = wr::RenderReasons::NONE;
-  bool mDestroyed;
-  bool mIsFirstPaint;
+  bool mDestroyed = false;
+  bool mIsFirstPaint = false;
   bool mLastNotifiedHasLayers = false;
   bool mReceivedDisplayList = false;
   bool mSkippedComposite = false;

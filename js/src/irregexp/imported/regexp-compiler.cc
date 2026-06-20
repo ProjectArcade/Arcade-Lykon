@@ -270,8 +270,9 @@ void ClassRanges::AppendToText(Text* text, Zone* zone) {
 }
 
 void Text::AppendToText(Text* text, Zone* zone) {
-  for (int i = 0; i < elements()->length(); i++)
+  for (int i = 0; i < elements()->length(); i++) {
     text->AddElement(elements()->at(i), zone);
+  }
 }
 
 TextElement TextElement::FromAtom(Atom* atom) {
@@ -314,6 +315,7 @@ Compiler::Compiler(Isolate* isolate, Zone* zone, int capture_count, Flags flags,
       work_list_(nullptr),
       recursion_depth_(0),
       flags_(flags),
+      macro_assembler_(nullptr),
       one_byte_(one_byte),
       reg_exp_too_big_(false),
       limiting_recursion_(false),
@@ -344,6 +346,8 @@ Compiler::CompilationResult Compiler::Assemble(
   Trace new_trace;
   if (start->Emit(this, &new_trace).IsError()) {
     work_list_ = nullptr;
+    fail.UnuseNear();
+    fail.Unuse();
     return ReportError();
   }
   macro_assembler_->BindJumpTarget(&fail);
@@ -366,9 +370,29 @@ Compiler::CompilationResult Compiler::Assemble(
   }
 
   DirectHandle<HeapObject> code = macro_assembler_->GetCode(re_data, flags_);
-  isolate->IncreaseTotalRegexpCodeGenerated(code);
   work_list_ = nullptr;
 
+#ifdef V8_TARGET_LITTLE_ENDIAN
+  // Generate a bitmask of valid characters for fast rejection.
+  // Skip for multiline regexps as match attempts are less likely to be
+  // rejected early based on the first few characters.
+  constexpr bool kPossiblyAtStart = false;
+  constexpr int kMinChars = 1;
+  constexpr int kMaxChars = 4;
+  int eats_at_least = start->EatsAtLeast(kPossiblyAtStart);
+  if (one_byte_ && eats_at_least >= kMinChars && !IsMultiline(flags_)) {
+    int chars = std::min(eats_at_least, kMaxChars);
+    QuickCheckDetails quick_check(chars);
+    start->GetQuickCheckDetails(&quick_check, this, 0, kPossiblyAtStart,
+                                Node::kRecursionBudget);
+
+    if (!quick_check.cannot_match()) {
+      quick_check.Rationalize(one_byte_);
+      re_data->set_quick_check_mask(quick_check.mask());
+      re_data->set_quick_check_value(quick_check.value());
+    }
+  }
+#endif
   return {code, next_register_};
 }
 
@@ -414,10 +438,12 @@ class DynamicBitSet : public ZoneObject {
     if (value < kFirstLimit) {
       first_ |= (1 << value);
     } else {
-      if (remaining_ == nullptr)
+      if (remaining_ == nullptr) {
         remaining_ = zone->New<ZoneList<unsigned>>(1, zone);
-      if (remaining_->is_empty() || !remaining_->Contains(value))
+      }
+      if (remaining_->is_empty() || !remaining_->Contains(value)) {
         remaining_->Add(value, zone);
+      }
     }
   }
 
@@ -1516,56 +1542,73 @@ bool Node::KeepRecursing(Compiler* compiler) {
 
 void ActionNode::FillInBMInfo(Isolate* isolate, int offset, int budget,
                               BoyerMooreLookahead* bm, bool not_at_start) {
-  std::optional<Flags> old_flags;
-  if (action_type_ == MODIFY_FLAGS) {
-    // It is not guaranteed that we hit the resetting modify flags node, due to
-    // recursion budget limitation for filling in BMInfo. Therefore we reset the
-    // flags manually to the previous state after recursing.
-    old_flags = bm->compiler()->flags();
-    bm->compiler()->set_flags(flags());
-  }
-  if (action_type_ == BEGIN_POSITIVE_SUBMATCH) {
-    // We use the node after the lookaround to fill in the eats_at_least info
-    // so we have to use the same node to fill in the Boyer-Moore info.
-    success_node()->on_success()->FillInBMInfo(isolate, offset, budget - 1, bm,
-                                               not_at_start);
-  } else if (action_type_ != POSITIVE_SUBMATCH_SUCCESS) {
-    // We don't use the node after a positive submatch success because it
-    // rewinds the position.  Since we returned 0 as the eats_at_least value for
-    // this node, we don't need to fill in any data.
-    on_success()->FillInBMInfo(isolate, offset, budget - 1, bm, not_at_start);
+  switch (action_type_) {
+    case SET_REGISTER_FOR_LOOP:
+    case INCREMENT_REGISTER:
+    case STORE_POSITION:
+    case RESTORE_POSITION:
+    case BEGIN_NEGATIVE_SUBMATCH:
+    case EMPTY_MATCH_CHECK:
+    case CLEAR_CAPTURES:
+    case EATS_AT_LEAST:
+      on_success()->FillInBMInfo(isolate, offset, budget - 1, bm, not_at_start);
+      break;
+    case MODIFY_FLAGS: {
+      std::optional<Flags> old_flags = bm->compiler()->flags();
+      bm->compiler()->set_flags(flags());
+      on_success()->FillInBMInfo(isolate, offset, budget - 1, bm, not_at_start);
+      bm->compiler()->set_flags(*old_flags);
+      break;
+    }
+    case BEGIN_POSITIVE_SUBMATCH:
+      // We use the node after the lookaround to fill in the eats_at_least info
+      // so we have to use the same node to fill in the Boyer-Moore info.
+      success_node()->on_success()->FillInBMInfo(isolate, offset, budget - 1,
+                                                 bm, not_at_start);
+      break;
+    case POSITIVE_SUBMATCH_SUCCESS:
+      // We don't use the node after a positive submatch success because it
+      // rewinds the position. Since we returned 0 as the eats_at_least value
+      // for this node, we don't need to fill in any data.
+      break;
   }
   SaveBMInfo(bm, not_at_start, offset);
-  if (old_flags.has_value()) {
-    bm->compiler()->set_flags(*old_flags);
-  }
 }
 
 void ActionNode::GetQuickCheckDetails(QuickCheckDetails* details,
                                       Compiler* compiler, int filled_in,
                                       bool not_at_start, int budget) {
-  if (action_type_ == BEGIN_POSITIVE_SUBMATCH) {
-    // We use the node after the lookaround to fill in the eats_at_least info
-    // so we have to use the same node to fill in the QuickCheck info.
-    success_node()->on_success()->GetQuickCheckDetails(
-        details, compiler, filled_in, not_at_start, budget - 1);
-  } else if (action_type() != POSITIVE_SUBMATCH_SUCCESS) {
-    // We don't use the node after a positive submatch success because it
-    // rewinds the position.  Since we returned 0 as the eats_at_least value
-    // for this node, we don't need to fill in any data.
-    std::optional<Flags> old_flags;
-    if (action_type() == MODIFY_FLAGS) {
-      // It is not guaranteed that we hit the resetting modify flags node, as
-      // GetQuickCheckDetails doesn't travers the whole graph. Therefore we
-      // reset the flags manually to the previous state after recursing.
-      old_flags = compiler->flags();
+  switch (action_type()) {
+    case SET_REGISTER_FOR_LOOP:
+    case INCREMENT_REGISTER:
+    case STORE_POSITION:
+    case RESTORE_POSITION:
+    case BEGIN_NEGATIVE_SUBMATCH:
+    case EMPTY_MATCH_CHECK:
+    case CLEAR_CAPTURES:
+    case EATS_AT_LEAST:
+      on_success()->GetQuickCheckDetails(details, compiler, filled_in,
+                                         not_at_start, budget - 1);
+      break;
+    case MODIFY_FLAGS: {
+      std::optional<Flags> old_flags = compiler->flags();
       compiler->set_flags(flags());
-    }
-    on_success()->GetQuickCheckDetails(details, compiler, filled_in,
-                                       not_at_start, budget - 1);
-    if (old_flags.has_value()) {
+      on_success()->GetQuickCheckDetails(details, compiler, filled_in,
+                                         not_at_start, budget - 1);
       compiler->set_flags(*old_flags);
+      break;
     }
+    case BEGIN_POSITIVE_SUBMATCH:
+      // We use the node after the lookaround to fill in the eats_at_least info
+      // so we have to use the same node to fill in the QuickCheck info.
+      success_node()->on_success()->GetQuickCheckDetails(
+          details, compiler, filled_in, not_at_start, budget - 1);
+      break;
+    case POSITIVE_SUBMATCH_SUCCESS:
+      // We don't use the node after a positive submatch success because it
+      // rewinds the position. Since we returned 0 as the eats_at_least value
+      // for this node, we don't need to fill in any data.
+      break;
   }
 }
 
@@ -1720,7 +1763,7 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
   // Do not collect any quick check details if the text node reads backward,
   // since it reads in the opposite direction than we use for quick checks.
   if (read_backward()) return;
-  Isolate* isolate = compiler->macro_assembler()->isolate();
+  Isolate* isolate = compiler->isolate();
   DCHECK(characters_filled_in < details->characters());
   int characters = details->characters();
   const uint32_t char_mask = CharMask(compiler->one_byte());
@@ -1793,6 +1836,11 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
           details->positions(characters_filled_in);
       ClassRanges* tree = elm.class_ranges();
       ZoneList<CharacterRange>* ranges = tree->ranges(zone());
+      // Canonicalize ranges to ensure they are disjoint and sorted. This is
+      // required for the correctness of the determines_perfectly check below,
+      // which computes the total character count by summing the sizes of the
+      // ranges.
+      CharacterRange::Canonicalize(ranges);
       if (tree->is_negated() || ranges->is_empty()) {
         // A quick check uses multi-character mask and compare.  There is no
         // useful way to incorporate a negative char class into this scheme
@@ -1813,17 +1861,13 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
             return;
           }
         }
+        int total_characters = 0;
         CharacterRange range = ranges->at(first_range);
         const base::uc32 first_from = range.from();
         const base::uc32 first_to =
             (range.to() > char_mask) ? char_mask : range.to();
+        total_characters += (first_to - first_from + 1);
         const uint32_t differing_bits = (first_from ^ first_to);
-        // A mask and compare is only perfect if the differing bits form a
-        // number like 00011111 with one single block of trailing 1s.
-        if ((differing_bits & (differing_bits + 1)) == 0 &&
-            first_from + differing_bits == first_to) {
-          pos->determines_perfectly = true;
-        }
         uint32_t common_bits = ~SmearBitsRight(differing_bits);
         uint32_t bits = (first_from & common_bits);
         for (int i = first_range + 1; i < ranges->length(); i++) {
@@ -1832,12 +1876,7 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
           if (from > char_mask) continue;
           const base::uc32 to =
               (range.to() > char_mask) ? char_mask : range.to();
-          // Here we are combining more ranges into the mask and compare
-          // value.  With each new range the mask becomes more sparse and
-          // so the chances of a false positive rise.  A character class
-          // with multiple ranges is assumed never to be equivalent to a
-          // mask and compare operation.
-          pos->determines_perfectly = false;
+          total_characters += (to - from + 1);
           uint32_t new_common_bits = (from ^ to);
           new_common_bits = ~SmearBitsRight(new_common_bits);
           common_bits &= new_common_bits;
@@ -1848,6 +1887,12 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
         }
         pos->mask = common_bits;
         pos->value = bits;
+        // A mask-and-compare check is perfectly precise (no false positives)
+        // iff the number of matching characters in the class equals the number
+        // of combinations allowed by the ignored bits (2^zero_bits).
+        unsigned int zero_bits =
+            base::bits::CountPopulation((~common_bits) & char_mask);
+        pos->determines_perfectly = (total_characters == (1 << zero_bits));
       }
       characters_filled_in++;
       DCHECK(characters_filled_in <= details->characters());
@@ -2114,8 +2159,9 @@ EmitResult AssertionNode::EmitBoundaryCheck(Compiler* compiler, Trace* trace) {
       if (bm->at(0)->is_word()) next_is_word_character = Trace::TRUE_VALUE;
     }
   } else {
-    if (lookahead->at(0)->is_non_word())
+    if (lookahead->at(0)->is_non_word()) {
       next_is_word_character = Trace::FALSE_VALUE;
+    }
     if (lookahead->at(0)->is_word()) next_is_word_character = Trace::TRUE_VALUE;
   }
   bool at_boundary = (assertion_type_ == AssertionNode::AT_BOUNDARY);
@@ -2431,7 +2477,10 @@ EmitResult TextNode::Emit(Compiler* compiler, Trace* trace) {
   if (limit_result == DONE) return EmitResult::Success();
   DCHECK(limit_result == CONTINUE);
 
-  if (trace->cp_offset() + Length() > RegExpMacroAssembler::kMaxCPOffset) {
+  const int max_offset = read_backward() ? trace->cp_offset() - Length()
+                                         : trace->cp_offset() + Length();
+  if (!base::IsInRange(max_offset, RegExpMacroAssembler::kMinCPOffset,
+                       RegExpMacroAssembler::kMaxCPOffset)) {
     compiler->SetRegExpTooBig();
     return EmitResult::Error();
   }
@@ -2662,7 +2711,9 @@ class AlternativeGeneration : public Malloced {
 // size then it is on the stack, otherwise the excess is on the heap.
 class AlternativeGenerationList {
  public:
-  AlternativeGenerationList(int count, Zone* zone) : alt_gens_(count, zone) {
+  AlternativeGenerationList(int count, Compiler* compiler)
+      : alt_gens_(count, compiler->zone()), compiler_(compiler) {
+    Zone* zone = compiler->zone();
     for (int i = 0; i < count && i < kAFew; i++) {
       alt_gens_.Add(a_few_alt_gens_ + i, zone);
     }
@@ -2671,6 +2722,14 @@ class AlternativeGenerationList {
     }
   }
   ~AlternativeGenerationList() {
+    if (V8_UNLIKELY(compiler_->IsRegExpTooBig())) {
+      for (int i = 0; i < alt_gens_.length(); i++) {
+        alt_gens_[i]->possible_success.UnuseNear();
+        alt_gens_[i]->possible_success.Unuse();
+        alt_gens_[i]->after.UnuseNear();
+        alt_gens_[i]->after.Unuse();
+      }
+    }
     for (int i = kAFew; i < alt_gens_.length(); i++) {
       delete alt_gens_[i];
       alt_gens_[i] = nullptr;
@@ -2683,6 +2742,7 @@ class AlternativeGenerationList {
   static const int kAFew = 10;
   ZoneList<AlternativeGeneration*> alt_gens_;
   AlternativeGeneration a_few_alt_gens_[kAFew];
+  Compiler* compiler_;
 };
 
 void BoyerMoorePositionInfo::Set(int character) {
@@ -3165,7 +3225,7 @@ EmitResult ChoiceNode::Emit(Compiler* compiler, Trace* trace) {
   SpecialLoopState special_loop_state(not_at_start(), this);
 
   int text_length = FixedLengthLoopLengthForAlternative(&alternatives_->at(0));
-  AlternativeGenerationList alt_gens(choice_count, zone());
+  AlternativeGenerationList alt_gens(choice_count, compiler);
 
   // Flags need to be reset to the state of the ChoiceNode at the beginning
   // of each alternative (in-line and out-of-line), as flags might be modified
@@ -3555,6 +3615,38 @@ EmitResult ActionNode::Emit(Compiler* compiler, Trace* trace) {
   return EmitResult::Success();
 }
 
+EmitResult UnanchoredAdvanceNode::Emit(Compiler* compiler, Trace* trace) {
+  RegExpMacroAssembler* assembler = compiler->macro_assembler();
+  if (!trace->is_trivial()) {
+    return trace->Flush(compiler, this);
+  }
+  assembler->UnanchoredAdvance(IsEitherUnicode(compiler->flags()),
+                               trace->backtrack());
+
+  Trace successor_trace(*trace);
+  successor_trace.InvalidateCurrentCharacter();
+  successor_trace.set_at_start(Trace::FALSE_VALUE);
+
+  RETURN_IF_ERROR(on_success()->Emit(compiler, &successor_trace));
+  return EmitResult::Success();
+}
+
+void UnanchoredAdvanceNode::GetQuickCheckDetails(QuickCheckDetails* details,
+                                                 Compiler* compiler,
+                                                 int characters_filled_in,
+                                                 bool not_at_start,
+                                                 int budget) {
+  // UnanchoredAdvance dynamically shifts position, so we do not propagate
+  // details through it.
+}
+
+void UnanchoredAdvanceNode::FillInBMInfo(Isolate* isolate, int offset,
+                                         int budget, BoyerMooreLookahead* bm,
+                                         bool not_at_start) {
+  // UnanchoredAdvance dynamically shifts position, so we do not propagate
+  // details through it.
+}
+
 EmitResult BackReferenceNode::Emit(Compiler* compiler, Trace* trace) {
   TRACE_EMIT("BackReference");
   RegExpMacroAssembler* assembler = compiler->macro_assembler();
@@ -3620,6 +3712,10 @@ class AssertionPropagator : public AllStatic {
   static void VisitAction(ActionNode* that) {
     // If the next node is interested in what it follows then this node
     // has to be interested too so it can pass the information on.
+    that->info()->AddFromFollowing(that->on_success()->info());
+  }
+
+  static void VisitUnanchoredAdvance(UnanchoredAdvanceNode* that) {
     that->info()->AddFromFollowing(that->on_success()->info());
   }
 
@@ -3704,6 +3800,12 @@ class EatsAtLeastPropagator : public AllStatic {
         that->set_eats_at_least_info(*that->on_success()->eats_at_least_info());
         break;
     }
+  }
+
+  static void VisitUnanchoredAdvance(UnanchoredAdvanceNode* that) {
+    uint8_t eats_at_least = base::saturated_cast<uint8_t>(
+        1 + that->on_success()->eats_at_least_info()->from_not_start);
+    that->set_eats_at_least_info(EatsAtLeastInfo(eats_at_least));
   }
 
   static void VisitChoice(ChoiceNode* that, int i) {
@@ -3820,9 +3922,20 @@ class Analysis : public NodeVisitor {
     STATIC_FOR_EACH(Propagators::VisitAction(that));
   }
 
+  void VisitUnanchoredAdvance(UnanchoredAdvanceNode* that) override {
+    EnsureAnalyzed(that->on_success());
+    if (has_failed()) return;
+    STATIC_FOR_EACH(Propagators::VisitUnanchoredAdvance(that));
+  }
+
   void VisitChoice(ChoiceNode* that) override {
+    // Flags need to be reset to the state of the ChoiceNode at the beginning
+    // of each alternative, as flags might be modified when visiting an
+    // alternative.
+    Flags header_flags = flags();
     for (int i = 0; i < that->alternatives()->length(); i++) {
       EnsureAnalyzed(that->alternatives()->at(i).node());
+      set_flags(header_flags);
       if (has_failed()) return;
       STATIC_FOR_EACH(Propagators::VisitChoice(that, i));
     }

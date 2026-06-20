@@ -29,9 +29,9 @@ task-defaults:
     use-uv: true
     worker-type:
         by-test-platform:
-            windows.*-asan/.*: win11-64-25h2-large
-            windows.*aarch64.*/.*: win11-a64-25h2
-            windows.*/.*: win11-64-25h2
+            windows11.*-asan/.*: win11-64-25h2-large
+            windows11.*aarch64.*/.*: win11-a64-25h2
+            windows11.*/.*: win11-64-25h2
             default: default
     require-signed-extensions:
         by-release-type:
@@ -209,6 +209,11 @@ tasks:
                     by-test-platform:
                         android-em.*/debug-isolated-process: ['trunk']
                         android.*: built-projects
+                        # Compositor shutdown assertion in DisconnectApzcTreeManager
+                        # on headless macOS aarch64 VM workers (Bug 2039987 family);
+                        # same pattern excludes jsreftest, marionette, mochitest-remote,
+                        # and crashtest debug on this platform.
+                        macosx1500-aarch64-vms/debug: []
                         default: built-projects
         chunks: dynamic
         default-chunks:
@@ -291,7 +296,6 @@ tasks:
         description: "Mochitest a11y run"
         treeherder-symbol: M(a11y)
         schedules-component: mochitest-a11y
-        test-manifest-loader: default  # ensure we don't run with manifest-scheduling
         loopback-video: true
         run-without-variant: false
         variants:
@@ -324,6 +328,8 @@ tasks:
             - inc-origin-init
             - trainhop-beta
             - trainhop-release
+            - nova
+            - nova+vertical-tabs
         run-on-projects:
             by-variant:
                 trainhop-beta:
@@ -380,6 +386,24 @@ tasks:
                         windows1.*-64.*(-shippable)?/.*: ['autoland', 'mozilla-central']
                         default: []
                 inc-origin-init: []
+                nova:
+                    by-test-platform:
+                        .*-artifact.*: []
+                        .*-asan.*: []
+                        .*-ccov.*: []
+                        linux.*64(-shippable)?/opt: ['mozilla-central']
+                        macosx1[45].*64(-shippable)?(-qr)?/opt: ['mozilla-central']
+                        windows11.*-64.*(-shippable)?/opt: ['mozilla-central']
+                        default: []
+                nova+vertical-tabs:
+                    by-test-platform:
+                        .*-artifact.*: []
+                        .*-asan.*: []
+                        .*-ccov.*: []
+                        linux.*64(-shippable)?/opt: ['mozilla-central']
+                        macosx1[45].*64(-shippable)?(-qr)?/opt: ['mozilla-central']
+                        windows11.*-64.*(-shippable)?/opt: ['mozilla-central']
+                        default: []
                 default:
                     by-test-platform:
                         android.*: []
@@ -501,6 +525,9 @@ tasks:
             by-test-platform:
                 .*-tsan.*: 2700
                 linux.*/debug: 2700
+                windows.*-ccov.*: 2700
+                windows.*-asan.*: 2700
+                windows.*/debug: 2700
                 default: 1800
         mozharness:
             mochitest-flavor: browser
@@ -525,7 +552,6 @@ tasks:
         treeherder-symbol: M(mda-bc)
         schedules-component: mochitest-browser-media
         loopback-video: true
-        test-manifest-loader: null
         variants: ["wmf-media-engine"]
         run-on-projects:
             by-variant:
@@ -554,7 +580,6 @@ tasks:
             name: mochitest-browser-screenshots
         treeherder-symbol: M(ss)
         loopback-video: true
-        test-manifest-loader: null  # don't load tests in the taskgraph
         variants: ["no-fission"]
         run-on-projects:
             by-test-platform:
@@ -572,7 +597,6 @@ tasks:
         treeherder-symbol: M(tr8ns)
         schedules-component: mochitest-browser-translations
         loopback-video: true
-        test-manifest-loader: null
         run-on-projects:
             by-test-platform:
                 android.*: []
@@ -608,6 +632,7 @@ tasks:
             - webrender-sw+1proc
             - standalone
             - inc-origin-init
+            - nova
         run-on-projects:
             by-variant:
                 webrender-sw+1proc:
@@ -618,6 +643,10 @@ tasks:
                 1proc:
                     by-test-platform:
                         .*-wayland.*: []
+                        # Compositor shutdown assertion in DisconnectApzcTreeManager
+                        # on headless macOS aarch64 VM workers (Bug 2039987 family);
+                        # same pattern excludes the other suites' debug on this platform.
+                        macosx1500-aarch64-vms/debug: []
                         default: built-projects
                 standalone:
                     by-test-platform:
@@ -629,6 +658,15 @@ tasks:
                         windows.*-64-[^-/]+/opt: ['autoland']
                         default: []
                 inc-origin-init: []
+                nova:
+                    by-test-platform:
+                        .*-artifact.*: []
+                        .*-asan.*: []
+                        .*-ccov.*: []
+                        linux.*64(-shippable)?/opt: ['mozilla-central']
+                        macosx1[45].*64(-shippable)?(-qr)?/opt: ['mozilla-central']
+                        windows11.*-64.*(-shippable)?/opt: ['mozilla-central']
+                        default: []
         chunks: dynamic
         default-chunks:
             by-variant:
@@ -795,7 +833,7 @@ tasks:
         loopback-video: true
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
         variants:
             - no-fission
@@ -861,7 +899,7 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
         run-without-variant: false
         variants:
@@ -1058,9 +1096,9 @@ tasks:
                         default: default
                 default:
                     by-test-platform:
-                        windows.*-asan/.*: win11-64-25h2-large
-                        windows.*aarch64.*/.*: win11-a64-25h2
-                        windows.*/.*: win11-64-25h2
+                        windows11.*-asan/.*: win11-64-25h2-large
+                        windows11.*aarch64.*/.*: win11-a64-25h2
+                        windows11.*/.*: win11-64-25h2
                         default: default
 
     mochitest-valgrind:
@@ -1069,7 +1107,7 @@ tasks:
             name: mochitest-valgrind-plain
         treeherder-symbol: M-V()
         run-on-projects: []
-        test-manifest-loader: null  # don't load tests in the taskgraph
+
         tier: 3
         loopback-video: true
         chunks: 40
@@ -1088,9 +1126,11 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
-        test-manifest-loader: null  # don't load tests in the taskgraph
+        chunks: dynamic
+        default-chunks: 1
+
         loopback-video: true
         max-run-time: 1800
         variants:
@@ -1125,6 +1165,7 @@ tasks:
         allow-software-gl-layers: false
         mozharness:
             mochitest-flavor: plain
+            chunked: true
 
     mochitest-webgl1-ext:
         description: "Mochitest webgl1-ext run"
@@ -1133,9 +1174,11 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
-        test-manifest-loader: null  # don't load tests in the taskgraph
+        chunks: dynamic
+        default-chunks: 1
+
         loopback-video: true
         max-run-time: 2700
         variants:
@@ -1170,6 +1213,7 @@ tasks:
         allow-software-gl-layers: false
         mozharness:
             mochitest-flavor: plain
+            chunked: true
 
     mochitest-webgl2-core:
         description: "Mochitest webgl2-core run"
@@ -1178,13 +1222,14 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
-        chunks:
+        chunks: dynamic
+        default-chunks:
             by-test-platform:
                 android.*: 2
                 default: 1
-        test-manifest-loader: null  # don't load tests in the taskgraph
+
         loopback-video: true
         max-run-time: 1800
         variants:
@@ -1229,7 +1274,7 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
         variants:
             - no-fission
@@ -1256,8 +1301,9 @@ tasks:
                         android.*: []
                         .*-tsan.*: []
                         default: built-projects
-        chunks: 4
-        test-manifest-loader: null  # don't load tests in the taskgraph
+        chunks: dynamic
+        default-chunks: 4
+
         loopback-video: true
         max-run-time: 2700
         # Bug 1296733: llvmpipe with mesa 9.2.1 lacks thread safety
@@ -1273,7 +1319,7 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
         variants:
             - webrender-sw
@@ -1295,7 +1341,7 @@ tasks:
         virtualization: virtual-with-gpu
         worker-type:
             by-test-platform:
-                windows.*/.*: win11-64-25h2-gpu
+                windows11.*/.*: win11-64-25h2-gpu
                 default: default
         loopback-video: true
         variants:
@@ -1342,6 +1388,10 @@ tasks:
                 default:
                     by-test-platform:
                         android.*: []
+                        # GPU process leak-detection failure on headless macOS
+                        # aarch64 VM workers (Bug 2039987 family); opt is green,
+                        # debug consistently misses the "total leaks" output line.
+                        macosx1500-aarch64-vms/debug: []
                         default: built-projects
         tier: default
         max-run-time: 5400

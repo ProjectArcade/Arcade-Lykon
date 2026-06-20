@@ -42,7 +42,9 @@ add_task(async function test_internal_post_recovery() {
     backup_build_id: bs.state.backupFileInfo.buildID,
     backup_os_name: bs.state.backupFileInfo.osName,
     backup_os_version: bs.state.backupFileInfo.osVersion,
+    backup_os_build_number: bs.state.backupFileInfo.osBuildNumber,
     backup_legacy_client_id: bs.state.backupFileInfo.legacyClientID,
+    restore_source: "onboarding",
   };
 
   let recoveredProfile = await bs.recoverFromBackupArchive(
@@ -51,7 +53,8 @@ add_task(async function test_internal_post_recovery() {
     false,
     testBackupDirPath,
     recoveredProfilePath,
-    true
+    true,
+    "onboarding"
   );
 
   let { ProfileAge } = ChromeUtils.importESModule(

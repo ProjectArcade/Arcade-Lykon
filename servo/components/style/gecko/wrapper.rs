@@ -16,12 +16,12 @@
 
 use crate::applicable_declarations::ApplicableDeclarationBlock;
 use crate::bloom::each_relevant_element_hash;
+use crate::context::TreeCountingCaches;
 use crate::context::{QuirksMode, SharedStyleContext, UpdateAnimationsTasks};
 use crate::data::{ElementDataMut, ElementDataRef, ElementDataWrapper};
 use crate::device::Device;
 use crate::dom::{
-    AttributeProvider, LayoutIterator, NodeInfo, OpaqueNode, TDocument, TElement, TNode,
-    TShadowRoot,
+    ElementContext, LayoutIterator, NodeInfo, OpaqueNode, TDocument, TElement, TNode, TShadowRoot,
 };
 use crate::gecko::selector_parser::{NonTSPseudoClass, PseudoElement, SelectorImpl};
 use crate::gecko::snapshot_helpers;
@@ -40,7 +40,6 @@ use crate::gecko_bindings::bindings::Gecko_GetUnvisitedLinkAttrDeclarationBlock;
 use crate::gecko_bindings::bindings::Gecko_GetVisitedLinkAttrDeclarationBlock;
 use crate::gecko_bindings::bindings::Gecko_IsSignificantChild;
 use crate::gecko_bindings::bindings::Gecko_MatchLang;
-use crate::gecko_bindings::bindings::Gecko_UnsetDirtyStyleAttr;
 use crate::gecko_bindings::bindings::Gecko_UpdateAnimations;
 use crate::gecko_bindings::structs;
 use crate::gecko_bindings::structs::nsChangeHint;
@@ -67,7 +66,7 @@ use crate::shared_lock::{Locked, SharedRwLock};
 use crate::string_cache::{Atom, Namespace, WeakAtom, WeakNamespace};
 use crate::stylesheets::scope_rule::ImplicitScopeRoot;
 use crate::stylist::CascadeData;
-use crate::values::computed::Display;
+use crate::values::computed::{Display, TreeCountingResult};
 use crate::values::{AtomIdent, AtomString};
 use crate::CaseSensitivityExt;
 use crate::LocalName;
@@ -921,14 +920,6 @@ impl<'le> GeckoElement<'le> {
     pub fn slow_selector_flags(&self) -> ElementSelectorFlags {
         slow_selector_flags_from_node_selector_flags(self.as_node().selector_flags())
     }
-
-    /// Returns whether this element is an HTML <video> or <audio> element.
-    #[inline]
-    pub fn is_html_media_element(&self) -> bool {
-        self.is_html_element()
-            && (self.local_name().as_ptr() == local_name!("video").as_ptr()
-                || self.local_name().as_ptr() == local_name!("audio").as_ptr())
-    }
 }
 
 /// Convert slow selector flags from the raw `NodeSelectorFlags`.
@@ -979,6 +970,9 @@ fn selector_flags_to_node_flags(flags: ElementSelectorFlags) -> u32 {
     }
     if flags.contains(ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_SIBLING) {
         gecko_flags |= NodeSelectorFlags::RelativeSelectorSearchDirectionSibling.0;
+    }
+    if flags.contains(ElementSelectorFlags::MAY_HAVE_TREE_COUNTING_FUNCTION) {
+        gecko_flags |= NodeSelectorFlags::MayHaveTreeCountingFunction.0;
     }
 
     gecko_flags
@@ -1094,6 +1088,13 @@ impl<'le> TElement for GeckoElement<'le> {
     #[inline]
     fn is_xul_element(&self) -> bool {
         self.namespace_id() == structs::root::kNameSpaceID_XUL as i32
+    }
+
+    #[inline]
+    fn is_html_media_element(&self) -> bool {
+        self.is_html_element()
+            && (self.local_name().as_ptr() == local_name!("video").as_ptr()
+                || self.local_name().as_ptr() == local_name!("audio").as_ptr())
     }
 
     #[inline]
@@ -1220,22 +1221,11 @@ impl<'le> TElement for GeckoElement<'le> {
         }
     }
 
-    fn unset_dirty_style_attribute(&self) {
-        if !self.may_have_style_attribute() {
-            return;
-        }
-
-        unsafe { Gecko_UnsetDirtyStyleAttr(self.0) };
-    }
-
     fn smil_override(&self) -> Option<ArcBorrow<'_, Locked<PropertyDeclarationBlock>>> {
         unsafe {
             let slots = self.extended_slots()?;
-
-            let declaration: &structs::DeclarationBlock =
+            let raw: &structs::StyleLockedDeclarationBlock =
                 slots.mSMILOverrideStyleDeclaration.mRawPtr.as_ref()?;
-
-            let raw: &structs::StyleLockedDeclarationBlock = declaration.mRaw.mRawPtr.as_ref()?;
             Some(ArcBorrow::from_ref(raw))
         }
     }
@@ -1820,7 +1810,7 @@ impl<'le> TElement for GeckoElement<'le> {
     }
 }
 
-impl<'le> AttributeProvider for GeckoElement<'le> {
+impl<'le> ElementContext for GeckoElement<'le> {
     fn get_attr(&self, attr: &LocalName, namespace: &Namespace) -> Option<String> {
         //TODO(bug 2003334): Avoid unnecessary string copies/conversions here.
         let mut result = nsString::new();
@@ -1836,6 +1826,37 @@ impl<'le> AttributeProvider for GeckoElement<'le> {
         } else {
             None
         }
+    }
+
+    fn opaque_element(&self) -> Option<OpaqueElement> {
+        Some(self.opaque())
+    }
+
+    fn opaque_parent(&self) -> Option<OpaqueNode> {
+        self.as_node().parent_node().map(|n| n.opaque())
+    }
+
+    fn get_tree_counting_result(&self, caches: &mut TreeCountingCaches) -> TreeCountingResult {
+        let Some(parent) = self.as_node().parent_node() else {
+            return TreeCountingResult::default();
+        };
+
+        let mut curr = parent.first_child();
+        let mut index = 0u32;
+        let mut count = 0u32;
+        while let Some(node) = curr {
+            if let Some(element) = node.as_element() {
+                count += 1;
+                if *self == element {
+                    index = count;
+                }
+                caches.sibling_index.insert(element.opaque(), count);
+            }
+            curr = node.next_sibling();
+        }
+        caches.sibling_count.insert(parent.opaque(), count);
+
+        TreeCountingResult::new(index, count)
     }
 }
 
@@ -2085,6 +2106,7 @@ impl<'le> ::selectors::Element for GeckoElement<'le> {
             | NonTSPseudoClass::Seeking
             | NonTSPseudoClass::Buffering
             | NonTSPseudoClass::Stalled
+            | NonTSPseudoClass::PictureInPicture
             | NonTSPseudoClass::Muted => self.state().intersects(pseudo_class.state_flag()),
             NonTSPseudoClass::Paused => {
                 self.is_html_media_element() && self.state().intersects(ElementState::PAUSED)

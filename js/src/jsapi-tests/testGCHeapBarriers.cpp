@@ -38,9 +38,7 @@ template <typename W, typename T>
 struct TestStruct {
   W wrapper;
 
-  void trace(JSTracer* trc) {
-    TraceNullableEdge(trc, &wrapper, "TestStruct::wrapper");
-  }
+  void trace(JSTracer* trc) { TraceEdge(trc, &wrapper, "TestStruct::wrapper"); }
 
   TestStruct() {}
   explicit TestStruct(T init) : wrapper(init) {}
@@ -178,6 +176,9 @@ BEGIN_TEST(testGCHeapPostBarriers) {
   CHECK(TestHeapPostBarriersForType<JSObject*>());
   CHECK(TestHeapPostBarriersForType<JSFunction*>());
   CHECK(TestHeapPostBarriersForType<JS::Uint8Array>());
+  CHECK((TestHeapPostBarriersForWrapper<js::GCPtr, JSObject*>()));
+  CHECK((TestHeapPostBarriersForWrapper<js::GCPtr, JSFunction*>()));
+
   // Bug 1599378: Add string tests.
 
   return true;
@@ -197,7 +198,7 @@ BEGIN_TEST(testGCHeapPostBarriers) {
 
 template <typename T>
 [[nodiscard]] bool TestHeapPostBarriersForType() {
-  CHECK((TestHeapPostBarriersForWrapper<js::GCPtr, T>()));
+  // GCPtr not supported for JS::ArrayBufferOrView subclasses.
   CHECK((TestHeapPostBarriersForMovableWrapper<JS::Heap, T>()));
   CHECK((TestHeapPostBarriersForMovableWrapper<js::HeapPtr, T>()));
   CHECK((TestHeapPostBarriersForMovableWrapper<js::WeakHeapPtr, T>()));

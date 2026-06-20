@@ -425,7 +425,21 @@ class BaseAboutNewTabRedirector {
    * the newtab page has no effect on the result of this function.
    */
   get defaultURL() {
-    return "resource://newtab/prerendered/lykon-home.html";
+    if (this.remoteRendererEnabled) {
+      return "resource://newtab/data/content/remote-renderer-host.html";
+    }
+
+    // Generate the desired activity stream resource depending on state, e.g.,
+    // "resource://newtab/prerendered/activity-stream.html"
+    // "resource://newtab/prerendered/activity-stream-debug.html"
+    // "resource://newtab/prerendered/activity-stream-noscripts.html"
+    return [
+      "resource://newtab/prerendered/",
+      "activity-stream",
+      this.activityStreamDebug && this.selfLoadingEnabled ? "-debug" : "",
+      this.selfLoadingEnabled ? "" : "-noscripts",
+      ".html",
+    ].join("");
   }
 
   newChannel() {
@@ -484,6 +498,7 @@ export class AboutNewTabRedirectorParent extends BaseAboutNewTabRedirector {
           pageshow: {},
           visibilitychange: {},
         },
+        observers: ["intl:l10n-sources-changed"],
       },
       // The wildcard on about:newtab is for the # parameter
       // that is used for the newtab devtools. The wildcard for about:home

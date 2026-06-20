@@ -12,14 +12,13 @@
 #ifndef XSIMD_AVX2_HPP
 #define XSIMD_AVX2_HPP
 
-#include <complex>
-#include <type_traits>
-
 #include "../types/xsimd_avx2_register.hpp"
 #include "../types/xsimd_batch_constant.hpp"
 #include "./utils/shifts.hpp"
 
+#include <complex>
 #include <limits>
+#include <type_traits>
 
 namespace xsimd
 {
@@ -191,24 +190,27 @@ namespace xsimd
             }
         }
 
-        template <class A, class T, bool... Values, class Mode>
+        template <class A, class T, bool... Values, class Mode,
+                  typename = std::enable_if_t<std::is_integral<T>::value && (sizeof(T) >= 4)>>
         XSIMD_INLINE void store_masked(T* mem, batch<T, A> const& src, batch_bool_constant<T, A, Values...> mask, Mode, requires_arch<avx2>) noexcept
         {
             constexpr size_t lanes_per_half = batch<T, A>::size / 2;
+            using half_batch = ::xsimd::make_sized_batch_t<T, lanes_per_half>;
+            using half_arch = typename half_batch::arch_type;
 
-            // confined to lower 128-bit half → forward to SSE
+            // lower 128-bit half
             XSIMD_IF_CONSTEXPR(mask.countl_zero() >= lanes_per_half)
             {
-                constexpr auto mlo = ::xsimd::detail::lower_half<sse4_2>(mask);
-                const auto lo = detail::lower_half(src);
-                store_masked<sse4_2>(mem, lo, mlo, Mode {}, sse4_2 {});
+                constexpr auto mlo = ::xsimd::detail::lower_half<half_arch>(mask);
+                const half_batch lo = detail::lower_half(src);
+                store_masked<half_arch>(mem, lo, mlo, Mode {}, half_arch {});
             }
-            // confined to upper 128-bit half → forward to SSE
+            // upper 128-bit half
             else XSIMD_IF_CONSTEXPR(mask.countr_zero() >= lanes_per_half)
             {
-                constexpr auto mhi = ::xsimd::detail::upper_half<sse4_2>(mask);
-                const auto hi = detail::upper_half(src);
-                store_masked<sse4_2>(mem + lanes_per_half, hi, mhi, Mode {}, sse4_2 {});
+                constexpr auto mhi = ::xsimd::detail::upper_half<half_arch>(mask);
+                const half_batch hi = detail::upper_half(src);
+                store_masked<half_arch>(mem + lanes_per_half, hi, mhi, Mode {}, half_arch {});
             }
             else
             {
@@ -217,10 +219,10 @@ namespace xsimd
         }
 
         template <class A, bool... Values, class Mode>
-        XSIMD_INLINE void store_masked(uint32_t* mem, batch<uint32_t, A> const& src, batch_bool_constant<uint32_t, A, Values...> mask, Mode, requires_arch<avx2>) noexcept
+        XSIMD_INLINE void store_masked(uint32_t* mem, batch<uint32_t, A> const& src, batch_bool_constant<uint32_t, A, Values...>, Mode, requires_arch<avx2>) noexcept
         {
             const auto s32 = bitwise_cast<int32_t>(src);
-            store_masked<A>(reinterpret_cast<int32_t*>(mem), s32, mask, Mode {}, avx2 {});
+            store_masked<A>(reinterpret_cast<int32_t*>(mem), s32, batch_bool_constant<int32_t, A, Values...> {}, Mode {}, avx2 {});
         }
 
         template <class A, bool... Values, class Mode>
@@ -231,7 +233,7 @@ namespace xsimd
         }
 
         // load_stream
-        template <class A, class T, class = typename std::enable_if<std::is_integral<T>::value, void>::type>
+        template <class A, class T, class = std::enable_if_t<std::is_integral<T>::value, void>>
         XSIMD_INLINE batch<T, A> load_stream(T const* mem, convert<T>, requires_arch<avx2>) noexcept
         {
             return _mm256_stream_load_si256((__m256i const*)mem);
@@ -359,7 +361,7 @@ namespace xsimd
         XSIMD_INLINE batch<T, A> bitwise_lshift(
             batch<T, A> const& self, batch_constant<T, A, Vs...> shifts, requires_arch<avx2> req) noexcept
         {
-            using uint_t = typename std::make_unsigned<T>::type;
+            using uint_t = std::make_unsigned_t<T>;
 
             // AVX2 only supports 16-bit shifts with a uniform bitshift value,
             // otherwise emulate using 32-bit shifts.
@@ -926,6 +928,89 @@ namespace xsimd
             {
                 return mul(self, other, avx {});
             }
+        }
+
+        // mul_hi
+        template <class A>
+        XSIMD_INLINE batch<int8_t, A> mul_hi(batch<int8_t, A> const& self, batch<int8_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            // Sign-extend bytes to 16-bit (unpack-with-self followed by srai 8
+            // duplicates the byte then arithmetic-shifts the sign in), do the
+            // 16x16->16 multiply, then take the high byte of each product.
+            // unpacklo/unpackhi and packs are all per-128-bit-lane, so the
+            // round trip preserves byte ordering and no vpermq is needed.
+            __m256i a_lo = _mm256_srai_epi16(_mm256_unpacklo_epi8(self, self), 8);
+            __m256i a_hi = _mm256_srai_epi16(_mm256_unpackhi_epi8(self, self), 8);
+            __m256i b_lo = _mm256_srai_epi16(_mm256_unpacklo_epi8(other, other), 8);
+            __m256i b_hi = _mm256_srai_epi16(_mm256_unpackhi_epi8(other, other), 8);
+            __m256i p_lo = _mm256_srai_epi16(_mm256_mullo_epi16(a_lo, b_lo), 8);
+            __m256i p_hi = _mm256_srai_epi16(_mm256_mullo_epi16(a_hi, b_hi), 8);
+            // results already lie in [-128, 127], so packs is exact (no saturation kicks in).
+            return _mm256_packs_epi16(p_lo, p_hi);
+        }
+        template <class A>
+        XSIMD_INLINE batch<uint8_t, A> mul_hi(batch<uint8_t, A> const& self, batch<uint8_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            __m256i zero = _mm256_setzero_si256();
+            __m256i a_lo = _mm256_unpacklo_epi8(self, zero);
+            __m256i a_hi = _mm256_unpackhi_epi8(self, zero);
+            __m256i b_lo = _mm256_unpacklo_epi8(other, zero);
+            __m256i b_hi = _mm256_unpackhi_epi8(other, zero);
+            __m256i p_lo = _mm256_srli_epi16(_mm256_mullo_epi16(a_lo, b_lo), 8);
+            __m256i p_hi = _mm256_srli_epi16(_mm256_mullo_epi16(a_hi, b_hi), 8);
+            return _mm256_packus_epi16(p_lo, p_hi);
+        }
+        template <class A>
+        XSIMD_INLINE batch<int16_t, A> mul_hi(batch<int16_t, A> const& self, batch<int16_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            return _mm256_mulhi_epi16(self, other);
+        }
+        template <class A>
+        XSIMD_INLINE batch<uint16_t, A> mul_hi(batch<uint16_t, A> const& self, batch<uint16_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            return _mm256_mulhi_epu16(self, other);
+        }
+        template <class A>
+        XSIMD_INLINE batch<int32_t, A> mul_hi(batch<int32_t, A> const& self, batch<int32_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            __m256i even = _mm256_mul_epi32(self, other);
+            __m256i odd = _mm256_mul_epi32(_mm256_shuffle_epi32(self, _MM_SHUFFLE(3, 3, 1, 1)),
+                                           _mm256_shuffle_epi32(other, _MM_SHUFFLE(3, 3, 1, 1)));
+            __m256i even_hi = _mm256_srli_epi64(even, 32);
+            return _mm256_blend_epi16(even_hi, odd, 0xCC);
+        }
+        template <class A>
+        XSIMD_INLINE batch<uint32_t, A> mul_hi(batch<uint32_t, A> const& self, batch<uint32_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            __m256i even = _mm256_mul_epu32(self, other);
+            __m256i odd = _mm256_mul_epu32(_mm256_srli_epi64(self, 32), _mm256_srli_epi64(other, 32));
+            __m256i even_hi = _mm256_srli_epi64(even, 32);
+            return _mm256_blend_epi16(even_hi, odd, 0xCC);
+        }
+
+        template <class A>
+        XSIMD_INLINE batch<uint64_t, A> mul_hi(batch<uint64_t, A> const& self, batch<uint64_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            return detail::mulhi_u64_core<A>(self, other,
+                                             [](batch<uint64_t, A> a, batch<uint64_t, A> b)
+                                             { return batch<uint64_t, A>(_mm256_mul_epu32(a, b)); });
+        }
+        template <class A>
+        XSIMD_INLINE batch<int64_t, A> mul_hi(batch<int64_t, A> const& self, batch<int64_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            return detail::mulhi_i64_core<A>(self, other,
+                                             [](batch<uint64_t, A> a, batch<uint64_t, A> b)
+                                             { return batch<uint64_t, A>(_mm256_mul_epu32(a, b)); });
+        }
+
+        // mul_hilo
+        template <class A>
+        XSIMD_INLINE std::pair<batch<uint64_t, A>, batch<uint64_t, A>>
+        mul_hilo(batch<uint64_t, A> const& self, batch<uint64_t, A> const& other, requires_arch<avx2>) noexcept
+        {
+            return detail::mulhilo_u64_core<A>(self, other,
+                                               [](batch<uint64_t, A> a, batch<uint64_t, A> b)
+                                               { return batch<uint64_t, A>(_mm256_mul_epu32(a, b)); });
         }
 
         // reduce_add

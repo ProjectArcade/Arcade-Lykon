@@ -385,5 +385,6 @@ pref("xpinstall.whitelist.add", "https://addons.mozilla.org");
 pref("xpinstall.whitelist.fileRequest", false);
 
 // Pref to enable the IP protection feature
-pref("browser.ipProtection.enabled", false);
+pref("browser.ipProtection.enabled", true);
 pref("browser.ipProtection.guardian.endpoint", "https://vpn.mozilla.org/");
+pref("toolkit.ipProtection.android.authProvider", "fxa");

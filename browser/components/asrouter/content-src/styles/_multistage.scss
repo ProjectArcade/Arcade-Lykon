@@ -99,6 +99,104 @@ html {
   }
 }
 
+.onboardingContainer:has(.pinnable-sites-list) {
+  .screen[pos='split'] {
+    .section-main {
+      .main-content {
+        padding-block: 40px 0;
+
+        .action-buttons .primary {
+          min-width: 71px;
+          padding-block: 7px;
+        }
+
+        .tile-title {
+          font-size: 18px;
+        }
+      }
+    }
+
+    .section-secondary {
+      background: var(--pinnable-sites-bkg);
+
+      .hero-text h1 {
+        font-size: 26px;
+      }
+
+      // Wide layout reserves space below the subtitle for the hero image.
+      .hero-text h2 {
+        margin-block-end: 370px;
+      }
+    }
+
+    @mixin narrow-pinnable-sites {
+      .section-main .main-content {
+        .main-content-inner {
+          align-items: stretch;
+          margin-block-start: -30px;
+        }
+
+        .action-buttons {
+          text-align: start;
+          justify-content: flex-start;
+        }
+
+        .pinnable-sites-list {
+          max-width: none;
+
+          .pinnable-sites-pin-button {
+            min-width: 62px;
+          }
+        }
+
+        .tile-title {
+          font-size: 13px;
+        }
+      }
+
+      .section-secondary {
+        // Swap the wide-layout hero image for the pink hero gradient. Each stop
+        // resolves to the flat #210340 in dark mode (see the smart-window
+        // gradient above for the same per-stop light-dark() pattern).
+        background: linear-gradient(
+          0deg,
+          light-dark(rgb(252, 245, 240), #210340) 0%,
+          light-dark(rgb(250, 236, 241), #210340) 57%,
+          light-dark(rgb(245, 212, 245), #210340) 100%
+        );
+        height: auto;
+        min-height: $small-secondary-section-height;
+
+        .message-text {
+          margin-inline: 0;
+        }
+
+        .hero-text {
+          h1 {
+            text-align: start;
+            margin-inline: 0;
+            padding-inline: 40px;
+            font-size: 17px;
+          }
+
+          // Drop the wide-layout reserve so the list isn't pushed off-screen.
+          h2 {
+            margin-block-end: 0;
+          }
+        }
+      }
+    }
+
+    @media only screen and (width <= 800px) {
+      @include narrow-pinnable-sites;
+    }
+
+    [narrow] & {
+      @include narrow-pinnable-sites;
+    }
+  }
+}
+
 .onboardingContainer:has(.embedded-backup-restore-container) {
   .screen[pos='split'][fullscreen] {
     .section-main {
@@ -119,7 +217,7 @@ html {
 
 .onboardingContainer {
   --grey-subtitle-1: light-dark(var(--color-gray-70), white);
-  --mr-welcome-background-color: light-dark(var(--color-gray-05), var(--color-gray-80));
+  --mr-welcome-background-color: light-dark(var(--color-gray-0), var(--color-gray-80));
   --mr-screen-heading-color: var(--text-color);
   --mr-welcome-background-gradient: linear-gradient(
     0deg,
@@ -127,7 +225,7 @@ html {
     light-dark(rgba(2, 144, 238, 20%), rgba(2, 144, 238, 30%)) 100%
   );
   --mr-smart-window-background-gradient: radial-gradient(190% 105% at 50% 90%, light-dark(#FDF3F2, #4E243F) 0%, light-dark(#ECE4FB, #311764) 100%);
-  --mr-screen-background-color: light-dark(var(--color-gray-05), var(--color-gray-70));
+  --mr-screen-background-color: light-dark(var(--color-gray-0), var(--color-gray-70));
   --single-select-border-color: var(--color-gray-60);
   --single-select-hover-color: light-dark(var(--color-gray-20), var(--color-gray-70));
   --picker-background-color: color-mix(in srgb, transparent 98%, light-dark(black, white) 2%);
@@ -2521,6 +2619,80 @@ html {
     }
   }
 
+  .pinnable-sites-list {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    gap: 16px;
+    max-width: 300px;
+
+    .pinnable-sites-item {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      padding-inline: 8px;
+      list-style: none;
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-medium);
+      gap: 14px;
+      min-height: 45px;
+
+      &:hover,
+      &:focus-within {
+        .pinnable-sites-pin-button:not(:disabled) {
+          opacity: 1;
+          pointer-events: auto;
+        }
+      }
+    }
+
+    .pinnable-sites-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      border-radius: 6px;
+    }
+
+    .pinnable-sites-text {
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+      text-align: start;
+      overflow: hidden;
+    }
+
+    .pinnable-sites-name {
+      font-size: 13px;
+      font-weight: var(--font-weight-semibold);
+      line-height: 1;
+    }
+
+    .pinnable-sites-description {
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+
+    .pinnable-sites-pin-button {
+      flex-shrink: 0;
+      opacity: 0;
+      pointer-events: none;
+      min-width: 62px;
+      padding-block: 7px;
+      // --transition (0.6s) is for screen-level animations; override for hover reveals.
+      transition: opacity 100ms;
+
+      @starting-style {
+        opacity: 0;
+      }
+
+      &:disabled {
+        // Keep visible once pinned so the user can see the action was completed.
+        opacity: 0.5;
+        pointer-events: none;
+      }
+    }
+  }
+
   .tile-title-container {
     margin-inline: 0;
     margin-block: 10px var(--space-xlarge);
@@ -2947,6 +3119,11 @@ html {
     }
   }
 
+  // Must come after the stagger rules above so source order wins at equal specificity.
+  .pinnable-sites-list .pinnable-sites-item .pinnable-sites-pin-button {
+    transition-delay: 0s;
+  }
+
   .screen-2 {
     .section-main {
       z-index: 1;
@@ -3167,5 +3344,135 @@ html {
     border-radius: var(--border-radius-medium);
     padding: var(--space-xlarge) 30px;
     margin-block: 0 var(--space-xlarge);
+  }
+
+  // Toggle that controls animated illustrations/backgrounds. Required for
+  // WCAG 2.2.2 whenever a screen includes animated illustrations. The button
+  // auto-appears whenever the screen provides a static fallback asset and
+  // toggles the rendered src/background to that static asset when paused.
+  .animation-play-pause-button {
+    position: absolute;
+    inset-block-end: var(--space-large);
+    inset-inline-start: var(--space-large);
+    min-width: auto;
+    min-height: var(--button-min-height);
+    padding: var(--button-padding);
+    margin: 0;
+    box-sizing: border-box;
+    border: var(--border-width) solid var(--border-color-transparent);
+    border-radius: var(--button-border-radius);
+    background-color: var(--background-color-canvas);
+    color: var(--text-color);
+    font-size: var(--button-font-size);
+    font-weight: var(--button-font-weight);
+    -moz-context-properties: fill;
+    fill: currentColor;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+
+    &::before {
+      content: '';
+      display: inline-block;
+      flex-shrink: 0;
+      width: var(--icon-size-small);
+      height: var(--icon-size-small);
+      background: url('chrome://global/skin/media/pause-fill.svg') no-repeat center / contain;
+    }
+
+    &.paused::before {
+      background-image: url('chrome://global/skin/media/play-fill.svg');
+    }
+
+    &:hover {
+      background-color: color-mix(
+        in srgb,
+        var(--background-color-canvas),
+        currentColor 14%
+      );
+    }
+
+    &:active {
+      background-color: color-mix(
+        in srgb,
+        var(--background-color-canvas),
+        currentColor 22%
+      );
+    }
+
+    &:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-outline-offset);
+    }
+  }
+
+  // Center-position screens place the button inside .main-content, which is
+  // not otherwise a positioning container. Promote it only when the button
+  // is actually present so we don't disturb existing screens.
+  .main-content:has(> .animation-play-pause-button) {
+    position: relative;
+  }
+}
+
+.SMARTWINDOW_FEEDBACK_SCREEN {
+  .welcome-text {
+    align-items: start;
+    margin: 0 0 8px;
+  }
+
+  .main-content-inner {
+    justify-content: flex-start;
+    padding: 32px;
+  }
+
+  .main-content.no-steps {
+    padding-bottom: 0;
+  }
+
+  #content-tiles-container {
+    margin: 0 8px;
+
+    .content-tile,
+    .textarea-container {
+      margin-inline: 0;
+    }
+
+    .tile-title-container {
+      margin-block: 0 8px;
+    }
+
+    .content-tile .multi-select-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      justify-items: start;
+      align-items: start;
+      gap: 8px;
+      margin-inline: 0;
+      padding: 12px;
+
+      .checkbox-container {
+        align-items: flex-start;
+      }
+    }
+  }
+
+  .tile-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .link-paragraph {
+    text-align: start;
+    padding: 0 8px;
+    margin-block: 12px 20px;
+  }
+
+  .action-buttons {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: center;
+    padding: 0 4px;
+    gap: 8px;
   }
 }

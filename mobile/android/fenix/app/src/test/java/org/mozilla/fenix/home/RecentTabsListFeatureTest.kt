@@ -20,7 +20,6 @@ import mozilla.components.feature.media.middleware.LastMediaAccessMiddleware
 import mozilla.components.support.test.middleware.CaptureActionsMiddleware
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -32,6 +31,7 @@ import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.home.recenttabs.RecentTab
 import org.mozilla.fenix.home.recenttabs.RecentTabsListFeature
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 class RecentTabsListFeatureTest {
 

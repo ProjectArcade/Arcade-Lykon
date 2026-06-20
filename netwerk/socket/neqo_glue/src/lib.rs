@@ -32,15 +32,14 @@ use neqo_common::{
     datagram, event::Provider as _, qdebug, qerror, qlog::Qlog, qwarn, Datagram, Decoder, Encoder,
     Header, Role, Tos,
 };
-use neqo_crypto::{agent::CertificateCompressor, init, PRErrorCode};
 use neqo_http3::{
     features::extended_connect::session, ConnectUdpEvent, Error as Http3Error, Http3Client,
     Http3ClientEvent, Http3Parameters, Http3State, Priority, WebTransportEvent,
 };
 use neqo_transport::{
     stream_id::StreamType, CongestionControl, Connection, ConnectionParameters,
-    Error as TransportError, Output, OutputBatch, RandomConnectionIdGenerator, SlowStart, StreamId,
-    Version,
+    Error as TransportError, HyStartCssBaseline, Output, OutputBatch, RandomConnectionIdGenerator,
+    SlowStart, StreamId, Version,
 };
 use nserror::{
     nsresult, NS_BASE_STREAM_WOULD_BLOCK, NS_ERROR_CONNECTION_REFUSED,
@@ -49,6 +48,7 @@ use nserror::{
     NS_ERROR_NET_RESET, NS_ERROR_NET_TIMEOUT, NS_ERROR_NOT_AVAILABLE, NS_ERROR_NOT_CONNECTED,
     NS_ERROR_OUT_OF_MEMORY, NS_ERROR_SOCKET_ADDRESS_IN_USE, NS_ERROR_UNEXPECTED, NS_OK,
 };
+use nss_rs::{agent::CertificateCompressor, init, PRErrorCode};
 use nsstring::{nsACString, nsCString};
 use thin_vec::ThinVec;
 use uuid::Uuid;
@@ -185,13 +185,13 @@ fn enable_zlib_decoder(c: &mut Connection) -> neqo_transport::Res<()> {
         const ID: u16 = 0x1;
         const NAME: &std::ffi::CStr = c"zlib";
 
-        fn decode(input: &[u8], output: &mut [u8]) -> neqo_crypto::Res<()> {
+        fn decode(input: &[u8], output: &mut [u8]) -> nss_rs::Res<()> {
             let (output_slice, error) = decompress_slice(output, &input, InflateConfig::default());
             if error != ReturnCode::Ok {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
             if output_slice.len() != output.len() {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             Ok(())
@@ -222,12 +222,12 @@ fn enable_zstd_decoder(c: &mut Connection) -> neqo_transport::Res<()> {
         const ID: u16 = 0x3;
         const NAME: &std::ffi::CStr = c"zstd";
 
-        fn decode(input: &[u8], output: &mut [u8]) -> neqo_crypto::Res<()> {
+        fn decode(input: &[u8], output: &mut [u8]) -> nss_rs::Res<()> {
             if input.is_empty() {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
             if output.is_empty() {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             let output_len = unsafe {
@@ -242,12 +242,12 @@ fn enable_zstd_decoder(c: &mut Connection) -> neqo_transport::Res<()> {
             // ZSTD_isError return 1 if error, 0 otherwise
             if unsafe { ZSTD_isError(output_len) != 0 } {
                 qdebug!("zstd compression failed with {output_len}");
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             if output.len() != output_len {
                 qdebug!("zstd compression `output_len` {output_len} doesn't match expected `output.len()` {}", output.len());
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             Ok(())
@@ -283,12 +283,12 @@ fn enable_brotli_decoder(c: &mut Connection) -> neqo_transport::Res<()> {
         const ID: u16 = 0x2;
         const NAME: &std::ffi::CStr = c"brotli";
 
-        fn decode(input: &[u8], output: &mut [u8]) -> neqo_crypto::Res<()> {
+        fn decode(input: &[u8], output: &mut [u8]) -> nss_rs::Res<()> {
             if input.is_empty() {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
             if output.is_empty() {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             let mut uncompressed_size = output.len();
@@ -302,11 +302,11 @@ fn enable_brotli_decoder(c: &mut Connection) -> neqo_transport::Res<()> {
             };
 
             if result != BrotliDecoderResult::Success {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             if uncompressed_size != output.len() {
-                return Err(neqo_crypto::Error::CertificateDecoding);
+                return Err(nss_rs::Error::CertificateDecoding);
             }
 
             Ok(())
@@ -441,6 +441,7 @@ impl NeqoHttp3Conn {
         let slow_start = match static_prefs::pref!("network.http.http3.slow_start_algorithm") {
             0 => SlowStart::Classic,
             1 => SlowStart::HyStart,
+            2 => SlowStart::Search,
             _ => {
                 // Unknown preferences; default to Classic
                 debug!("Unknown http3.slow_start_algorithm pref, defaulting to SlowStart::Classic");
@@ -457,6 +458,15 @@ impl NeqoHttp3Conn {
             // transmitted UDP datagrams might get fragmented by the IP layer.
             && socket.as_ref().map_or(false, |s| !s.may_fragment());
 
+        let spurious_recovery = static_prefs::pref!("network.http.http3.spurious_recovery");
+
+        let css_baseline =
+            if static_prefs::pref!("network.http.http3.hystart_alternative_css_baseline") {
+                HyStartCssBaseline::EntryThreshold
+            } else {
+                HyStartCssBaseline::CurrentRoundMinRtt
+            };
+
         let mut params = ConnectionParameters::default()
             .versions(quic_version, version_list)
             .congestion_control(cc_algorithm)
@@ -470,7 +480,9 @@ impl NeqoHttp3Conn {
             .pmtud_iface_mtu(cfg!(not(target_os = "openbsd")))
             // MLKEM support is configured further below. By default, disable it.
             .mlkem(false)
-            .pmtud(pmtud_enabled);
+            .pmtud(pmtud_enabled)
+            .spurious_recovery(spurious_recovery)
+            .hystart_css_baseline(css_baseline);
 
         // 0 means "use neqo's spec-compliant default PTO scaling".
         if fast_pto > 0 {
@@ -517,11 +529,11 @@ impl NeqoHttp3Conn {
         {
             // These operations are infallible when conn.state == State::Init.
             conn.set_groups(&[
-                neqo_crypto::TLS_GRP_KEM_MLKEM768X25519,
-                neqo_crypto::TLS_GRP_EC_X25519,
-                neqo_crypto::TLS_GRP_EC_SECP256R1,
-                neqo_crypto::TLS_GRP_EC_SECP384R1,
-                neqo_crypto::TLS_GRP_EC_SECP521R1,
+                nss_rs::TLS_GRP_KEM_MLKEM768X25519,
+                nss_rs::TLS_GRP_EC_X25519,
+                nss_rs::TLS_GRP_EC_SECP256R1,
+                nss_rs::TLS_GRP_EC_SECP384R1,
+                nss_rs::TLS_GRP_EC_SECP521R1,
             ])
             .map_err(|_| NS_ERROR_UNEXPECTED)?;
             additional_shares += 1;
@@ -647,9 +659,22 @@ impl NeqoHttp3Conn {
             add("datagram", s.datagram);
         }
 
+        // Only record the metrics below for connections that established. Not
+        // gating on `stats.packets_rx` as it counts garbage too, so it would
+        // still admit a network that replies to every UDP packet with junk
+        // without ever speaking QUIC.
+        if stats.frame_rx.handshake_done == 0 {
+            return;
+        }
+
+        let version_label = match stats.version {
+            Version::Version1 => "v1",
+            Version::Version2 => "v2",
+        };
+        glean::http_3_quic_version.get(version_label).add(1);
+
         if !static_prefs::pref!("network.http.http3.use_nspr_for_io")
             && static_prefs::pref!("network.http.http3.ecn_report")
-            && stats.frame_rx.handshake_done != 0
         {
             let rx_ect0_sum: u64 = stats.ecn_rx.into_values().map(|v| v[Ecn::Ect0]).sum();
             let rx_ce_sum: u64 = stats.ecn_rx.into_values().map(|v| v[Ecn::Ce]).sum();
@@ -666,7 +691,6 @@ impl NeqoHttp3Conn {
 
         if !static_prefs::pref!("network.http.http3.use_nspr_for_io")
             && static_prefs::pref!("network.http.http3.ecn_mark")
-            && stats.frame_rx.handshake_done != 0
         {
             let tx_ect0_sum: u64 = stats.ecn_tx_acked.into_values().map(|v| v[Ecn::Ect0]).sum();
             let tx_ce_sum: u64 = stats.ecn_tx_acked.into_values().map(|v| v[Ecn::Ce]).sum();
@@ -711,132 +735,189 @@ impl NeqoHttp3Conn {
             }
         }
 
-        // Ignore connections into the void for metrics where it makes sense.
-        if stats.packets_rx != 0 {
-            // Calculate and collect packet loss ratio. The value is used later to also record the filtered loss ratio for connections that used the congestion controller.
-            let loss_ratio =
-                match i64::try_from((stats.lost * PRECISION_FACTOR_USIZE) / stats.packets_tx) {
-                    Ok(v) => {
-                        glean::http_3_loss_ratio.accumulate_single_sample_signed(v);
-                        Some(v)
+        // Calculate and collect packet loss ratio. The value is used later to also record the filtered loss ratio for connections that used the congestion controller.
+        let loss_ratio =
+            match i64::try_from((stats.lost * PRECISION_FACTOR_USIZE) / stats.packets_tx) {
+                Ok(v) => {
+                    glean::http_3_loss_ratio.accumulate_single_sample_signed(v);
+                    Some(v)
+                }
+                Err(e) => {
+                    qwarn!("Failed to convert ratio to i64 for use with glean: {e}");
+                    debug_assert!(
+                        false,
+                        "Failed to convert ratio to i64 for use with glean: {e}"
+                    );
+                    None
+                }
+            };
+        // Records the unfiltered (old) slow start exit ratio
+        if stats.cc.slow_start_exit_cwnd.is_some() {
+            glean::http_3_slow_start_exited.get("exited").add(1);
+        } else {
+            glean::http_3_slow_start_exited.get("not_exited").add(1);
+        }
+
+        let cwnd_that_grew = stats.cc.cwnd.filter(|&c| c > MAX_INITIAL_CWND);
+        let growth_label = match (cwnd_that_grew, stats.cc.slow_start_exit_cwnd) {
+            (Some(_), Some(exit_cwnd)) if exit_cwnd < MAX_INITIAL_CWND => {
+                "no_growth_then_exit_then_growth"
+            }
+            (Some(_), _) => "had_growth",
+            (None, Some(_)) => "no_growth_but_exit",
+            (None, None) => "no_growth",
+        };
+        glean::http_3_congestion_window_growth
+            .get(growth_label)
+            .add(1);
+        // Filtered: only record CC metrics for connections that grew past the initial window.
+        if let Some(final_cwnd) = cwnd_that_grew {
+            glean::http_3_final_cwnd.accumulate(final_cwnd as u64);
+            if let Some(loss) = loss_ratio {
+                glean::http_3_loss_ratio_filtered.accumulate_single_sample_signed(loss);
+            }
+            // Record metrics concerning the slow start exit point below this filter.
+            debug_assert_eq!(
+                stats.cc.slow_start_exit_cwnd.is_some(),
+                stats.cc.slow_start_exit_reason.is_some(),
+                "slow_start_exit_cwnd and slow_start_exit_reason must always be set together"
+            );
+            let mut hystart_label = "not_exited";
+            let mut search_label = "not_exited";
+            if let (Some(exit_cwnd), Some(reason)) = (
+                stats.cc.slow_start_exit_cwnd,
+                stats.cc.slow_start_exit_reason,
+            ) {
+                glean::http_3_slow_start_exit_cwnd.accumulate(exit_cwnd as u64);
+                glean::http_3_slow_start_exited_filtered
+                    .get("exited")
+                    .add(1);
+                let accuracy_cwnd =
+                    ((exit_cwnd.abs_diff(final_cwnd) as f64) / final_cwnd as f64) * 100.0;
+                let accuracy_w_max = if let Some(final_w_max) = stats.cc.w_max {
+                    assert!(final_w_max > 0.0, "w_max can never be non-positive");
+                    glean::http_3_final_w_max.accumulate(final_w_max as u64);
+                    Some(((exit_cwnd as f64 - final_w_max).abs() / final_w_max) * 100.0)
+                } else {
+                    None
+                };
+                let direction_label = match exit_cwnd.cmp(&final_cwnd) {
+                    Ordering::Greater => "overshoot",
+                    Ordering::Less => "undershoot",
+                    Ordering::Equal => "exact",
+                };
+                let (reason_label, accuracy_label) = match reason {
+                    SlowStartExitReason::CongestionEvent => {
+                        glean::http_3_slow_start_exit_direction_loss
+                            .get(direction_label)
+                            .add(1);
+                        hystart_label = "exited_ce";
+                        search_label = "exited_ce";
+                        ("ce", "ce_exit")
                     }
-                    Err(e) => {
-                        qwarn!("Failed to convert ratio to i64 for use with glean: {e}");
-                        debug_assert!(
-                            false,
-                            "Failed to convert ratio to i64 for use with glean: {e}"
-                        );
-                        None
+                    SlowStartExitReason::Heuristic => {
+                        glean::http_3_slow_start_exit_direction_heuristic
+                            .get(direction_label)
+                            .add(1);
+                        hystart_label = "exited_hystart";
+                        search_label = "exited_search";
+                        ("heuristic", "heuristic_exit")
                     }
                 };
-            // Records the unfiltered (old) slow start exit ratio
-            if stats.cc.slow_start_exit_cwnd.is_some() {
-                glean::http_3_slow_start_exited.get("exited").add(1);
-            } else {
-                glean::http_3_slow_start_exited.get("not_exited").add(1);
-            }
-
-            let cwnd_that_grew = stats.cc.cwnd.filter(|&c| c > MAX_INITIAL_CWND);
-            let growth_label = match (cwnd_that_grew, stats.cc.slow_start_exit_cwnd) {
-                (Some(_), Some(exit_cwnd)) if exit_cwnd < MAX_INITIAL_CWND => {
-                    "no_growth_then_exit_then_growth"
-                }
-                (Some(_), _) => "had_growth",
-                (None, Some(_)) => "no_growth_but_exit",
-                (None, None) => "no_growth",
-            };
-            glean::http_3_congestion_window_growth
-                .get(growth_label)
-                .add(1);
-            // Filtered: only record CC metrics for connections that grew past the initial window.
-            if let Some(final_cwnd) = cwnd_that_grew {
-                glean::http_3_final_cwnd.accumulate(final_cwnd as u64);
-                if let Some(loss) = loss_ratio {
-                    glean::http_3_loss_ratio_filtered.accumulate_single_sample_signed(loss);
-                }
-                // Record metrics concerning the slow start exit point below this filter.
-                debug_assert_eq!(
-                    stats.cc.slow_start_exit_cwnd.is_some(),
-                    stats.cc.slow_start_exit_reason.is_some(),
-                    "slow_start_exit_cwnd and slow_start_exit_reason must always be set together"
-                );
-                let mut hystart_label = "not_exited";
-                if let (Some(exit_cwnd), Some(reason)) = (
-                    stats.cc.slow_start_exit_cwnd,
-                    stats.cc.slow_start_exit_reason,
-                ) {
-                    glean::http_3_slow_start_exit_cwnd.accumulate(exit_cwnd as u64);
-                    glean::http_3_slow_start_exited_filtered
-                        .get("exited")
-                        .add(1);
-                    let accuracy_cwnd =
-                        ((exit_cwnd.abs_diff(final_cwnd) as f64) / final_cwnd as f64) * 100.0;
-                    let accuracy_w_max = if let Some(final_w_max) = stats.cc.w_max {
-                        assert!(final_w_max > 0.0, "w_max can never be non-positive");
-                        glean::http_3_final_w_max.accumulate(final_w_max as u64);
-                        Some(((exit_cwnd as f64 - final_w_max).abs() / final_w_max) * 100.0)
-                    } else {
-                        None
-                    };
-                    let direction_label = match exit_cwnd.cmp(&final_cwnd) {
-                        Ordering::Greater => "overshoot",
-                        Ordering::Less => "undershoot",
-                        Ordering::Equal => "exact",
-                    };
-                    let (reason_label, accuracy_label) = match reason {
-                        SlowStartExitReason::CongestionEvent => {
-                            glean::http_3_slow_start_exit_direction_loss
-                                .get(direction_label)
-                                .add(1);
-                            hystart_label = "exited_ce";
-                            ("ce", "ce_exit")
-                        }
-                        SlowStartExitReason::Heuristic => {
-                            glean::http_3_slow_start_exit_direction_heuristic
-                                .get(direction_label)
-                                .add(1);
-                            hystart_label = "exited_hystart";
-                            ("heuristic", "heuristic_exit")
-                        }
-                    };
-                    glean::http_3_slow_start_exit_reason
-                        .get(reason_label)
-                        .add(1);
-                    glean::http_3_slow_start_exit_accuracy
+                glean::http_3_slow_start_exit_reason
+                    .get(reason_label)
+                    .add(1);
+                glean::http_3_slow_start_exit_accuracy
+                    .get(accuracy_label)
+                    .accumulate_single_sample_signed(accuracy_cwnd as i64);
+                if let Some(accuracy_w_max) = accuracy_w_max {
+                    glean::http_3_slow_start_exit_accuracy_w_max
                         .get(accuracy_label)
-                        .accumulate_single_sample_signed(accuracy_cwnd as i64);
-                    if let Some(accuracy_w_max) = accuracy_w_max {
-                        glean::http_3_slow_start_exit_accuracy_w_max
-                            .get(accuracy_label)
-                            .accumulate_single_sample_signed(accuracy_w_max as i64);
-                    }
-                } else {
-                    glean::http_3_slow_start_exited_filtered
-                        .get("not_exited")
-                        .add(1);
+                        .accumulate_single_sample_signed(accuracy_w_max as i64);
                 }
-                // Only record HyStart metrics when HyStart is enabled (1 == HyStart, see constructor).
-                if static_prefs::pref!("network.http.http3.slow_start_algorithm") == 1 {
-                    glean::http_3_hystart_css_rounds_finished
-                        .get(hystart_label)
-                        .accumulate_single_sample_signed(
-                            stats.cc.hystart_css_rounds_finished as i64,
-                        );
-                    glean::http_3_hystart_css_entries
-                        .get(hystart_label)
-                        .accumulate_single_sample_signed(stats.cc.hystart_css_entries as i64);
-                }
+            } else {
+                glean::http_3_slow_start_exited_filtered
+                    .get("not_exited")
+                    .add(1);
+            }
+            // Only record HyStart metrics when HyStart is enabled (1 == HyStart, see constructor).
+            if static_prefs::pref!("network.http.http3.slow_start_algorithm") == 1 {
+                glean::http_3_hystart_css_rounds_finished
+                    .get(hystart_label)
+                    .accumulate_single_sample_signed(stats.cc.hystart_css_rounds_finished as i64);
+                glean::http_3_hystart_css_entries
+                    .get(hystart_label)
+                    .accumulate_single_sample_signed(stats.cc.hystart_css_entries as i64);
             }
 
-            glean::http_3_congestion_event_count.accumulate_single_sample_signed(
-                (stats.cc.congestion_events.ecn + stats.cc.congestion_events.loss)
-                    .saturating_sub(stats.cc.congestion_events.spurious) as i64,
-            );
-
-            if let Some(peer_max) = stats.pmtud_peer_max_udp_payload {
-                if let Ok(v) = i64::try_from(peer_max) {
-                    glean::http_3_peer_max_udp_payload.accumulate_single_sample_signed(v);
+            // Only record SEARCH metrics when SEARCH is enabled (2 == SEARCH, see constructor).
+            if static_prefs::pref!("network.http.http3.slow_start_algorithm") == 2 {
+                // Metrics for drain phase evaluation
+                if let Some(empty_buffer_bdp) = stats.cc.search_empty_buffer_target {
+                    glean::http_3_search_empty_buffer_bdp_estimate.accumulate(empty_buffer_bdp);
                 }
+                if let Some(full_buffer_bdp) = stats.cc.search_full_buffer_target {
+                    glean::http_3_search_full_buffer_bdp_estimate.accumulate(full_buffer_bdp);
+                }
+                // Metrics to tune EXTRA_BINS
+                if let Some(lookback_bins) = stats.cc.search_lookback_bins_needed {
+                    glean::http_3_search_lookback_bins
+                        .accumulate_single_sample_signed(lookback_bins as i64);
+                    glean::http_3_search_rtt_inflated.get("inflated").add(1);
+                } else {
+                    glean::http_3_search_rtt_inflated
+                        .get("never_inflated")
+                        .add(1);
+                }
+                // Metrics to tune THRESH
+                if let Some(max_norm_diff) = stats.cc.search_max_norm_diff {
+                    glean::http_3_search_max_norm_diff
+                        .get(search_label)
+                        .accumulate_single_sample_signed(max_norm_diff as i64);
+                }
+                // Metrics to calibrate reset mechanism
+                glean::http_3_search_reset_count
+                    .get(search_label)
+                    .accumulate_single_sample_signed(stats.cc.search_reset.count as i64);
+                if let Some(max_passed_bins) = stats.cc.search_reset.max_passed_bins {
+                    glean::http_3_search_max_passed_bins
+                        .accumulate_single_sample_signed(max_passed_bins as i64);
+                }
+                // Metrics to gain insights into app-limited behavior during SEARCH slow start
+                glean::http_3_search_zero_bytes_sent
+                    .get(search_label)
+                    .accumulate_single_sample_signed(stats.cc.search_zero_sent_bytes as i64);
+
+                // Metrics to evaluate whether the first RTT used to initialize SEARCH is inflated
+                if let Some(first_rtt) = stats.cc.search_first_rtt {
+                    let first_us = u64::try_from(first_rtt.as_micros()).unwrap_or(u64::MAX);
+                    let min_us = u64::try_from(stats.min_rtt.as_micros()).unwrap_or(u64::MAX);
+                    if min_us > 0 {
+                        glean::http_3_search_first_rtt_vs_min_rtt
+                            .accumulate_single_sample_signed((first_us * 100 / min_us) as i64);
+                    }
+                    // And whether using `min(first, second)` would be a viable fix
+                    if let Some(second_rtt) = stats.cc.search_second_rtt {
+                        let second_us = u64::try_from(second_rtt.as_micros()).unwrap_or(u64::MAX);
+                        if second_us > 0 {
+                            glean::http_3_search_first_rtt_vs_second_rtt
+                                .accumulate_single_sample_signed(
+                                    (first_us * 100 / second_us) as i64,
+                                );
+                        }
+                    }
+                }
+            }
+        }
+
+        glean::http_3_congestion_event_count.accumulate_single_sample_signed(
+            (stats.cc.congestion_events.ecn + stats.cc.congestion_events.loss)
+                .saturating_sub(stats.cc.congestion_events.spurious) as i64,
+        );
+
+        if let Some(peer_max) = stats.pmtud_peer_max_udp_payload {
+            if let Ok(v) = i64::try_from(peer_max) {
+                glean::http_3_peer_max_udp_payload.accumulate_single_sample_signed(v);
             }
         }
 
@@ -1521,36 +1602,34 @@ pub unsafe extern "C" fn neqo_htttp3conn_send_request_body(
         })
 }
 
-const fn crypto_error_code(err: &neqo_crypto::Error) -> u64 {
+const fn crypto_error_code(err: &nss_rs::Error) -> u64 {
     match err {
-        // Removed in https://github.com/mozilla/neqo/pull/2912. Don't reuse
-        // code point.
-        //
-        // neqo_crypto::Error::Aead => 1,
-        neqo_crypto::Error::CertificateLoading => 2,
-        neqo_crypto::Error::CreateSslSocket => 3,
-        neqo_crypto::Error::Hkdf => 4,
-        neqo_crypto::Error::Internal => 5,
-        neqo_crypto::Error::IntegerOverflow => 6,
-        neqo_crypto::Error::InvalidEpoch => 7,
-        neqo_crypto::Error::MixedHandshakeMethod => 8,
-        neqo_crypto::Error::NoDataAvailable => 9,
-        neqo_crypto::Error::Nss { .. } => 10,
-        // Removed in https://github.com/mozilla/neqo/pull/2912. Don't reuse
-        // code point.
-        //
-        // neqo_crypto::Error::Overrun => 11,
-        neqo_crypto::Error::SelfEncrypt => 12,
-        neqo_crypto::Error::TimeTravel => 13,
-        neqo_crypto::Error::UnsupportedCipher => 14,
-        neqo_crypto::Error::UnsupportedVersion => 15,
-        neqo_crypto::Error::String => 16,
-        neqo_crypto::Error::EchRetry(_) => 17,
-        neqo_crypto::Error::CipherInit => 18,
-        neqo_crypto::Error::CertificateDecoding => 19,
-        neqo_crypto::Error::CertificateEncoding => 20,
-        neqo_crypto::Error::InvalidCertificateCompressionID => 21,
-        neqo_crypto::Error::InvalidAlpn => 22,
+        nss_rs::Error::Aead => 1,
+        nss_rs::Error::CertificateLoading => 2,
+        nss_rs::Error::CreateSslSocket => 3,
+        nss_rs::Error::Hkdf => 4,
+        nss_rs::Error::Internal => 5,
+        nss_rs::Error::IntegerOverflow => 6,
+        nss_rs::Error::InvalidEpoch => 7,
+        nss_rs::Error::MixedHandshakeMethod => 8,
+        nss_rs::Error::NoDataAvailable => 9,
+        nss_rs::Error::Nss { .. } => 10,
+        nss_rs::Error::SelfEncrypt => 12,
+        nss_rs::Error::TimeTravel => 13,
+        nss_rs::Error::UnsupportedCipher => 14,
+        nss_rs::Error::UnsupportedVersion => 15,
+        nss_rs::Error::String => 16,
+        nss_rs::Error::EchRetry(_) => 17,
+        nss_rs::Error::CipherInit => 18,
+        nss_rs::Error::CertificateDecoding => 19,
+        nss_rs::Error::CertificateEncoding => 20,
+        nss_rs::Error::InvalidCertificateCompressionID => 21,
+        nss_rs::Error::InvalidAlpn => 22,
+        nss_rs::Error::AeadTruncated => 23,
+        nss_rs::Error::InvalidInput => 24,
+        nss_rs::Error::UnsupportedCurve => 25,
+        nss_rs::Error::UnsupportedHash => 26,
+        nss_rs::Error::InvalidState => 27,
     }
 }
 
@@ -1575,7 +1654,7 @@ impl From<TransportError> for CloseError {
         #[expect(clippy::match_same_arms, reason = "It's cleaner this way.")]
         match error {
             TransportError::Internal => Self::TransportInternalError,
-            TransportError::Crypto(neqo_crypto::Error::EchRetry(_)) => Self::EchRetry,
+            TransportError::Crypto(nss_rs::Error::EchRetry(_)) => Self::EchRetry,
             TransportError::Crypto(c) => Self::CryptoError(crypto_error_code(&c)),
             TransportError::CryptoAlert(c) => Self::CryptoAlert(c),
             TransportError::PeerApplication(c) => Self::PeerAppError(c),
@@ -2126,7 +2205,7 @@ pub extern "C" fn neqo_http3conn_event(
                 Http3State::Connected => Http3Event::ConnectionConnected,
                 Http3State::Closing(reason) => {
                     if let neqo_transport::CloseReason::Transport(
-                        TransportError::Crypto(neqo_crypto::Error::EchRetry(c))
+                        TransportError::Crypto(nss_rs::Error::EchRetry(c))
                         | TransportError::EchRetry(c),
                     ) = &reason
                     {
@@ -2152,7 +2231,7 @@ pub extern "C" fn neqo_http3conn_event(
                 }
                 Http3State::Closed(error_code) => {
                     if let neqo_transport::CloseReason::Transport(
-                        TransportError::Crypto(neqo_crypto::Error::EchRetry(c))
+                        TransportError::Crypto(nss_rs::Error::EchRetry(c))
                         | TransportError::EchRetry(c),
                     ) = &error_code
                     {
@@ -2908,7 +2987,7 @@ fn probe_apple_fast_path_inner(send_fd: c_int, recv_fd: c_int) -> io::Result<()>
     use neqo_common::Ecn;
     use rustix::{
         fs::{fcntl_getfl, fcntl_setfl, OFlags},
-        net::{getsockname, sockopt::{set_socket_timeout, Timeout}, SocketAddrAny},
+        net::{getsockname, sockopt::{set_socket_timeout, Timeout}},
     };
 
     // Wrap a raw fd in neqo_udp::Socket, enable the fast path, restore blocking
@@ -2921,11 +3000,9 @@ fn probe_apple_fast_path_inner(send_fd: c_int, recv_fd: c_int) -> io::Result<()>
         unsafe { socket.enable_apple_fast_path() };
         fcntl_setfl(bfd, fcntl_getfl(bfd)? & !OFlags::NONBLOCK)?;
         set_socket_timeout(bfd, Timeout::Recv, Some(Duration::from_secs(1)))?;
-        let addr: SocketAddr = match getsockname(bfd)? {
-            SocketAddrAny::V4(a) => a.into(),
-            SocketAddrAny::V6(a) => a.into(),
-            _ => return Err(io::Error::other("unexpected address family")),
-        };
+        let addr: SocketAddr = getsockname(bfd)?
+            .try_into()
+            .map_err(|e: rustix::io::Errno| io::Error::from_raw_os_error(e.raw_os_error()))?;
         Ok((socket, addr))
     };
     let (sender, send_addr) = make_socket(send_fd)?;

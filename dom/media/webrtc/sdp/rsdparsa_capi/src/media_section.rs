@@ -4,14 +4,14 @@
 
 use std::ptr;
 
-use nserror::{NS_ERROR_INVALID_ARG, NS_OK, nsresult};
+use nserror::{nsresult, NS_ERROR_INVALID_ARG, NS_OK};
 use nsstring::nsACString;
 use rsdparsa::attribute_type::{SdpAttribute, SdpAttributeRtpmap};
 use rsdparsa::media_type::{SdpFormatList, SdpMedia, SdpMediaValue, SdpProtocolValue};
 use rsdparsa::{SdpBandwidth, SdpSession};
 use thin_vec::ThinVec;
 
-use network::{RustSdpConnection, get_bandwidth};
+use network::{get_bandwidth, RustSdpConnection};
 use types::{RustSpan, StringView};
 
 #[no_mangle]
@@ -105,10 +105,7 @@ pub unsafe extern "C" fn sdp_get_format_type(sdp_media: *const SdpMedia) -> Rust
 }
 
 #[no_mangle]
-pub extern "C" fn sdp_get_format_string_vec(
-    sdp_media: &SdpMedia,
-    ret: &mut ThinVec<StringView>,
-) {
+pub extern "C" fn sdp_get_format_string_vec(sdp_media: &SdpMedia, ret: &mut ThinVec<StringView>) {
     if let SdpFormatList::Strings(ref formats) = *sdp_media.get_formats() {
         ret.extend(formats.iter().map(|s| StringView::from(s.as_str())));
     }
@@ -147,9 +144,7 @@ pub extern "C" fn sdp_get_media_bandwidth(
 }
 
 #[no_mangle]
-pub extern "C" fn sdp_get_media_bandwidth_vec(
-    sdp_media: &SdpMedia,
-) -> *const Vec<SdpBandwidth> {
+pub extern "C" fn sdp_get_media_bandwidth_vec(sdp_media: &SdpMedia) -> *const Vec<SdpBandwidth> {
     sdp_media.get_bandwidth()
 }
 

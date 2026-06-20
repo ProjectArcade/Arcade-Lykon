@@ -80,6 +80,8 @@ struct NrIceCandidate {
   TcpType tcp_type;
   std::string codeword;
   std::string label;
+  std::string foundation;
+  std::string username_fragment;
   bool trickled;
   uint32_t priority;
   bool is_proxied = false;
@@ -117,6 +119,8 @@ struct NrIceCandidatePair {
   // for RTCIceCandidatePairStats
   uint64_t bytes_sent;
   uint64_t bytes_recvd;
+  uint64_t packets_sent;
+  uint64_t packets_recvd;
   uint64_t ms_since_last_send;
   uint64_t ms_since_last_recv;
   uint64_t responses_recvd;
@@ -200,6 +204,10 @@ class NrIceMediaStream {
   // So the receiver of SignalCandidate can determine which transport
   // the candidate belongs to.
   const std::string& GetId() const { return id_; }
+
+  // The local ICE username fragment of the current generation, or the empty
+  // string if the stream has no active generation.
+  std::string GetUfrag() const;
 
   bool AllGenerationsDoneGathering() const;
   bool AnyGenerationIsConnected() const;

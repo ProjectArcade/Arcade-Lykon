@@ -62,7 +62,8 @@ class AutoDestructorOp {
 
 /* static */
 PLDHashNumber PLDHashTable::HashStringKey(const void* aKey) {
-  return HashString(static_cast<const char*>(aKey));
+  auto* str = static_cast<const char*>(aKey);
+  return HashString(str, strlen(str));
 }
 
 /* static */
@@ -212,7 +213,7 @@ PLDHashTable::~PLDHashTable() {
   AutoDestructorOp op(mChecker);
 #endif
 
-  if (!mEntryStore.IsAllocated()) {
+  if (IsEmpty()) {
     return;
   }
 
@@ -238,6 +239,37 @@ void PLDHashTable::ClearAndPrepareForLength(uint32_t aLength) {
 }
 
 void PLDHashTable::Clear() { ClearAndPrepareForLength(kDefaultInitialLength); }
+
+void PLDHashTable::ClearAndRetainStorage() {
+#ifdef MOZ_HASH_TABLE_CHECKS_ENABLED
+  AutoWriteOp op(mChecker);
+#endif
+
+  if (!mEntryStore.IsAllocated()) {
+    return;
+  }
+
+  uint32_t capacity = Capacity();
+
+  // Clear any live entries (if not trivially destructible), as ~PLDHashTable
+  // would.
+  if (mOps->clearEntry) {
+    mEntryStore.ForEachSlot(capacity, mEntrySize, [&](const Slot& aSlot) {
+      if (aSlot.IsLive()) {
+        mOps->clearEntry(this, aSlot.ToEntry());
+      }
+    });
+  }
+
+  // Mark every slot free by zeroing the keyhash array. The store layout is
+  // [hash0..hashN-1][entry0..entryN-1], so the hashes occupy the first
+  // |capacity| PLDHashNumbers; a free slot is one whose keyhash is 0.
+  memset(mEntryStore.Get(), 0, capacity * sizeof(PLDHashNumber));
+
+  mEntryCount = 0;
+  mRemovedCount = 0;
+  mGeneration++;
+}
 
 // If |Reason| is |ForAdd|, the return value is always non-null and it may be
 // a previously-removed entry. If |Reason| is |ForSearchOrRemove|, the return
@@ -421,7 +453,7 @@ PLDHashEntryHdr* PLDHashTable::Search(const void* aKey) const {
   AutoReadOp op(mChecker);
 #endif
 
-  if (!mEntryStore.IsAllocated()) {
+  if (IsEmpty()) {
     return nullptr;
   }
 
@@ -457,7 +489,7 @@ void PLDHashTable::Remove(const void* aKey) {
   AutoWriteOp op(mChecker);
 #endif
 
-  if (!mEntryStore.IsAllocated()) {
+  if (IsEmpty()) {
     return;
   }
 

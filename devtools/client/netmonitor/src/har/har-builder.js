@@ -13,6 +13,9 @@ const {
   parseQueryString,
 } = require("resource://devtools/client/netmonitor/src/utils/request-utils.js");
 const {
+  getRequestPriorityAsText,
+} = require("resource://devtools/client/netmonitor/src/utils/format-utils.js");
+const {
   buildHarLog,
 } = require("resource://devtools/client/netmonitor/src/har/har-builder-utils.js");
 const L10N = new LocalizationHelper("devtools/client/locales/har.properties");
@@ -82,9 +85,11 @@ class HarBuilder {
     // Build pages.
     this.buildPages(harLog.log);
 
-    // Build entries.
-    for (const request of this.#items) {
-      const entry = await this.buildEntry(harLog.log, request);
+    // Build entries in parallel.
+    const entries = await Promise.all(
+      this.#items.map(request => this.buildEntry(harLog.log, request))
+    );
+    for (const entry of entries) {
       if (entry) {
         harLog.log.entries.push(entry);
       }
@@ -202,6 +207,11 @@ class HarBuilder {
     // Security state isn't part of HAR spec, and so create
     // custom field that needs to use '_' prefix.
     entry._securityState = networkEvent.securityState;
+
+    // priority might be a signed integer or undefined or null
+    if (Number.isInteger(networkEvent.priority)) {
+      entry._priority = getRequestPriorityAsText(networkEvent.priority);
+    }
 
     if (networkEvent.remoteAddress) {
       entry.serverIPAddress = networkEvent.remoteAddress;

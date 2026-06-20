@@ -110,6 +110,7 @@ browsertime:
     - browsertime-responsiveness
     - browsertime-regression-tests
     - browsertime-upload
+    - browsertime-speculation-rules
     - browsertime-speculative
     - browsertime-throttled
     - browsertime-pageload-benchmark
@@ -458,6 +459,12 @@ macosx1500-64-tests:
 
 macosx1500-aarch64-tests:
     - cppunittest
+    - firefox-ui-functional
+    - jsreftest
+    - marionette-integration
+    - marionette-unittest
+    - crashtest
+    - jittest
     - mochitest-a11y
     - mochitest-browser-a11y
     - mochitest-browser-media
@@ -473,22 +480,12 @@ macosx1500-aarch64-tests:
     - mochitest-webgl1-ext
     - mochitest-webgl2-core
     - mochitest-webgl2-ext
-    - web-platform-tests
-
-macosx1470-64-tests:
-    - cppunittest
-    - crashtest
-    - firefox-ui-functional
-    - gtest
-    - jittest
-    - jsreftest
-    - marionette-integration
-    - marionette-unittest
     - reftest
     - telemetry-tests-client
     - test-verify
     - test-verify-gpu
     - test-verify-wpt
+    - web-platform-tests
     - web-platform-tests-canvas
     - web-platform-tests-crashtest
     - web-platform-tests-eme
@@ -497,6 +494,30 @@ macosx1470-64-tests:
     - web-platform-tests-wdspec
     - web-platform-tests-webcodecs
     - xpcshell
+
+# Test set for ARM64 VMs (VirtualMac2,1). No GPU, no display, no perf hardware.
+# Limited to suites empirically validated on these workers; tests that need
+# a real WindowServer (focus management, accessibility hierarchy, browser
+# windows, fullscreen, compositor hooks) hang or timeout and are intentionally
+# omitted. web-platform-tests is also omitted pending Bug 2038639 (GPU process
+# leak in APZCTreeManager::CheckerboardFlushObservers on headless macOS).
+# Suites can be re-added as headless support improves.
+macosx1500-aarch64-vms-tests:
+    - cppunittest
+    - crashtest
+    - jittest
+    - jsreftest
+    - marionette-integration
+    - marionette-unittest
+    - mochitest-chrome
+    - mochitest-plain
+    - mochitest-remote
+    - telemetry-tests-client
+    - xpcshell
+
+macosx1470-64-tests:
+    - cppunittest
+    - gtest
 
 macosx1015-64-qr-tests:
     - cppunittest
@@ -563,16 +584,16 @@ android14-x86_64-tests:
 android-hw-aarch64-opt-unittests:
     - jittest
 
-android-hw-arm7-pgo-unittests:
-    - jittest-all
-
 android-hw-aarch64-pgo-unittests:
     - jittest
 
-android-hw-arm7-debug-unittests:
+android-hw-aarch64-debug-unittests:
     - jittest
 
-android-hw-aarch64-debug-unittests:
+android-hw-arm7-pgo-unittests:
+    - jittest-all
+
+android-hw-arm7-debug-unittests:
     - jittest
 
 android-hw-aarch64:

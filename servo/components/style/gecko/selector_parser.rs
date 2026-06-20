@@ -204,8 +204,8 @@ impl NonTSPseudoClass {
                 match *self {
                     $(NonTSPseudoClass::$name => check_flag!($flags),)*
                     NonTSPseudoClass::MozLocaleDir(_) => check_flag!(PSEUDO_CLASS_ENABLED_IN_UA_SHEETS_AND_CHROME),
+                    NonTSPseudoClass::Heading(_) => check_flag!(PSEUDO_CLASS_ENABLED_IN_UA_SHEETS),
                     NonTSPseudoClass::CustomState(_) |
-                    NonTSPseudoClass::Heading(_) |
                     NonTSPseudoClass::Lang(_) |
                     NonTSPseudoClass::ActiveViewTransitionType(_) |
                     NonTSPseudoClass::Dir(_) => false,
@@ -225,7 +225,10 @@ impl NonTSPseudoClass {
             return static_prefs::pref!("dom.viewTransitions.enabled");
         }
         if matches!(*self, Self::Heading(..)) {
-            return static_prefs::pref!("layout.css.heading-selector.enabled");
+            return static_prefs::pref!("dom.headingoffset.enabled");
+        }
+        if matches!(*self, Self::PictureInPicture) {
+            return static_prefs::pref!("dom.media-pip.enabled");
         }
         if matches!(
             *self,
@@ -386,7 +389,7 @@ impl<'a> SelectorParser<'a> {
     }
 
     fn is_pseudo_element_enabled(&self, pseudo_element: &PseudoElement) -> bool {
-        if pseudo_element.enabled_in_content() {
+        if pseudo_element.enabled_in_content(&self.url_data) {
             return true;
         }
 
@@ -594,9 +597,15 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         location: SourceLocation,
         name: CowRcStr<'i>,
     ) -> Result<PseudoElement, ParseError<'i>> {
-        let allow_unkown_webkit = !self.for_supports_rule;
-        if let Some(pseudo) = PseudoElement::from_slice(&name, allow_unkown_webkit) {
+        if let Some(pseudo) = PseudoElement::from_slice(&name) {
             if self.is_pseudo_element_enabled(&pseudo) {
+                return Ok(pseudo);
+            }
+        }
+
+        // @supports must report disabled/unknown `-webkit-*` pseudos as unsupported.
+        if !self.for_supports_rule {
+            if let Some(pseudo) = PseudoElement::unknown_webkit_from_name(&name) {
                 return Ok(pseudo);
             }
         }

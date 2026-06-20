@@ -20,38 +20,37 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/ipprotection/IPProtectionPanel.sys.mjs",
   IPProtectionService:
     "moz-src:///toolkit/components/ipprotection/IPProtectionService.sys.mjs",
-  IPPSignInWatcher:
-    "moz-src:///toolkit/components/ipprotection/fxa/IPPSignInWatcher.sys.mjs",
+  IPPDummyAuthProvider:
+    "resource://testing-common/ipprotection/IPPDummyAuthProvider.sys.mjs",
   IPPNimbusHelper:
     "moz-src:///toolkit/components/ipprotection/IPPNimbusHelper.sys.mjs",
-  IPPEnrollAndEntitleManager:
-    "moz-src:///toolkit/components/ipprotection/fxa/IPPEnrollAndEntitleManager.sys.mjs",
 });
 
 const PANELSTATES = {
   signedOutVPNOff: {
-    isSignedOut: true,
     unauthenticated: true,
     isProtectionEnabled: false,
   },
   signedInVPNOff: {
-    isSignedOut: false,
     unauthenticated: false,
     isProtectionEnabled: false,
   },
   signedInVPNOn: {
-    isSignedOut: false,
     unauthenticated: false,
     isProtectionEnabled: true,
   },
 };
 
-async function setAndUpdateIsAuthenticated(content, isSignedOut, sandbox) {
-  sandbox.stub(lazy.IPPSignInWatcher, "isSignedIn").get(() => !isSignedOut);
+async function setAuthenticated(content, isReady, sandbox) {
+  if (isReady) {
+    lazy.IPPDummyAuthProvider.simulateSignIn(true);
+    lazy.IPPDummyAuthProvider.setEntitlement(createTestEntitlement(), {
+      silent: true,
+    });
+  } else {
+    lazy.IPPDummyAuthProvider.simulateSignIn(false);
+  }
   sandbox.stub(lazy.IPPNimbusHelper, "isEligible").get(() => true);
-  sandbox
-    .stub(lazy.IPPEnrollAndEntitleManager, "isEnrolledAndEntitled")
-    .get(() => true);
   lazy.IPProtectionService.updateState();
   content.requestUpdate();
   await content.updateComplete;
@@ -84,7 +83,7 @@ add_task(async function test_main_content() {
 
   let originalState = structuredClone(content.state);
 
-  await setAndUpdateIsAuthenticated(content, false, sandbox);
+  await setAuthenticated(content, true, sandbox);
 
   Assert.ok(
     BrowserTestUtils.isVisible(content),
@@ -235,9 +234,8 @@ add_task(async function test_settings_button_closes_panel() {
  */
 add_task(async function test_enrolling_skeleton() {
   let content = await openPanel({
-    isSignedOut: false,
     unauthenticated: false,
-    isCheckingEntitlement: true,
+    isEnrolling: true,
   });
 
   let container = content.shadowRoot.querySelector("#enrolling-container");
@@ -254,6 +252,10 @@ add_task(async function test_enrolling_skeleton() {
     container.querySelectorAll(".skeleton-line-thick").length,
     2,
     "Two skeleton line thick elements should be present"
+  );
+  Assert.ok(
+    container.querySelector(".skeleton-image"),
+    "Skeleton image element should be present"
   );
 
   Assert.ok(
@@ -277,9 +279,8 @@ add_task(async function test_enrolling_skeleton() {
  */
 add_task(async function test_enrolling_overrides_unauthenticated() {
   let content = await openPanel({
-    isSignedOut: true,
     unauthenticated: true,
-    isCheckingEntitlement: true,
+    isEnrolling: true,
   });
 
   Assert.ok(
@@ -300,8 +301,7 @@ add_task(async function test_enrolling_overrides_unauthenticated() {
  */
 add_task(async function test_enrolling_transitions_to_ready() {
   setupService({
-    isSignedIn: true,
-    isEnrolledAndEntitled: true,
+    isReady: true,
     canEnroll: true,
     proxyPass: {
       status: 200,
@@ -309,13 +309,11 @@ add_task(async function test_enrolling_transitions_to_ready() {
       pass: makePass(),
     },
   });
-  await IPPEnrollAndEntitleManager.refetchEntitlement();
 
   let content = await openPanel({
-    isSignedOut: false,
     unauthenticated: false,
     isProtectionEnabled: false,
-    isCheckingEntitlement: true,
+    isEnrolling: true,
   });
 
   Assert.ok(
@@ -324,10 +322,9 @@ add_task(async function test_enrolling_transitions_to_ready() {
   );
 
   await setPanelState({
-    isSignedOut: false,
     unauthenticated: false,
     isProtectionEnabled: false,
-    isCheckingEntitlement: false,
+    isEnrolling: false,
   });
 
   Assert.ok(

@@ -18,9 +18,24 @@ sealed class RemoteSettingsServer {
     object Stage : RemoteSettingsServer()
 
     /**
-     * Object representing Dev RemoteSettingsServer
+     * Object representing Dev RemoteSettingsServer with v2 route
      */
     object Dev : RemoteSettingsServer()
+
+    /**
+     * Object representing Production RemoteSettingsServer
+     */
+    object ProdV2 : RemoteSettingsServer()
+
+    /**
+     * Object representing Stage RemoteSettingsServer with v2 route
+     */
+    object StageV2 : RemoteSettingsServer()
+
+    /**
+     * Object representing Dev RemoteSettingsServer with v2 route
+     */
+    object DevV2 : RemoteSettingsServer()
 
     /**
      * Object representing Custom RemoteSettingsServer
@@ -36,6 +51,9 @@ fun RemoteSettingsServer.into(): mozilla.appservices.remotesettings.RemoteSettin
         RemoteSettingsServer.Dev -> mozilla.appservices.remotesettings.RemoteSettingsServer.Dev
         RemoteSettingsServer.Stage -> mozilla.appservices.remotesettings.RemoteSettingsServer.Stage
         RemoteSettingsServer.Prod -> mozilla.appservices.remotesettings.RemoteSettingsServer.Prod
+        RemoteSettingsServer.DevV2 -> mozilla.appservices.remotesettings.RemoteSettingsServer.DevV2
+        RemoteSettingsServer.StageV2 -> mozilla.appservices.remotesettings.RemoteSettingsServer.StageV2
+        RemoteSettingsServer.ProdV2 -> mozilla.appservices.remotesettings.RemoteSettingsServer.ProdV2
         is RemoteSettingsServer.Custom -> mozilla.appservices.remotesettings.RemoteSettingsServer.Custom(this.url)
     }
 }

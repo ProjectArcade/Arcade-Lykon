@@ -13,12 +13,9 @@
   - Presentation feedback
   - Fullscreen - handle differently
   - Attach dmabuf feedback to dmabuf surfaces to get formats for direct scanout
-  - Don't use for tooltips/small menus etc.
 
   Testing:
     Mochitest test speeds
-    Fractional Scale
-    SW/HW rendering + VSync
 */
 
 #include "mozilla/layers/NativeLayerWayland.h"
@@ -45,10 +42,12 @@
 #ifdef MOZ_LOGGING
 #  undef LOG
 #  undef LOGVERBOSE
+#  undef LOG_VSYNC
 #  include "mozilla/Logging.h"
 #  include "nsTArray.h"
 #  include "Units.h"
 extern mozilla::LazyLogModule gWidgetCompositorLog;
+extern mozilla::LazyLogModule gWidgetVsync;
 #  define LOG(str, ...)                                     \
     MOZ_LOG(gWidgetCompositorLog, mozilla::LogLevel::Debug, \
             ("%s: " str, GetDebugTag().get(), ##__VA_ARGS__))
@@ -58,8 +57,12 @@ extern mozilla::LazyLogModule gWidgetCompositorLog;
 #  define LOGS(str, ...)                                    \
     MOZ_LOG(gWidgetCompositorLog, mozilla::LogLevel::Debug, \
             (str, ##__VA_ARGS__))
+#  define LOG_VSYNC(str, ...)                       \
+    MOZ_LOG(gWidgetVsync, mozilla::LogLevel::Debug, \
+            ("[%p]: " str, GetDebugTag().get(), ##__VA_ARGS__))
 #else
 #  define LOG(args)
+#  define LOG_VSYNC(args)
 #endif /* MOZ_LOGGING */
 
 using namespace mozilla;
@@ -112,7 +115,40 @@ void NativeLayerRootWayland::SetDRMFormat(DRMFormat* aFormat) {
   }
 }
 
+void NativeLayerRootWayland::ConfigureScaleLocked(
+    WaylandSurfaceLock& aProofOfLock) {
+  LOGVERBOSE("NativeLayerRootWayland::ConfigureScaleLocked()");
+
+  // coordinates scale setup is not changing
+  static bool coordinatesScale =
+      StaticPrefs::widget_wayland_coordinates_scale_enabled() &&
+      WaylandDisplayGet()->GetFractionalScaleManagerV2();
+
+  if (coordinatesScale) {
+    mRootSurface->SetScaleCallbackLocked(
+        aProofOfLock, WaylandSurface::ScaleCallbackType::Layers,
+        [this, self = RefPtr{this}]() {
+          WaylandSurfaceLock lock(mRootSurface);
+          if (!mRootSurface->IsCoordinatesScaleLocked(lock)) {
+            return;
+          }
+          LOGVERBOSE("NativeLayerRootWayland::CoordinatesScaleCallback()");
+          uint32_t scale = mRootSurface->GetCoordinatesScale();
+          for (RefPtr<NativeLayerWayland>& layer : mSublayers) {
+            layer->SetCoordinatesScale(scale);
+          }
+        });
+  }
+
+  mRootSurface->SetScaleTypeLocked(aProofOfLock,
+                                   coordinatesScale
+                                       ? WaylandSurface::ScaleType::Coordinates
+                                       : WaylandSurface::ScaleType::Fractional,
+                                   /* aSetHandler */ coordinatesScale);
+}
+
 void NativeLayerRootWayland::Init() {
+  LOG("NativeLayerRootWayland::Init");
   mTmpBuffer = widget::WaylandBufferSHM::Create(LayoutDeviceIntSize(1, 1));
 
   // Get DRM format for surfaces created by GBM.
@@ -138,8 +174,25 @@ void NativeLayerRootWayland::Init() {
     SetDRMFormat(format);
   }
 
-  // Unmap all layers if nsWindow is unmapped
   WaylandSurfaceLock lock(mRootSurface);
+
+  // Repaint layers if we're mapped.
+  mRootSurface->SetMapCallbackLocked(
+      lock,
+      [this, self = RefPtr{this}](WaylandSurfaceLock& aProofOfLock) -> void {
+        LOG("NativeLayerRootWayland map callback, missing root commit [%d]",
+            mMissingRootCommit);
+        if (mMissingRootCommit) {
+          CommitToScreenLocked(aProofOfLock);
+        }
+        ConfigureScaleLocked(aProofOfLock);
+      });
+
+  if (mRootSurface->IsMapped()) {
+    ConfigureScaleLocked(lock);
+  }
+
+  // Unmap all layers if nsWindow is unmapped
   mRootSurface->SetUnmapCallbackLocked(
       lock, [this, self = RefPtr{this}]() -> void {
         LOG("NativeLayerRootWayland Unmap callback");
@@ -162,13 +215,29 @@ void NativeLayerRootWayland::Init() {
 
   // Propagate frame callback state (enabled/disabled) to all layers
   // to save resources.
-  mRootSurface->SetFrameCallbackStateHandlerLocked(
+  mRootSurface->SetVSyncCallbackStateHandlerLocked(
       lock, [this, self = RefPtr{this}](bool aState) -> void {
-        LOGVERBOSE("FrameCallbackStateHandler()");
+        LOG_VSYNC("VSyncCallbackStateHandler()");
+        // It's run on locked surface
         mRootSurface->AssertCurrentThreadOwnsMutex();
         for (RefPtr<NativeLayerWayland>& layer : mSublayers) {
           layer->SetFrameCallbackState(aState);
         }
+      });
+
+  // Run emulated VSync if there isn't any mapped/painted layer
+  mRootSurface->SetVSyncEmulateCheckLocked(
+      lock, [this, self = RefPtr{this}]() -> bool {
+        // It's run on locked surface
+        mRootSurface->AssertCurrentThreadOwnsMutex();
+        bool isVisible = false;
+        for (RefPtr<NativeLayerWayland>& layer : mSublayers) {
+          if ((isVisible = layer->IsVisible())) {
+            break;
+          }
+        }
+        LOG_VSYNC("Emulate VSync [%d]", !isVisible);
+        return !isVisible;
       });
 
   // Get the best DMABuf format for root wl_surface. We use the same
@@ -220,6 +289,7 @@ void NativeLayerRootWayland::Shutdown() {
     if (mRootSurface->IsMapped()) {
       mRootSurface->RemoveAttachedBufferLocked(lock);
     }
+    mRootSurface->ClearMapCallbackLocked(lock);
     mRootSurface->ClearUnmapCallbackLocked(lock);
     mRootSurface->ClearGdkCommitCallbackLocked(lock);
     mRootSurface->DisableDMABufFormatsLocked(lock);
@@ -401,7 +471,7 @@ void NativeLayerRootWayland::SetLayers(
     for (const RefPtr<NativeLayerWayland>& layer : newLayers) {
       if (layer->IsNew()) {
         LOG("  Map new child layer [%p]", layer.get());
-        if (!layer->Map(&lock)) {
+        if (!layer->Map(lock)) {
           continue;
         }
         if (layer->IsOpaque() && WaylandSurface::IsOpaqueRegionEnabled()) {
@@ -513,16 +583,6 @@ void NativeLayerRootWayland::LogStatsLocked(
 bool NativeLayerRootWayland::CommitToScreen() {
   WaylandSurfaceLock lock(mRootSurface);
 
-  mFrameInProcess = false;
-
-  if (!mRootSurface->IsMapped()) {
-    // TODO: Register frame callback to paint again? Are we hidden?
-    LOG("NativeLayerRootWayland::CommitToScreen() root surface is not mapped");
-    return false;
-  }
-
-  LOG("NativeLayerRootWayland::CommitToScreen()");
-
   // Attach empty tmp buffer to root layer (nsWindow).
   // We need to have any content to attach child layers to it.
   if (!mRootSurface->HasBufferAttached()) {
@@ -530,10 +590,24 @@ bool NativeLayerRootWayland::CommitToScreen() {
     mRootSurface->ClearOpaqueRegionLocked(lock);
   }
 
+  if (!mRootSurface->IsMapped()) {
+    LOG("NativeLayerRootWayland::CommitToScreen() root surface is not mapped");
+    mMissingRootCommit = true;
+    return false;
+  }
+
+  return CommitToScreenLocked(lock);
+}
+
+bool NativeLayerRootWayland::CommitToScreenLocked(WaylandSurfaceLock& aLock) {
+  mFrameInProcess = false;
+
+  LOG("NativeLayerRootWayland::CommitToScreen()");
+
   // Try to map all missing surfaces
   for (RefPtr<NativeLayerWayland>& layer : mSublayers) {
     if (!layer->IsMapped()) {
-      if (!layer->Map(&lock)) {
+      if (!layer->Map(aLock)) {
         LOGVERBOSE(
             "NativeLayerRootWayland::CommitToScreen() failed to map layer [%p]",
             layer.get());
@@ -547,7 +621,7 @@ bool NativeLayerRootWayland::CommitToScreen() {
   }
 
   if (mRootMutatedStackingOrder) {
-    RequestUpdateOnMainThreadLocked(lock);
+    RequestUpdateOnMainThreadLocked(aLock);
   }
 
   const double scale = mRootSurface->GetScale();
@@ -583,26 +657,30 @@ bool NativeLayerRootWayland::CommitToScreen() {
 
   LOGVERBOSE("NativeLayerRootWayland::CommitToScreen(): %s root commit",
              mRootAllLayersRendered ? "enabled" : "disabled");
-  mRootSurface->SetCommitStateLocked(lock, mRootAllLayersRendered);
+  mRootSurface->SetCommitStateLocked(aLock, mRootAllLayersRendered);
 
 #ifdef MOZ_LOGGING
-  LogStatsLocked(lock);
+  LogStatsLocked(aLock);
 #endif
 
   // Commit all layers changes now so we can unmap removed layers without
   // flickering.
-  lock.Commit();
+  aLock.Commit();
 
   if (mRootAllLayersRendered && !mRemovedSublayers.IsEmpty()) {
-    ClearLayersLocked(lock);
+    ClearLayersLocked(aLock);
   }
 
+  mMissingRootCommit = false;
   return true;
 }
 
-// Ready-to-paint signal from root or child surfaces. Route it to
+// Ready-to-paint signal (VSync) from child surfaces. Route it to
 // root WaylandSurface (owned by nsWindow) where it's used to fire VSync.
-void NativeLayerRootWayland::FrameCallbackHandler(uint32_t aTime) {
+void NativeLayerRootWayland::VSyncCallbackHandler(uint32_t aTime,
+                                                  bool aEmulated) {
+  MOZ_DIAGNOSTIC_ASSERT(!aEmulated,
+                        "VSyncCallbackHandler() is supposed to be HW only");
   {
     // Child layer wl_subsurface already requested next frame callback
     // and we need to commit to root surface too as we're in
@@ -611,16 +689,19 @@ void NativeLayerRootWayland::FrameCallbackHandler(uint32_t aTime) {
   }
 
   if (aTime <= mLastFrameCallbackTime) {
-    LOGVERBOSE(
-        "NativeLayerRootWayland::FrameCallbackHandler() ignoring redundant "
+    LOG_VSYNC(
+        "NativeLayerRootWayland::VSyncCallbackHandler() ignoring redundant "
         "callback %d",
         aTime);
     return;
   }
   mLastFrameCallbackTime = aTime;
 
-  LOGVERBOSE("NativeLayerRootWayland::FrameCallbackHandler() time %d", aTime);
-  mRootSurface->FrameCallbackHandler(nullptr, aTime,
+  LOG_VSYNC(
+      "NativeLayerRootWayland::VSyncCallbackHandler() time %d emulated [%d]",
+      aTime, aEmulated);
+  mRootSurface->VSyncCallbackHandler(nullptr, aTime,
+                                     /* aEmulated */ aEmulated,
                                      /* aRoutedFromChildSurface */ true);
 }
 
@@ -665,10 +746,11 @@ RefPtr<WaylandBuffer> NativeLayerRootWayland::BorrowExternalBuffer(
 NativeLayerWayland::NativeLayerWayland(NativeLayerRootWayland* aRootLayer,
                                        const IntSize& aSize, bool aIsOpaque)
     : mRootLayer(aRootLayer), mIsOpaque(aIsOpaque), mSize(aSize) {
-  mSurface = new WaylandSurface(mRootLayer->GetRootWaylandSurface());
+  mSurface = new WaylandSurface();
 #ifdef MOZ_LOGGING
   mSurface->SetLoggingWidget(this);
 #endif
+  mSurface->Init(mRootLayer->GetRootWaylandSurface());
   LOG("NativeLayerWayland::NativeLayerWayland() WaylandSurface [%p] size [%d, "
       "%d] opaque %d",
       mSurface.get(), mSize.width, mSize.height, aIsOpaque);
@@ -684,6 +766,10 @@ NativeLayerWayland::~NativeLayerWayland() {
 }
 
 bool NativeLayerWayland::IsMapped() { return mSurface->IsMapped(); }
+
+bool NativeLayerWayland::IsVisible() {
+  return mSurface->IsMapped() && mSurface->HasBufferAttached();
+}
 
 void NativeLayerWayland::SetSurfaceIsFlipped(bool aIsFlipped) {
   WaylandSurfaceLock lock(mSurface);
@@ -728,6 +814,13 @@ void NativeLayerWayland::PlaceAbove(NativeLayerWayland* aLowerLayer) {
 
   mSurface->PlaceAboveLocked(lock, lowerSurfacelock);
   mState.mMutatedStackingOrder = true;
+}
+
+void NativeLayerWayland::SetCoordinatesScale(uint32_t aCoordinatesScale) {
+  WaylandSurfaceLock lock(mSurface);
+  if (mSurface->SetCoordinatesScaleLocked(lock, aCoordinatesScale)) {
+    mState.mMutatedPlacement = true;
+  }
 }
 
 void NativeLayerWayland::SetTransform(const Matrix4x4& aTransform) {
@@ -823,6 +916,9 @@ void NativeLayerWayland::UpdateLayerPlacementLocked(
   }
   mState.mMutatedPlacement = false;
 
+  // Placement is changed to we need to repaint
+  mState.mMutatedVisibility = true;
+
   LOGVERBOSE("NativeLayerWayland::UpdateLayerPlacementLocked()");
 
   MOZ_RELEASE_ASSERT(mTransform.Is2D());
@@ -830,6 +926,11 @@ void NativeLayerWayland::UpdateLayerPlacementLocked(
 
   Rect surfaceRectClipped = Rect(0, 0, (float)mSize.width, (float)mSize.height);
   surfaceRectClipped = surfaceRectClipped.Intersect(Rect(mDisplayRect));
+
+  LOGVERBOSE(
+      " size [%d x %d] clipped (display rect) size [%f, %f] -> [%f x %f]",
+      mSize.width, mSize.height, surfaceRectClipped.x, surfaceRectClipped.y,
+      surfaceRectClipped.width, surfaceRectClipped.height);
 
   transform2D.PostTranslate((float)mPosition.x, (float)mPosition.y);
   surfaceRectClipped = transform2D.TransformBounds(surfaceRectClipped);
@@ -841,7 +942,6 @@ void NativeLayerWayland::UpdateLayerPlacementLocked(
   const bool visible = !surfaceRectClipped.IsEmpty();
   if (mState.mIsVisible != visible) {
     mState.mIsVisible = visible;
-    mState.mMutatedVisibility = true;
     mState.mMutatedStackingOrder = true;
     if (!mState.mIsVisible) {
       LOGVERBOSE("NativeLayerWayland become hidden");
@@ -854,29 +954,34 @@ void NativeLayerWayland::UpdateLayerPlacementLocked(
   mSurface->SetTransformFlippedLocked(aProofOfLock, transform2D._11 < 0.0,
                                       transform2D._22 < 0.0);
 
-  // TODO! Downscale introduces rounding errors here.
+  bool useCoordinatesScale = mSurface->HasCoordinatesScaleLocked(aProofOfLock);
   auto unscaledRect =
-      gfx::RoundedToInt(surfaceRectClipped / UnknownScaleFactor(mScale));
+      useCoordinatesScale
+          ? gfx::RoundedToInt(surfaceRectClipped)
+          : gfx::RoundedToInt(surfaceRectClipped / UnknownScaleFactor(mScale));
   auto rect = DesktopIntRect::FromUnknownRect(unscaledRect);
   mSurface->MoveLocked(aProofOfLock, rect.TopLeft());
   mSurface->SetViewPortDestLocked(aProofOfLock, rect.Size());
 
-  LOGVERBOSE(
-      "NativeLayerWayland::UpdateLayerPlacement(): destination [%d,%d] -> [%d "
-      "x %d]",
-      rect.x, rect.y, rect.width, rect.height);
+  LOGVERBOSE("  destination [%d, %d] -> [%d x %d] coordinate scale [%f]",
+             rect.x, rect.y, rect.width, rect.height,
+             mSurface->GetCoordinatesScaleRounded());
 
   auto transform2DInversed = transform2D.Inverse();
   Rect bufferClip = transform2DInversed.TransformBounds(surfaceRectClipped);
-  auto viewportRect = gfx::RoundedToInt(
-      bufferClip.Intersect(Rect(0, 0, mSize.width, mSize.height)));
+  Rect unscaledViewportRect =
+      bufferClip.Intersect(Rect(0, 0, mSize.width, mSize.height));
+  Rect scaledViewportRect =
+      useCoordinatesScale
+          ? unscaledViewportRect *
+                UnknownScaleFactor(mSurface->GetCoordinatesScaleRounded())
+          : unscaledViewportRect;
+  DesktopRect viewportRect = DesktopRect::FromUnknownRect(scaledViewportRect);
 
-  LOGVERBOSE(
-      "NativeLayerWayland::UpdateLayerPlacement(): source [%d,%d] -> [%d x %d]",
-      viewportRect.x, viewportRect.y, viewportRect.width, viewportRect.height);
-
-  mSurface->SetViewPortSourceRectLocked(
-      aProofOfLock, DesktopIntRect::FromUnknownRect(viewportRect));
+  LOGVERBOSE("  source [%f, %f] -> [%f x %f] coordinate scale [%f]",
+             viewportRect.x, viewportRect.y, viewportRect.width,
+             viewportRect.height, mSurface->GetCoordinatesScaleRounded());
+  mSurface->SetViewPortSourceRectLocked(aProofOfLock, viewportRect);
 }
 
 void NativeLayerWayland::RenderLayer(double aScale) {
@@ -923,7 +1028,7 @@ void NativeLayerWayland::RenderLayer(double aScale) {
   LOG("NativeLayerWayland::RenderLayer(): rendered [%d]", mState.mIsRendered);
 }
 
-bool NativeLayerWayland::Map(WaylandSurfaceLock* aParentWaylandSurfaceLock) {
+bool NativeLayerWayland::Map(WaylandSurfaceLock& aParentWaylandSurfaceLock) {
   WaylandSurfaceLock surfaceLock(mSurface);
 
   if (mNeedsMainThreadUpdate == MainThreadUpdate::Unmap) {
@@ -936,28 +1041,34 @@ bool NativeLayerWayland::Map(WaylandSurfaceLock* aParentWaylandSurfaceLock) {
   MOZ_DIAGNOSTIC_ASSERT(!mSurface->IsMapped());
   MOZ_DIAGNOSTIC_ASSERT(mNeedsMainThreadUpdate != MainThreadUpdate::Map);
 
-  if (!mSurface->MapLocked(surfaceLock, aParentWaylandSurfaceLock,
+  if (!mSurface->MapLocked(surfaceLock, &aParentWaylandSurfaceLock,
                            DesktopIntPoint())) {
     gfxCriticalError() << "NativeLayerWayland::Map() failed!";
     return false;
   }
   mSurface->DisableUserInputLocked(surfaceLock);
-  mSurface->CreateViewportLocked(surfaceLock,
-                                 /* aFollowsSizeChanges */ false);
+
+  auto* parentSurface = aParentWaylandSurfaceLock.GetWaylandSurface();
+  if (parentSurface->IsCoordinatesScaleLocked(aParentWaylandSurfaceLock)) {
+    mSurface->SetCoordinatesScaleLocked(surfaceLock,
+                                        parentSurface->GetCoordinatesScale());
+  }
 
   // Route frame-to-paint (frame callback) from child layer to root layer
   // where it's passed to Vsync.
   //
   // aTime param is used to identify duplicate events.
   //
-  mSurface->SetFrameCallbackLocked(
+  mSurface->SetVSyncCallbackHandlerLocked(
       surfaceLock,
-      [this, self = RefPtr{this}](wl_callback* aCallback,
-                                  uint32_t aTime) -> void {
-        LOGVERBOSE("NativeLayerWayland::FrameCallbackHandler() time %d", aTime);
-        mRootLayer->FrameCallbackHandler(aTime);
-      },
-      /* aEmulateFrameCallback */ true);
+      [this, self = RefPtr{this}](wl_callback* aCallback, uint32_t aTime,
+                                  bool aEmulated) -> void {
+        LOG_VSYNC(
+            "NativeLayerWayland::VSyncCallbackHandler() time %d emulated %d",
+            aTime, aEmulated);
+        MOZ_DIAGNOSTIC_ASSERT(!aEmulated);
+        mRootLayer->VSyncCallbackHandler(aTime, aEmulated);
+      });
 
   if (mIsHDR) {
     gfx::YUVColorSpace yuvColorSpace = gfx::YUVColorSpace::BT709;
@@ -993,9 +1104,9 @@ bool NativeLayerWayland::Map(WaylandSurfaceLock* aParentWaylandSurfaceLock) {
 }
 
 void NativeLayerWayland::SetFrameCallbackState(bool aState) {
-  LOGVERBOSE("NativeLayerWayland::SetFrameCallbackState() %d", aState);
+  LOG_VSYNC("NativeLayerWayland::SetFrameCallbackState() %d", aState);
   WaylandSurfaceLock lock(mSurface);
-  mSurface->SetFrameCallbackStateLocked(lock, aState);
+  mSurface->SetVSyncCallbackStateLocked(lock, aState);
 }
 
 void NativeLayerWayland::MainThreadMap() {
@@ -1026,7 +1137,7 @@ void NativeLayerWayland::Unmap() {
   mSurface->UnmapLocked(surfaceLock);
   // Clear reference to this added at NativeLayerWayland::Map() by
   // callback handler.
-  mSurface->ClearFrameCallbackHandlerLocked(surfaceLock);
+  mSurface->ClearVSyncCallbackHandlerLocked(surfaceLock);
   mState.mMutatedStackingOrder = true;
   mState.mMutatedVisibility = true;
   mState.mIsRendered = false;
@@ -1484,7 +1595,7 @@ void NativeLayerRootSnapshotterWayland::UpdateSnapshot(
     if (!fb) {
       return;
     }
-    mSnapshot = new RenderSourceNLRS(std::move(fb));
+    mSnapshot = MakeRefPtr<RenderSourceNLRS>(std::move(fb));
   }
 
   mLayerForSnapshot->CopyFrontBufferToFrameBuffer(mSnapshot->FB().mFB);
@@ -1519,8 +1630,7 @@ NativeLayerRootSnapshotterWayland::CreateDownscaleTarget(
   if (!fb) {
     return nullptr;
   }
-  RefPtr<profiler_screenshots::DownscaleTarget> dt =
-      new DownscaleTargetNLRS(mGL, std::move(fb));
+  RefPtr dt = MakeRefPtr<DownscaleTargetNLRS>(mGL, std::move(fb));
   return dt.forget();
 }
 

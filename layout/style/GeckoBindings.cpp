@@ -25,6 +25,7 @@
 #include "mozilla/LookAndFeel.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/RestyleManager.h"
 #include "mozilla/ServoBindings.h"
 #include "mozilla/ServoElementSnapshot.h"
@@ -112,20 +113,7 @@ const nsINode* Gecko_GetFlattenedTreeParentNode(const nsINode* aNode) {
 void Gecko_GetAnonymousContentForElement(const Element* aElement,
                                          nsTArray<nsIContent*>* aArray) {
   MOZ_ASSERT(aElement->MayHaveAnonymousChildren());
-  if (aElement->HasProperties()) {
-    if (auto* backdrop = nsLayoutUtils::GetBackdropPseudo(aElement)) {
-      aArray->AppendElement(backdrop);
-    }
-    if (auto* marker = nsLayoutUtils::GetMarkerPseudo(aElement)) {
-      aArray->AppendElement(marker);
-    }
-    if (auto* before = nsLayoutUtils::GetBeforePseudo(aElement)) {
-      aArray->AppendElement(before);
-    }
-    if (auto* after = nsLayoutUtils::GetAfterPseudo(aElement)) {
-      aArray->AppendElement(after);
-    }
-  }
+  nsLayoutUtils::AppendGeneratedContentPseudos(aElement, *aArray);
   nsContentUtils::AppendNativeAnonymousChildren(
       aElement, *aArray, nsIContent::eSkipDocumentLevelNativeAnonymousContent);
 }
@@ -377,19 +365,7 @@ bool Gecko_HaveSeenPtr(SeenPtrs* aTable, const void* aPtr) {
 
 const StyleLockedDeclarationBlock* Gecko_GetStyleAttrDeclarationBlock(
     const Element* aElement) {
-  DeclarationBlock* decl = aElement->GetInlineStyleDeclaration();
-  if (!decl) {
-    return nullptr;
-  }
-  return decl->Raw();
-}
-
-void Gecko_UnsetDirtyStyleAttr(const Element* aElement) {
-  DeclarationBlock* decl = aElement->GetInlineStyleDeclaration();
-  if (!decl) {
-    return;
-  }
-  decl->UnsetDirty();
+  return aElement->GetInlineStyleDeclaration();
 }
 
 const StyleLockedDeclarationBlock*
@@ -888,12 +864,16 @@ bool Gecko_LookupAttrValue(const Element* aElement, nsAtom& aNamespace,
     attrNameSpace = nsNameSpaceManager::GetInstance()->GetNameSpaceID(
         &aNamespace, nsContentUtils::IsChromeDoc(aElement->OwnerDoc()));
   }
-  if (aName.IsAsciiLowercase() || !aElement->OwnerDoc()->IsHTMLDocument()) {
-    return aElement->GetAttr(attrNameSpace, &aName, aResult);
+  // All attribute names on HTML elements in HTML docs match
+  // ASCII-case-insensitively. See note in:
+  // https://html.spec.whatwg.org/multipage/dom.html#custom-data-attribute
+  if (!aName.IsAsciiLowercase() && aElement->OwnerDoc()->IsHTMLDocument() &&
+      aElement->IsHTMLElement()) {
+    RefPtr<nsAtom> lowercaseName(&aName);
+    ToLowerCaseASCII(lowercaseName);
+    return aElement->GetAttr(attrNameSpace, lowercaseName, aResult);
   }
-  RefPtr<nsAtom> lowercaseName(&aName);
-  ToLowerCaseASCII(lowercaseName);
-  return aElement->GetAttr(attrNameSpace, lowercaseName, aResult);
+  return aElement->GetAttr(attrNameSpace, &aName, aResult);
 }
 
 template <typename Implementor>
@@ -1099,47 +1079,68 @@ enum class KeyframeSearchDirection {
 enum class KeyframeInsertPosition {
   Prepend,
   LastForOffset,
+  Append,
 };
 
-static Keyframe* GetOrCreateKeyframe(
-    nsTArray<Keyframe>* aKeyframes, float aOffset,
-    const StyleComputedTimingFunction* aTimingFunction,
+static std::pair<Keyframe*, size_t> GetOrCreateKeyframe(
+    nsTArray<Keyframe>* aKeyframes, StyleTimelineRangeName aRangeName,
+    float aOffset, const StyleComputedTimingFunction* aTimingFunction,
     const CompositeOperationOrAuto aComposition,
     KeyframeSearchDirection aSearchDirection,
     KeyframeInsertPosition aInsertPosition) {
   MOZ_ASSERT(aKeyframes, "The keyframe array should be valid");
   MOZ_ASSERT(aTimingFunction, "The timing function should be valid");
-  MOZ_ASSERT(aOffset >= 0. && aOffset <= 1.,
-             "The offset should be in the range of [0.0, 1.0]");
+  MOZ_ASSERT(aRangeName != StyleTimelineRangeName::None ||
+                 (aRangeName == StyleTimelineRangeName::None && aOffset >= 0. &&
+                  aOffset <= 1.),
+             "The percentage offset should be in the range of [0.0, 1.0]");
 
+  const auto& offset = Keyframe::OffsetType{aRangeName, (double)aOffset};
   size_t keyframeIndex;
   switch (aSearchDirection) {
     case KeyframeSearchDirection::Forwards:
       if (nsAnimationManager::FindMatchingKeyframe(
-              *aKeyframes, aOffset, *aTimingFunction, aComposition,
+              *aKeyframes, offset, *aTimingFunction, aComposition,
               keyframeIndex)) {
-        return &(*aKeyframes)[keyframeIndex];
+        return {&(*aKeyframes)[keyframeIndex], keyframeIndex};
       }
       break;
     case KeyframeSearchDirection::Backwards:
       if (nsAnimationManager::FindMatchingKeyframe(
-              Reversed(*aKeyframes), aOffset, *aTimingFunction, aComposition,
+              Reversed(*aKeyframes), offset, *aTimingFunction, aComposition,
               keyframeIndex)) {
-        return &(*aKeyframes)[aKeyframes->Length() - 1 - keyframeIndex];
+        return {&(*aKeyframes)[aKeyframes->Length() - 1 - keyframeIndex],
+                aKeyframes->Length() - 1 - keyframeIndex};
       }
       keyframeIndex = aKeyframes->Length() - 1;
       break;
   }
 
-  Keyframe* keyframe = aKeyframes->InsertElementAt(
-      aInsertPosition == KeyframeInsertPosition::Prepend ? 0 : keyframeIndex);
-  keyframe->mOffset.emplace(aOffset);
+  Keyframe* keyframe = nullptr;
+  switch (aInsertPosition) {
+    case KeyframeInsertPosition::Prepend:
+      keyframe = aKeyframes->InsertElementAt(0);
+      break;
+    case KeyframeInsertPosition::LastForOffset:
+      // FIXME: Bug 2037642. This may be incorrect to insert the final keyframe,
+      // or we probably never call this because we generate the initial/final
+      // keyframes in from_keyframes().
+      // However, we will move the generation of initial/final keyframes into
+      // other places so this will be dropped soon. Just keep it as it is.
+      keyframe = aKeyframes->InsertElementAt(keyframeIndex);
+      break;
+    case KeyframeInsertPosition::Append:
+      keyframe = aKeyframes->AppendElement();
+      break;
+  }
+  MOZ_ASSERT(keyframe);
+  keyframe->mOffset.emplace(offset);
   if (!aTimingFunction->IsLinearKeyword()) {
     keyframe->mTimingFunction.emplace(*aTimingFunction);
   }
   keyframe->mComposite = aComposition;
-
-  return keyframe;
+  // Return the length of aKeyframes to represent the new Keyframe is inserted.
+  return {keyframe, aKeyframes->Length()};
 }
 
 Keyframe* Gecko_GetOrCreateKeyframeAtStart(
@@ -1147,31 +1148,50 @@ Keyframe* Gecko_GetOrCreateKeyframeAtStart(
     const StyleComputedTimingFunction* aTimingFunction,
     const CompositeOperationOrAuto aComposition) {
   MOZ_ASSERT(aKeyframes->IsEmpty() ||
-                 aKeyframes->ElementAt(0).mOffset.value() >= aOffset,
-             "The offset should be less than or equal to the first keyframe's "
-             "offset if there are exisiting keyframes");
-
-  return GetOrCreateKeyframe(aKeyframes, aOffset, aTimingFunction, aComposition,
+                 aKeyframes->ElementAt(0).mOffset->mPercentage >= aOffset,
+             "The percentage offset should be less than or equal to the first "
+             "keyframe's offset if there are exisiting keyframes");
+  return GetOrCreateKeyframe(aKeyframes, StyleTimelineRangeName::None, aOffset,
+                             aTimingFunction, aComposition,
                              KeyframeSearchDirection::Forwards,
-                             KeyframeInsertPosition::Prepend);
+                             KeyframeInsertPosition::Prepend)
+      .first;
+}
+
+Keyframe* Gecko_GetOrCreateKeyframeWithRangeName(
+    nsTArray<Keyframe>* aKeyframes, const StyleTimelineRangeName aRangeName,
+    float aOffset, const StyleComputedTimingFunction* aTimingFunction,
+    const CompositeOperationOrAuto aComposition, size_t* aMatchedIdx) {
+  MOZ_ASSERT(aRangeName != StyleTimelineRangeName::Normal,
+             "normal shouldn't be used");
+
+  auto [keyframe, idx] = GetOrCreateKeyframe(
+      aKeyframes, aRangeName, aOffset, aTimingFunction, aComposition,
+      KeyframeSearchDirection::Backwards, KeyframeInsertPosition::Append);
+  *aMatchedIdx = idx;
+  return keyframe;
 }
 
 Keyframe* Gecko_GetOrCreateInitialKeyframe(
     nsTArray<Keyframe>* aKeyframes,
     const StyleComputedTimingFunction* aTimingFunction,
     const CompositeOperationOrAuto aComposition) {
-  return GetOrCreateKeyframe(aKeyframes, 0., aTimingFunction, aComposition,
+  return GetOrCreateKeyframe(aKeyframes, StyleTimelineRangeName::None, 0.,
+                             aTimingFunction, aComposition,
                              KeyframeSearchDirection::Forwards,
-                             KeyframeInsertPosition::LastForOffset);
+                             KeyframeInsertPosition::LastForOffset)
+      .first;
 }
 
 Keyframe* Gecko_GetOrCreateFinalKeyframe(
     nsTArray<Keyframe>* aKeyframes,
     const StyleComputedTimingFunction* aTimingFunction,
     const CompositeOperationOrAuto aComposition) {
-  return GetOrCreateKeyframe(aKeyframes, 1., aTimingFunction, aComposition,
+  return GetOrCreateKeyframe(aKeyframes, StyleTimelineRangeName::None, 1.,
+                             aTimingFunction, aComposition,
                              KeyframeSearchDirection::Backwards,
-                             KeyframeInsertPosition::LastForOffset);
+                             KeyframeInsertPosition::LastForOffset)
+      .first;
 }
 
 void Gecko_GetComputedURLSpec(const StyleComputedUrl* aURL, nsCString* aOut) {
@@ -1264,6 +1284,11 @@ void Gecko_Snapshot_DebugListAttributes(const ServoElementSnapshot* aSnapshot,
 }
 
 NS_IMPL_THREADSAFE_FFI_REFCOUNTING(URLExtraData, URLExtraData);
+
+bool Gecko_IsURIInList(const URLExtraData* aData, const nsACString* aList) {
+  return nsContentUtils::IsURIInList(aData->BaseURI(),
+                                     PromiseFlatCString(*aList));
+}
 
 void Gecko_nsStyleFont_SetLang(nsStyleFont* aFont, nsAtom* aAtom) {
   aFont->mLanguage = dont_AddRef(aAtom);

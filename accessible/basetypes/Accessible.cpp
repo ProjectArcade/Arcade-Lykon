@@ -24,13 +24,13 @@ using namespace mozilla;
 using namespace mozilla::a11y;
 
 Accessible::Accessible()
-    : mType(static_cast<uint32_t>(0)),
+    : mType(eNoType),
       mGenericTypes(static_cast<uint32_t>(0)),
       mRoleMapEntryIndex(aria::NO_ROLE_MAP_ENTRY_INDEX) {}
 
 Accessible::Accessible(AccType aType, AccGenericType aGenericTypes,
                        uint8_t aRoleMapEntryIndex)
-    : mType(static_cast<uint32_t>(aType)),
+    : mType(aType),
       mGenericTypes(static_cast<uint32_t>(aGenericTypes)),
       mRoleMapEntryIndex(aRoleMapEntryIndex) {}
 
@@ -391,24 +391,10 @@ int32_t Accessible::GetLevel(bool aFast) const {
       }
     }
   } else if (role == roles::HEADING) {
-    nsAtom* tagName = TagName();
-    if (tagName == nsGkAtoms::h1) {
-      return 1;
-    }
-    if (tagName == nsGkAtoms::h2) {
-      return 2;
-    }
-    if (tagName == nsGkAtoms::h3) {
-      return 3;
-    }
-    if (tagName == nsGkAtoms::h4) {
-      return 4;
-    }
-    if (tagName == nsGkAtoms::h5) {
-      return 5;
-    }
-    if (tagName == nsGkAtoms::h6) {
-      return 6;
+    const uint8_t level = HeadingLevel();
+    if (level) {
+      MOZ_ASSERT(level > 0 && level <= 9);
+      return level;
     }
 
     const nsRoleMapEntry* ariaRole = this->ARIARoleMap();

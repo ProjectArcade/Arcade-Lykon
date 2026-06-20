@@ -39,6 +39,7 @@ functions = [
     "SSL_ConfigServerCert",
     "SSL_ConfigServerSessionIDCache",
     "SSL_DestroyResumptionTokenInfo",
+    "SSL_ExportKeyingMaterial",
     "SSL_GetChannelInfo",
     "SSL_GetExperimentalAPI",
     "SSL_GetImplementedCiphers",
@@ -151,6 +152,7 @@ functions = [
     "NSS_SetAlgorithmPolicy",
     "PK11_AEADOp",
     "PK11_Authenticate",
+    "PK11_CheckUserPassword",
     "PK11_CipherOp",
     "PK11_CreateContextBySymKey",
     "PK11_Decrypt",
@@ -175,6 +177,7 @@ functions = [
     "PK11_GetBlockSize",
     "PK11_GetInternalKeySlot",
     "PK11_GetInternalSlot",
+    "PK11_IsFIPS",
     "PK11_GetKeyData",
     "PK11_GetMechanism",
     "PK11_GetTokenName",
@@ -190,11 +193,14 @@ functions = [
     "PK11_HPKE_SetupS",
     "PK11_HPKE_Serialize",
     "PK11_HPKE_ValidateParameters",
+    "PK11_CreatePBEV2AlgorithmID",
     "PK11_ImportDataKey",
     "PK11_ImportDERPrivateKeyInfoAndReturnKey",
     "PK11_ImportPublicKey",
     "PK11_ImportSymKey",
     "PK11_ListFixedKeysInSlot",
+    "PK11_Logout",
+    "PK11_PBEKeyGen",
     "PK11_PubDeriveWithKDF",
     "PK11_ReadRawAttribute",
     "PK11_ReferenceSlot",
@@ -214,6 +220,7 @@ functions = [
     "SECKEY_DestroySubjectPublicKeyInfo",
     "SECKEY_ExtractPublicKey",
     "SECKEY_ConvertToPublicKey",
+    "SECOID_DestroyAlgorithmID",
     "SECOID_FindOIDByTag",
 ]
 enums = [
@@ -224,7 +231,7 @@ enums = [
     "PK11Origin",
     "SECOidTag",
 ]
-opaque = ["PK11ContextStr", "PK11SlotInfoStr", "SECKEYPublicKeyStr"]
+opaque = ["PK11ContextStr", "PK11SlotInfoStr", "SECAlgorithmIDStr", "SECKEYPublicKeyStr"]
 variables = [
     "AES_BLOCK_SIZE",
     "PK11_ATTR_EXTRACTABLE",

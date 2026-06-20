@@ -435,6 +435,14 @@ void BrowserChild::SetTargetAPZC(
   }
 }
 
+void BrowserChild::NotifyApzAwareListenerAdded(
+    ScrollableLayerGuid::ViewID aScrollId) const {
+  if (mApzcTreeManager) {
+    mApzcTreeManager->NotifyApzAwareListenerAdded(
+        ScrollableLayerGuid(mLayersId, 0, aScrollId));
+  }
+}
+
 bool BrowserChild::DoUpdateZoomConstraints(
     const uint32_t& aPresShellId, const ViewID& aViewId,
     const Maybe<ZoomConstraints>& aConstraints) {
@@ -1706,7 +1714,7 @@ void BrowserChild::HandleMouseRawUpdateEvent(
   HandleRealMouseButtonEvent(mouseRawUpdateEvent, aGuid, aInputBlockId);
 }
 
-mozilla::ipc::IPCResult BrowserChild::RecvRealMouseMoveEventForTests(
+mozilla::ipc::IPCResult BrowserChild::RecvRealMouseMoveEventNoCompress(
     const WidgetMouseEvent& aMouseEvent, const ScrollableLayerGuid& aGuid,
     const uint64_t& aInputBlockId) {
   return RecvRealMouseMoveEvent(aMouseEvent, aGuid, aInputBlockId);
@@ -1719,7 +1727,7 @@ mozilla::ipc::IPCResult BrowserChild::RecvNormalPriorityRealMouseMoveEvent(
 }
 
 mozilla::ipc::IPCResult
-BrowserChild::RecvNormalPriorityRealMouseMoveEventForTests(
+BrowserChild::RecvNormalPriorityRealMouseMoveEventNoCompress(
     const WidgetMouseEvent& aMouseEvent, const ScrollableLayerGuid& aGuid,
     const uint64_t& aInputBlockId) {
   return RecvRealMouseMoveEvent(aMouseEvent, aGuid, aInputBlockId);
@@ -3311,25 +3319,21 @@ void BrowserChild::InitAPZState() {
 
   // Initialize the ApzcTreeManager. This takes multiple casts because of ugly
   // multiple inheritance.
-  PAPZCTreeManagerChild* baseProtocol =
-      cbc->SendPAPZCTreeManagerConstructor(mLayersId);
-  if (!baseProtocol) {
+  auto treeManager = MakeRefPtr<APZCTreeManagerChild>();
+  if (!cbc->SendPAPZCTreeManagerConstructor(treeManager, mLayersId)) {
     MOZ_ASSERT(false,
                "Allocating a TreeManager should not fail with APZ enabled");
     return;
   }
-  APZCTreeManagerChild* derivedProtocol =
-      static_cast<APZCTreeManagerChild*>(baseProtocol);
 
-  mApzcTreeManager = RefPtr<IAPZCTreeManager>(derivedProtocol);
+  mApzcTreeManager = treeManager;
 
   // Initialize the GeckoContentController for this tab. We don't hold a
   // reference because we don't need it. The ContentProcessController will hold
   // a reference to the tab, and will be destroyed by the compositor or ipdl
   // during destruction.
-  RefPtr<GeckoContentController> contentController =
-      new ContentProcessController(this);
-  APZChild* apzChild = new APZChild(contentController);
+  auto contentController = MakeRefPtr<ContentProcessController>(this);
+  auto apzChild = MakeRefPtr<APZChild>(contentController);
   cbc->SendPAPZConstructor(apzChild, mLayersId);
 }
 
@@ -3760,6 +3764,12 @@ mozilla::ipc::IPCResult BrowserChild::RecvSafeAreaInsetsChanged(
   // Actually we don't set this value on sub document. This behaviour is
   // same as Blink that safe area insets isn't set on sub document.
 
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvInitSupportsUnadjustedMovement(
+    const bool& aSupportsUnadjustedMovement) {
+  mPuppetWidget->InitSupportsUnadjustedMovement(aSupportsUnadjustedMovement);
   return IPC_OK();
 }
 
@@ -4245,9 +4255,7 @@ void BrowserChild::OnPointerRawUpdateEventListenerRemoved(
 #if defined(ACCESSIBILITY) && defined(MOZ_ENABLE_SKIA_PDF)
 mozilla::ipc::IPCResult BrowserChild::RecvRequestDocAccessibleForPrint() {
   if (RefPtr<Document> doc = GetTopLevelDocument()) {
-    if (nsAccessibilityService* serv = GetAccService()) {
-      serv->NotifyOfPrintDocument(doc);
-    }
+    a11y::DocManager::NotifyOfPrintDocument(doc);
   }
   return IPC_OK();
 }
@@ -4326,6 +4334,6 @@ BrowserChildMessageManager::GetTabEventTarget() {
 }
 
 nsresult BrowserChildMessageManager::Dispatch(
-    already_AddRefed<nsIRunnable>&& aRunnable) const {
+    already_AddRefed<nsIRunnable> aRunnable) const {
   return SchedulerGroup::Dispatch(std::move(aRunnable));
 }

@@ -1,5 +1,5 @@
 import { CONTENT_MESSAGE_TYPE } from "common/Actions.mjs";
-import { WIDGET_REGISTRY } from "content-src/components/Widgets/WidgetsRegistry.mjs";
+import { WIDGET_REGISTRY } from "common/WidgetsRegistry.mjs";
 import {
   ActivityStream,
   PREFS_CONFIG,

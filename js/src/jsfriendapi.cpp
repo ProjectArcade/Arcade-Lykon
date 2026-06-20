@@ -178,10 +178,9 @@ JS_PUBLIC_API bool JS_WrapPropertyDescriptor(
   return cx->compartment()->wrap(cx, desc);
 }
 
-JS_PUBLIC_API void JS_TraceShapeCycleCollectorChildren(JS::CallbackTracer* trc,
-                                                       JS::GCCellPtr shape) {
-  MOZ_ASSERT(shape.is<Shape>());
-  TraceCycleCollectorChildren(trc, &shape.as<Shape>());
+JS_PUBLIC_API void JS_TraceShapeCycleCollectorChildren(JSTracer* trc,
+                                                       Shape* shape) {
+  TraceCycleCollectorChildren(trc, shape);
 }
 
 static bool DefineHelpProperty(JSContext* cx, HandleObject obj,
@@ -280,6 +279,10 @@ JS_PUBLIC_API bool JS::GetBuiltinClass(JSContext* cx, HandleObject obj,
   }
 
   return true;
+}
+
+JS_PUBLIC_API bool JS::IsPlainObject(JSObject* obj) {
+  return obj->is<PlainObject>();
 }
 
 JS_PUBLIC_API bool js::IsArgumentsObject(HandleObject obj) {
@@ -478,15 +481,12 @@ JS_PUBLIC_API bool js::GetRealmOriginalEval(JSContext* cx,
   return true;
 }
 
-void JS::detail::SetReservedSlotWithBarrier(JSObject* obj, size_t slot,
-                                            const Value& value) {
-  if (obj->is<ProxyObject>()) {
-    obj->as<ProxyObject>().setReservedSlot(slot, value);
-  } else {
-    // Note: We do not currently support watching reserved object slots for
-    // property modification.
-    obj->as<NativeObject>().setSlot(slot, value);
-  }
+void JS::detail::SetNativeObjectReservedSlotWithBarrier(JSObject* obj,
+                                                        size_t slot,
+                                                        const Value& value) {
+  // Note: We do not currently support watching reserved object slots for
+  // property modification.
+  obj->as<NativeObject>().setReservedSlot(slot, value);
 }
 
 bool JS::NativeObjectHasOwnProperties(const JSObject* obj) {
@@ -559,77 +559,6 @@ JS_PUBLIC_API void js::TraceGrayWrapperTargets(JSTracer* trc, Zone* zone) {
 JSLinearString* JS::detail::StringToLinearStringSlow(JSContext* cx,
                                                      JSString* str) {
   return str->ensureLinear(cx);
-}
-
-static bool CopyProxyObject(JSContext* cx, Handle<ProxyObject*> from,
-                            Handle<ProxyObject*> to) {
-  MOZ_ASSERT(from->getClass() == to->getClass());
-
-  if (from->is<WrapperObject>() &&
-      (Wrapper::wrapperHandler(from)->flags() & Wrapper::CROSS_COMPARTMENT)) {
-    to->setCrossCompartmentPrivate(GetProxyPrivate(from));
-  } else {
-    RootedValue v(cx, GetProxyPrivate(from));
-    if (!cx->compartment()->wrap(cx, &v)) {
-      return false;
-    }
-    to->setSameCompartmentPrivate(v);
-  }
-
-  MOZ_ASSERT(from->numReservedSlots() == to->numReservedSlots());
-
-  RootedValue v(cx);
-  for (size_t n = 0; n < from->numReservedSlots(); n++) {
-    v = GetProxyReservedSlot(from, n);
-    if (!cx->compartment()->wrap(cx, &v)) {
-      return false;
-    }
-    SetProxyReservedSlot(to, n, v);
-  }
-
-  return true;
-}
-
-JS_PUBLIC_API JSObject* JS_CloneObject(JSContext* cx, HandleObject obj,
-                                       HandleObject proto) {
-  // |obj| might be in a different compartment.
-  cx->check(proto);
-
-  if (!obj->is<NativeObject>() && !obj->is<ProxyObject>()) {
-    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
-                              JSMSG_CANT_CLONE_OBJECT);
-    return nullptr;
-  }
-
-  RootedObject clone(cx);
-  if (obj->is<NativeObject>()) {
-    clone = NewObjectWithGivenProto(cx, obj->getClass(), proto);
-    if (!clone) {
-      return nullptr;
-    }
-
-    if (clone->is<JSFunction>() && obj->compartment() != clone->compartment()) {
-      JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
-                                JSMSG_CANT_CLONE_OBJECT);
-      return nullptr;
-    }
-  } else {
-    auto* handler = GetProxyHandler(obj);
-    clone = ProxyObject::New(cx, handler, JS::NullHandleValue,
-                             AsTaggedProto(proto), obj->getClass());
-    if (!clone) {
-      return nullptr;
-    }
-
-    if (!CopyProxyObject(cx, obj.as<ProxyObject>(), clone.as<ProxyObject>())) {
-      return nullptr;
-    }
-  }
-
-  MOZ_ASSERT(gc::GetFinalizeKind(obj->allocKind()) ==
-             gc::GetFinalizeKind(clone->allocKind()));
-
-  return clone;
 }
 
 extern JS_PUBLIC_API bool JS::ForceLexicalInitialization(JSContext* cx,

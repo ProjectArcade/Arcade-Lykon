@@ -2,7 +2,7 @@
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
 /**
- * @import { PanelList } from "chrome://global/content/elements/panel-list.mjs"
+ * @import { PanelList,  PanelItem } from "chrome://global/content/elements/panel-list.mjs"
  */
 
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
@@ -28,8 +28,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
   TestUtils: "resource://testing-common/TestUtils.sys.mjs",
-  UrlbarController:
-    "moz-src:///browser/components/urlbar/UrlbarController.sys.mjs",
+  UrlbarParentController:
+    "moz-src:///browser/components/urlbar/UrlbarParentController.sys.mjs",
   UrlbarPrefs: "moz-src:///browser/components/urlbar/UrlbarPrefs.sys.mjs",
   UrlbarSearchUtils:
     "moz-src:///browser/components/urlbar/UrlbarSearchUtils.sys.mjs",
@@ -433,7 +433,7 @@ class UrlbarInputTestUtils {
     // Now get the item.
     let menuitem;
     if (accesskey) {
-      await lazy.BrowserTestUtils.waitForCondition(() => {
+      await lazy.TestUtils.waitForCondition(() => {
         menuitem = this.#urlbar(window).view.resultMenu.querySelector(
           `menuitem[accesskey=${accesskey}]`
         );
@@ -792,7 +792,7 @@ class UrlbarInputTestUtils {
     if (!httpserver) {
       throw new Error("Must provide an http server");
     }
-    return lazy.BrowserTestUtils.waitForCondition(
+    return lazy.TestUtils.waitForCondition(
       () => httpserver.connectionNumber == count,
       "Waiting for speculative connection setup"
     );
@@ -977,7 +977,7 @@ class UrlbarInputTestUtils {
     );
 
     let results = this.#urlbar(window).querySelector(".urlbarView-results");
-    await lazy.BrowserTestUtils.waitForCondition(
+    await lazy.TestUtils.waitForCondition(
       () =>
         results.hasAttribute("actionmode") ==
         (this.#urlbar(window).searchMode?.source ==
@@ -1007,7 +1007,7 @@ class UrlbarInputTestUtils {
         expectedPlaceholder = { id: "urlbar-placeholder-keyword-disabled" };
       }
 
-      await lazy.BrowserTestUtils.waitForCondition(() => {
+      await lazy.TestUtils.waitForCondition(() => {
         let l10nAttributes = window.document.l10n.getAttributes(
           this.#urlbar(window).inputField
         );
@@ -1287,25 +1287,12 @@ class UrlbarInputTestUtils {
     { backspace, clickClose, waitForSearch = true } = {}
   ) {
     let urlbar = this.#urlbar(window);
-    // If the Urlbar is not extended, ignore the clickClose parameter. The close
-    // button is not clickable in this state. This state might be encountered on
-    // Linux, where prefers-reduced-motion is enabled in automation.
-    if (!urlbar.hasAttribute("breakout-extend") && clickClose) {
-      if (waitForSearch) {
-        let searchPromise = UrlbarTestUtils.promiseSearchComplete(window);
-        urlbar.searchMode = null;
-        await searchPromise;
-      } else {
-        urlbar.searchMode = null;
-      }
-      return;
-    }
-
     if (!backspace && !clickClose) {
       backspace = true;
     }
 
     if (backspace) {
+      urlbar.focus();
       let urlbarValue = urlbar.value;
       urlbar.selectionStart = urlbar.selectionEnd = 0;
       if (waitForSearch) {
@@ -1374,9 +1361,9 @@ class UrlbarInputTestUtils {
   /**
    * Returns a new mock controller.  This is useful for xpcshell tests.
    *
-   * @param {object} options Additional options to pass to the UrlbarController
-   *        constructor.
-   * @returns {UrlbarController} A new controller.
+   * @param {object} options Additional options to pass to the
+   *        UrlbarParentController constructor.
+   * @returns {UrlbarParentController} A new controller.
    */
   newMockController(options = {}) {
     let sapName = options.sapName || "urlbar";
@@ -1390,7 +1377,7 @@ class UrlbarInputTestUtils {
         configurable: true,
       });
     }
-    return new lazy.UrlbarController(
+    return new lazy.UrlbarParentController(
       Object.assign(
         {
           input: {
@@ -1599,7 +1586,7 @@ class UrlbarInputTestUtils {
       await openFn();
     } else {
       button.focus();
-      await lazy.BrowserTestUtils.waitForCondition(
+      await lazy.TestUtils.waitForCondition(
         () => !button.hasAttribute("aria-hidden")
       );
       button.click();
@@ -1620,6 +1607,28 @@ class UrlbarInputTestUtils {
       this.searchModeSwitcherPopup(win),
       "hidden"
     );
+  }
+
+  /**
+   * @param {ChromeWindow} win
+   *   The search mode switcher's window.
+   * @param {string} selector
+   *   A CSS selector for the panel-item that should be activated.
+   * @returns {Promise<void>}
+   *   Resolved when the search mode switcher popup is hidden.
+   */
+  async activateSearchModeSwitcherItem(win, selector) {
+    this.info("Opening search mode switcher.");
+    let panelList = await this.openSearchModeSwitcher(win);
+    let panelItem = /**@type {PanelItem}*/ (panelList.querySelector(selector));
+    if (!panelItem || panelItem.localName != "panel-item") {
+      throw new Error("No matches for selector");
+    }
+    this.info("Clicking panel-item.");
+    let popupHidden = this.searchModeSwitcherPopupClosed(win);
+    panelItem.click();
+    await popupHidden;
+    this.info("Search mode switcher closed.");
   }
 
   /**
@@ -1677,7 +1686,7 @@ class UrlbarInputTestUtils {
         {},
         menupopup.documentGlobal
       );
-      await lazy.BrowserTestUtils.waitForCondition(() => {
+      await lazy.TestUtils.waitForCondition(() => {
         let current = menupopup.querySelector("[_moz-menuactive]");
         if (selected != current) {
           selected = current;

@@ -83,8 +83,12 @@ using mozilla::layers::CompositorOptions from "mozilla/layers/CompositorOptions.
 using mozilla::CSSToScreenScale from "Units.h";
 using mozilla::CommandInt from "mozilla/EventForwards.h";
 using mozilla::HapticFeedbackType from "nsIWidget.h";
+using nsIWidget::NativeMouseMessage from "nsIWidget.h";
+using nsIWidget::NativeModifiers from "nsIWidget.h";
+using nsIWidget::NativePointerLockMode from "nsIWidget.h";
 using nsIWidget::TouchPointerState from "nsIWidget.h";
 using nsIWidget::TouchpadGesturePhase from "nsIWidget.h";
+using mozilla::MouseButton from "mozilla/EventForwards.h";
 using nsCursor from "nsIWidget.h";
 using struct LookAndFeelInt from "mozilla/widget/WidgetMessageUtils.h";
 using struct mozilla::DimensionRequest from "mozilla/widget/WidgetMessageUtils.h";
@@ -465,14 +469,14 @@ parent:
 
     async SynthesizeNativeKeyEvent(int32_t aNativeKeyboardLayout,
                                    int32_t aNativeKeyCode,
-                                   uint32_t aModifierFlags,
+                                   NativeModifiers aModifierFlags,
                                    nsString aCharacters,
                                    nsString aUnmodifiedCharacters,
                                    uint64_t? aCallbackId);
     async SynthesizeNativeMouseEvent(LayoutDeviceIntPoint aPoint,
-                                     uint32_t aNativeMessage,
-                                     int16_t aButton,
-                                     uint32_t aModifierFlags,
+                                     NativeMouseMessage aNativeMessage,
+                                     MouseButton aButton,
+                                     NativeModifiers aModifierFlags,
                                      uint64_t? aCallbackId);
     async SynthesizeNativeMouseMove(LayoutDeviceIntPoint aPoint,
                                     uint64_t? aCallbackId);
@@ -481,7 +485,7 @@ parent:
                                            double aDeltaX,
                                            double aDeltaY,
                                            double aDeltaZ,
-                                           uint32_t aModifierFlags,
+                                           NativeModifiers aModifierFlags,
                                            uint32_t aAdditionalFlags,
                                            uint64_t? aCallbackId);
     async SynthesizeNativeTouchPoint(uint32_t aPointerId,
@@ -514,8 +518,9 @@ parent:
                                       int32_t aModifierFlags,
                                       uint64_t? aCallbackId);
 
-    async LockNativePointer();
+    async LockNativePointer(NativePointerLockMode aNativePointerLockMode);
     async UnlockNativePointer();
+    async SetNativePointerLockMode(NativePointerLockMode aNativePointerLockMode);
 
     async AccessKeyNotHandled(WidgetKeyboardEvent event);
 
@@ -725,19 +730,17 @@ child:
                                            uint64_t aInputBlockId);
 
     /**
-     * But don't compress mousemove events for tests since every event is
-     * important for the test since synthesizing various input events may
-     * be faster than what the user operates same things.  If you need to
-     * test the `Compress`, send mouse move events with setting `isSyntehsized`
-     * of `aEvent` of `EventUtils#syntehsizeMouse*()`.
+     * Don't compress mousemove events but events can still be coalesced.
+     * If you need to test the `Compress`, send mouse move events with setting
+     * `isSynthesized` of `aEvent` of `EventUtils#synthesizeMouse*()`.
      */
     [Priority=input]
-    async RealMouseMoveEventForTests(WidgetMouseEvent event,
-                                     ScrollableLayerGuid aGuid,
-                                     uint64_t aInputBlockId);
-    async NormalPriorityRealMouseMoveEventForTests(WidgetMouseEvent event,
-                                                   ScrollableLayerGuid aGuid,
-                                                   uint64_t aInputBlockId);
+    async RealMouseMoveEventNoCompress(WidgetMouseEvent event,
+                                       ScrollableLayerGuid aGuid,
+                                       uint64_t aInputBlockId);
+    async NormalPriorityRealMouseMoveEventNoCompress(WidgetMouseEvent event,
+                                                     ScrollableLayerGuid aGuid,
+                                                     uint64_t aInputBlockId);
 
     /**
      * Mouse move events with |reason == eSynthesized| are sent via a separate
@@ -951,6 +954,12 @@ child:
      *
      */
     async SafeAreaInsetsChanged(LayoutDeviceIntMargin aSafeAreaInsets);
+
+    /**
+     * Tell the child to init the supporting of unadjustedMovement.
+     *
+     */
+    async InitSupportsUnadjustedMovement(bool aSupportsUnadjustedMovement);
 
     /**
      * Tell the browser that its frame loader has been swapped

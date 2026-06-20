@@ -40,8 +40,7 @@ JSObject* HTMLScriptElement::WrapNode(JSContext* aCx,
 }
 
 HTMLScriptElement::HTMLScriptElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo,
-    FromParser aFromParser)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo, FromParser aFromParser)
     : nsGenericHTMLElement(std::move(aNodeInfo)), ScriptElement(aFromParser) {
   AddMutationObserver(this);
 }
@@ -67,6 +66,17 @@ nsresult HTMLScriptElement::BindToTree(BindContext& aContext,
   }
 
   return NS_OK;
+}
+
+void HTMLScriptElement::UnbindFromTree(UnbindContext& aContext) {
+  // https://html.spec.whatwg.org/#script-processing-model:html-element-removing-steps
+  if (mFrozen && GetScriptIsSpeculationRules()) {
+    if (auto* doc = GetComposedDoc()) {
+      doc->UnregisterSpeculationRules(this);
+    }
+  }
+
+  nsGenericHTMLElement::UnbindFromTree(aContext);
 }
 
 bool HTMLScriptElement::ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,
@@ -290,7 +300,7 @@ void HTMLScriptElement::FreezeExecutionAttrs(const Document* aOwnerDoc) {
                                                 OwnerDoc(), GetBaseURI());
 
       if (!mUri) {
-        AutoTArray<nsString, 2> params = {u"src"_ns, src};
+        AutoTArray<nsString, 2> params = {u"src"_ns, std::move(src)};
 
         nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "HTML"_ns,
                                         OwnerDoc(),
@@ -340,7 +350,9 @@ bool HTMLScriptElement::Supports(const GlobalObject& aGlobal,
   nsAutoString type(aType);
   return aType.EqualsLiteral("classic") || aType.EqualsLiteral("module") ||
 
-         aType.EqualsLiteral("importmap");
+         aType.EqualsLiteral("importmap") ||
+         (StaticPrefs::dom_speculation_rules_enabled() &&
+          aType.EqualsLiteral("speculationrules"));
 }
 
 nsDOMTokenList* HTMLScriptElement::Blocking() {

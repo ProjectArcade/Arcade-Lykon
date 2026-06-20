@@ -2,8 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use api::units::PictureRect;
+use api::{MixBlendMode, units::PictureRect};
 use crate::pattern::{PatternKind, PatternShaderInput};
+use crate::renderer::BlendMode;
 use crate::{spatial_tree::SpatialNodeIndex, render_task_graph::RenderTaskId, surface::SurfaceTileDescriptor, tile_cache::TileKey, renderer::GpuBufferAddress, FastHashMap};
 use crate::gpu_types::QuadSegment;
 use crate::prim_store::storage;
@@ -127,13 +128,16 @@ pub enum PrimitiveCommand {
     Quad {
         pattern: PatternKind,
         pattern_input: PatternShaderInput,
-        src_color_task_id: RenderTaskId,
+        // Source textures sampled by the pattern. Most patterns only use slot 0;
+        // multi-plane patterns such as YUV use the additional slots.
+        src_color_task_ids: [RenderTaskId; 3],
         // TODO(gw): Used for bounding rect only, could possibly remove
         draw_index: storage::Index<PrimitiveDrawHeader>,
         gpu_buffer_address: GpuBufferAddress,
         transform_id: GpuTransformId,
         quad_flags: QuadFlags,
         edge_flags: EdgeMask,
+        blend_mode: BlendMode,
     },
 }
 
@@ -159,22 +163,24 @@ impl PrimitiveCommand {
     pub fn quad(
         pattern: PatternKind,
         pattern_input: PatternShaderInput,
-        src_color_task_id: RenderTaskId,
+        src_color_task_ids: [RenderTaskId; 3],
         draw_index: storage::Index<PrimitiveDrawHeader>,
         gpu_buffer_address: GpuBufferAddress,
         transform_id: GpuTransformId,
         quad_flags: QuadFlags,
         edge_flags: EdgeMask,
+        blend_mode: BlendMode,
     ) -> Self {
         PrimitiveCommand::Quad {
             pattern,
             pattern_input,
-            src_color_task_id,
+            src_color_task_ids,
             draw_index,
             gpu_buffer_address,
             transform_id,
             quad_flags,
             edge_flags,
+            blend_mode,
         }
     }
 
@@ -189,6 +195,39 @@ impl PrimitiveCommand {
     }
 }
 
+
+// Non-Advanced variants map to 0..=8; Advanced(mode) maps to 9 + mode as u32.
+// MixBlendMode is repr(u8) with values 0..=16, so Advanced covers 9..=25.
+
+fn encode_blend_mode(blend_mode: BlendMode) -> u32 {
+    match blend_mode {
+        BlendMode::None => 0,
+        BlendMode::Alpha => 1,
+        BlendMode::PremultipliedAlpha => 2,
+        BlendMode::PremultipliedDestOut => 3,
+        BlendMode::SubpixelDualSource => 4,
+        BlendMode::MultiplyDualSource => 5,
+        BlendMode::Screen => 6,
+        BlendMode::Exclusion => 7,
+        BlendMode::PlusLighter => 8,
+        BlendMode::Advanced(mode) => 9 + mode as u32,
+    }
+}
+
+fn decode_blend_mode(val: u32) -> BlendMode {
+    match val {
+        0 => BlendMode::None,
+        1 => BlendMode::Alpha,
+        2 => BlendMode::PremultipliedAlpha,
+        3 => BlendMode::PremultipliedDestOut,
+        4 => BlendMode::SubpixelDualSource,
+        5 => BlendMode::MultiplyDualSource,
+        6 => BlendMode::Screen,
+        7 => BlendMode::Exclusion,
+        8 => BlendMode::PlusLighter,
+        _ => BlendMode::Advanced(unsafe { std::mem::transmute::<u8, MixBlendMode>((val - 9) as u8) }),
+    }
+}
 
 /// A list of commands describing how to draw a primitive list.
 #[cfg_attr(feature = "capture", derive(Serialize))]
@@ -217,6 +256,7 @@ impl CommandBuffer {
         self.commands.push(Command::set_segments(segments.len()));
         for segment in segments {
             self.commands.push(Command::data(segment.task_id.index));
+            self.commands.push(Command::data(segment.task_id.sub_rect_index as u32));
         }
     }
 
@@ -251,15 +291,19 @@ impl CommandBuffer {
                 self.commands.push(Command::draw_instance(draw_index));
                 self.commands.push(Command::data(gpu_buffer_address.as_u32()));
             }
-            PrimitiveCommand::Quad { pattern, pattern_input, draw_index, gpu_buffer_address, transform_id, quad_flags, edge_flags, src_color_task_id } => {
+            PrimitiveCommand::Quad { pattern, pattern_input, draw_index, gpu_buffer_address, transform_id, quad_flags, edge_flags, src_color_task_ids, blend_mode } => {
                 self.commands.push(Command::draw_quad(draw_index));
                 self.commands.push(Command::data(pattern as u32));
                 self.commands.push(Command::data(pattern_input.0 as u32));
                 self.commands.push(Command::data(pattern_input.1 as u32));
-                self.commands.push(Command::data(src_color_task_id.index));
                 self.commands.push(Command::data(gpu_buffer_address.as_u32()));
                 self.commands.push(Command::data(transform_id.0));
                 self.commands.push(Command::data((quad_flags.bits() as u32) << 16 | edge_flags.bits() as u32));
+                self.commands.push(Command::data(encode_blend_mode(blend_mode)));
+                for i in 0..pattern.num_src_textures() {
+                    self.commands.push(Command::data(src_color_task_ids[i].index));
+                    self.commands.push(Command::data(src_color_task_ids[i].sub_rect_index as u32));
+                }
             }
         }
     }
@@ -304,22 +348,32 @@ impl CommandBuffer {
                         cmd_iter.next().unwrap().0 as i32,
                         cmd_iter.next().unwrap().0 as i32,
                     );
-                    let src_color_task_id = RenderTaskId { index: cmd_iter.next().unwrap().0 };
                     let data = cmd_iter.next().unwrap();
                     let transform_id = GpuTransformId(cmd_iter.next().unwrap().0);
                     let bits = cmd_iter.next().unwrap().0;
                     let quad_flags = QuadFlags::from_bits((bits >> 16) as u8).unwrap();
                     let edge_flags = EdgeMask::from_bits((bits & 0xff) as u8).unwrap();
+                    let blend_mode = decode_blend_mode(cmd_iter.next().unwrap().0);
                     let gpu_buffer_address = GpuBufferAddress::from_u32(data.0);
+
+                    let mut src_color_task_ids = [RenderTaskId::INVALID; 3];
+                    for i in 0..pattern.num_src_textures() {
+                        src_color_task_ids[i] = RenderTaskId {
+                            index: cmd_iter.next().unwrap().0,
+                            sub_rect_index: cmd_iter.next().unwrap().0 as u16
+                        };
+                    }
+
                     let cmd = PrimitiveCommand::quad(
                         pattern,
                         pattern_input,
-                        src_color_task_id,
+                        src_color_task_ids,
                         draw_index,
                         gpu_buffer_address,
                         transform_id,
                         quad_flags,
                         edge_flags,
+                        blend_mode,
                     );
                     f(&cmd, current_spatial_node_index, &segments);
                     segments.clear()
@@ -337,7 +391,12 @@ impl CommandBuffer {
                 Command::CMD_SET_SEGMENTS => {
                     let count = param;
                     for _ in 0 .. count {
-                        segments.push(RenderTaskId { index: cmd_iter.next().unwrap().0 });
+                        segments.push(
+                            RenderTaskId {
+                                index: cmd_iter.next().unwrap().0,
+                                sub_rect_index: cmd_iter.next().unwrap().0 as u16,
+                            }
+                        );
                     }
                 }
                 _ => {

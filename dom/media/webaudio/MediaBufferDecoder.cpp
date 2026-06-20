@@ -16,6 +16,7 @@
 #include "MediaDataDemuxer.h"
 #include "MediaQueue.h"
 #include "PDMFactory.h"
+#include "PDMFactorySupport.h"
 #include "VideoUtils.h"
 #include "WebAudioUtils.h"
 #include "js/MemoryFunctions.h"
@@ -35,7 +36,9 @@ namespace mozilla {
 extern LazyLogModule gMediaDecoderLog;
 
 #define LOG(x, ...) \
-  MOZ_LOG(gMediaDecoderLog, LogLevel::Debug, (x, ##__VA_ARGS__))
+  MOZ_LOG_FMT(gMediaDecoderLog, LogLevel::Debug, x, ##__VA_ARGS__)
+#define LOGW(x, ...) \
+  MOZ_LOG_FMT(gMediaDecoderLog, LogLevel::Warning, x, ##__VA_ARGS__)
 
 using namespace dom;
 
@@ -157,6 +160,8 @@ class MediaDecodeTask final : public Runnable {
   }
 
  private:
+  void UpdateFromPacket(const AudioData& aData);
+
   MediaContainerType mContainerType;
   uint8_t* mBuffer;
   const uint32_t mLength;
@@ -171,6 +176,12 @@ class MediaDecodeTask final : public Runnable {
   nsTArray<RefPtr<MediaRawData>> mRawSamples;
   MediaInfo mMediaInfo;
   MediaQueue<AudioData> mAudioQueue;
+  // Maximum per-packet channel count seen across OnAudioDecodeCompleted
+  // and OnAudioDrainCompleted. Authoritative upper bound on the channel
+  // widths in mAudioQueue at FinishDecode time. Distinct from
+  // mMediaInfo.mAudio.mChannels, which is unused but happens to hold the
+  // channel count from the demuxer (e.g. FLAC STREAMINFO).
+  uint32_t mMaxChannels = 0;
   RefPtr<AbstractThread> mMainThread;
 };
 
@@ -257,11 +268,10 @@ void MediaDecodeTask::OnInitDemuxerCompleted() {
       return;
     }
 
-    RefPtr<PDMFactory> platform = new PDMFactory();
     UniquePtr<TrackInfo> audioInfo = mTrackDemuxer->GetInfo();
     // We actively ignore audio tracks that we know we can't play.
     if (audioInfo && audioInfo->IsValid() &&
-        !platform->SupportsMimeType(audioInfo->mMimeType).isEmpty()) {
+        !PDMFactorySupport::IsTypeSupported(audioInfo->mMimeType).isEmpty()) {
       mMediaInfo.mAudio = *audioInfo->GetAsAudioInfo();
     }
   }
@@ -382,6 +392,19 @@ void MediaDecodeTask::DoDecode() {
   }
 }
 
+void MediaDecodeTask::UpdateFromPacket(const AudioData& aData) {
+  MOZ_ASSERT(OnPSupervisorTaskQueue());
+  if (mMediaInfo.mAudio.mRate != 0 && mMediaInfo.mAudio.mRate != aData.mRate) {
+    LOGW("sample-rate drift {} -> {}", mMediaInfo.mAudio.mRate, aData.mRate);
+  }
+  mMediaInfo.mAudio.mRate = aData.mRate;
+  if (aData.mChannels > mMaxChannels) {
+    LOG("max channel count increased from {} to {}", mMaxChannels,
+        aData.mChannels);
+    mMaxChannels = aData.mChannels;
+  }
+}
+
 void MediaDecodeTask::OnAudioDecodeCompleted(
     MediaDataDecoder::DecodedData&& aResults) {
   MOZ_ASSERT(OnPSupervisorTaskQueue());
@@ -390,8 +413,7 @@ void MediaDecodeTask::OnAudioDecodeCompleted(
     MOZ_ASSERT(sample->mType == MediaData::Type::AUDIO_DATA);
     RefPtr<AudioData> audioData = sample->As<AudioData>();
 
-    mMediaInfo.mAudio.mRate = audioData->mRate;
-    mMediaInfo.mAudio.mChannels = audioData->mChannels;
+    UpdateFromPacket(*audioData);
 
     mAudioQueue.Push(audioData.forget());
   }
@@ -428,6 +450,7 @@ void MediaDecodeTask::OnAudioDrainCompleted(
     MOZ_ASSERT(sample->mType == MediaData::Type::AUDIO_DATA);
     RefPtr<AudioData> audioData = sample->As<AudioData>();
 
+    UpdateFromPacket(*audioData);
     mAudioQueue.Push(audioData.forget());
   }
   DoDrain();
@@ -453,25 +476,28 @@ void MediaDecodeTask::ShutdownDecoder() {
   mDecoder = nullptr;
 }
 
-static void UpmixPreviousData(
-    const RefPtr<ThreadSharedFloatArrayBufferList>& aOldBuffers,
-    const RefPtr<ThreadSharedFloatArrayBufferList>& aNewBuffers,
-    const uint32_t aCopyCount, const uint32_t aPrevChannelCount,
-    const uint32_t aChannelCount) {
-  if (aCopyCount > 0) {
-    // Copy all existing buffers
-    for (uint32_t i = 0; i < aPrevChannelCount; ++i) {
-      const float* src = aOldBuffers->GetData(i);
-      float* dst = aNewBuffers->GetDataForWrite(i);
-      AudioBufferCopyWithScale(src, 1.0, dst, aCopyCount);
-    }
-
-    // Upmix from channel 0 to create new channels if needed
-    for (uint32_t i = aPrevChannelCount; i < aChannelCount; ++i) {
-      const float* src = aOldBuffers->GetData(0);
-      float* dst = aNewBuffers->GetDataForWrite(i);
-      AudioBufferCopyWithScale(src, 1.0, dst, aCopyCount);
-    }
+// Mirror channel 0's content in the frame range [aFramesStart, aFramesEnd)
+// into channels [aInChannelCount, aOutChannelCount) at the same range.
+// Called from FinishDecode after each per-packet write loop to fill surplus
+// channels when a packet has fewer channels than mDecodeJob.mBuffer was
+// allocated for, producing audibly duplicated mono content rather than
+// silence.
+//
+// FIXME: a layout-aware upmix should be driven by the stream's channel
+// map (AudioInfo::mChannelMap) rather than duplicating channel 0 blindly.
+static void Upmix(AudioChunk& aBuffer, uint32_t aFramesStart,
+                  uint32_t aFramesEnd, uint32_t aInChannelCount,
+                  uint32_t aOutChannelCount) {
+  if (aInChannelCount >= aOutChannelCount || aFramesEnd <= aFramesStart) {
+    return;
+  }
+  const uint32_t frameCount = aFramesEnd - aFramesStart;
+  const AudioDataValue* src =
+      aBuffer.ChannelData<AudioDataValue>()[0] + aFramesStart;
+  for (uint32_t i = aInChannelCount; i < aOutChannelCount; ++i) {
+    AudioDataValue* dst =
+        aBuffer.ChannelDataForWrite<AudioDataValue>(i) + aFramesStart;
+    PodCopy(dst, src, frameCount);
   }
 }
 
@@ -495,7 +521,7 @@ void MediaDecodeTask::FinishDecode() {
   ShutdownDecoder();
 
   uint32_t frameCount = mAudioQueue.AudioFramesCount();
-  uint32_t channelCount = mMediaInfo.mAudio.mChannels;
+  uint32_t channelCount = mMaxChannels;
   uint32_t sampleRate = mMediaInfo.mAudio.mRate;
 
   if (!frameCount || !channelCount || !sampleRate) {
@@ -503,6 +529,11 @@ void MediaDecodeTask::FinishDecode() {
         "sample-rate");
     ReportFailureOnMainThread(WebAudioDecodeJob::InvalidContent);
     return;
+  }
+
+  if (mMaxChannels != mMediaInfo.mAudio.mChannels) {
+    LOGW("channel-count drift declared={} max={}", mMediaInfo.mAudio.mChannels,
+         mMaxChannels);
   }
 
   const uint32_t destSampleRate = mDecodeJob.mContext->SampleRate();
@@ -547,39 +578,13 @@ void MediaDecodeTask::FinishDecode() {
 
     audioData->EnsureAudioBuffer();  // could lead to a copy :(
 
-    // Edge case - incoming packet has more channels than we've allocated
-    // memory for. Allocate additional channel buffers and upmix.
-    if (channelCount < audioData->mChannels) {
-      LOG("MediaDecodeTask: Expected %u channels, found %u. Adding channels.",
-          channelCount, audioData->mChannels);
-      newBuffers = CreateChannelBuffers(audioData->mChannels, resampledFrames);
-      if (!newBuffers) {
-        ReportFailureOnMainThread(WebAudioDecodeJob::UnknownError);
-        return;
-      }
-      RefPtr<ThreadSharedFloatArrayBufferList> oldBuffers =
-          mDecodeJob.mBuffer.mBuffer->AsThreadSharedFloatArrayBufferList();
-      UpmixPreviousData(oldBuffers, newBuffers, writeIndex, channelCount,
-                        audioData->mChannels);
-      mDecodeJob.mBuffer.mChannelData.SetLength(audioData->mChannels);
-      for (uint32_t i = 0; i < audioData->mChannels; ++i) {
-        mDecodeJob.mBuffer.mChannelData[i] = newBuffers->GetData(i);
-      }
-      mDecodeJob.mBuffer.mBuffer = std::move(newBuffers);
-      channelCount = audioData->mChannels;
-
-      // Don't bother draining the previous resampler for unexpected edge case.
-      if (sampleRate != destSampleRate) {
-        resampler =
-            speex_resampler_init(channelCount, sampleRate, destSampleRate,
-                                 SPEEX_RESAMPLER_QUALITY_DEFAULT, nullptr);
-        speex_resampler_skip_zeros(resampler);
-      }
-    }
+    MOZ_DIAGNOSTIC_ASSERT(audioData->mChannels <= channelCount,
+                          "packet channel count exceeds max channels");
 
     const AudioDataValue* bufferData =
         static_cast<AudioDataValue*>(audioData->mAudioBuffer->Data());
 
+    const uint32_t packetWriteStart = writeIndex;
     if (sampleRate != destSampleRate) {
       const uint32_t maxOutSamples = resampledFrames - writeIndex;
 
@@ -613,6 +618,8 @@ void MediaDecodeTask::FinishDecode() {
         }
       }
     }
+    Upmix(mDecodeJob.mBuffer, packetWriteStart, writeIndex,
+          audioData->mChannels, channelCount);
   }
 
   if (sampleRate != destSampleRate) {

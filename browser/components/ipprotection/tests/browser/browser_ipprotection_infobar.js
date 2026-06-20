@@ -46,6 +46,9 @@ function dispatchUsageEvent(remainingPercent) {
   );
 }
 
+const MAX_BYTES = "5368709120";
+const REMAINING_20 = "1073741824";
+
 DEFAULT_EXPERIMENT = null;
 
 const REGEX_DECIMAL = /^\d+\.\d$/;
@@ -54,7 +57,7 @@ const REGEX_WHOLE_NUMBER = /^\d+$/;
 add_task(async function test_75_percent_notification() {
   IPProtectionInfobarManager.init();
 
-  dispatchUsageEvent(0.2);
+  dispatchUsageEvent(0.246); // 12.3 GB remaining
 
   await TestUtils.waitForCondition(
     () =>
@@ -86,7 +89,7 @@ add_task(async function test_75_percent_notification() {
 add_task(async function test_90_percent_notification() {
   IPProtectionInfobarManager.init();
 
-  dispatchUsageEvent(0.08);
+  dispatchUsageEvent(0.094); // 4.7 GB remaining
 
   await TestUtils.waitForCondition(
     () =>
@@ -239,7 +242,10 @@ add_task(async function test_90_percent_overrides_75_percent() {
 });
 
 add_task(async function test_remove_infobar_after_sign_out() {
-  setupService({ isSignedIn: true, isEnrolledAndEntitled: true });
+  setupService({
+    isReady: true,
+    usageInfo: makeUsage(MAX_BYTES, REMAINING_20),
+  });
   IPProtectionService.updateState();
 
   IPProtectionInfobarManager.init();
@@ -261,7 +267,7 @@ add_task(async function test_remove_infobar_after_sign_out() {
     "75% notification should be present before sign out"
   );
 
-  setupService({ isSignedIn: false });
+  setupService({ isReady: false });
   IPProtectionService.updateState();
 
   await TestUtils.waitForCondition(
@@ -584,7 +590,10 @@ add_task(async function test_bandwidth_reset_clears_dismissed_state() {
 });
 
 add_task(async function test_dismissed_state_persists_through_sign_out() {
-  setupService({ isSignedIn: true, isEnrolledAndEntitled: true });
+  setupService({
+    isReady: true,
+    usageInfo: makeUsage(MAX_BYTES, REMAINING_20),
+  });
   IPProtectionService.updateState();
 
   IPProtectionInfobarManager.init();
@@ -611,11 +620,14 @@ add_task(async function test_dismissed_state_persists_through_sign_out() {
     "Wait for 75% notification to be removed after dismiss"
   );
 
-  setupService({ isSignedIn: false });
+  setupService({ isReady: false });
   IPProtectionService.updateState();
   await TestUtils.waitForTick();
 
-  setupService({ isSignedIn: true, isEnrolledAndEntitled: true });
+  setupService({
+    isReady: true,
+    usageInfo: makeUsage(MAX_BYTES, REMAINING_20),
+  });
   IPProtectionService.updateState();
 
   dispatchUsageEvent(0.2);
@@ -769,6 +781,105 @@ add_task(async function test_panel_dismiss_does_not_hide_infobars() {
   IPProtectionInfobarManager.uninit();
 });
 
+add_task(
+  async function test_panel_triggered_hide_persists_dismissal_across_windows() {
+    IPProtectionInfobarManager.init();
+
+    dispatchUsageEvent(0.2);
+
+    await TestUtils.waitForCondition(
+      () =>
+        window.gNotificationBox.getNotificationWithValue(
+          "ip-protection-bandwidth-warning-75"
+        ),
+      "Wait for 75% notification to appear"
+    );
+
+    IPProtectionInfobarManager.hideInfobars({ triggeredByPanel: true });
+
+    await TestUtils.waitForCondition(
+      () =>
+        !window.gNotificationBox.getNotificationWithValue(
+          "ip-protection-bandwidth-warning-75"
+        ),
+      "Wait for 75% notification to be removed after panel-triggered hide"
+    );
+
+    Assert.equal(
+      getDismissedPref().infobar,
+      75,
+      "Dismissed pref infobar is set to 75 after panel-triggered hide"
+    );
+
+    const newWin = await BrowserTestUtils.openNewBrowserWindow();
+
+    await TestUtils.waitForTick();
+
+    Assert.equal(
+      newWin.gNotificationBox.getNotificationWithValue(
+        "ip-protection-bandwidth-warning-75"
+      ),
+      null,
+      "75% notification does not reappear in new window after panel-triggered dismissal"
+    );
+
+    await BrowserTestUtils.closeWindow(newWin);
+    Services.prefs.clearUserPref(BANDWIDTH_WARNING_DISMISSED_PREF);
+    IPProtectionInfobarManager.uninit();
+  }
+);
+
+add_task(async function test_panel_triggered_hide_without_panel_flag_reshows() {
+  IPProtectionInfobarManager.init();
+
+  dispatchUsageEvent(0.2);
+
+  await TestUtils.waitForCondition(
+    () =>
+      window.gNotificationBox.getNotificationWithValue(
+        "ip-protection-bandwidth-warning-75"
+      ),
+    "Wait for 75% notification to appear"
+  );
+
+  IPProtectionInfobarManager.hideInfobars();
+
+  await TestUtils.waitForCondition(
+    () =>
+      !window.gNotificationBox.getNotificationWithValue(
+        "ip-protection-bandwidth-warning-75"
+      ),
+    "Wait for 75% notification to be removed"
+  );
+
+  Assert.equal(
+    getDismissedPref().infobar,
+    0,
+    "Dismissed pref infobar remains unset when hide is not triggered by panel"
+  );
+
+  const newWin = await BrowserTestUtils.openNewBrowserWindow();
+
+  await TestUtils.waitForCondition(
+    () =>
+      newWin.gNotificationBox.getNotificationWithValue(
+        "ip-protection-bandwidth-warning-75"
+      ),
+    "Wait for 75% notification to reappear in new window"
+  );
+
+  Assert.ok(
+    newWin.gNotificationBox.getNotificationWithValue(
+      "ip-protection-bandwidth-warning-75"
+    ),
+    "75% notification reappears in new window when hide was not panel-triggered"
+  );
+
+  await BrowserTestUtils.closeWindow(newWin);
+  Services.prefs.clearUserPref(BANDWIDTH_WARNING_DISMISSED_PREF);
+  IPProtectionInfobarManager.uninit();
+});
+
 add_task(async function test_handles_missing_usage_data() {
   IPProtectionInfobarManager.init();
 
@@ -800,6 +911,40 @@ add_task(async function test_handles_missing_usage_data() {
     notification90,
     null,
     "No 90% notification with missing usage data"
+  );
+
+  IPProtectionInfobarManager.uninit();
+});
+
+add_task(async function test_init_guarded_by_bandwidth_pref() {
+  IPProtectionInfobarManager.uninit();
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.ipProtection.bandwidth.enabled", false]],
+  });
+
+  IPProtectionInfobarManager.init();
+  Assert.ok(
+    !IPProtectionInfobarManager.initialized,
+    "init() is a no-op while bandwidth tracking is disabled"
+  );
+
+  dispatchUsageEvent(0.05);
+  await TestUtils.waitForTick();
+
+  Assert.equal(
+    window.gNotificationBox.getNotificationWithValue(
+      "ip-protection-bandwidth-warning-90"
+    ),
+    null,
+    "No infobar appears while bandwidth tracking is disabled"
+  );
+
+  await SpecialPowers.popPrefEnv();
+
+  Assert.ok(
+    IPProtectionInfobarManager.initialized,
+    "Manager auto-inits when pref toggles back to true"
   );
 
   IPProtectionInfobarManager.uninit();

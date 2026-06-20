@@ -254,7 +254,11 @@ JitCode* BaselineCacheIRCompiler::compile() {
   } while (reader.more());
 
   MOZ_ASSERT(!enteredStubFrame_);
-  masm.assumeUnreachable("Should have returned from IC");
+  allocator.discardStack(masm);
+  if (JitOptions.enableICFramePointers) {
+    PopICFrameRegs(masm);
+  }
+  EmitReturnFromIC(masm);
 
   // Done emitting the main IC code. Now emit the failure paths.
   perfSpewer_.recordOffset(masm, "FailurePath");
@@ -1813,16 +1817,6 @@ bool BaselineCacheIRCompiler::emitMegamorphicSetElement(ObjOperandId objId,
   return true;
 }
 
-bool BaselineCacheIRCompiler::emitReturnFromIC() {
-  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-  allocator.discardStack(masm);
-  if (JitOptions.enableICFramePointers) {
-    PopICFrameRegs(masm);
-  }
-  EmitReturnFromIC(masm);
-  return true;
-}
-
 bool BaselineCacheIRCompiler::emitLoadArgumentFixedSlot(ValOperandId resultId,
                                                         uint8_t slotIndex) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
@@ -1888,9 +1882,7 @@ bool BaselineCacheIRCompiler::emitLoadDOMExpandoValueGuardGeneration(
     return false;
   }
 
-  masm.loadPtr(Address(obj, ProxyObject::offsetOfReservedSlots()), scratch);
-  Address expandoAddr(scratch,
-                      js::detail::ProxyReservedSlots::offsetOfPrivateSlot());
+  Address expandoAddr(obj, ProxyObject::offsetOfPrivateSlot());
 
   // Load the ExpandoAndGeneration* in the output scratch register and guard
   // it matches the proxy's ExpandoAndGeneration.

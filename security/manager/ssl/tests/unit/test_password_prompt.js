@@ -54,12 +54,11 @@ function run_test() {
   });
 
   // Set an initial password.
-  let tokenDB = Cc["@mozilla.org/security/pk11tokendb;1"].getService(
-    Ci.nsIPK11TokenDB
+  let token = Cc["@mozilla.org/security/internalkeytoken;1"].createInstance(
+    Ci.nsIPKCS11Token
   );
-  let token = tokenDB.getInternalKeyToken();
-  token.initPassword("hunter2");
-  token.logoutSimple();
+  token.changePassword("", "hunter2");
+  token.logout();
 
   // Try with the correct password.
   gMockPrompter.passwordToTry = "hunter2";
@@ -73,7 +72,7 @@ function run_test() {
 
   // Reset state.
   gMockPrompter.numPrompts = 0;
-  token.logoutSimple();
+  token.logout();
 
   // Try with an incorrect password.
   gMockPrompter.passwordToTry = "*******";

@@ -61,7 +61,7 @@ unsigned int RsdparsaSdpMediaSection::GetPort() const {
   return sdp_get_media_port(GetSection());
 }
 
-void RsdparsaSdpMediaSection::SetPort(unsigned int port) {
+void RsdparsaSdpMediaSection::SetPort(const unsigned int port) {
   sdp_set_media_port(GetSection(), port);
 }
 
@@ -130,7 +130,8 @@ SdpDirectionAttribute RsdparsaSdpMediaSection::GetDirectionAttribute() const {
 
 void RsdparsaSdpMediaSection::AddCodec(const std::string& pt,
                                        const std::string& name,
-                                       uint32_t clockrate, uint16_t channels) {
+                                       const uint32_t clockrate,
+                                       const uint16_t channels) {
   StringView rustName{reinterpret_cast<const uint8_t*>(name.data()),
                       name.size()};
 
@@ -143,7 +144,7 @@ void RsdparsaSdpMediaSection::AddCodec(const std::string& pt,
     mFormats.push_back(pt);
 
     // Add a rtpmap in mAttributeList
-    SdpRtpmapAttributeList* rtpmap = new SdpRtpmapAttributeList();
+    auto rtpmap = MakeUnique<SdpRtpmapAttributeList>();
     if (mAttributeList->HasAttribute(SdpAttribute::kRtpmapAttribute)) {
       const SdpRtpmapAttributeList& old = mAttributeList->GetRtpmap();
       for (auto it = old.mRtpmaps.begin(); it != old.mRtpmaps.end(); ++it) {
@@ -164,7 +165,7 @@ void RsdparsaSdpMediaSection::AddCodec(const std::string& pt,
     }
 
     rtpmap->PushEntry(pt, codec, name, clockrate, channels);
-    mAttributeList->SetAttribute(rtpmap);
+    mAttributeList->SetAttribute(std::move(rtpmap));
   }
 }
 
@@ -180,8 +181,9 @@ void RsdparsaSdpMediaSection::ClearCodecs() {
 }
 
 void RsdparsaSdpMediaSection::AddDataChannel(const std::string& name,
-                                             uint16_t port, uint16_t streams,
-                                             uint32_t message_size) {
+                                             const uint16_t port,
+                                             const uint16_t streams,
+                                             const uint32_t message_size) {
   StringView rustName{reinterpret_cast<const uint8_t*>(name.data()),
                       name.size()};
   auto nr = sdp_media_add_datachannel(GetSection(), rustName, port, streams,
@@ -210,7 +212,7 @@ void RsdparsaSdpMediaSection::Serialize(std::ostream& os) const {
   }
   os << CRLF;
 
-  // We dont do i=
+  // We don't do i=
 
   if (mConnection) {
     os << *mConnection;
@@ -220,7 +222,7 @@ void RsdparsaSdpMediaSection::Serialize(std::ostream& os) const {
   sdp_serialize_bandwidth(sdp_get_media_bandwidth_vec(GetSection()), &bwString);
   os << bwString.get();
 
-  // We dont do k= because they're evil
+  // We don't do k= because they're evil
 
   os << *mAttributeList;
 }
@@ -240,7 +242,7 @@ void RsdparsaSdpMediaSection::LoadFormats() {
   }
 }
 
-UniquePtr<SdpConnection> convertRustConnection(RustSdpConnection conn) {
+UniquePtr<SdpConnection> convertRustConnection(const RustSdpConnection conn) {
   auto address = convertExplicitlyTypedAddress(conn.addr);
   return MakeUnique<SdpConnection>(address.first, address.second, conn.ttl,
                                    conn.amount);

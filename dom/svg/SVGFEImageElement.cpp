@@ -15,6 +15,7 @@
 #include "mozilla/dom/UserActivation.h"
 #include "mozilla/gfx/2D.h"
 #include "nsContentUtils.h"
+#include "nsIURIWithSizeOf.h"
 #include "nsLayoutUtils.h"
 #include "nsNetUtil.h"
 
@@ -59,7 +60,7 @@ NS_IMPL_ISUPPORTS_CYCLE_COLLECTION_INHERITED(SVGFEImageElement,
 // Implementation
 
 SVGFEImageElement::SVGFEImageElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
     : SVGFEImageElementBase(std::move(aNodeInfo)) {
   // We start out broken
   AddStatesSilently(ElementState::BROKEN);
@@ -245,12 +246,9 @@ FilterPrimitiveDescription SVGFEImageElement::GetPrimitiveDescription(
   RefPtr<SourceSurface> image;
   nsIntSize nativeSize;
   if (imageContainer) {
-    if (NS_FAILED(imageContainer->GetWidth(&nativeSize.width))) {
-      nativeSize.width = kFallbackIntrinsicWidthInPixels;
-    }
-    if (NS_FAILED(imageContainer->GetHeight(&nativeSize.height))) {
-      nativeSize.height = kFallbackIntrinsicHeightInPixels;
-    }
+    CSSIntSize size = NaturalSize(DoDensityCorrection::No);
+    nativeSize.width = size.width;
+    nativeSize.height = size.height;
     uint32_t flags =
         imgIContainer::FLAG_SYNC_DECODE | imgIContainer::FLAG_ASYNC_NOTIFY;
     image = imageContainer->GetFrameAtSize(nativeSize,
@@ -434,9 +432,10 @@ void SVGFEImageElement::AddSizeOfExcludingThis(nsWindowSizes& aSizes,
   // It is okay to include the size of mSrcURI here even though it might have
   // strong references from elsewhere because the URI was created for this
   // object, in nsImageLoadingContent::StringToURI(). Only objects that created
-  // their own URI will call nsIURI::SizeOfIncludingThis().
+  // their own URI will call nsIURIWithSizeOf::SizeOfIncludingThis().
   if (mSrcURI) {
-    *aNodeSize += mSrcURI->SizeOfIncludingThis(aSizes.mState.mMallocSizeOf);
+    *aNodeSize += SizeOfIncludingThisIfURIWithSizeOf(
+        mSrcURI, aSizes.mState.mMallocSizeOf);
   }
 }
 

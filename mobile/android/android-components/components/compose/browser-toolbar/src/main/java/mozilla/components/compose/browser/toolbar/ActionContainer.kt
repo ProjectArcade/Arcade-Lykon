@@ -23,7 +23,7 @@ import mozilla.components.compose.base.theme.AcornTheme
 import mozilla.components.compose.browser.toolbar.concept.Action
 import mozilla.components.compose.browser.toolbar.concept.Action.ActionButton
 import mozilla.components.compose.browser.toolbar.concept.Action.ActionButtonRes
-import mozilla.components.compose.browser.toolbar.concept.Action.AnimatedPillAction
+import mozilla.components.compose.browser.toolbar.concept.Action.AnimatedPillActionRes
 import mozilla.components.compose.browser.toolbar.concept.Action.SearchSelectorAction
 import mozilla.components.compose.browser.toolbar.concept.Action.SearchSelectorAction.ContentDescription.StringContentDescription
 import mozilla.components.compose.browser.toolbar.concept.Action.SearchSelectorAction.ContentDescription.StringResContentDescription
@@ -108,16 +108,19 @@ fun ActionContainer(
                     )
                 }
 
-                is AnimatedPillAction -> {
-                    AnimatedPillButton(
-                        icon = action.icon,
-                        overlayIcon = action.overlayIcon,
-                        text = action.text,
-                        contentDescription = action.contentDescription,
-                        highlighted = action.highlighted,
-                        onClick = action.onClick,
-                        onInteraction = onInteraction,
-                    )
+                is AnimatedPillActionRes -> {
+                    action.iconDrawable()?.let {
+                        AnimatedPillButton(
+                            icon = it,
+                            overlayIcon = action.overlayDrawable(),
+                            text = stringResource(action.textResId),
+                            contentDescription = stringResource(action.contentDescriptionResId),
+                            highlighted = action.highlighted,
+                            animated = action.animated,
+                            onClick = action.onClick,
+                            onInteraction = onInteraction,
+                        )
+                    }
                 }
             }
         }
@@ -132,6 +135,22 @@ private fun ActionButtonRes.iconDrawable(): Drawable? {
     return remember(this, context) {
         AppCompatResources.getDrawable(context, drawableResId)
             ?.apply { mutate().setTint(tint.toArgb()) }
+    }
+}
+
+@Composable
+private fun AnimatedPillActionRes.iconDrawable(): Drawable? {
+    val context = LocalContext.current
+    return remember(iconResId, context) {
+        AppCompatResources.getDrawable(context, iconResId)
+    }
+}
+
+@Composable
+private fun AnimatedPillActionRes.overlayDrawable(): Drawable? {
+    val context = LocalContext.current
+    return remember(overlayResId, context) {
+        AppCompatResources.getDrawable(context, overlayResId)
     }
 }
 
@@ -197,9 +216,17 @@ private fun ActionContainerPreview() {
                     showPrivacyMask = false,
                     onClick = object : BrowserToolbarEvent {},
                 ),
+                AnimatedPillActionRes(
+                    iconResId = iconsR.drawable.mozac_ic_shield_checkmark_24,
+                    overlayResId = iconsR.drawable.mozac_ic_globe_24,
+                    textResId = R.string.mozac_clear_button_description,
+                    contentDescriptionResId = R.string.mozac_clear_button_description,
+                    highlighted = true,
+                    onClick = object : BrowserToolbarEvent {},
+                ),
             ),
             onInteraction = {},
-            modifier = Modifier.background(color = MaterialTheme.colorScheme.surfaceDim),
+            modifier = Modifier.background(color = MaterialTheme.colorScheme.surfaceContainerHighest),
         )
     }
 }

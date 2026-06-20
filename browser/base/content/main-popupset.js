@@ -18,6 +18,13 @@ document.addEventListener(
       switch (event.target.id) {
         // == tabContextMenu ==
         case "context_openANewTab":
+          // The tab context menu can be invoked on a window that isn't the
+          // OS-level frontmost window (most reproducibly on macOS in a
+          // multi-monitor setup). Raise the window so the new tab's
+          // focusUrlBar request can actually land OS keyboard focus on the
+          // address bar. Bug 2039674 tracks routing this through
+          // URILoadingHelper instead.
+          window.focus();
           gBrowser.addAdjacentNewTab(TabContextMenu.contextTab);
           break;
         case "context_moveTabToNewGroup":
@@ -86,10 +93,6 @@ document.addEventListener(
           break;
         case "context_shareSelectedTabs":
           lazy.ContentSharingUtils.handleShareTabs(TabContextMenu.contextTabs);
-          Services.prefs.setBoolPref(
-            "browser.contentsharing.newBadge.enabled",
-            false
-          );
           break;
         case "context_bookmarkTab":
           PlacesCommandHook.bookmarkTabs([TabContextMenu.contextTab]);
@@ -438,13 +441,36 @@ document.addEventListener(
       }
     });
 
+    const userContextIcons = document.getElementById("userContext-icons");
+    userContextIcons.addEventListener("click", event => {
+      if (event.button !== 0) {
+        return;
+      }
+      document
+        .getElementById("userContext-indicator-menu")
+        .openPopup(userContextIcons, "after_start", 0, 0, false, false, event);
+    });
+
     const containerHistoryPopup = document.getElementById(
       "sidebar-history-context-menu-container-popup"
     );
-    containerHistoryPopup.addEventListener("command", event =>
+    containerHistoryPopup.addEventListener("command", event => {
+      PlacesUIUtils.openInContainerTab(event);
+      Glean.browserUiInteraction.sidebarHistory.open_in_new_container_tab.add(
+        1
+      );
+    });
+    containerHistoryPopup.addEventListener("popupshowing", event =>
+      PlacesUIUtils.createContainerTabMenu(event)
+    );
+
+    const containerSyncedTabsPopup = document.getElementById(
+      "sidebar-synced-tabs-context-menu-container-popup"
+    );
+    containerSyncedTabsPopup.addEventListener("command", event =>
       PlacesUIUtils.openInContainerTab(event)
     );
-    containerHistoryPopup.addEventListener("popupshowing", event =>
+    containerSyncedTabsPopup.addEventListener("popupshowing", event =>
       PlacesUIUtils.createContainerTabMenu(event)
     );
 
@@ -632,8 +658,6 @@ document.addEventListener(
           break;
       }
     });
-
-    // Adblocker handlers moved to lykon-shield-panel.js
   },
   { once: true }
 );

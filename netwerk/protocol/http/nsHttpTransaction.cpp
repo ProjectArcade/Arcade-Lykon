@@ -358,7 +358,9 @@ nsresult nsHttpTransaction::Init(
               nsIOService::gDefaultSegmentSize,
               nsIOService::gDefaultSegmentCount);
 
-  bool forceUseHTTPSRR = StaticPrefs::network_dns_force_use_https_rr();
+  // HTTPS RR is handled by HappyEyeballsConnectionAttempt.
+  bool forceUseHTTPSRR = StaticPrefs::network_dns_force_use_https_rr() &&
+                         !(mCaps & NS_HTTP_USE_HAPPY_EYEBALLS);
   if ((StaticPrefs::network_dns_use_https_rr_as_altsvc() &&
        !(mCaps & NS_HTTP_DISALLOW_HTTPS_RR) &&
        !(mCaps & NS_HTTP_USE_HAPPY_EYEBALLS)) ||
@@ -545,6 +547,16 @@ void nsHttpTransaction::SetConnection(nsAHttpConnection* conn) {
         mTRRSkipReason = mConnection->TRRSkipReason();
         mEchConfigUsed = mConnection->GetEchConfigUsed();
       }
+
+      // On a reused HTTP/1.1 CONNECT tunnel OnProxyConnectComplete is not
+      // called again, so pick up the head the connection captured during
+      // tunnel setup. This is just a RefPtr addref, not a copy.
+      if (mConnInfo && mConnInfo->UsingConnect()) {
+        RefPtr<HttpConnectionBase> httpConn = mConnection->HttpConnection();
+        if (httpConn) {
+          mProxyConnectResponseHead = httpConn->GetProxyConnectResponseHead();
+        }
+      }
     }
   }
 }
@@ -667,8 +679,32 @@ void nsHttpTransaction::OnTransportStatus(nsITransport* transport,
     } else if (status == NS_NET_STATUS_TLS_HANDSHAKE_ENDED) {
       SetConnectEnd(TimeStamp::Now(), false);
     } else if (status == NS_NET_STATUS_SENDING_TO) {
-      // Set the timestamp to Now(), only if it null
-      SetRequestStart(TimeStamp::Now(), true);
+      // Do not set requestStart while 0-RTT early data is in flight.
+      // Early data goes on the wire before the TLS handshake completes,
+      // so recording requestStart here would put it before connectEnd,
+      // violating the W3C Resource Timing ordering. For the HE path,
+      // HappyEyeballsTransaction::ReadSegments stamps requestStart on the
+      // HT and BootstrapTimings clamps it to connectEnd. For the non-HE
+      // path, this guard covers it.
+      if (!m0RTTInProgress) {
+        SetRequestStart(TimeStamp::Now(), true);
+      }
+    }
+  }
+
+  // Clamp requestStart to connectEnd for 0-RTT connections where the
+  // HandshakeDoneInternal async dispatch ran before TLS_HANDSHAKE_ENDED
+  // arrived, causing requestStart (set in Finish0RTT) to be earlier than
+  // connectEnd (set by the subsequent TLS_HANDSHAKE_ENDED). The clamp
+  // only adjusts requestStart — it does not retimestamp connectEnd.
+  // This fires every time TLS_HANDSHAKE_ENDED is received; for
+  // non-0-RTT connections requestStart is null here so the guard is
+  // a no-op.
+  if (status == NS_NET_STATUS_TLS_HANDSHAKE_ENDED) {
+    MutexAutoLock lock(mLock);
+    if (!mTimings.requestStart.IsNull() && !mTimings.connectEnd.IsNull() &&
+        mTimings.requestStart < mTimings.connectEnd) {
+      mTimings.requestStart = mTimings.connectEnd;
     }
   }
 
@@ -1339,9 +1375,13 @@ bool nsHttpTransaction::ShouldRestartOnResumptionError(nsresult reason) {
       ("nsHttpTransaction::ShouldRestartOnResumptionError [this=%p, "
        "mResumptionAttempted=%d error=%" PRIx32 "]\n",
        this, mResumptionAttempted, static_cast<uint32_t>(reason)));
+  // Also accept NS_ERROR_NET_RESET: the socket-transport teardown can win
+  // the race against NSS alert propagation and surface a PSK rejection as a
+  // generic connection reset.
   return StaticPrefs::network_http_early_data_disable_on_error() &&
          mResumptionAttempted &&
-         NS_ERROR_GET_MODULE(reason) == NS_ERROR_MODULE_SECURITY;
+         (NS_ERROR_GET_MODULE(reason) == NS_ERROR_MODULE_SECURITY ||
+          reason == NS_ERROR_NET_RESET);
 }
 
 static void MaybeRemoveSSLToken(nsITransportSecurityInfo* aSecurityInfo) {
@@ -1443,6 +1483,33 @@ void nsHttpTransaction::Close(nsresult reason) {
   bool shouldRestartTransactionForHTTPSRR =
       mOrigConnInfo && AllowedErrorForTransactionRetry(reason) &&
       !mDoNotRemoveAltSvc;
+
+  // When a PSK resumption attempt fails over a non-ECH HTTPS-RR-routed
+  // connection, only the cached resumption material is bad — the route is
+  // fine. Stay on the alt-route: MaybeRemoveSSLToken has already evicted the
+  // PSK, so a fresh handshake on the same route should succeed. Setting
+  // mDontRetryWithDirectRoute keeps Restart() from stripping the route. If
+  // that retry also fails, mResumptionAttempted will have been reset and
+  // the standard HTTPS-RR retry path takes over.
+  //
+  // Skip this for ECH connections: ECH manages its own retry chain (record
+  // rotation, fallback to origin) through PrepareConnInfoForRetry, and must
+  // not be blocked.
+  //
+  // Also skip if NS_HTTP_DISALLOW_HTTP3 is already set: Http3Session::Close
+  // calls DisableHttp3() before CloseTransaction(), so the session layer may
+  // have already decided H3 is unusable. Keeping an H3 connInfo with that cap
+  // set would trip the ProcessNewTransaction assertion that forbids the
+  // combination.
+  const bool echConfigUsed =
+      nsHttpHandler::EchConfigEnabled(mConnInfo->IsHttp3()) &&
+      !mConnInfo->GetEchConfig().IsEmpty();
+  if (shouldRestartTransactionForHTTPSRR && !echConfigUsed &&
+      !(mCaps & NS_HTTP_DISALLOW_HTTP3) &&
+      ShouldRestartOnResumptionError(reason)) {
+    shouldRestartTransactionForHTTPSRR = false;
+    mDontRetryWithDirectRoute = true;
+  }
 
   //
   // if the connection was reset or closed before we wrote any part of the
@@ -1920,7 +1987,9 @@ nsresult nsHttpTransaction::Restart() {
   nsCOMPtr<nsISeekableStream> seekable = do_QueryInterface(mRequestStream);
   if (seekable) seekable->Seek(nsISeekableStream::NS_SEEK_SET, 0);
 
-  if (mDoNotTryEarlyData) {
+  // Evict the cached token on any resumption-related restart (0-RTT
+  // rejection or bare PSK rejection); otherwise a poisoned token loops.
+  if (mDoNotTryEarlyData || mResumptionAttempted) {
     MutexAutoLock lock(mLock);
     MaybeRemoveSSLToken(mSecurityInfo);
   }
@@ -2922,7 +2991,25 @@ TimingStruct nsHttpTransaction::Timings() {
 
 void nsHttpTransaction::BootstrapTimings(TimingStruct times) {
   mozilla::MutexAutoLock lock(mLock);
+  TimeStamp savedRequestStart = mTimings.requestStart;
   mTimings = times;
+  if (!savedRequestStart.IsNull() && mTimings.requestStart.IsNull()) {
+    mTimings.requestStart = savedRequestStart;
+  }
+
+  // Clamp connectStart to domainLookupEnd: with HE the state machine can start
+  // a connection attempt as soon as one address family (A or AAAA) resolves
+  // while the other family's DNS is still in flight.
+  if (!mTimings.connectStart.IsNull() && !mTimings.domainLookupEnd.IsNull() &&
+      mTimings.connectStart < mTimings.domainLookupEnd) {
+    mTimings.connectStart = mTimings.domainLookupEnd;
+  }
+  // Clamp requestStart to connectEnd: for 0-RTT, SENDING_TO fires before TLS
+  // completes, setting requestStart earlier than connectEnd.
+  if (!mTimings.requestStart.IsNull() && !mTimings.connectEnd.IsNull() &&
+      mTimings.requestStart < mTimings.connectEnd) {
+    mTimings.requestStart = mTimings.connectEnd;
+  }
 }
 
 void nsHttpTransaction::SetDomainLookupStart(mozilla::TimeStamp timeStamp,
@@ -3204,6 +3291,18 @@ void nsHttpTransaction::GetNetworkAddresses(
   aEchConfigUsed = mEchConfigUsed;
 }
 
+void nsHttpTransaction::RemoveSSLTokens(nsITransportSecurityInfo* aSecInfo) {
+  if (!aSecInfo) {
+    return;
+  }
+  // Always evict regardless of
+  // network_http_remove_resumption_token_when_early_data_failed: skipping
+  // eviction causes an infinite Finish0RTT(restart=1) loop.
+  nsAutoCString key;
+  aSecInfo->GetPeerId(key);
+  SSLTokensCache::RemoveAll(key);
+}
+
 bool nsHttpTransaction::Do0RTT(bool aCanSendEarlyData) {
   LOG(("nsHttpTransaction::Do0RTT [aCanSendEarlyData=%d]", aCanSendEarlyData));
   mResumptionAttempted = true;
@@ -3217,8 +3316,8 @@ bool nsHttpTransaction::Do0RTT(bool aCanSendEarlyData) {
 
 nsresult nsHttpTransaction::Finish0RTT(bool aRestart,
                                        bool aAlpnChanged /* ignored */) {
-  LOG(("nsHttpTransaction::Finish0RTT %p %d %d\n", this, aRestart,
-       aAlpnChanged));
+  LOG(("nsHttpTransaction::Finish0RTT %p aRestart=%d aAlpnChanged=%d\n", this,
+       aRestart, aAlpnChanged));
   MOZ_ASSERT(m0RTTInProgress);
   m0RTTInProgress = false;
 
@@ -3228,6 +3327,16 @@ nsresult nsHttpTransaction::Finish0RTT(bool aRestart,
     // note that if this is invoked by a 3 param version of finish0rtt this
     // disposition might be reverted
     mEarlyDataDisposition = EARLY_ACCEPTED;
+
+    // Early data was accepted: the request bytes went on the wire before
+    // TLS completed, so SENDING_TO was suppressed (m0RTTInProgress was
+    // true). Set requestStart now that connectEnd is known, so the
+    // W3C Resource Timing ordering (requestStart >= connectEnd) holds.
+    MutexAutoLock lock(mLock);
+    if (mTimings.requestStart.IsNull()) {
+      mTimings.requestStart =
+          mTimings.connectEnd.IsNull() ? TimeStamp::Now() : mTimings.connectEnd;
+    }
   }
   if (aRestart) {
     // Not to use 0RTT when this transaction is restarted next time.
@@ -3246,6 +3355,41 @@ nsresult nsHttpTransaction::Finish0RTT(bool aRestart,
     MaybeRefreshSecurityInfo();
   }
   return NS_OK;
+}
+
+void nsHttpTransaction::FinishAdopted0RTT(bool aRestart) {
+  LOG(("nsHttpTransaction::FinishAdopted0RTT %p restart=%d\n", this, aRestart));
+  mResumptionAttempted = true;
+  if (!aRestart) {
+    // Mirror nsHttpTransaction::Finish0RTT: only promote when the
+    // pre-state is EARLY_SENT (i.e. ZeroRttHandle::ReadSegments
+    // already flipped us via MarkEarlyDataSent). If EARLY_SENT was
+    // never set, no bytes were sent as early data for this txn and
+    // claiming EARLY_ACCEPTED would be a lie.
+    if (mEarlyDataDisposition == EARLY_SENT) {
+      mEarlyDataDisposition = EARLY_ACCEPTED;
+
+      // SENDING_TO was suppressed while early data was in flight so
+      // requestStart was never set. Set it now to connectEnd (which
+      // was set when TLS_HANDSHAKE_ENDED fired) so that the W3C
+      // Resource Timing ordering (requestStart >= connectEnd) holds.
+      MutexAutoLock lock(mLock);
+      if (mTimings.requestStart.IsNull()) {
+        mTimings.requestStart = mTimings.connectEnd.IsNull()
+                                    ? TimeStamp::Now()
+                                    : mTimings.connectEnd;
+      }
+    }
+  } else {
+    mDoNotTryEarlyData = true;
+    // Rewind the request stream so the real txn re-sends from the
+    // start on the winning full-handshake conn. Matches
+    // nsHttpTransaction::Finish0RTT's restart path.
+    nsCOMPtr<nsISeekableStream> seekable = do_QueryInterface(mRequestStream);
+    if (seekable) {
+      (void)seekable->Seek(nsISeekableStream::NS_SEEK_SET, 0);
+    }
+  }
 }
 
 void nsHttpTransaction::Refused0RTT() {
@@ -3305,26 +3449,37 @@ void nsHttpTransaction::SetHttpTrailers(nsCString& aTrailers) {
 }
 
 bool nsHttpTransaction::IsWebsocketUpgrade() {
+  if (mIsWebsocketUpgrade.isSome()) {
+    return *mIsWebsocketUpgrade;
+  }
+  bool result = false;
   if (mRequestHead) {
     nsAutoCString upgradeHeader;
     if (NS_SUCCEEDED(mRequestHead->GetHeader(nsHttp::Upgrade, upgradeHeader)) &&
         upgradeHeader.LowerCaseEqualsLiteral("websocket")) {
-      return true;
+      result = true;
     }
   }
-  return false;
+  mIsWebsocketUpgrade = Some(result);
+  return result;
 }
 
-void nsHttpTransaction::OnProxyConnectComplete(int32_t aResponseCode) {
+void nsHttpTransaction::OnProxyConnectComplete(
+    ProxyConnectResponseHead* aResponseHead) {
   MOZ_ASSERT(OnSocketThread(), "not on socket thread");
   MOZ_ASSERT(mConnInfo->UsingConnect());
+  MOZ_ASSERT(aResponseHead);
 
+  int32_t status = aResponseHead->Head().Status();
   LOG(("nsHttpTransaction::OnProxyConnectComplete %p aResponseCode=%d", this,
-       aResponseCode));
+       status));
 
-  mProxyConnectResponseCode = aResponseCode;
+  {
+    MutexAutoLock lock(mLock);
+    mProxyConnectResponseHead = aResponseHead;
+  }
 
-  if (mConnInfo->IsHttp3() && mProxyConnectResponseCode == 200 &&
+  if (mConnInfo->IsHttp3() && status == 200 &&
       !mHttp3TunnelFallbackTimerCreated) {
     mHttp3TunnelFallbackTimerCreated = true;
     CreateAndStartTimer(mHttp3TunnelFallbackTimer, this,
@@ -3333,11 +3488,19 @@ void nsHttpTransaction::OnProxyConnectComplete(int32_t aResponseCode) {
 }
 
 int32_t nsHttpTransaction::GetProxyConnectResponseCode() {
-  return mProxyConnectResponseCode;
+  MutexAutoLock lock(mLock);
+  return mProxyConnectResponseHead ? mProxyConnectResponseHead->Head().Status()
+                                   : 0;
+}
+
+RefPtr<ProxyConnectResponseHead>
+nsHttpTransaction::GetProxyConnectResponseHead() {
+  MutexAutoLock lock(mLock);
+  return mProxyConnectResponseHead;
 }
 
 void nsHttpTransaction::SetFlat407Headers(const nsACString& aHeaders) {
-  MOZ_ASSERT(mProxyConnectResponseCode == 407);
+  MOZ_ASSERT(GetProxyConnectResponseCode() == 407);
   MOZ_ASSERT(!mResponseHead);
 
   LOG(("nsHttpTransaction::SetFlat407Headers %p", this));

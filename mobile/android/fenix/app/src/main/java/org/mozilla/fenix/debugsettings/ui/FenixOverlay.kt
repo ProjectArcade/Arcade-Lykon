@@ -20,7 +20,8 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.createTab
@@ -30,7 +31,10 @@ import mozilla.components.concept.storage.CreditCardsAddressesStorage
 import mozilla.components.concept.storage.LoginsStorage
 import mozilla.telemetry.glean.Glean
 import org.mozilla.fenix.R
+import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.ClientUUID
+import org.mozilla.fenix.components.appstate.AppAction
+import org.mozilla.fenix.components.components
 import org.mozilla.fenix.debugsettings.addresses.AddressesDebugRegionRepository
 import org.mozilla.fenix.debugsettings.addresses.AddressesTools
 import org.mozilla.fenix.debugsettings.addresses.FakeAddressesDebugRegionRepository
@@ -55,8 +59,8 @@ import org.mozilla.fenix.debugsettings.store.DebugDrawerTelemetryMiddleware
 import org.mozilla.fenix.debugsettings.store.DrawerStatus
 import org.mozilla.fenix.debugsettings.tabs.TabGroupTools
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.tabgroups.storage.database.StoredTabGroup
-import org.mozilla.fenix.tabgroups.storage.database.TapGroupAssignment
+import org.mozilla.fenix.tabgroups.storage.data.TabGroup
+import org.mozilla.fenix.tabgroups.storage.data.TabGroupData
 import org.mozilla.fenix.tabgroups.storage.repository.TabGroupRepository
 import org.mozilla.fenix.theme.DefaultThemeProvider
 import org.mozilla.fenix.theme.FirefoxTheme
@@ -81,11 +85,13 @@ fun FenixOverlay(
 
     FenixOverlay(
         browserStore = browserStore,
+        appStore = context.components.appStore,
         cfrToolsStore = CfrToolsStore(
             middlewares = listOf(
                 CfrToolsPreferencesMiddleware(
                     cfrPreferencesRepository = DefaultCfrPreferencesRepository(
                         context = LocalContext.current,
+                        settings = components.settings,
                         lifecycleOwner = lifecycleOwner,
                         coroutineScope = lifecycleOwner.lifecycleScope,
                     ),
@@ -131,6 +137,7 @@ fun FenixOverlay(
 /**
  * Overlay for presenting Fenix-wide debugging content.
  *
+ * @param appStore [AppStore] used to dispatch [AppAction] actions.
  * @param browserStore [BrowserStore] used to access [BrowserState].
  * @param cfrToolsStore [CfrToolsStore] used to access [CfrToolsState].
  * @param gleanDebugToolsStore [GleanDebugToolsStore] used to access [GleanDebugToolsState].
@@ -145,6 +152,7 @@ fun FenixOverlay(
 @Suppress("LongParameterList")
 @Composable
 private fun FenixOverlay(
+    appStore: AppStore,
     browserStore: BrowserStore,
     cfrToolsStore: CfrToolsStore,
     gleanDebugToolsStore: GleanDebugToolsStore,
@@ -178,6 +186,7 @@ private fun FenixOverlay(
     val debugDrawerDestinations = remember {
         DebugDrawerRoute.generateDebugDrawerDestinations(
             debugDrawerStore = debugDrawerStore,
+            appStore = appStore,
             browserStore = browserStore,
             cfrToolsStore = cfrToolsStore,
             gleanDebugToolsStore = gleanDebugToolsStore,
@@ -219,41 +228,31 @@ private fun FenixOverlayPreview() {
     val selectedTab = createTab("https://mozilla.org")
 
     val mockTabGroupRepository = object : TabGroupRepository {
-        override fun observeTabGroups() = MutableStateFlow(
-            listOf(
-                StoredTabGroup(id = "1", title = "Mock Open", theme = "Blue", closed = false, lastModified = 0L),
-                StoredTabGroup(id = "2", title = "Mock Closed", theme = "Orange", closed = true, lastModified = 0L),
-            ),
-        )
-        override suspend fun createTabGroupWithTabs(tabGroup: StoredTabGroup, tabIds: List<String>) {}
-        override suspend fun fetchTabGroups(): List<StoredTabGroup> = emptyList()
-        override suspend fun fetchTabGroupById(id: String): StoredTabGroup? = null
-        override suspend fun addNewTabGroup(tabGroup: StoredTabGroup) {}
-        override suspend fun updateTabGroup(tabGroup: StoredTabGroup) {}
+        override val tabGroupDataFlow: Flow<TabGroupData>
+            get() = flowOf()
+
+        override suspend fun createTabGroupWithTabs(tabGroup: TabGroup, tabIds: List<String>) {}
         override suspend fun closeTabGroup(tabGroupId: String) {}
         override suspend fun openTabGroup(tabGroupId: String) {}
         override suspend fun closeAllTabGroups() {}
-        override suspend fun deleteTabGroup(tabGroup: StoredTabGroup) {}
         override suspend fun deleteTabGroupById(tabGroupId: String) {}
         override suspend fun deleteTabGroupsById(ids: List<String>) {}
-        override fun observeTabGroupAssignments() = MutableStateFlow(emptyMap<String, String>())
-        override suspend fun fetchTabGroupAssignments(): Map<String, String> = emptyMap()
         override suspend fun addTabGroupAssignment(tabId: String, tabGroupId: String) {}
-        override suspend fun addTabGroupAssignments(assignments: List<TapGroupAssignment>) {}
         override suspend fun addTabsToTabGroup(tabGroupId: String, tabIds: List<String>) {}
         override suspend fun updateTabGroupAssignment(tabId: String, tabGroupId: String) {}
-        override suspend fun deleteTabGroupAssignment(assignment: TapGroupAssignment) {}
         override suspend fun deleteTabGroupAssignmentById(tabId: String) {}
         override suspend fun deleteTabGroupAssignmentsById(tabIds: List<String>) {}
         override suspend fun deleteAllTabGroupAssignmentsForGroup(tabGroupId: String) {}
-        override suspend fun addTabGroupAssignment(assignment: TapGroupAssignment) {}
         override suspend fun deleteAllTabGroupData() {}
+        override suspend fun addNewTabGroup(tabGroup: TabGroup) {}
+        override suspend fun updateTabGroup(tabGroup: TabGroup) {}
     }
 
     FenixOverlay(
         browserStore = BrowserStore(
             BrowserState(selectedTabId = selectedTab.id, tabs = listOf(selectedTab)),
         ),
+        appStore = org.mozilla.fenix.components.AppStore(),
         cfrToolsStore = CfrToolsStore(),
         gleanDebugToolsStore = GleanDebugToolsStore(
             initialState = GleanDebugToolsState(

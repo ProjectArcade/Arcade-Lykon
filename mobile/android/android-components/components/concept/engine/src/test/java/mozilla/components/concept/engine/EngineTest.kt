@@ -14,11 +14,11 @@ import mozilla.components.concept.engine.utils.EngineVersion
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.lang.UnsupportedOperationException
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 class EngineTest {
 

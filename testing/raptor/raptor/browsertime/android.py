@@ -54,7 +54,11 @@ class BrowsertimeAndroid(PerftestAndroid, Browsertime):
         if self.device is None:
             self.device = ADBDeviceFactory(verbose=True)
             if not self.config.get("disable_perf_tuning", False):
-                tune_performance(self.device, log=LOG)
+                tune_performance(
+                    self.device,
+                    log=LOG,
+                    test_names=self._test_names,
+                )
 
     @property
     def android_external_storage(self):
@@ -175,7 +179,7 @@ class BrowsertimeAndroid(PerftestAndroid, Browsertime):
 
         if test.get("playback", False):
             pb_args = [
-                "--proxy-server=%s:%d" % (self.playback.host, self.playback.port),
+                f"--proxy-server={self.playback.host}:{self.playback.port}",
                 "--proxy-bypass-list=localhost;127.0.0.1",
                 "--ignore-certificate-errors",
             ]
@@ -217,7 +221,7 @@ class BrowsertimeAndroid(PerftestAndroid, Browsertime):
 
         self.geckodriver_profile = os.path.join(
             self.android_external_storage,
-            "%s-geckodriver-profile" % self.config["binary"],
+            f"{self.config['binary']}-geckodriver-profile",
         )
 
         # make sure no remote profile exists
@@ -235,6 +239,7 @@ class BrowsertimeAndroid(PerftestAndroid, Browsertime):
             self.remove_mozprofile_delimiters_from_profile()
 
     def run_tests(self, tests, test_names):
+        self._test_names = test_names
         self.setup_adb_device()
 
         if self.config["app"] in CHROME_ANDROID_APPS:

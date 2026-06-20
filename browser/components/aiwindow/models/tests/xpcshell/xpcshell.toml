@@ -9,7 +9,11 @@ firefox-appdir = "browser"
 
 ["test_ChatUtils.js"]
 
+["test_Conversation.js"]
+
 ["test_ConversationSuggestions.js"]
+
+["test_ManageTabs.js"]
 
 ["test_Memories.js"]
 
@@ -27,6 +31,12 @@ firefox-appdir = "browser"
 
 ["test_MemoriesManager.js"]
 
+["test_MemoriesSessions.js"]
+
+["test_Message.js"]
+
+["test_PromptLoader_buildConversation.js"]
+
 ["test_PromptOptimizer.js"]
 
 ["test_SearchBrowsingHistory.js"]
@@ -37,9 +47,15 @@ firefox-appdir = "browser"
 
 ["test_SensitiveInfoDetector.js"]
 
+["test_TelemetryManager.js"]
+
+["test_TelemetryUtils.js"]
+
 ["test_TitleGeneration.js"]
 
 ["test_ToolDefinitions.js"]
+
+["test_Tools_AddMemory.js"]
 
 ["test_Tools_GetOpenTabs.js"]
 
@@ -47,14 +63,20 @@ firefox-appdir = "browser"
 
 ["test_Tools_GetUserMemories.js"]
 
+["test_Tools_ManageTabs.js"]
+
 ["test_Tools_RunSearch.js"]
 
 ["test_Tools_SearchBrowsingHistory.js"]
+
+["test_Tools_WorldCup.js"]
 
 ["test_Utils.js"]
 
 ["test_Utils_RemoteSettings.js"]
 
 ["test_Utils_RemoteSettings_ChatModelChoice.js"]
+
+["test_engine_build_object_form.js"]
 
 ["test_intent_classifier.js"]

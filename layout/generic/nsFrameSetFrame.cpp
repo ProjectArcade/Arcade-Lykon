@@ -15,6 +15,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/PresShellInlines.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/ServoStyleSet.h"
 #include "mozilla/ServoStyleSetInlines.h"
 #include "mozilla/dom/ChildIterator.h"
@@ -299,7 +300,11 @@ void nsHTMLFramesetFrame::Init(nsIContent* aContent, nsContainerFrame* aParent,
       mChildFrameborder[mChildCount] = GetFrameBorder(child);
       mChildBorderColors[mChildCount].Set(GetBorderColor(child));
     }
-    child->SetPrimaryFrame(frame);
+    if (!child->GetPrimaryFrame()) [[likely]] {
+      // Child might have a pre-existing primary frame if we're doing fixed-pos
+      // replication... This code is really disgusting.
+      child->SetPrimaryFrame(frame);
+    }
 
     mFrames.AppendFrame(nullptr, frame);
 

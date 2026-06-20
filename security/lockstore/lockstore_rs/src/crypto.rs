@@ -80,6 +80,20 @@ fn cipher_suite_from_id(id: u8) -> Option<CipherSuite> {
     }
 }
 
+/// Parse the cipher-suite id from the leading byte of a self-describing
+/// ciphertext blob produced by `encrypt_with_symkey` /
+/// `encrypt_with_key`. Returns `Decryption` on an empty blob or an
+/// unknown id.
+pub(crate) fn cipher_suite_of_blob(blob: &[u8]) -> Result<CipherSuite, LockstoreError> {
+    if blob.is_empty() {
+        return Err(LockstoreError::Decryption(
+            "Ciphertext is empty".to_string(),
+        ));
+    }
+    cipher_suite_from_id(blob[0])
+        .ok_or_else(|| LockstoreError::Decryption(format!("Unknown cipher suite id: {}", blob[0])))
+}
+
 fn random_bytes(size: usize) -> Vec<u8> {
     let mut buf = vec![0u8; size];
     p11::randomize(&mut buf);
@@ -92,6 +106,14 @@ pub fn generate_random_key(cipher_suite: CipherSuite) -> Vec<u8> {
 
 pub fn generate_random_nonce(cipher_suite: CipherSuite) -> Vec<u8> {
     random_bytes(cipher_suite.nonce_size())
+}
+
+/// `len` random bytes from NSS's PRNG. Use for salts and any other
+/// random byte string whose size is not derived from a `CipherSuite`.
+/// For nonces tied to a cipher suite, use `generate_random_nonce`; for
+/// symmetric keys, use `generate_random_key`.
+pub fn generate_random_bytes(len: usize) -> Vec<u8> {
+    random_bytes(len)
 }
 
 /// Encrypts data using AEAD with a SymKey handle.
@@ -109,12 +131,17 @@ pub fn encrypt_with_symkey(
     let mut aead = Aead::new(Mode::Encrypt, alg, key, nonce_bytes)
         .map_err(|e| LockstoreError::Encryption(format!("Failed to create AEAD: {}", e)))?;
 
+    // The cipher-suite id is prepended to the blob as its first byte;
+    // pass that same byte as AAD so the AEAD tag authenticates it
+    // directly. Tampering with the prefix is then caught by tag
+    // verification, not just by our own prefix consistency check.
+    let aad = [cipher_suite_id(cipher_suite)];
     let ciphertext = aead
-        .encrypt(&[], plaintext)
+        .encrypt(&aad, plaintext)
         .map_err(|e| LockstoreError::Encryption(format!("Encryption failed: {}", e)))?;
 
     let mut result = Vec::with_capacity(1 + nonce.len() + ciphertext.len());
-    result.push(cipher_suite_id(cipher_suite));
+    result.push(aad[0]);
     result.extend_from_slice(&nonce);
     result.extend_from_slice(&ciphertext);
 
@@ -130,8 +157,9 @@ pub fn decrypt_with_symkey(ciphertext: &[u8], key: &SymKey) -> Result<Vec<u8>, L
         ));
     }
 
-    let cipher_suite = cipher_suite_from_id(ciphertext[0]).ok_or_else(|| {
-        LockstoreError::Decryption(format!("Unknown cipher suite id: {}", ciphertext[0]))
+    let suite_byte = ciphertext[0];
+    let cipher_suite = cipher_suite_from_id(suite_byte).ok_or_else(|| {
+        LockstoreError::Decryption(format!("Unknown cipher suite id: {}", suite_byte))
     })?;
     let ciphertext = &ciphertext[1..];
     let nonce_size = cipher_suite.nonce_size();
@@ -150,8 +178,11 @@ pub fn decrypt_with_symkey(ciphertext: &[u8], key: &SymKey) -> Result<Vec<u8>, L
     let mut aead = Aead::new(Mode::Decrypt, alg, key, nonce_bytes)
         .map_err(|e| LockstoreError::Decryption(format!("Failed to create AEAD: {}", e)))?;
 
+    // AAD = the suite-id prefix byte (see `encrypt_with_symkey`); tag
+    // verification fails if the prefix has been tampered with.
+    let aad = [suite_byte];
     let plaintext = aead
-        .decrypt(&[], 0, actual_ciphertext)
+        .decrypt(&aad, 0, actual_ciphertext)
         .map_err(|e| LockstoreError::Decryption(format!("Decryption failed: {}", e)))?;
 
     Ok(plaintext)

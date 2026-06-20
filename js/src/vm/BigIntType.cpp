@@ -1632,6 +1632,7 @@ BigInt* BigInt::parseLiteralDigits(JSContext* cx, Range<const CharT> chars,
       "excessively instantiating this template");
 
   MOZ_ASSERT(chars.length());
+  MOZ_ASSERT(2 <= radix && radix <= 36);
 
   RangedPtr<const CharT> start = chars.begin();
   RangedPtr<const CharT> end = chars.end();
@@ -1670,8 +1671,8 @@ BigInt* BigInt::parseLiteralDigits(JSContext* cx, Range<const CharT> chars,
 
   // Numbers in radix 2, 4, and 16 can be directly stored into the result when
   // parsing from right to left.
-  uint8_t log2 = mozilla::FloorLog2(radix);
-  if (std::has_single_bit(log2)) {
+  if (radix == 2 || radix == 4 || radix == 16) {
+    uint8_t log2 = mozilla::FloorLog2(radix);
     size_t chunkChars = BigInt::DigitBits >> mozilla::FloorLog2(log2);
 
     size_t i = 0;
@@ -2929,7 +2930,7 @@ BigInt* BigInt::asUintN(JSContext* cx, HandleBigInt x, uint64_t bits) {
   }
 
   size_t length;
-  Digit highDigitMask;
+  Digit highDigitMask, mask;
   {
     auto xDigits = x->digits();
     Digit msd = xDigits[xDigits.size() - 1];
@@ -2947,7 +2948,7 @@ BigInt* BigInt::asUintN(JSContext* cx, HandleBigInt x, uint64_t bits) {
     // Eagerly trim high zero digits.
     const size_t highDigitBits = ((bits - 1) % DigitBits) + 1;
     highDigitMask = Digit(-1) >> (DigitBits - highDigitBits);
-    Digit mask = highDigitMask;
+    mask = highDigitMask;
     while (length > 0) {
       if (xDigits[length - 1] & mask) {
         break;
@@ -2968,7 +2969,6 @@ BigInt* BigInt::asUintN(JSContext* cx, HandleBigInt x, uint64_t bits) {
 
   auto xDigits = x->digits();
   auto resDigits = res->digits();
-  Digit mask = highDigitMask;
   while (length-- > 0) {
     resDigits[length] = xDigits[length] & mask;
     mask = Digit(-1);

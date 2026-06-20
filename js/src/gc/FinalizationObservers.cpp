@@ -159,11 +159,15 @@ ObserverList& ObserverList::operator=(ObserverList&& other) {
   next.setPrev(this);
   prev.setNext(this);
 
-  other.next = &other;
-  other.prev = &other;
-  MOZ_ASSERT(other.isEmpty());
+  other.makeEmpty();
 
   return *this;
+}
+
+void ObserverList::makeEmpty() {
+  next = this;
+  prev = this;
+  MOZ_ASSERT(isEmpty());
 }
 
 bool ObserverList::isEmpty() const {
@@ -192,6 +196,25 @@ void ObserverList::insertFront(ObserverListObject* obj) {
 
   oldNext.setPrev(obj);
   obj->setPrev(this);
+}
+
+static inline void LinkElements(ObserverListPtr a, ObserverListPtr b) {
+  a.setNext(b);
+  b.setPrev(a);
+}
+
+void ObserverList::append(ObserverList&& other) {
+  // The things in these lists might be gray.
+  AutoTouchingGrayThings atgt;
+
+  if (other.isEmpty()) {
+    return;
+  }
+
+  LinkElements(getPrev(), other.getNext());
+  LinkElements(other.getPrev(), this);
+
+  other.makeEmpty();
 }
 
 void ObserverList::setNext(Ptr link) { next = link; }
@@ -651,11 +674,13 @@ bool GCRuntime::relocateFinalizationObserverTarget(const Value& oldTarget,
     return true;
   }
 
-  // Update the target stored in each WeakRefObject.
+  // Update the target stored in each WeakRefObject, skipping dying objects.
   for (auto iter = weakRefList.iter(); !iter.done(); iter.next()) {
     auto* weakRef = &iter.get()->as<WeakRefObject>();
-    MOZ_ASSERT(weakRef->target() == oldTarget);
-    weakRef->setTargetUnbarriered(newTarget);
+    if (!IsAboutToBeFinalizedUnbarriered(weakRef)) {
+      MOZ_ASSERT(weakRef->target() == oldTarget);
+      weakRef->setTarget(newTarget);
+    }
   }
 
   Zone* newZone = GetWeakTargetZone(newTarget);
@@ -691,17 +716,12 @@ ObserverList FinalizationObservers::extractWeakRefObservers(
 bool FinalizationObservers::addWeakRefObservers(const Value& target,
                                                 ObserverList&& list) {
   auto ptr = weakRefMap.lookupForAdd(target);
-  if (ptr) {
-    // There's already an entry for this target (unlikely but possible).
-    // Merge the lists by moving elements one by one.
-    ObserverList& existing = ptr->value();
-    while (!list.isEmpty()) {
-      existing.insertFront(list.getFirst());
-    }
-    return true;
+  if (!ptr && !weakRefMap.add(ptr, target, ObserverList())) {
+    return false;
   }
 
-  return weakRefMap.add(ptr, target, std::move(list));
+  ptr->value().append(std::move(list));
+  return true;
 }
 
 ObserverList FinalizationObservers::extractRecordObservers(
@@ -718,17 +738,12 @@ ObserverList FinalizationObservers::extractRecordObservers(
 bool FinalizationObservers::addRecordObservers(const Value& target,
                                                ObserverList&& list) {
   auto ptr = recordMap.lookupForAdd(target);
-  if (ptr) {
-    // There's already an entry for this target (unlikely but possible).
-    // Merge the lists by moving elements one by one.
-    ObserverList& existing = ptr->value();
-    while (!list.isEmpty()) {
-      existing.insertFront(list.getFirst());
-    }
-    return true;
+  if (!ptr && !recordMap.add(ptr, target, ObserverList())) {
+    return false;
   }
 
-  return recordMap.add(ptr, target, std::move(list));
+  ptr->value().append(std::move(list));
+  return true;
 }
 
 /* static */

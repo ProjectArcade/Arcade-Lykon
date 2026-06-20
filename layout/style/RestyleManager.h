@@ -355,6 +355,12 @@ class RestyleManager {
                         const nsAttrValue* aOldValue);
 
   /**
+   * Recascade aElement and its pseudo-elements if they depend on
+   * aAttribute through attr().
+   */
+  void MaybeRecascadeForAttrFunction(Element* aElement, nsAtom* aAttribute);
+
+  /**
    * Restyle an element's previous and/or next siblings.
    */
   void RestyleSiblingsForNthOf(dom::Element* aChild,
@@ -492,7 +498,7 @@ class RestyleManager {
   void RestyleWholeContainer(nsINode* aContainer, NodeSelectorFlags);
   void RestylePreviousSiblings(nsIContent* aStartingSibling);
   void RestyleSiblingsStartingWith(nsIContent* aStartingSibling);
-
+  void RecascadeForTreeCountingFunctions(nsINode* aContainer);
   void RestyleForEmptyChange(Element* aContainer);
   void MaybeRestyleForEdgeChildChange(nsINode* aContainer,
                                       nsIContent* aChangedChild);

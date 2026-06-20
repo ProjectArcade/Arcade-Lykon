@@ -47,7 +47,6 @@ import mozprocess
 import mozrunner
 from manifestparser import TestManifest
 from manifestparser.filters import (
-    chunk_by_slice,
     failures,
     pathprefix,
     subsuite,
@@ -85,6 +84,7 @@ from mozprofile.cli import KeyValueParseError, parse_key_value, parse_preference
 from mozprofile.permissions import ServerLocations
 from mozrunner.utils import get_stack_fixer_function, test_environment
 from mozscreenshot import dump_screen
+from moztest.tsan import TSANErrorParser
 
 HAVE_PSUTIL = False
 try:
@@ -223,7 +223,10 @@ class MessageLogger:
 
     def _fix_test_name(self, message):
         """Normalize a logged test path to match the relative path from the sourcedir."""
-        if message.get("test") is not None:
+        if message.get("test") is None:
+            if self._current_test_name is not None:
+                message["test"] = self._current_test_name
+        else:
             test = message["test"]
             for pattern in MessageLogger.TEST_PATH_PREFIXES:
                 test = re.sub(pattern, "", test)
@@ -594,6 +597,15 @@ class MochitestServer:
                 os.path.join(os.path.dirname(here), "bin"),
                 env["LD_LIBRARY_PATH"],
             ])
+            # The trainhop bundle ships an m-c libxul.so in tests/bin that gets
+            # loaded by this xpcshell. That libxul would rendez-vous with the
+            # crashhelper from the Beta/Release application directory, but the
+            # two speak incompatible IPC protocols (see bug 2037462), causing
+            # the synchronous startup rendez-vous to hang. The httpd xpcshell
+            # is not the SUT, so suppress its crash-reporter setup -- xpcshell
+            # only enters the OOPInit/SetExceptionHandler block when
+            # MOZ_CRASHREPORTER is set (XPCShellImpl.cpp), so we just unset it.
+            env.pop("MOZ_CRASHREPORTER", None)
 
         # When running with an ASan build, our xpcshell server will also be ASan-enabled,
         # thus consuming too much resources when running together with the browser on
@@ -1684,12 +1696,6 @@ class MochitestDesktop:
             manifestFile.write(
                 f"content mochitests {chrometestDir} contentaccessible=yes\n"
             )
-            manifestFile.write(
-                f"content mochitests-any {chrometestDir} contentaccessible=yes remoteenabled=yes\n"
-            )
-            manifestFile.write(
-                f"content mochitests-content {chrometestDir} contentaccessible=yes remoterequired=yes\n"
-            )
 
             if options.testingModulesDir is not None:
                 manifestFile.write(
@@ -1844,9 +1850,6 @@ toolbar#nav-bar {
                 options.test_paths = self.normalize_paths(options.test_paths)
                 path_filter = pathprefix(options.test_paths)
                 filters.append(path_filter)
-
-            if options.totalChunks:
-                filters.append(chunk_by_slice(options.thisChunk, options.totalChunks))
 
             noDefaultFilters = False
             if options.runFailures:
@@ -2688,6 +2691,11 @@ toolbar#nav-bar {
             self.virtualAudioNodeIdList = []
 
     def dumpScreen(self, utilityPath):
+        if self.message_logger.retry_mode:
+            self.log.info(
+                "Not taking screenshot here: screenshot will be taken on retry if the test still fails"
+            )
+            return
         if self.haveDumpedScreen:
             self.log.info(
                 "Not taking screenshot here: see the one that was previously logged"
@@ -2899,12 +2907,12 @@ toolbar#nav-bar {
 
             # Log if slow events are used from chrome.
             env["MOZ_LOG"] = (
-                env["MOZ_LOG"] + "," if env["MOZ_LOG"] else ""
+                env["MOZ_LOG"] + "," if env.get("MOZ_LOG") else ""
             ) + "SlowChromeEvent:3"
 
             if detectShutdownLeaks:
                 env["MOZ_LOG"] = (
-                    env["MOZ_LOG"] + "," if env["MOZ_LOG"] else ""
+                    env["MOZ_LOG"] + "," if env.get("MOZ_LOG") else ""
                 ) + "DocShellAndDOMWindowLeak:3"
                 shutdownLeaks = ShutdownLeaks(self.log)
             else:
@@ -2915,6 +2923,11 @@ toolbar#nav-bar {
             else:
                 lsanLeaks = None
 
+            if mozinfo.info["tsan"] and mozinfo.isLinux and mozinfo.bits == 64:
+                tsanErrors = TSANErrorParser(self.log)
+            else:
+                tsanErrors = None
+
             # create an instance to process the output
             outputHandler = self.OutputHandler(
                 harness=self,
@@ -2924,6 +2937,7 @@ toolbar#nav-bar {
                 dump_screen_on_fail=screenshotOnFail,
                 shutdownLeaks=shutdownLeaks,
                 lsanLeaks=lsanLeaks,
+                tsanErrors=tsanErrors,
                 bisectChunk=bisectChunk,
                 restartAfterFailure=restartAfterFailure,
             )
@@ -3052,10 +3066,18 @@ toolbar#nav-bar {
             runner.process_handler = None
 
             if not status and self.message_logger.is_test_running:
+                # In retry mode, queue the test for retry and suppress the
+                # unexpected failure on the initial run; otherwise report it
+                # as a real failure.
+                if self.message_logger.retry_mode:
+                    self.failedTests.add(self.lastTestSeen)
+                    expected = "FAIL"
+                else:
+                    expected = "PASS"
                 message = {
                     "action": "test_end",
                     "status": "FAIL",
-                    "expected": "PASS",
+                    "expected": expected,
                     "thread": None,
                     "pid": None,
                     "source": "mochitest",
@@ -3128,13 +3150,12 @@ toolbar#nav-bar {
             )
 
             expected = None
-            if crashAsPass or crash_count > 0:
+            if crashAsPass:
                 # self.message_logger.is_test_running indicates we need a test_end message
                 if self.message_logger.is_test_running:
                     # this works for browser-chrome, mochitest-plain has status=0
                     expected = "CRASH"
-                if crashAsPass:
-                    status = 0
+                status = 0
             elif crash_count or zombieProcesses:
                 if self.message_logger.is_test_running:
                     expected = "PASS"
@@ -3463,7 +3484,21 @@ toolbar#nav-bar {
                 self.countretry += len(self.failedTests)
                 self.log.info("Retrying tests that failed during initial run.")
                 self.log.group_start(name="retry")
-                res = self.doTests(options, self.failedTests, manifestToFilter)
+                if options.restartBetweenTests:
+                    # Restart the browser between each retried test, as on the
+                    # initial run, so the retry still isolates the failures.
+                    res = 0
+                    for test in self.getActiveTests(options):
+                        if test["path"] not in self.failedTests:
+                            continue
+                        testRes = self.doTests(
+                            options, {test["path"]}, manifestToFilter
+                        )
+                        if testRes == TBPL_RETRY:
+                            return testRes
+                        res = res or testRes
+                else:
+                    res = self.doTests(options, self.failedTests, manifestToFilter)
                 self.log.group_end(name="retry")
                 if res == TBPL_RETRY:
                     return res
@@ -4286,6 +4321,7 @@ toolbar#nav-bar {
             dump_screen_on_fail=False,
             shutdownLeaks=None,
             lsanLeaks=None,
+            tsanErrors=None,
             bisectChunk=None,
             restartAfterFailure=None,
         ):
@@ -4300,6 +4336,7 @@ toolbar#nav-bar {
             self.dump_screen_on_fail = dump_screen_on_fail
             self.shutdownLeaks = shutdownLeaks
             self.lsanLeaks = lsanLeaks
+            self.tsanErrors = tsanErrors
             self.bisectChunk = bisectChunk
             self.restartAfterFailure = restartAfterFailure
             self.browserProcessId = None
@@ -4335,6 +4372,7 @@ toolbar#nav-bar {
                 self.dumpScreenOnFail,
                 self.trackShutdownLeaks,
                 self.trackLSANLeaks,
+                self.trackTSanErrors,
                 self.count_structured,
             ]
             if self.bisectChunk or self.restartAfterFailure:
@@ -4355,7 +4393,10 @@ toolbar#nav-bar {
                 self.harness.countfail += unattributedFailures
                 for error in leakErrors:
                     if error["test"] not in self.harness.failedTests:
-                        self.harness.countfail += 1
+                        if self.harness.message_logger.retry_mode:
+                            self.harness.failedTests.add(error["test"])
+                        else:
+                            self.harness.countfail += 1
                     msg = {
                         "action": "test_status",
                         "subtest": "Shutdown",
@@ -4372,6 +4413,9 @@ toolbar#nav-bar {
 
             if self.lsanLeaks:
                 self.harness.countfail += self.lsanLeaks.process()
+
+            if self.tsanErrors:
+                self.tsanErrors.flush()
 
         # output message handlers:
         # these take a message and return a message
@@ -4479,6 +4523,21 @@ toolbar#nav-bar {
                     self.lsanLeaks.log(line, self.harness.lastManifest)
                 else:
                     self.lsanLeaks.log(line, self.harness.lastTestSeen)
+            return message
+
+        def trackTSanErrors(self, message):
+            if self.tsanErrors and message["action"] in ("log", "process_output"):
+                line = (
+                    message.get("message", "")
+                    if message["action"] == "log"
+                    else message["data"]
+                )
+                pid = message.get("process")
+                if "(finished)" in self.harness.lastTestSeen:
+                    scope = self.harness.lastManifest
+                else:
+                    scope = self.harness.lastTestSeen
+                self.tsanErrors.log(line, pid=pid, scope=scope)
             return message
 
         def trackShutdownLeaks(self, message):

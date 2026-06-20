@@ -1750,9 +1750,16 @@ validateSecretKey(SFTKSession *session, SFTKObject *object,
                 sftk_FreeAttribute(attribute);
                 return CKR_KEY_SIZE_RANGE;
             }
+            /* sftk_FindAttribute returns a private copy, so set the parity
+             * bits on it and then write the value back to the object. */
             sftk_FormatDESKey((unsigned char *)attribute->attrib.pValue,
                               attribute->attrib.ulValueLen);
+            crv = sftk_forceAttribute(object, CKA_VALUE,
+                                      attribute->attrib.pValue,
+                                      attribute->attrib.ulValueLen);
             sftk_FreeAttribute(attribute);
+            if (crv != CKR_OK)
+                return crv;
             break;
         case CKK_AES:
             attribute = sftk_FindAttribute(object, CKA_VALUE);
@@ -3447,12 +3454,67 @@ loser:
     return crv;
 }
 
+#ifdef DEBUG
+/*
+ * Count session objects that are still live in a slot and belong to an
+ * application session. The module's own objects (the FIPS validation
+ * indicators hung off slot->moduleObjects) are excluded because softoken owns
+ * them and tears them down separately in SFTK_DestroySlotData.
+ *
+ * When all of a slot's sessions are torn down (logout case below) a
+ * well-behaved application has already destroyed every object it created, so
+ * this count should be zero. A leftover object means the application created a
+ * session object and relied on session/slot teardown to reap it instead of
+ * destroying it -- harmless at exit, but an unbounded leak while the process
+ * runs, since these accumulate on NSS's long-lived internal session.
+ */
+static unsigned int
+sftk_countLiveSessionObjects(SFTKSlot *slot)
+{
+    unsigned int i;
+    unsigned int count = 0;
+
+    PR_Lock(slot->objectLock);
+    for (i = 0; i < slot->sessObjHashSize; i++) {
+        SFTKObject *object;
+        for (object = slot->sessObjHashTable[i]; object;
+             object = object->next) {
+            SFTKSessionObject *so = sftk_narrowToSessionObject(object);
+            if (so && so->session != &slot->moduleObjects) {
+                count++;
+            }
+        }
+    }
+    PR_Unlock(slot->objectLock);
+    return count;
+}
+#endif /* DEBUG */
+
 CK_RV
 sftk_CloseAllSessions(SFTKSlot *slot, PRBool logout)
 {
     SFTKSession *session;
     unsigned int i;
     SFTKDBHandle *handle;
+
+#ifdef DEBUG
+    /* When NSS_STRICT_SHUTDOWN is set, assert that the application has
+     * destroyed all of its session objects before every session on the slot is
+     * torn down (which happens via NSC_CloseAllSessions at slot teardown /
+     * C_Finalize, and via SFTK_ShutdownSlot). The fork child inherits the
+     * parent's objects and cannot clean them up, so skip the check there. */
+    if (logout && !parentForkedAfterC_Initialize &&
+        PR_GetEnvSecure("NSS_STRICT_SHUTDOWN")) {
+        unsigned int live = sftk_countLiveSessionObjects(slot);
+        if (live != 0) {
+            PR_fprintf(PR_STDERR,
+                       "NSS_STRICT_SHUTDOWN: slot %lu still has %u live "
+                       "session object(s) when closing all sessions\n",
+                       (unsigned long)slot->slotID, live);
+        }
+        PORT_Assert(live == 0);
+    }
+#endif
 
     /* first log out the card */
     /* special case - if we are in a middle of upgrade, we want to close the
@@ -3480,7 +3542,7 @@ sftk_CloseAllSessions(SFTKSlot *slot, PRBool logout)
      * NSC_CloseAllSessions... but any session running when this code starts
      * will guarrenteed be close, and no session will be partially closed */
     for (i = 0; i < slot->sessHashSize; i++) {
-        PRLock *lock = SFTK_SESSION_LOCK(slot, i);
+        PRLock *lock = SFTK_HEAD_BUCKET_LOCK(slot, i);
         do {
             SKIP_AFTER_FORK(PR_Lock(lock));
             session = slot->head[i];
@@ -3504,7 +3566,7 @@ sftk_CloseAllSessions(SFTKSlot *slot, PRBool logout)
                 SKIP_AFTER_FORK(PR_Unlock(lock));
             }
             if (session) {
-                sftk_DestroySession(session);
+                sftk_FreeSession(session);
             }
         } while (session != NULL);
     }
@@ -4871,6 +4933,10 @@ NSC_CloseSession(CK_SESSION_HANDLE hSession)
     if (sftkqueue_is_queued(session, hSession, slot->head, slot->sessHashSize)) {
         sessionFound = PR_TRUE;
         sftkqueue_delete(session, hSession, slot->head, slot->sessHashSize);
+        /* Drop the bucket's reference. We still hold the reference taken
+         * by sftk_SessionFromHandle, so refCount cannot reach 0 here. */
+        PORT_Assert(session->refCount > 1);
+        session->refCount--;
     }
     PR_Unlock(lock);
 
@@ -4891,10 +4957,11 @@ NSC_CloseSession(CK_SESSION_HANDLE hSession)
         if (handle) {
             sftk_freeDB(handle);
         }
-        sftk_DestroySession(session);
-        session = NULL;
     }
 
+    /* Drop the lookup reference. Whichever caller drives refCount to 0
+     * destroys the session. */
+    sftk_FreeSession(session);
     return CKR_OK;
 }
 
@@ -5144,7 +5211,6 @@ sftk_CreateNewSlot(SFTKSlot *slot, CK_OBJECT_CLASS class,
     unsigned int moduleIndex = NSC_NON_FIPS_MODULE;
     SFTKAttribute *attribute;
     sftk_parameters paramStrings;
-    char *paramString;
     CK_SLOT_ID slotID = 0;
     SFTKSlot *newSlot = NULL;
     CK_RV crv = CKR_OK;
@@ -5159,8 +5225,16 @@ sftk_CreateNewSlot(SFTKSlot *slot, CK_OBJECT_CLASS class,
     if (attribute == NULL) {
         return CKR_TEMPLATE_INCOMPLETE;
     }
-    paramString = (char *)attribute->attrib.pValue;
-    crv = sftk_parseParameters(paramString, &paramStrings, isFIPS);
+    /* sftk_parseParameters scans attribute->attrib.pValue as a C string;
+     * reject if it isn't NUL-terminated within ulValueLen. */
+    if (attribute->attrib.ulValueLen == 0 ||
+        memchr(attribute->attrib.pValue, '\0',
+               attribute->attrib.ulValueLen) == NULL) {
+        crv = CKR_ATTRIBUTE_VALUE_INVALID;
+        goto loser;
+    }
+    crv = sftk_parseParameters((char *)attribute->attrib.pValue,
+                               &paramStrings, isFIPS);
     if (crv != CKR_OK) {
         goto loser;
     }
@@ -5828,6 +5902,45 @@ sftk_searchTokenList(SFTKSlot *slot, SFTKSearchResults *search,
     return crv;
 }
 
+/* Atomically install a search, returning whatever was previously installed
+ * (which the caller must free). Without the lock, two concurrent
+ * FindObjectsInit calls each read NULL, then one's later assignment
+ * overwrites the other's, leaking the loser. The lock also protects the
+ * "take" side, so a concurrent FindObjects/FindObjectsFinal can't observe
+ * a torn replacement. */
+static SFTKSearchResults *
+sftk_SwapSearch(SFTKSession *session, SFTKSearchResults *new_search)
+{
+    SFTKSlot *slot = sftk_SlotFromSession(session);
+    PRLock *lock = SFTK_SESSION_LOCK(slot, session->handle);
+    SFTKSearchResults *prev;
+    PR_Lock(lock);
+    prev = session->search;
+    session->search = new_search;
+    PR_Unlock(lock);
+    return prev;
+}
+
+/* Try to reinstall a search after a partial consume. If a concurrent
+ * FindObjectsInit replaced the search while we worked, our search is
+ * stale; signal the caller to free it. */
+static PRBool
+sftk_RestoreSearch(SFTKSession *session, SFTKSearchResults *search)
+{
+    SFTKSlot *slot = sftk_SlotFromSession(session);
+    PRLock *lock = SFTK_SESSION_LOCK(slot, session->handle);
+    PRBool restored;
+    PR_Lock(lock);
+    if (session->search == NULL) {
+        session->search = search;
+        restored = PR_TRUE;
+    } else {
+        restored = PR_FALSE;
+    }
+    PR_Unlock(lock);
+    return restored;
+}
+
 /* NSC_FindObjectsInit initializes a search for token and session objects
  * that match a template. */
 CK_RV
@@ -5906,11 +6019,10 @@ NSC_FindObjectsInit(CK_SESSION_HANDLE hSession,
         }
     }
 
-    if ((freeSearch = session->search) != NULL) {
-        session->search = NULL;
+    freeSearch = sftk_SwapSearch(session, search);
+    if (freeSearch != NULL) {
         sftk_FreeSearch(freeSearch);
     }
-    session->search = search;
     sftk_FreeSession(session);
     return CKR_OK;
 
@@ -5942,12 +6054,16 @@ NSC_FindObjects(CK_SESSION_HANDLE hSession,
     session = sftk_SessionFromHandle(hSession);
     if (session == NULL)
         return CKR_SESSION_HANDLE_INVALID;
-    if (session->search == NULL) {
+    /* Take ownership of the search for the duration of the iteration so
+     * a concurrent FindObjectsInit/FindObjectsFinal can't free it under
+     * us. If another thread takes it first, we behave as if the search
+     * had been exhausted: zero results, no error. */
+    search = sftk_SwapSearch(session, NULL);
+    if (search == NULL) {
         sftk_FreeSession(session);
         return CKR_OK;
     }
-    search = session->search;
-    left = session->search->size - session->search->index;
+    left = search->size - search->index;
     transfer = ((int)ulMaxObjectCount > left) ? left : ulMaxObjectCount;
     if (transfer > 0) {
         PORT_Memcpy(phObject, &search->handles[search->index],
@@ -5958,7 +6074,11 @@ NSC_FindObjects(CK_SESSION_HANDLE hSession,
 
     search->index += transfer;
     if (search->index == search->size) {
-        session->search = NULL;
+        /* fully consumed */
+        sftk_FreeSearch(search);
+    } else if (!sftk_RestoreSearch(session, search)) {
+        /* A concurrent FindObjectsInit installed a newer search while
+         * we were iterating; ours is now stale, drop it. */
         sftk_FreeSearch(search);
     }
     *pulObjectCount = transfer;
@@ -5978,8 +6098,7 @@ NSC_FindObjectsFinal(CK_SESSION_HANDLE hSession)
     session = sftk_SessionFromHandle(hSession);
     if (session == NULL)
         return CKR_SESSION_HANDLE_INVALID;
-    search = session->search;
-    session->search = NULL;
+    search = sftk_SwapSearch(session, NULL);
     sftk_FreeSession(session);
     if (search != NULL) {
         sftk_FreeSearch(search);

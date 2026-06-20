@@ -10,7 +10,6 @@
 #include <stdio.h>  // for FILE definition
 
 #include "DepthOrderedFrameList.h"
-#include "FrameMetrics.h"
 #include "LayoutConstants.h"
 #include "TouchManager.h"
 #include "Units.h"
@@ -123,6 +122,7 @@ class SourceSurface;
 namespace layers {
 class LayerManager;
 struct LayersId;
+enum class ScrollOffsetUpdateType : uint8_t;
 }  // namespace layers
 
 namespace layout {
@@ -159,6 +159,7 @@ class PresShell final : public nsStubDocumentObserver,
   typedef gfx::SourceSurface SourceSurface;
   typedef layers::FocusTarget FocusTarget;
   typedef layers::FrameMetrics FrameMetrics;
+  typedef layers::ScrollOffsetUpdateType ScrollOffsetUpdateType;
   typedef layers::LayerManager LayerManager;
 
   // A set type for tracking visible frames, for use by the visibility code in
@@ -656,20 +657,27 @@ class PresShell final : public nsStubDocumentObserver,
   already_AddRefed<AccessibleCaretEventHub> GetAccessibleCaretEventHub() const;
 
   /**
-   * Get the caret, if it exists. AddRefs it.
+   * Get the active caret, if it exists. This will return the
+   * drag & drop caret if a D&D operation is ongoing. AddRefs it.
    */
-  already_AddRefed<nsCaret> GetCaret() const;
+  already_AddRefed<nsCaret> GetActiveCaret() const;
 
   /**
-   * Set the current caret to a new caret. To undo this, call RestoreCaret.
+   * Get the original caret this PresShell was created with.
    */
-  void SetCaret(nsCaret* aNewCaret);
+  already_AddRefed<nsCaret> GetOriginalCaret() const;
+
+  /**
+   * Set the active caret to a new caret. To undo this, call
+   * RestoreOriginalCaret.
+   */
+  void SetActiveCaret(nsCaret* aNewCaret);
 
   /**
    * Restore the caret to the original caret that this pres shell was created
    * with.
    */
-  void RestoreCaret();
+  void RestoreOriginalCaret();
 
   dom::Selection* GetCurrentSelection(SelectionType aSelectionType);
 
@@ -727,9 +735,16 @@ class PresShell final : public nsStubDocumentObserver,
   nsIFrame* GetCurrentEventFrame();
 
   /**
-   * Gets the current target event frame from the PresShell
+   * Gets the explicit event target content of the current event target frame
    */
-  already_AddRefed<nsIContent> GetEventTargetContent(WidgetEvent* aEvent);
+  nsIContent* GetExplicitEventTargetContent(const WidgetEvent* = nullptr);
+
+  /**
+   * Gets the event target content from the current event target frame. If the
+   * event target should be an element node, this returns an inclusive ancestor
+   * element of the explicit event target content.
+   */
+  nsIContent* GetEventTargetContent(const WidgetEvent* = nullptr);
 
   /**
    * Get and set the history state for the current document
@@ -1245,7 +1260,7 @@ class PresShell final : public nsStubDocumentObserver,
   // updates.
   struct VisualScrollUpdate {
     nsPoint mVisualScrollOffset;
-    FrameMetrics::ScrollOffsetUpdateType mUpdateType;
+    ScrollOffsetUpdateType mUpdateType;
     bool mAcknowledged = false;
   };
 
@@ -1267,8 +1282,7 @@ class PresShell final : public nsStubDocumentObserver,
   //     need to be used.
   // Please request APZ review if adding a new call site.
   void ScrollToVisual(const nsPoint& aVisualViewportOffset,
-                      FrameMetrics::ScrollOffsetUpdateType aUpdateType,
-                      ScrollMode aMode);
+                      ScrollOffsetUpdateType aUpdateType, ScrollMode aMode);
   void AcknowledgePendingVisualScrollUpdate();
   void ClearPendingVisualScrollUpdate();
   const Maybe<VisualScrollUpdate>& GetPendingVisualScrollUpdate() const {
@@ -1587,11 +1601,7 @@ class PresShell final : public nsStubDocumentObserver,
   void ResetVisualViewportSize();
   bool IsVisualViewportSizeSet() { return mVisualViewportSizeSet; }
   void SetNeedsWindowPropertiesSync();
-  nsSize GetVisualViewportSize() {
-    NS_ASSERTION(mVisualViewportSizeSet,
-                 "asking for visual viewport size when its not set?");
-    return mVisualViewportSize;
-  }
+  nsSize GetVisualViewportSize() const;
 
   nsPoint GetVisualViewportOffsetRelativeToLayoutViewport() const;
 
@@ -1889,6 +1899,9 @@ class PresShell final : public nsStubDocumentObserver,
 
   void CleanupFullscreenState();
 
+  void MaybeExitKeyboardLockedFullscreen(WidgetKeyboardEvent* aKeyboardEvent,
+                                         Document* aFullscreenRoot);
+
  private:
   ~PresShell();
 
@@ -1979,9 +1992,8 @@ class PresShell final : public nsStubDocumentObserver,
   void CancelPostedReflowCallbacks();
   void FlushPendingScrollAnchorAdjustments();
 
-  void SetPendingVisualScrollUpdate(
-      const nsPoint& aVisualViewportOffset,
-      FrameMetrics::ScrollOffsetUpdateType aUpdateType);
+  void SetPendingVisualScrollUpdate(const nsPoint& aVisualViewportOffset,
+                                    ScrollOffsetUpdateType aUpdateType);
 
 #ifdef MOZ_REFLOW_PERF
   UniquePtr<ReflowCountMgr> mReflowCountMgr;

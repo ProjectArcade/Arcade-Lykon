@@ -202,6 +202,7 @@ export const UIPhases = {
 
 export var ScreenshotsUtils = {
   browserToScreenshotsState: new WeakMap(),
+  tabContainerToScreenshotsCount: new WeakMap(),
   initialized: false,
   methodsUsed: {},
 
@@ -216,12 +217,12 @@ export var ScreenshotsUtils = {
     if (perBrowserState?.previewDialog) {
       return UIPhases.PREVIEW;
     }
+    if (perBrowserState?.hasOverlaySelection) {
+      return UIPhases.OVERLAYSELECTION;
+    }
     const buttonsPanel = this.panelForBrowser(browser);
     if (buttonsPanel && !buttonsPanel.hidden) {
       return UIPhases.INITIAL;
-    }
-    if (perBrowserState?.hasOverlaySelection) {
-      return UIPhases.OVERLAYSELECTION;
     }
     return UIPhases.CLOSED;
   },
@@ -549,8 +550,16 @@ export var ScreenshotsUtils = {
         this.showPanelAndOverlay(browser, reason);
         browser.addEventListener("SwapDocShells", this);
         let gBrowser = browser.getTabBrowser();
-        gBrowser.tabContainer.addEventListener("TabSelect", this);
-        browser.ownerDocument.addEventListener("keydown", this);
+        let count =
+          this.tabContainerToScreenshotsCount.get(gBrowser.tabContainer) ?? 0;
+        if (!count) {
+          gBrowser.tabContainer.addEventListener("TabSelect", this);
+          browser.ownerDocument.addEventListener("keydown", this);
+        }
+        this.tabContainerToScreenshotsCount.set(
+          gBrowser.tabContainer,
+          count + 1
+        );
         break;
       }
       case UIPhases.INITIAL:
@@ -586,8 +595,18 @@ export var ScreenshotsUtils = {
     this.revokeBlobURL(browser);
 
     browser.removeEventListener("SwapDocShells", this);
-    gBrowser.tabContainer.removeEventListener("TabSelect", this);
-    browser.ownerDocument.removeEventListener("keydown", this);
+    if (this.browserToScreenshotsState.has(browser)) {
+      let count =
+        this.tabContainerToScreenshotsCount.get(gBrowser.tabContainer) ?? 0;
+      if (count > 0) {
+        count -= 1;
+        this.tabContainerToScreenshotsCount.set(gBrowser.tabContainer, count);
+        if (!count) {
+          gBrowser.tabContainer.removeEventListener("TabSelect", this);
+          browser.ownerDocument.removeEventListener("keydown", this);
+        }
+      }
+    }
 
     this.browserToScreenshotsState.delete(browser);
     if (Cu.isInAutomation) {
@@ -876,6 +895,18 @@ export var ScreenshotsUtils = {
     });
 
     buttonsPanel.hidden = false;
+
+    const tab = gBrowser.getTabForBrowser(browser);
+    if (tab?.splitview) {
+      for (const siblingTab of tab.splitview.tabs) {
+        if (
+          siblingTab !== tab &&
+          this.getUIPhase(siblingTab.linkedBrowser) === UIPhases.INITIAL
+        ) {
+          this.cancel(siblingTab.linkedBrowser, "Navigation");
+        }
+      }
+    }
 
     return new Promise(resolve => {
       browser.documentGlobal.requestAnimationFrame(() => {

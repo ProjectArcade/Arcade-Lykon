@@ -1088,7 +1088,7 @@ static int remove_recursive_on_reboot(const NS_tchar* path,
     return rv;
   }
 
-  while ((entry = NS_treaddir(dir)) != 0) {
+  while ((entry = NS_treaddir(dir)) != nullptr) {
     if (NS_tstrcmp(entry->d_name, NS_T(".")) &&
         NS_tstrcmp(entry->d_name, NS_T(".."))) {
       NS_tchar childPath[MAXPATHLEN];
@@ -1697,6 +1697,9 @@ int FromZucchiniStatus(zucchini::status::Code code) {
     case zucchini::status::kStatusInvalidNewImage:
       result = CRC_ERROR;
       break;
+    case zucchini::status::kStatusOutOfMemory:
+      result = BSPATCH_MEM_ERROR;
+      break;
     case zucchini::status::kStatusInvalidParam:
     case zucchini::status::kStatusDiskFull:
     case zucchini::status::kStatusIoError:
@@ -2084,6 +2087,10 @@ int PatchFile::Execute() {
   rv = mPatchFileDecoder->Apply(mBuf.get(), mBufSize, ofile);
 
   // Go ahead and do a bit of cleanup now to minimize runtime overhead.
+  // Release the patch decoder and any resources it holds (such as
+  // memory-mapped patch files in zucchini) so they don't accumulate
+  // across sequential patch actions.
+  mPatchFileDecoder.reset();
   // Make sure mPatchStream gets unlocked on Windows; the system will do that,
   // but not until some indeterminate future time, and we want determinism.
 #ifdef XP_WIN
@@ -3391,7 +3398,7 @@ int NS_main(int argc, NS_tchar** argv) {
       isAdmin.unwrap() || isLocalSystem.unwrap();
 #elif defined(XP_MACOSX)
         strstr(argv[0], "/Library/PrivilegedHelperTools/org.mozilla.updater") !=
-        0;
+        nullptr;
 #else
       false;
 #endif
@@ -3405,7 +3412,7 @@ int NS_main(int argc, NS_tchar** argv) {
     }
   }
 
-  if (argc == 4 && (strstr(argv[1], "-dmgInstall") != 0)) {
+  if (argc == 4 && (strstr(argv[1], "-dmgInstall") != nullptr)) {
     isDMGInstall = true;
     if (isElevated) {
       freeArguments(argc, argv);
@@ -5248,6 +5255,16 @@ int DoUpdate() {
   NS_tchar* rb = buf;
 
 #if defined(MOZ_ZUCCHINI)
+#  if defined(TEST_UPDATER) && defined(XP_WIN)
+  // Crash recovery is only supported (and hence tested) on Windows for now.
+  // POSIX support is planned, see bug 2043122 for more information.
+  zucchini::mozilla::TestOptions options;
+  options.logDestructorMarker = EnvHasValue("MOZ_TEST_ZUCCHINI_DTOR_MARKER");
+  options.triggerBadAlloc = EnvHasValue("MOZ_TEST_ZUCCHINI_BAD_ALLOC");
+  options.triggerCheckFailure = EnvHasValue("MOZ_TEST_ZUCCHINI_CHECK_FAILURE");
+  zucchini::mozilla::SetTestOptions(options);
+#  endif  // TEST_UPDATER && XP_WIN
+
   zucchini::mozilla::SetLogFunction(LogZucchiniMessage);
 #endif  // defined(MOZ_ZUCCHINI)
 

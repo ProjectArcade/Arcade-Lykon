@@ -4,9 +4,9 @@
 
 use libc::c_float;
 
-use nserror::{NS_ERROR_INVALID_ARG, NS_OK, nsresult};
-use rsdparsa::SdpSession;
+use nserror::{nsresult, NS_ERROR_INVALID_ARG, NS_OK};
 use rsdparsa::attribute_type::*;
+use rsdparsa::SdpSession;
 use thin_vec::ThinVec;
 
 use network::{RustAddress, RustExplicitlyTypedAddress};
@@ -53,7 +53,10 @@ fn get_attribute(
 }
 
 fn string_views(strings: &[String]) -> ThinVec<StringView> {
-    strings.iter().map(|s| StringView::from(s.as_str())).collect()
+    strings
+        .iter()
+        .map(|s| StringView::from(s.as_str()))
+        .collect()
 }
 
 #[repr(C)]
@@ -562,9 +565,7 @@ pub struct RustSdpAttributeFlags {
 }
 
 #[no_mangle]
-pub extern "C" fn sdp_get_attribute_flags(
-    attributes: &Vec<SdpAttribute>,
-) -> RustSdpAttributeFlags {
+pub extern "C" fn sdp_get_attribute_flags(attributes: &Vec<SdpAttribute>) -> RustSdpAttributeFlags {
     let mut ret = RustSdpAttributeFlags {
         ice_lite: false,
         rtcp_mux: false,
@@ -588,10 +589,7 @@ pub extern "C" fn sdp_get_attribute_flags(
 }
 
 #[no_mangle]
-pub extern "C" fn sdp_get_mid(
-    attributes: &Vec<SdpAttribute>,
-    ret: &mut StringView,
-) -> nsresult {
+pub extern "C" fn sdp_get_mid(attributes: &Vec<SdpAttribute>, ret: &mut StringView) -> nsresult {
     for attribute in attributes.iter() {
         if let SdpAttribute::Mid(ref data) = *attribute {
             *ret = StringView::from(data.as_str());
@@ -929,7 +927,10 @@ impl<'a> From<&'a SdpAttributeImageAttrSetList> for RustSdpAttributeImageAttrSet
             },
             &SdpAttributeImageAttrSetList::Sets(ref sets) => RustSdpAttributeImageAttrSetList {
                 is_wildcard: false,
-                sets: sets.iter().map(RustSdpAttributeImageAttrSet::from).collect(),
+                sets: sets
+                    .iter()
+                    .map(RustSdpAttributeImageAttrSet::from)
+                    .collect(),
             },
         }
     }
@@ -1019,7 +1020,11 @@ pub struct RustSdpAttributeSimulcastVersion {
 impl<'a> From<&'a SdpAttributeSimulcastVersion> for RustSdpAttributeSimulcastVersion {
     fn from(other: &SdpAttributeSimulcastVersion) -> Self {
         RustSdpAttributeSimulcastVersion {
-            ids: other.ids.iter().map(RustSdpAttributeSimulcastId::from).collect(),
+            ids: other
+                .ids
+                .iter()
+                .map(RustSdpAttributeSimulcastId::from)
+                .collect(),
         }
     }
 }

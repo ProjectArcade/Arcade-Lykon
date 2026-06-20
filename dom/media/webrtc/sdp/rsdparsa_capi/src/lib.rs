@@ -15,7 +15,7 @@ use libc::size_t;
 
 use std::convert::TryFrom;
 
-use nserror::{NS_ERROR_INVALID_ARG, NS_OK, nsresult};
+use nserror::{nsresult, NS_ERROR_INVALID_ARG, NS_OK};
 use nsstring::nsACString;
 use rsdparsa::address::ExplicitlyTypedAddress;
 use rsdparsa::anonymizer::{AnonymizingClone, StatefulSdpAnonymizer};
@@ -33,7 +33,7 @@ pub mod network;
 pub mod types;
 
 use network::{
-    RustAddressType, RustSdpConnection, RustSdpOrigin, get_bandwidth, origin_view_helper,
+    get_bandwidth, origin_view_helper, RustAddressType, RustSdpConnection, RustSdpOrigin,
 };
 pub use types::StringView;
 

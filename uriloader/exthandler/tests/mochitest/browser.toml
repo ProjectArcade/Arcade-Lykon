@@ -10,7 +10,8 @@ support-files = [
   "download.sjs",
 ]
 skip-if = [
-  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && opt && socketprocess_networking", # Bug 1776014
+  "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && opt && socketprocess_networking" ,
+  "os == 'win' && os_version == '11.26200' && opt", # Bug 1776014
 ]
 
 ["browser_auto_close_window_nodialog.js"]
@@ -31,6 +32,12 @@ run-if = [
 support-files = ["download.bin"]
 
 ["browser_download_always_ask_preferred_app.js"]
+
+["browser_download_force_save_attachments.js"]
+support-files = [
+  "file_pdf_application_pdf.pdf",
+  "file_pdf_application_pdf.pdf^headers^",
+]
 
 ["browser_download_idn_blocklist.js"]
 support-files = ["download.bin"]

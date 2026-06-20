@@ -809,6 +809,12 @@ DictionaryCacheEntry::OnStopRequest(nsIRequest* request, nsresult result) {
           }
         }
 
+        if (NS_SUCCEEDED(finalResult) && !self->mDictionaryDataComplete) {
+          DICTIONARY_LOG(("Zero-byte cache entry for %s", self->mURI.get()));
+          finalResult = NS_ERROR_FAILURE;
+          shouldRemoveDictionary = true;
+        }
+
         self->CleanupOnCacheData(finalResult);
         self->mStopReceived = true;
         if (shouldRemoveDictionary) {
@@ -892,18 +898,43 @@ DictionaryCacheEntry::OnCacheEntryAvailable(nsICacheEntry* entry, bool isNew,
     nsCOMPtr<nsIInputStream> stream;
     entry->OpenInputStream(0, getter_AddRefs(stream));
     if (!stream) {
+      DICTIONARY_LOG(("OpenInputStream failed for %s", mURI.get()));
+      nsCOMPtr<nsIRunnable> runnable = NS_NewRunnableFunction(
+          "DictionaryCacheEntry::OnCacheEntryAvailable",
+          [self = RefPtr{this}]() {
+            self->CleanupOnCacheData(NS_ERROR_FAILURE);
+            DictionaryCache::RemoveDictionary(self->mURI);
+          });
+      NS_DispatchToMainThread(runnable);
       return NS_OK;
     }
 
+    // nsInputStreamPump supports off-main-thread use: when constructed
+    // off-thread it sets mOffMainThread and targets the calling thread's
+    // serial event target, so callbacks fire on whatever thread calls
+    // AsyncRead.
     RefPtr<nsInputStreamPump> pump;
     nsresult rv = nsInputStreamPump::Create(getter_AddRefs(pump), stream);
     if (NS_FAILED(rv)) {
-      return NS_OK;  // just ignore
+      DICTIONARY_LOG(("nsInputStreamPump::Create failed for %s", mURI.get()));
+      NS_DispatchToMainThread(NS_NewRunnableFunction(
+          "DictionaryCacheEntry::OnCacheEntryAvailable",
+          [self = RefPtr{this}]() {
+            self->CleanupOnCacheData(NS_ERROR_FAILURE);
+            DictionaryCache::RemoveDictionary(self->mURI);
+          }));
+      return NS_OK;
     }
-
     rv = pump->AsyncRead(this);
     if (NS_FAILED(rv)) {
-      return NS_OK;  // just ignore
+      DICTIONARY_LOG(("AsyncRead failed for %s", mURI.get()));
+      NS_DispatchToMainThread(NS_NewRunnableFunction(
+          "DictionaryCacheEntry::OnCacheEntryAvailable",
+          [self = RefPtr{this}]() {
+            self->CleanupOnCacheData(NS_ERROR_FAILURE);
+            DictionaryCache::RemoveDictionary(self->mURI);
+          }));
+      return NS_OK;
     }
     DICTIONARY_LOG(("Waiting for data"));
   } else {
@@ -1571,10 +1602,15 @@ void DictionaryOrigin::SetCacheEntry(nsICacheEntry* aEntry) {
   mEntry = aEntry;
   mEntry->SetContentType(nsICacheEntry::CONTENT_TYPE_DICTIONARY);
   if (mDeferredWrites) {
+    // RemoveEntry() mutates mEntries, so defer removals.
+    DictCacheList remove;
     for (auto& entry : mEntries) {
       if (NS_FAILED(Write(entry))) {
-        RemoveEntry(entry);
+        remove.AppendElement(entry);
       }
+    }
+    for (auto& entry : remove) {
+      RemoveEntry(entry);
     }
   }
   mDeferredWrites = false;

@@ -318,7 +318,8 @@ class MediaDecoder : public DecoderDoctorLifeLogger<MediaDecoder> {
   virtual void SetLoadInBackground(bool aLoadInBackground) {}
 
   MediaDecoderStateMachineBase* GetStateMachine() const;
-  void SetStateMachine(MediaDecoderStateMachineBase* aStateMachine);
+  void SetStateMachine(
+      already_AddRefed<MediaDecoderStateMachineBase> aStateMachine);
 
   // Constructs the time ranges representing what segments of the media
   // are buffered and playable.
@@ -383,6 +384,13 @@ class MediaDecoder : public DecoderDoctorLifeLogger<MediaDecoder> {
   void SetIsBackgroundVideoDecodingAllowed(bool aAllowed);
 
   bool IsVideoDecodingSuspended() const;
+
+#  ifdef MOZ_WMF_CDM
+  // [TEST-ONLY] Returns true if WMFClearKey CDM is active. The media engine
+  // renders frames internally via OnVideoStreamTick() in this mode, so no
+  // decoded frames appear in the image container.
+  bool IsUsingWMFClearKey() const;
+#  endif
 
   // The MediaDecoderOwner of this decoder wants to resist fingerprinting.
   bool ShouldResistFingerprinting() const {
@@ -478,8 +486,8 @@ class MediaDecoder : public DecoderDoctorLifeLogger<MediaDecoder> {
 
   // Always return a state machine. If the decoder supports using external
   // engine, `aDisableExternalEngine` can disable the external engine if needed.
-  virtual MediaDecoderStateMachineBase* CreateStateMachine(
-      bool aDisableExternalEngine) MOZ_NONNULL_RETURN = 0;
+  virtual already_AddRefed<MediaDecoderStateMachineBase> CreateStateMachine(
+      bool aDisableExternalEngine) = 0;
 
   void SetStateMachineParameters();
 
@@ -586,7 +594,7 @@ class MediaDecoder : public DecoderDoctorLifeLogger<MediaDecoder> {
 
   void FinishShutdown();
 
-  void ConnectMirrors(MediaDecoderStateMachineBase* aObject);
+  void ConnectMirrors();
   void DisconnectMirrors();
 #  ifdef MOZ_WMF_MEDIA_ENGINE
   // Return true if we switched to a new state machine.
@@ -695,6 +703,10 @@ class MediaDecoder : public DecoderDoctorLifeLogger<MediaDecoder> {
 
   // True if we have suspended video decoding.
   bool mIsVideoDecodingSuspended = false;
+
+#  ifdef MOZ_WMF_CDM
+  bool mIsFrameServerMode = false;
+#  endif
 
  protected:
   // PlaybackRate and pitch preservation status we should start at.

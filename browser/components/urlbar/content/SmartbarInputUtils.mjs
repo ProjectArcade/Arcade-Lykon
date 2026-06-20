@@ -42,6 +42,13 @@ ChromeUtils.defineLazyGetter(lazy, "log", function () {
 // Debounce delay for the mention suggestions query.
 const MENTION_QUERY_DEBOUNCE_MS = 150;
 
+const PLACEHOLDER_HINT_L10N_IDS = [
+  "smartbar-placeholder-hint-1",
+  "smartbar-placeholder-hint-2",
+  "smartbar-placeholder-hint-3",
+  "smartbar-placeholder-hint-4",
+];
+
 /**
  * @typedef {object} TabMention
  * @property {string} id - Mention ID
@@ -398,6 +405,18 @@ function setupMentionsPlugin(editorElement, panelList) {
     getAllMentions: {
       value: () => plugin.mentions.getAll(),
     },
+    /**
+     * Inserts an inline mention at the specified text offset
+     *
+     * @param {Node} mention
+     * @param {number} textOffset
+     */
+    insertMention: {
+      value: (mention, textOffset) => {
+        const pos = editorElement.textOffsetToPos(textOffset);
+        plugin.mentions.insertNode(mention, pos);
+      },
+    },
   });
 
   return plugin;
@@ -443,6 +462,16 @@ export function createEditor(inputElement) {
   editorElement.id = inputElement.id;
   editorElement.value = inputElement.value ?? "";
 
+  const isSidebarMode =
+    window.browsingContext?.embedderElement?.id === lazy.AIWindowUI.BROWSER_ID;
+  document.l10n
+    .formatValues(PLACEHOLDER_HINT_L10N_IDS.map(id => ({ id })))
+    .then(hints => {
+      editorElement.placeholderHints = hints;
+      editorElement.showPlaceholderAnimation = !isSidebarMode;
+    })
+    .catch(console.error);
+
   inputElement.replaceWith(editorElement);
 
   const container = editorElement.closest(".urlbar-input-container");
@@ -450,8 +479,7 @@ export function createEditor(inputElement) {
     container.querySelector("smartwindow-panel-list")
   );
   panelList.placeholderL10nId = "smartbar-mentions-list-no-results-label";
-  panelList.sidebarMode =
-    window.browsingContext?.embedderElement?.id === lazy.AIWindowUI.BROWSER_ID;
+  panelList.sidebarMode = isSidebarMode;
 
   const mentionsPlugin = setupMentionsPlugin(editorElement, panelList);
   editorElement.plugins = [mentionsPlugin];

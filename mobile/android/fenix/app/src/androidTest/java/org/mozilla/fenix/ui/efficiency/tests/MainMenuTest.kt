@@ -6,13 +6,25 @@ package org.mozilla.fenix.ui.efficiency.tests
 
 import org.junit.Ignore
 import org.junit.Test
+import org.mozilla.fenix.customannotations.Converted
 import org.mozilla.fenix.customannotations.SmokeTest
+import org.mozilla.fenix.helpers.MockBrowserDataHelper
 import org.mozilla.fenix.helpers.TestAssetHelper.getGenericAsset
+import org.mozilla.fenix.helpers.TestAssetHelper.pdfFormAsset
 import org.mozilla.fenix.ui.efficiency.helpers.BaseTest
 import org.mozilla.fenix.ui.efficiency.selectors.BookmarksSelectors
+import org.mozilla.fenix.ui.efficiency.selectors.BookmarksSelectors.DELETE_BOOKMARK_BUTTON
 import org.mozilla.fenix.ui.efficiency.selectors.BrowserPageSelectors
+import org.mozilla.fenix.ui.efficiency.selectors.HistorySelectors.NAVIGATE_BACK_BUTTON
 import org.mozilla.fenix.ui.efficiency.selectors.HomeSelectors
 import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.BACK_BUTTON
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.BOOKMARK_THIS_PAGE_BUTTON
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.DESKTOP_SITE_BUTTON
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.DESKTOP_SITE_OFF
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.DESKTOP_SITE_ON
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.EDIT_BOOKMARK_BUTTON
+import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors.FORWARD_BUTTON
 
 class MainMenuTest : BaseTest() {
 
@@ -23,7 +35,18 @@ class MainMenuTest : BaseTest() {
     @Test
     fun verifyMainMenuItemsTest() {
         on.mainMenu.navigateToPage()
-            .mozVerifyElementsByGroup("homeBanner")
+            .mozVerifyElementsByGroup("homePageMainMenuItems")
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080124
+    @SmokeTest
+    @Test
+    fun verifyTheBrowserViewMainMenuItemsTest() {
+        val website = mockWebServer.getGenericAsset(1)
+
+        on.browserPage.navigateToPage(website.url.toString())
+        on.mainMenu.navigateToPage()
+            .mozVerifyElementsByGroup("browserViewMainMenuItems")
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080172
@@ -60,5 +83,176 @@ class MainMenuTest : BaseTest() {
             .mozClick(HomeSelectors.MAIN_MENU_BUTTON_UIAUTOMATOR)
         on.mainMenu
             .mozVerifyElementsByGroup("bookmarkActions")
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080138
+    @SmokeTest
+    @Test
+    fun verifyTheDownloadsMenuItemTest() {
+        val testPage = mockWebServer.getGenericAsset(1)
+
+        on.browserPage.navigateToPage(testPage.url.toString())
+        on.downloads.navigateToPage()
+            .mozVerifyElementsByGroup("emptyDownloads")
+        on.browserPage.navigateToPage()
+            .verifyPageContent(testPage.content)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080129
+    @SmokeTest
+    @Test
+    fun verifyTheBookmarkPageMenuOptionTest() {
+        val testPage = mockWebServer.getGenericAsset(1)
+
+        on.browserPage.navigateToPage(testPage.url.toString())
+        on.mainMenu.navigateToPage()
+            .mozClick(BOOKMARK_THIS_PAGE_BUTTON)
+        on.browserPage.navigateToPage()
+        on.mainMenu.navigateToPage()
+            .mozClick(EDIT_BOOKMARK_BUTTON)
+        on.bookmarks
+            .mozVerifyElementsByGroup("editBookmarksView")
+            .mozClick(DELETE_BOOKMARK_BUTTON)
+        on.browserPage.navigateToPage()
+        on.mainMenu.navigateToPage()
+            .mozVerify(BOOKMARK_THIS_PAGE_BUTTON)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080136
+    @SmokeTest
+    @Test
+    fun verifyTheHistoryMenuItemTest() {
+        val testPage = mockWebServer.getGenericAsset(1)
+
+        on.browserPage.navigateToPage(testPage.url.toString())
+        on.history.navigateToPage()
+            .mozVerifyElementsByGroup("historyMenuViewWithHistoryItems")
+            .mozClick(NAVIGATE_BACK_BUTTON)
+        on.browserPage
+            .verifyPageContent(testPage.content)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080133
+    @SmokeTest
+    @Test
+    fun verifySwitchToDesktopSiteIsDisabledOnPDFsTest() {
+        val pdfPage = mockWebServer.pdfFormAsset
+
+        on.browserPage.navigateToPage(pdfPage.url.toString())
+        on.mainMenu.navigateToPage()
+            .mozVerifyElementIsNotEnabled(MainMenuSelectors.DESKTOP_SITE_BUTTON)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080139
+    @SmokeTest
+    @Test
+    fun verifyThePasswordsMenuItemTest() {
+        val testPage = mockWebServer.getGenericAsset(1)
+
+        on.browserPage.navigateToPage(testPage.url.toString())
+        on.settingsSavedPasswords.navigateToPage()
+            .mozVerifyElementsByGroup("emptySavedPasswordsList")
+        on.browserPage.navigateToPage()
+            .verifyPageContent(testPage.content)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080126
+    @SmokeTest
+    @Test
+    fun verifyTheMainMenuForwardButtonTest() {
+        val firstWebPage = mockWebServer.getGenericAsset(1)
+        val nextWebPage = mockWebServer.getGenericAsset(2)
+
+        on.browserPage
+            .navigateToPage(firstWebPage.url.toString())
+            .verifyUrl(firstWebPage.url.toString())
+            .navigateToPage(nextWebPage.url.toString(), forceNavigation = true)
+            .verifyUrl(nextWebPage.url.toString())
+        on.mainMenu.navigateToPage()
+            .mozClick(BACK_BUTTON)
+        on.browserPage.navigateToPage()
+            .verifyUrl(firstWebPage.url.toString())
+        on.mainMenu.navigateToPage()
+            .mozClick(FORWARD_BUTTON)
+        on.browserPage.navigateToPage()
+            .verifyUrl(nextWebPage.url.toString())
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080125
+    @SmokeTest
+    @Test
+    fun verifyTheMainMenuBackButtonTest() {
+        val firstWebPage = mockWebServer.getGenericAsset(1)
+        val nextWebPage = mockWebServer.getGenericAsset(2)
+
+        on.browserPage
+            .navigateToPage(firstWebPage.url.toString())
+            .verifyUrl(firstWebPage.url.toString())
+            .navigateToPage(nextWebPage.url.toString(), forceNavigation = true)
+            .verifyUrl(nextWebPage.url.toString())
+        on.mainMenu.navigateToPage()
+            .mozClick(BACK_BUTTON)
+        on.browserPage.navigateToPage()
+            .verifyUrl(firstWebPage.url.toString())
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080131
+    @SmokeTest
+    @Test
+    fun verifyDesktopSiteModeOnOffIsEnabledTest() {
+        val defaultWebPage = mockWebServer.getGenericAsset(1)
+
+        on.browserPage
+            .navigateToPage(defaultWebPage.url.toString())
+        on.mainMenu
+            .navigateToPage()
+            .mozVerify(DESKTOP_SITE_BUTTON)
+            .mozVerify(DESKTOP_SITE_OFF)
+        on.mainMenu
+            .mozClick(DESKTOP_SITE_BUTTON)
+        on.browserPage
+            .navigateToPage()
+        on.mainMenu
+            .navigateToPage()
+            .mozVerify(DESKTOP_SITE_ON)
+        on.mainMenu
+            .mozClick(DESKTOP_SITE_BUTTON)
+        on.browserPage
+            .navigateToPage()
+        on.mainMenu
+            .navigateToPage()
+            .mozVerify(DESKTOP_SITE_OFF)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3080115
+    @SmokeTest
+    @Test
+    fun verifyTheSaveToCollectionSubMenuOptionTest() {
+        val collectionTitle = "First Collection"
+        val firstTestPage = mockWebServer.getGenericAsset(1)
+        val secondTestPage = mockWebServer.getGenericAsset(2)
+
+        composeRule.activityRule.applySettingsExceptions {
+            // Disabling these features to have better visibility of the Collections view
+            it.isRecentlyVisitedFeatureEnabled = false
+            it.isRecentTabsFeatureEnabled = false
+        }
+
+        MockBrowserDataHelper
+            .createCollection(
+                Pair(firstTestPage.url.toString(), firstTestPage.title),
+                title = collectionTitle,
+            )
+
+        on.browserPage.navigateToPage(secondTestPage.url.toString())
+            .saveTabToExistingCollection(collectionTitle)
+        on.browserPage.navigateToPage()
+        on.home.navigateToPage()
+        on.home
+            .verifyTabsInExpandedCollection(
+                collectionTitle = collectionTitle,
+                firstTestPage.title,
+                secondTestPage.title,
+            )
     }
 }

@@ -12,6 +12,7 @@
 #include "mozilla/MouseEvents.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/StaticPrefs_ui.h"
 #include "mozilla/TextEvents.h"
@@ -763,7 +764,7 @@ bool nsListControlFrame::ReflowFinished() {
     // scrolling to the selected element, when the ResetList was probably only
     // caused by content loading normally.
     const bool scroll = !DidHistoryRestore() || mPostChildrenLoadedReset;
-    nsContentUtils::AddScriptRunner(new AsyncReset(this, scroll));
+    nsContentUtils::AddScriptRunner(MakeAndAddRef<AsyncReset>(this, scroll));
   }
   mReflowWasInterrupted = false;
   return ScrollContainerFrame::ReflowFinished();
@@ -845,8 +846,8 @@ nsresult nsListControlFrame::GetIndexFromEvent(const WidgetMouseEvent& aEvent,
   }
 
   RefPtr<dom::HTMLOptionElement> option;
-  for (nsCOMPtr<nsIContent> content =
-           PresContext()->EventStateManager()->GetEventTargetContent(nullptr);
+  for (nsIContent* content =
+           PresContext()->EventStateManager()->GetEventTargetContent();
        content && !option; content = content->GetParent()) {
     option = dom::HTMLOptionElement::FromNode(content);
   }

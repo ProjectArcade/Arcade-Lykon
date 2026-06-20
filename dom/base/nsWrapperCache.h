@@ -172,12 +172,6 @@ class JS_HAZ_ROOTED nsWrapperCache {
   void ClearWrapperOnWrapFailure();
 
   /**
-   * Update the wrapper when the object moves between globals.
-   */
-  template <typename T>
-  void UpdateWrapperForNewGlobal(T* aScriptObjectHolder, JSObject* aNewWrapper);
-
-  /**
    * Update the wrapper if the object it contains is moved.
    *
    * This method must be called from the objectMovedOp class extension hook for
@@ -555,7 +549,7 @@ enum { WRAPPER_CACHE_FLAGS_BITS_USED = 1 };
   tmp->ReleaseWrapper(p);
 
 #define NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_CLASS(_class)        \
-  static_assert(std::is_base_of<nsWrapperCache, _class>::value,    \
+  static_assert(std::is_base_of_v<nsWrapperCache, _class>,         \
                 "Class should inherit nsWrapperCache");            \
   NS_IMPL_CYCLE_COLLECTION_SINGLE_ZONE_SCRIPT_HOLDER_CLASS(_class) \
   NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(_class)                     \
@@ -610,7 +604,7 @@ enum { WRAPPER_CACHE_FLAGS_BITS_USED = 1 };
 // This is used for wrapper cached classes that inherit from cycle
 // collected non-wrapper cached classes.
 #define NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_INHERITED(_class, _base, ...)   \
-  static_assert(!std::is_base_of<nsWrapperCache, _base>::value,               \
+  static_assert(!std::is_base_of_v<nsWrapperCache, _base>,                    \
                 "Base class should not inherit nsWrapperCache");              \
   NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_CLASS(_class)                         \
   NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(_class, _base)              \
@@ -630,7 +624,7 @@ enum { WRAPPER_CACHE_FLAGS_BITS_USED = 1 };
 // declaration.
 #define NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE_WITH_JS_MEMBERS(              \
     class_, native_members_, js_members_)                                   \
-  static_assert(std::is_base_of<nsWrapperCache, class_>::value,             \
+  static_assert(std::is_base_of_v<nsWrapperCache, class_>,                  \
                 "Class should inherit nsWrapperCache");                     \
   NS_IMPL_CYCLE_COLLECTION_CLASS(class_)                                    \
   NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(class_)                             \

@@ -64,8 +64,8 @@ const BASE_MESSAGES = () => [
   {
     id: "MENU_MESSAGE_DEFAULT_CTA_ILLUSTRATION_LAYOUT",
     template: "menu_message",
-    layout: "column",
     content: {
+      layout: "column",
       messageType: "default_cta",
       imageURL:
         "chrome://browser/content/asrouter/assets/fox-with-checkmark.svg",
@@ -98,7 +98,7 @@ const BASE_MESSAGES = () => [
       },
     },
     targeting:
-      "source == 'app_menu' && os.isWindows && os.windowsVersion >= 10 && !isDefaultBrowserUncached && !hasActiveEnterprisePolicies && 'browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features' | preferenceValue != false",
+      "'browser.nova.enabled'|preferenceValue != true && source == 'app_menu' && os.isWindows && os.windowsVersion >= 10 && !isDefaultBrowserUncached && !hasActiveEnterprisePolicies && 'browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features' | preferenceValue != false",
     trigger: {
       id: "menuOpened",
     },
@@ -108,8 +108,8 @@ const BASE_MESSAGES = () => [
   {
     id: "MENU_MESSAGE_DEFAULT_CTA_ILLUSTRATION_LAYOUT",
     template: "menu_message",
-    layout: "column",
     content: {
+      layout: "column",
       imageURL:
         "chrome://browser/content/asrouter/assets/fox-with-checkmark.svg",
       imageWidth: 68,
@@ -145,7 +145,104 @@ const BASE_MESSAGES = () => [
       },
     },
     targeting:
-      "source == 'app_menu' && os.isMac && !isDefaultBrowserUncached && !hasActiveEnterprisePolicies && 'browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features' | preferenceValue != false",
+      "'browser.nova.enabled'|preferenceValue != true && source == 'app_menu' && os.isMac && !isDefaultBrowserUncached && !hasActiveEnterprisePolicies && 'browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features' | preferenceValue != false",
+    trigger: {
+      id: "menuOpened",
+    },
+    groups: [],
+    skip_in_tests: "it's covered by browser_asrouter_menu_messages.js",
+  },
+  // Nova variant of MENU_MESSAGE_DEFAULT_CTA messaging:
+  {
+    id: "MENU_MESSAGE_DEFAULT_CTA_ILLUSTRATION_LAYOUT",
+    template: "menu_message",
+    content: {
+      layout: "split",
+      imageURL: "chrome://browser/content/asrouter/assets/kit-checkmark.svg",
+      rtlImageURL:
+        "chrome://browser/content/asrouter/assets/kit-checkmark-flipped.svg",
+      imageWidth: 92,
+      imageVerticalTopOffset: -16,
+      messageType: "default_cta",
+      primaryText: {
+        string_id: "set-default-menu-message-row-layout-title",
+      },
+      secondaryText: {
+        string_id: "set-default-menu-message-row-layout-subtitle",
+      },
+      primaryActionText: {
+        string_id: "set-default-menu-message-primary-button-variant",
+      },
+      primaryAction: {
+        type: "MULTI_ACTION",
+        data: {
+          actions: [
+            {
+              type: "SET_DEFAULT_BROWSER",
+            },
+            {
+              type: "PIN_FIREFOX_TO_TASKBAR",
+            },
+          ],
+        },
+      },
+      closeAction: {
+        type: "BLOCK_MESSAGE",
+        data: {
+          id: "MENU_MESSAGE_DEFAULT_CTA_ILLUSTRATION_LAYOUT",
+        },
+      },
+    },
+    targeting:
+      "'browser.nova.enabled'|preferenceValue == true && source == 'app_menu' && os.isWindows && os.windowsVersion >= 10 && !isDefaultBrowserUncached && !hasActiveEnterprisePolicies && 'browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features'| preferenceValue != false",
+    trigger: {
+      id: "menuOpened",
+    },
+    groups: [],
+    skip_in_tests: "it's covered by browser_asrouter_menu_messages.js",
+  },
+  {
+    id: "MENU_MESSAGE_DEFAULT_CTA_ILLUSTRATION_LAYOUT",
+    template: "menu_message",
+    content: {
+      layout: "split",
+      imageURL: "chrome://browser/content/asrouter/assets/kit-checkmark.svg",
+      rtlImageURL:
+        "chrome://browser/content/asrouter/assets/kit-checkmark-flipped.svg",
+      imageWidth: 92,
+      imageVerticalTopOffset: -16,
+      messageType: "default_cta",
+      primaryText: {
+        string_id: "set-default-menu-message-row-layout-title",
+      },
+      secondaryText: {
+        string_id: "set-default-menu-message-row-layout-subtitle-variant",
+      },
+      primaryActionText: {
+        string_id: "set-default-menu-message-primary-button-variant",
+      },
+      primaryAction: {
+        type: "MULTI_ACTION",
+        data: {
+          actions: [
+            {
+              type: "SET_DEFAULT_BROWSER",
+            },
+            {
+              type: "PIN_FIREFOX_TO_TASKBAR",
+            },
+          ],
+        },
+      },
+      closeAction: {
+        type: "BLOCK_MESSAGE",
+        data: {
+          id: "MENU_MESSAGE_DEFAULT_CTA_ILLUSTRATION_LAYOUT",
+        },
+      },
+    },
+    targeting:
+      "'browser.nova.enabled'|preferenceValue == true && source == 'app_menu' && os.isMac && !isDefaultBrowserUncached && !hasActiveEnterprisePolicies && 'browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features'| preferenceValue != false",
     trigger: {
       id: "menuOpened",
     },
@@ -1557,12 +1654,6 @@ const BASE_MESSAGES = () => [
     template: "pb_newtab",
     groups: ["pbNewtab"],
     content: {
-      infoBody: "fluent:about-private-browsing-info-description-simplified",
-      infoEnabled: true,
-      infoIcon: "chrome://global/skin/icons/indicator-private-browsing.svg",
-      infoLinkText: "fluent:about-private-browsing-learn-more-link",
-      infoTitle: "",
-      infoTitleEnabled: false,
       promoEnabled: true,
       promoType: "FOCUS",
       promoHeader: "fluent:about-private-browsing-focus-promo-header-c",
@@ -1662,12 +1753,6 @@ const BASE_MESSAGES = () => [
     template: "pb_newtab",
     groups: ["pbNewtab"],
     content: {
-      infoBody: "fluent:about-private-browsing-info-description-simplified",
-      infoEnabled: true,
-      infoIcon: "chrome://global/skin/icons/indicator-private-browsing.svg",
-      infoLinkText: "fluent:about-private-browsing-learn-more-link",
-      infoTitle: "",
-      infoTitleEnabled: false,
       promoEnabled: true,
       promoType: "FOCUS",
       promoHeader: "fluent:about-private-browsing-focus-promo-header-c",
@@ -1763,12 +1848,6 @@ const BASE_MESSAGES = () => [
     template: "pb_newtab",
     groups: ["pbNewtab"],
     content: {
-      infoBody: "fluent:about-private-browsing-info-description-simplified",
-      infoEnabled: true,
-      infoIcon: "chrome://global/skin/icons/indicator-private-browsing.svg",
-      infoLinkText: "fluent:about-private-browsing-learn-more-link",
-      infoTitle: "",
-      infoTitleEnabled: false,
       promoEnabled: true,
       promoType: "FOCUS",
       promoHeader: "fluent:about-private-browsing-focus-promo-header-c",
@@ -1866,12 +1945,6 @@ const BASE_MESSAGES = () => [
     type: "default",
     groups: ["pbNewtab"],
     content: {
-      infoBody: "fluent:about-private-browsing-info-description-simplified",
-      infoEnabled: true,
-      infoIcon: "chrome://global/skin/icons/indicator-private-browsing.svg",
-      infoLinkText: "fluent:about-private-browsing-learn-more-link",
-      infoTitle: "",
-      infoTitleEnabled: false,
       promoEnabled: true,
       promoType: "PIN",
       promoHeader: "fluent:about-private-browsing-pin-promo-header",
@@ -1935,12 +2008,6 @@ const BASE_MESSAGES = () => [
     type: "default",
     groups: ["pbNewtab"],
     content: {
-      infoBody: "fluent:about-private-browsing-info-description-simplified",
-      infoEnabled: true,
-      infoIcon: "chrome://global/skin/icons/indicator-private-browsing.svg",
-      infoLinkText: "fluent:about-private-browsing-learn-more-link",
-      infoTitle: "",
-      infoTitleEnabled: false,
       promoEnabled: true,
       promoType: "COOKIE_BANNERS",
       promoHeader: "fluent:about-private-browsing-cookie-banners-promo-heading",
@@ -2120,7 +2187,7 @@ const BASE_MESSAGES = () => [
     content: {
       template: "multistage",
       transitions: true,
-      modal: "tab",
+      modal: "window",
       backdrop: "transparent",
       id: "RESTORE_FROM_BACKUP",
       screens: [
@@ -2130,7 +2197,7 @@ const BASE_MESSAGES = () => [
             position: "split",
             split_content_padding_block: "166px",
             background:
-              "url('chrome://activity-stream/content/data/content/assets/fox-doodle-backup.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
+              "url('chrome://activity-stream/content/data/content/assets/br-backup-fox-outside-box.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
             logo: {},
             title: {
               string_id: "restored-from-backup-success-title",
@@ -2166,7 +2233,7 @@ const BASE_MESSAGES = () => [
     content: {
       template: "multistage",
       transitions: true,
-      modal: "tab",
+      modal: "window",
       backdrop: "transparent",
       id: "RESTORE_FROM_BACKUP_NEED_DEFAULT_NEED_PIN",
       screens: [
@@ -2175,7 +2242,7 @@ const BASE_MESSAGES = () => [
           content: {
             position: "split",
             background:
-              "url('chrome://activity-stream/content/data/content/assets/fox-doodle-backup.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
+              "url('chrome://activity-stream/content/data/content/assets/br-backup-fox-outside-box.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
             logo: {},
             title: {
               string_id: "restored-from-backup-success-title",
@@ -2271,7 +2338,7 @@ const BASE_MESSAGES = () => [
     content: {
       template: "multistage",
       transitions: true,
-      modal: "tab",
+      modal: "window",
       backdrop: "transparent",
       id: "RESTORE_FROM_BACKUP_NEED_DEFAULT",
       screens: [
@@ -2280,7 +2347,7 @@ const BASE_MESSAGES = () => [
           content: {
             position: "split",
             background:
-              "url('chrome://activity-stream/content/data/content/assets/fox-doodle-backup.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
+              "url('chrome://activity-stream/content/data/content/assets/br-backup-fox-outside-box.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
             logo: {},
             title: {
               string_id: "restored-from-backup-success-title",
@@ -2354,7 +2421,7 @@ const BASE_MESSAGES = () => [
     content: {
       template: "multistage",
       transitions: true,
-      modal: "tab",
+      modal: "window",
       backdrop: "transparent",
       id: "RESTORE_FROM_BACKUP_NEED_PIN",
       screens: [
@@ -2363,7 +2430,7 @@ const BASE_MESSAGES = () => [
           content: {
             position: "split",
             background:
-              "url('chrome://activity-stream/content/data/content/assets/fox-doodle-backup.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
+              "url('chrome://activity-stream/content/data/content/assets/br-backup-fox-outside-box.svg') var(--mr-secondary-position) no-repeat var(--mr-screen-background-color)",
             logo: {},
             title: {
               string_id: "restored-from-backup-success-title",
@@ -3098,6 +3165,7 @@ const BASE_MESSAGES = () => [
     frequency: {
       lifetime: 1,
     },
+    skip_in_tests: "We don't want it to pop up in tests",
     content: {
       id: "RELAY_50_MASKS_ANNOUNCEMENT",
       template: "multistage",
@@ -3139,7 +3207,7 @@ const BASE_MESSAGES = () => [
                 type: "OPEN_URL",
                 data: {
                   args: "https://relay.firefox.com",
-                  where: "tab",
+                  where: "tabshifted",
                 },
                 dismiss: true,
               },
@@ -3151,6 +3219,251 @@ const BASE_MESSAGES = () => [
               action: {
                 dismiss: true,
               },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    id: "SMARTWINDOW_DEFAULT_PROMO",
+    template: "smart_window_newtab_promo",
+    content: {
+      type: "vibrant",
+      heading: {
+        string_id: "smart-window-default-promo-heading",
+      },
+      message: {
+        string_id: "smart-window-default-promo-message",
+      },
+      imageSrc:
+        "chrome://browser/content/aiwindow/assets/smart-window-promo-default.svg",
+      imageAlignment: "start",
+      imageWidth: "small",
+      imageDisplay: "padded",
+      primary_button: {
+        label: {
+          string_id: "smart-window-default-promo-primary-button",
+        },
+        action: {
+          type: "SET_PREF",
+          data: {
+            pref: {
+              name: "browser.smartwindow.isDefaultWindow",
+              value: true,
+            },
+          },
+        },
+      },
+      additional_button: {
+        label: {
+          string_id: "smart-window-default-promo-additional-button",
+        },
+        action: {
+          type: "BLOCK_MESSAGE",
+          data: {
+            id: "SMARTWINDOW_DEFAULT_PROMO",
+          },
+        },
+      },
+    },
+    trigger: {
+      id: "smartWindowNewTab",
+    },
+    targeting:
+      "isAIWindow && previousSessionEnd && !activeNotifications && userPrefs.cfrFeatures && ('browser.smartwindow.chat.interactionCount'|preferenceValue) > 2 && !('browser.smartwindow.isDefaultWindow' | preferenceValue)",
+    frequency: {
+      lifetime: 3,
+    },
+    groups: [],
+  },
+  {
+    id: "SMARTWINDOW_FEEDBACK_MODAL_POSITIVE",
+    template: "spotlight",
+    groups: [],
+    targeting: "true",
+    trigger: {
+      id: "feedbackThumbClick",
+      params: ["thumbs-up"],
+    },
+    content: {
+      id: "SMARTWINDOW_FEEDBACK_MODAL_POSITIVE",
+      template: "multistage",
+      modal: "window",
+      write_in_microsurvey: true,
+      screens: [
+        {
+          id: "SMARTWINDOW_FEEDBACK_SCREEN",
+          content: {
+            position: "center",
+            screen_style: {
+              width: "560px",
+              maxHeight: "495px",
+              overflow: "auto",
+            },
+            dismiss_button: { size: "small", action: { dismiss: true } },
+            title: { string_id: "aiwindow-feedback-modal-title" },
+            tiles: [
+              {
+                type: "textarea",
+                subtitle: { string_id: "aiwindow-feedback-what-worked-well" },
+                style: { marginBlock: "0" },
+                data: { id: "feedback-text", rows: 4, character_limit: 1000 },
+              },
+            ],
+            above_button_content: [
+              {
+                type: "text",
+                text: {
+                  string_id: "aiwindow-feedback-disclaimer",
+                  fontSize: "13px",
+                },
+                link_keys: ["learn-more"],
+              },
+            ],
+            "learn-more": {
+              action: {
+                type: "OPEN_URL",
+                data: {
+                  where: "chromeless",
+                  args: "https://support.mozilla.org/1/firefox/%VERSION%/%OS%/%LOCALE%/smart-window-user-feedback",
+                  width: 960,
+                  height: 720,
+                },
+              },
+            },
+            primary_button: {
+              label: { string_id: "aiwindow-feedback-submit" },
+              action: {
+                type: "MULTI_ACTION",
+                collectTextInput: true,
+                navigate: true,
+                data: { actions: [] },
+              },
+            },
+            secondary_button: {
+              label: { string_id: "aiwindow-feedback-cancel" },
+              action: { navigate: true },
+            },
+          },
+        },
+      ],
+    },
+  },
+  {
+    id: "SMARTWINDOW_FEEDBACK_MODAL_NEGATIVE",
+    template: "spotlight",
+    groups: [],
+    targeting: "true",
+    trigger: {
+      id: "feedbackThumbClick",
+      params: ["thumbs-down"],
+    },
+    content: {
+      id: "SMARTWINDOW_FEEDBACK_MODAL_NEGATIVE",
+      template: "multistage",
+      modal: "window",
+      write_in_microsurvey: true,
+      screens: [
+        {
+          id: "SMARTWINDOW_FEEDBACK_SCREEN",
+          content: {
+            position: "center",
+            screen_style: {
+              width: "560px",
+              maxHeight: "495px",
+              overflow: "auto",
+            },
+            dismiss_button: { size: "small", action: { dismiss: true } },
+            title: { string_id: "aiwindow-feedback-modal-title" },
+            tiles: [
+              {
+                type: "multiselect",
+                subtitle: { string_id: "aiwindow-feedback-choose-any" },
+                data: [
+                  {
+                    id: "incorrect-or-misleading",
+                    label: {
+                      string_id:
+                        "aiwindow-feedback-reason-incorrect-or-misleading",
+                    },
+                  },
+                  {
+                    id: "performance-or-usability",
+                    label: {
+                      string_id:
+                        "aiwindow-feedback-reason-performance-or-usability",
+                    },
+                  },
+                  {
+                    id: "doesnt-address-my-request",
+                    label: {
+                      string_id:
+                        "aiwindow-feedback-reason-doesnt-address-my-request",
+                    },
+                  },
+                  {
+                    id: "harmful-or-offensive",
+                    label: {
+                      string_id:
+                        "aiwindow-feedback-reason-harmful-or-offensive",
+                    },
+                  },
+                  {
+                    id: "lacks-personalization",
+                    label: {
+                      string_id:
+                        "aiwindow-feedback-reason-lacks-personalization",
+                    },
+                  },
+                  {
+                    id: "other",
+                    label: { string_id: "aiwindow-feedback-reason-other" },
+                  },
+                ],
+                style: { marginBlock: "0 16px" },
+              },
+              {
+                type: "textarea",
+                subtitle: { string_id: "aiwindow-feedback-add-details" },
+                style: { marginBlock: "0" },
+                data: { id: "feedback-text", rows: 4, character_limit: 1000 },
+              },
+            ],
+            above_button_content: [
+              {
+                type: "text",
+                text: {
+                  string_id: "aiwindow-feedback-disclaimer",
+                  fontSize: "13px",
+                },
+                link_keys: ["learn-more"],
+              },
+            ],
+            "learn-more": {
+              action: {
+                type: "OPEN_URL",
+                data: {
+                  where: "chromeless",
+                  args: "https://support.mozilla.org/1/firefox/%VERSION%/%OS%/%LOCALE%/smart-window-user-feedback",
+                  width: 960,
+                  height: 720,
+                },
+              },
+            },
+            primary_button: {
+              label: { string_id: "aiwindow-feedback-submit" },
+              action: {
+                type: "MULTI_ACTION",
+                collectSelect: true,
+                collectTextInput: true,
+                navigate: true,
+                data: { actions: [] },
+              },
+            },
+            secondary_button: {
+              label: { string_id: "aiwindow-feedback-cancel" },
+              action: { navigate: true },
             },
           },
         },
@@ -3171,7 +3484,7 @@ const PREONBOARDING_MESSAGES = () => [
       {
         id: "TOU_ONBOARDING_LOADING",
         targeting:
-          "browser.aboutwelcome.experimentsGate.enabled|preferenceValue && (!browser.aboutwelcome.experimentsGate.skipSplashIfLoaded|preferenceValue || !nimbusExperimentsLoaded)",
+          "'browser.aboutwelcome.experimentsGate.enabled'|preferenceValue && (!'browser.aboutwelcome.experimentsGate.skipSplashIfLoaded'|preferenceValue || !experimentsLoaded)",
         advance_on_experiment_load: {
           minDisplayMs: 3000,
           maxDisplayMs: 10000,
@@ -3502,13 +3815,6 @@ export const OnboardingMessageProvider = {
         mobileContent.cta_paragraph.text = {
           string_id: "mr2022-onboarding-no-mobile-download-cta-text",
         };
-      }
-      // Update CN specific QRCode url
-      if (lazy.BrowserUtils.isChinaRepack()) {
-        mobileContent.hero_image.url = `${mobileContent.hero_image.url.slice(
-          0,
-          mobileContent.hero_image.url.indexOf(".svg")
-        )}-cn.svg`;
       }
     }
 

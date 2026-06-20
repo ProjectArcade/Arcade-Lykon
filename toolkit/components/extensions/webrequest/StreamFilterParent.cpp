@@ -45,9 +45,6 @@ class ChannelEventWrapper : public ChannelEvent {
     return do_AddRef(mTarget);
   }
 
- protected:
-  ~ChannelEventWrapper() override = default;
-
  private:
   nsCOMPtr<nsIEventTarget> mTarget;
 };
@@ -58,9 +55,6 @@ class ChannelEventFunction final : public ChannelEventWrapper {
       : ChannelEventWrapper(aTarget), mFunc(std::move(aFunc)) {}
 
   void Run() override { mFunc(); }
-
- protected:
-  ~ChannelEventFunction() override = default;
 
  private:
   std::function<void()> mFunc;
@@ -76,9 +70,6 @@ class ChannelEventRunnable final : public ChannelEventWrapper {
     nsresult rv = mRunnable->Run();
     (void)NS_WARN_IF(NS_FAILED(rv));
   }
-
- protected:
-  ~ChannelEventRunnable() override = default;
 
  private:
   RefPtr<Runnable> mRunnable;
@@ -179,7 +170,7 @@ void StreamFilterParent::Disconnect(const nsACString& aReason) {
   nsAutoCString reason(aReason);
 
   RefPtr<StreamFilterParent> self(this);
-  RunOnActorThread(FUNC, [self, reason] {
+  RunOnActorThread(FUNC, [self, reason = std::move(reason)] {
     if (self->IPCActive()) {
       self->mState = State::Disconnected;
       self->CheckResult(self->SendError(reason));
@@ -470,8 +461,8 @@ nsresult StreamFilterParent::Write(Data& aData) {
       NS_ASSIGNMENT_DEPEND);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  rv =
-      mOrigListener->OnDataAvailable(mChannel, stream, mOffset, aData.Length());
+  nsCOMPtr<nsIStreamListener> origListener = mOrigListener;
+  rv = origListener->OnDataAvailable(mChannel, stream, mOffset, aData.Length());
   NS_ENSURE_SUCCESS(rv, rv);
 
   mOffset += aData.Length();
@@ -642,7 +633,8 @@ StreamFilterParent::OnStartRequest(nsIRequest* aRequest) {
     }
   }
 
-  nsresult rv = mOrigListener->OnStartRequest(aRequest);
+  nsCOMPtr<nsIStreamListener> origListener = mOrigListener;
+  nsresult rv = origListener->OnStartRequest(aRequest);
 
   // Important: Do this only *after* running the next listener in the chain, so
   // that we get the final delivery target after any retargeting that it may do.
@@ -709,7 +701,8 @@ nsresult StreamFilterParent::EmitStopRequest(nsresult aStatusCode) {
   MOZ_ASSERT(!mSentStop);
 
   mSentStop = true;
-  nsresult rv = mOrigListener->OnStopRequest(mChannel, aStatusCode);
+  nsCOMPtr<nsIStreamListener> origListener = mOrigListener;
+  nsresult rv = origListener->OnStopRequest(mChannel, aStatusCode);
 
   if (mLoadGroup && !mDisconnected) {
     (void)mLoadGroup->RemoveRequest(this, nullptr, aStatusCode);
@@ -795,8 +788,9 @@ StreamFilterParent::OnDataAvailable(nsIRequest* aRequest,
     }
 
     mOffset += aCount;
-    return mOrigListener->OnDataAvailable(aRequest, aInputStream,
-                                          mOffset - aCount, aCount);
+    nsCOMPtr<nsIStreamListener> origListener = mOrigListener;
+    return origListener->OnDataAvailable(aRequest, aInputStream,
+                                         mOffset - aCount, aCount);
   }
 
   Data data;
@@ -872,24 +866,24 @@ void StreamFilterParent::AssertIsIOThread() { MOZ_ASSERT(IsIOThread()); }
 
 template <typename Function>
 void StreamFilterParent::RunOnMainThread(const char* aName, Function&& aFunc) {
-  mQueue->RunOrEnqueue(
-      new ChannelEventFunction(mMainThread, std::forward<Function>(aFunc)));
+  mQueue->RunOrEnqueue(MakeUnique<ChannelEventFunction>(
+      mMainThread, std::forward<Function>(aFunc)));
 }
 
 void StreamFilterParent::RunOnMainThread(already_AddRefed<Runnable> aRunnable) {
   mQueue->RunOrEnqueue(
-      new ChannelEventRunnable(mMainThread, std::move(aRunnable)));
+      MakeUnique<ChannelEventRunnable>(mMainThread, std::move(aRunnable)));
 }
 
 template <typename Function>
 void StreamFilterParent::RunOnIOThread(const char* aName, Function&& aFunc) {
-  mQueue->RunOrEnqueue(
-      new ChannelEventFunction(mIOThread, std::forward<Function>(aFunc)));
+  mQueue->RunOrEnqueue(MakeUnique<ChannelEventFunction>(
+      mIOThread, std::forward<Function>(aFunc)));
 }
 
 void StreamFilterParent::RunOnIOThread(already_AddRefed<Runnable> aRunnable) {
   mQueue->RunOrEnqueue(
-      new ChannelEventRunnable(mIOThread, std::move(aRunnable)));
+      MakeUnique<ChannelEventRunnable>(mIOThread, std::move(aRunnable)));
 }
 
 template <typename Function>

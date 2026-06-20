@@ -22,6 +22,7 @@
 #include <ostream>
 
 #include "irregexp/RegExpTypes.h"
+#include "irregexp/util/BitFieldShim.h"
 #include "irregexp/util/BitVectorShim.h"
 #include "irregexp/util/FlagsShim.h"
 #include "irregexp/util/VectorShim.h"
@@ -70,6 +71,8 @@ class Handle;
 #define V8_FALLTHROUGH [[fallthrough]]
 #define V8_NODISCARD [[nodiscard]]
 #define V8_NOEXCEPT noexcept
+#define V8_LIFETIME_BOUND /* unsupported */
+#define V8_GSL_POINTER    /* [[gsl::Pointer]] unsupported */
 
 #define V8_LIKELY(x) MOZ_LIKELY(x)
 #define V8_UNLIKELY(x) MOZ_UNLIKELY(x)
@@ -249,6 +252,11 @@ constexpr T RoundUp(T x) {
   return RoundDown<m, T>(static_cast<T>(x + (m - 1)));
 }
 
+// The USE(x, ...) template is used to silence C++ compiler warnings
+// issued for (yet) unused variables (typically parameters).
+template <typename... Args>
+void USE([[maybe_unused]] Args&&...) {};
+
 namespace base {
 
 // Latin1/UTF-16 constants
@@ -258,21 +266,6 @@ using uc16 = char16_t;
 using uc32 = uint32_t;
 
 constexpr int kUC16Size = sizeof(base::uc16);
-
-// Origin:
-// https://github.com/v8/v8/blob/855591a54d160303349a5f0a32fab15825c708d1/src/base/macros.h#L247-L258
-// The USE(x, ...) template is used to silence C++ compiler warnings
-// issued for (yet) unused variables (typically parameters).
-// The arguments are guaranteed to be evaluated from left to right.
-struct Use {
-  template <typename T>
-  Use(T&&) {}  // NOLINT(runtime/explicit)
-};
-#define USE(...)                                                   \
-  do {                                                             \
-    ::v8::base::Use unused_tmp_array_for_use_macro[]{__VA_ARGS__}; \
-    (void)unused_tmp_array_for_use_macro;                          \
-  } while (false)
 
 // Origin:
 // https://github.com/v8/v8/blob/855591a54d160303349a5f0a32fab15825c708d1/src/base/safe_conversions.h#L35-L39
@@ -301,7 +294,7 @@ inline uint8_t saturated_cast<uint8_t, uint32_t>(uint32_t x) {
 // branch.
 template <typename T, typename U>
 inline constexpr bool IsInRange(T value, U lower_limit, U higher_limit) {
-  using unsigned_T = typename std::make_unsigned<T>::type;
+  using unsigned_T = std::make_unsigned_t<T>;
   // Use static_cast to support enum classes.
   return static_cast<unsigned_T>(static_cast<unsigned_T>(value) -
                                  static_cast<unsigned_T>(lower_limit)) <=
@@ -408,6 +401,30 @@ constexpr uint32_t CountPopulation(uint32_t value) {
 }
 
 }  // namespace bits
+
+namespace internal {
+
+template <typename T>
+class CheckedNumeric : public mozilla::CheckedInt<T> {
+ public:
+  template <typename U>
+  MOZ_IMPLICIT constexpr CheckedNumeric(U val) : mozilla::CheckedInt<T>(val) {}
+
+  // AssignIfValid(Dst) - Assigns the underlying value if it is currently valid
+  // and is within the range supported by the destination type. Returns true if
+  // successful and false otherwise.
+  template <typename Dst>
+  bool AssignIfValid(Dst* result) const {
+    if (MOZ_LIKELY(this->isValid() && std::in_range<Dst>(this->value()))) {
+      *result = this->value();
+      return true;
+    }
+    return false;
+  }
+};
+
+}  // namespace internal
+
 }  // namespace base
 
 namespace unibrow {
@@ -713,8 +730,8 @@ inline int CompareChars(const lchar* lhs, const rchar* rhs, size_t chars) {
 template <typename lchar, typename rchar>
 inline bool CompareCharsEqualUnsigned(const lchar* lhs, const rchar* rhs,
                                       size_t chars) {
-  STATIC_ASSERT(std::is_unsigned<lchar>::value);
-  STATIC_ASSERT(std::is_unsigned<rchar>::value);
+  STATIC_ASSERT(std::is_unsigned_v<lchar>);
+  STATIC_ASSERT(std::is_unsigned_v<rchar>);
   if (sizeof(*lhs) == sizeof(*rhs)) {
     // memcmp compares byte-by-byte, but for equality it doesn't matter whether
     // two-byte char comparison is little- or big-endian.
@@ -729,8 +746,8 @@ inline bool CompareCharsEqualUnsigned(const lchar* lhs, const rchar* rhs,
 template <typename lchar, typename rchar>
 inline bool CompareCharsEqual(const lchar* lhs, const rchar* rhs,
                               size_t chars) {
-  using ulchar = typename std::make_unsigned<lchar>::type;
-  using urchar = typename std::make_unsigned<rchar>::type;
+  using ulchar = std::make_unsigned_t<lchar>;
+  using urchar = std::make_unsigned_t<rchar>;
   return CompareCharsEqualUnsigned(reinterpret_cast<const ulchar*>(lhs),
                                    reinterpret_cast<const urchar*>(rhs), chars);
 }
@@ -761,7 +778,7 @@ class Object {
 // isolate->stack_guard()->HandleInterrupts(). We want to handle
 // interrupts in the caller, so we return a magic value from
 // HandleInterrupts and check for it here.
-inline bool IsExceptionHole(Object obj, Isolate*) {
+inline bool IsExceptionHole(Object obj) {
   return obj.value().isMagic(JS_INTERRUPT_REGEXP);
 }
 
@@ -797,7 +814,7 @@ class HeapObject : public Object {
 template <typename T>
 class Tagged {
  public:
-  Tagged() {}
+  Tagged() = default;
   MOZ_IMPLICIT Tagged(const T& value) : value_(value) {}
   MOZ_IMPLICIT Tagged(T&& value) : value_(std::move(value)) {}
 
@@ -939,7 +956,7 @@ inline bool IsByteArray(Object obj) {
 template <typename T>
 class FixedIntegerArray : public ByteArray {
   static_assert(alignof(T) <= alignof(ByteArrayData));
-  static_assert(std::is_integral<T>::value);
+  static_assert(std::is_integral_v<T>);
 
  public:
   static Handle<FixedIntegerArray<T>> New(Isolate* isolate, uint32_t length);
@@ -1146,7 +1163,7 @@ using DisallowGarbageCollection = JS::AutoAssertNoGC;
 
 class AllowGarbageCollection {
  public:
-  AllowGarbageCollection() {}
+  AllowGarbageCollection() = default;
 };
 
 // Origin:

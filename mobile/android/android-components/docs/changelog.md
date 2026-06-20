@@ -4,7 +4,24 @@ title: Changelog
 permalink: /changelog/
 ---
 
-# 152.0 (In Development)
+# 154.0 (In Development)
+* **browser-icons**
+    * ⚠️ **Breaking change**: Removed the `useMerinoManifest` parameter from `BrowserIcons`. The Merino manifest is now always used as the icon source. Removed `TippyTopIconPreparer` and the `IconRequest.Resource.Type.TIPPY_TOP` resource type. [Bug 2047476](https://bugzilla.mozilla.org/show_bug.cgi?id=2047476)
+* **support-base**
+    * 🆕 Added `Action.NEXT` and `Action.PREVIOUS` to the `Fact`.
+* **feature-media**
+    * 🆕 The media notification now emits `Action.NEXT` and `Action.PREVIOUS` facts when the next/previous track buttons are tapped.
+
+# 153.0
+* **support-utils**
+  * 🆕 Added `DiskLruCacheStore` to provide shared `DiskLruCache` read, write, remove, and clear helpers for disk-backed components.
+  * 🆕 Added `CacheDirectoryMigration` to help migrating the cache directory used by `DiskLruCache`.
+
+# 152.0
+* **browser-engine-gecko**
+    * 🆕 New `getTrackingProtectionEventsByDateRange`, `sumAllTrackingProtectionEvents` and `getEarliestTrackingProtectionDate` APIs to query the tracking protection database from Gecko. [Bug 2031989](https://bugzilla.mozilla.org/show_bug.cgi?id=2031989)
+* **feature-session**
+    * 🆕 New `FetchTrackingEventsUseCase`, `FetchTotalTrackersBlockedUseCase` and `FetchEarliestTrackingDateUseCase` usecases to query for tracking protection related dertails from the current engine. [Bug 2031989](https://bugzilla.mozilla.org/show_bug.cgi?id=2031989)
 
 # 151.0
 * **browser-engine-gecko**

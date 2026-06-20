@@ -342,7 +342,7 @@ void DnsAndConnectSocket::CancelBackupTimer() {
   // performed the backup connection.
 }
 
-void DnsAndConnectSocket::Abandon(bool aReenqueueTransaction) {
+void DnsAndConnectSocket::Abandon() {
   LOG(("DnsAndConnectSocket::Abandon [this=%p ent=%s] %p %p %p %p", this,
        mConnInfo->Origin(), mPrimaryTransport.mSocketTransport.get(),
        mBackupTransport.mSocketTransport.get(),
@@ -608,7 +608,10 @@ nsresult DnsAndConnectSocket::SetupConn(bool isPrimary, nsresult status) {
 
   // This half-open socket has created a connection.  This flag excludes it
   // from counter of actual connections used for checking limits.
-  mHasConnected = true;
+  if (!mHasConnected) {
+    mHasConnected = true;
+    ent->OnConnectionAttemptConnected();
+  }
 
   // if this is still in the pending list, remove it and dispatch it
   RefPtr<PendingTransactionInfo> pendingTransInfo =
@@ -1252,7 +1255,7 @@ nsresult DnsAndConnectSocket::TransportSetup::SetupStreams(
     tmpFlags |= nsISocketTransport::NO_PERMANENT_STORAGE;
   }
 
-  (void)socketTransport->SetIsPrivate(ci->GetPrivate());
+  (void)socketTransport->SetOriginAttributes(ci->GetOriginAttributes());
   (void)socketTransport->SetIsTRRConnection(ci->GetIsTrrServiceChannel());
 
   if (dnsAndSock->mCaps & NS_HTTP_DISALLOW_ECH) {
@@ -1309,12 +1312,6 @@ nsresult DnsAndConnectSocket::TransportSetup::SetupStreams(
 
   socketTransport->SetConnectionFlags(tmpFlags);
   socketTransport->SetTlsFlags(ci->GetTlsFlags());
-
-  const OriginAttributes& originAttributes =
-      dnsAndSock->mConnInfo->GetOriginAttributes();
-  if (originAttributes != OriginAttributes()) {
-    socketTransport->SetOriginAttributes(originAttributes);
-  }
 
   socketTransport->SetQoSBits(gHttpHandler->GetQoSBits());
 

@@ -8,23 +8,23 @@ At the moment, it is only used for this documentation verification, but in the f
 Run Locally
 -----------
 
-The mozlint integration of PerfDocs can be run using mach:
+PerfDocs can be run using mach:
 
 .. parsed-literal::
 
-    $ mach lint --linter perfdocs .
+    $ ./mach perfdocs
 
-Documentation can be regenerated for performance tests by including the ``--fix`` flag:
+Documentation can be regenerated for performance tests by using the ``--generate`` flag:
 
 .. parsed-literal::
 
-    $ mach lint --linter perfdocs . --fix
+    $ ./mach perfdocs --generate
 
 
 Configuration
 -------------
 
-There are no configuration options available for this linter. It scans the full source tree under ``testing``, looking for folders named ``perfdocs``, validates their content, and regenerates the documentation (if ``--fix`` is provided). This has been implemented for all performance testing harnesses, and the documentation generated gets displayed in :ref:`Performance Testing`.
+There are no configuration options available. It scans the full source tree, looking for folders named ``perfdocs``, validates their content, and regenerates the documentation (if ``--generate`` is provided). This has been implemented for all performance testing harnesses, and the documentation generated gets displayed in :ref:`Performance Testing`.
 
 In the ``perfdocs`` folders, there needs to be an ``index.rst`` file and it needs to contain the string ``{documentation}`` in some location in the file which is where the test documentation will be placed. The folders must also have a ``config.yml`` file following this schema:
 

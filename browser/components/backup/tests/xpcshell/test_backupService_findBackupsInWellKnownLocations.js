@@ -36,6 +36,8 @@ add_task(
     // getBackupFileInfo should return without throwing to simulate
     // what happens when a valid backup file's validity is checked
     sandbox.stub(bs, "getBackupFileInfo").callsFake(async _filePath => {});
+    sandbox.stub(BackupService, "docsDirFolderPath").get(() => null);
+    sandbox.stub(BackupService, "oneDriveFolderPath").get(() => null);
 
     Assert.ok(await IOUtils.exists(BACKUP_DIR), "Backup directory exists");
     Assert.equal(
@@ -45,7 +47,7 @@ add_task(
     );
 
     // 1) Single valid file -> findBackupsInWellKnownLocations should find it
-    const ONE = "FirefoxBackup_one_20241201-1200.html";
+    const ONE = "FirefoxBackup_one_20241201-120000.000.html";
     await touchBackupFile(BACKUP_DIR, ONE);
 
     let result = await bs.findBackupsInWellKnownLocations();
@@ -61,7 +63,7 @@ add_task(
     );
 
     // 2) Add a second matching file -> well-known search should refuse to pick (validateFile=false)
-    const TWO = "FirefoxBackup_two_20241202-1300.html";
+    const TWO = "FirefoxBackup_two_20241202-130000.000.html";
     await touchBackupFile(BACKUP_DIR, TWO);
 
     let result2 = await bs.findBackupsInWellKnownLocations();
@@ -193,6 +195,8 @@ add_task(async function test_backupDetectionComplete_telemetry() {
     let bs = new BackupService();
     let sandbox = sinon.createSandbox();
     sandbox.stub(bs, "getBackupFileInfo").callsFake(async _filePath => {});
+    sandbox.stub(BackupService, "docsDirFolderPath").get(() => null);
+    sandbox.stub(BackupService, "oneDriveFolderPath").get(() => null);
 
     await touchBackupFile(dir, "FirefoxBackup_test_20241201-1200.html");
     await bs.findBackupsInWellKnownLocations();
@@ -217,6 +221,8 @@ add_task(async function test_backupDetectionComplete_telemetry() {
       isEncrypted: false,
     });
     sandbox.stub(bs, "classifyLocationForTelemetry").returns("documents");
+    sandbox.stub(BackupService, "docsDirFolderPath").get(() => null);
+    sandbox.stub(BackupService, "oneDriveFolderPath").get(() => null);
 
     const FILE = "FirefoxBackup_test_20241201-1200.html";
     await touchBackupFile(dir, FILE);
@@ -250,6 +256,10 @@ add_task(async function test_backupDetectionComplete_telemetry() {
     Services.prefs.setStringPref("browser.backup.location", dir);
 
     let bs = new BackupService();
+    let sandbox = sinon.createSandbox();
+    sandbox.stub(BackupService, "docsDirFolderPath").get(() => null);
+    sandbox.stub(BackupService, "oneDriveFolderPath").get(() => null);
+
     await bs.findBackupsInWellKnownLocations({
       validateFile: true,
       source: "preferences",
@@ -278,6 +288,7 @@ add_task(async function test_backupDetectionComplete_telemetry() {
       "Restore ID is empty when nothing found."
     );
 
+    sandbox.restore();
     await IOUtils.remove(root, { recursive: true });
   }
 });

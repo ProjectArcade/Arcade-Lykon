@@ -3,26 +3,51 @@
 
 "use strict";
 
+const { PromiseTestUtils } = ChromeUtils.importESModule(
+  "resource://testing-common/PromiseTestUtils.sys.mjs"
+);
+
+// Tests in this file deliberately reject openAIEngine.build for several
+// error-path subtests. Background ML work scheduled during AI window setup
+// (e.g. memories) can race with stub install/restore and surface its own
+// Connection error from the OpenAI pipeline — orthogonal to what the
+// assertions exercise.
+PromiseTestUtils.allowMatchingRejectionsGlobally(/Connection error/);
+
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   IntentClassifier:
     "moz-src:///browser/components/aiwindow/models/IntentClassifier.sys.mjs",
+  MESSAGE_ROLE:
+    "moz-src:///browser/components/aiwindow/ui/modules/ChatEnums.sys.mjs",
 });
+
+const { MockEngineManager } = ChromeUtils.importESModule(
+  "resource://testing-common/AIWindowTestUtils.sys.mjs"
+);
 
 describe("SmartWindowRequestResponseTelemetry", () => {
   let win;
   let sb;
+  let mockEngineManager;
 
   beforeEach(async () => {
     sb = sinon.createSandbox();
     sb.stub(lazy.IntentClassifier, "getPromptIntent").resolves("chat");
     await SpecialPowers.pushPrefEnv({
-      set: [["browser.smartwindow.firstrun.modelChoice", "0"]],
+      set: [
+        ["browser.smartwindow.firstrun.modelChoice", "0"],
+        ["browser.smartwindow.customEndpoint", "http://localhost:0/v1"],
+      ],
     });
     Services.fog.testResetFOG();
   });
 
   afterEach(async () => {
+    if (mockEngineManager) {
+      mockEngineManager.cleanupMocks();
+      mockEngineManager = null;
+    }
     if (win) {
       await BrowserTestUtils.closeWindow(win);
       win = null;
@@ -133,6 +158,14 @@ describe("SmartWindowRequestResponseTelemetry", () => {
           "model_response: latency is greater than 0"
         );
         Assert.ok(
+          /^\d+$/.test(responseEvents[0].extra.latency),
+          `model_response: latency is integer ms (got ${responseEvents[0].extra.latency})`
+        );
+        Assert.ok(
+          /^\d+$/.test(responseEvents[0].extra.duration),
+          `model_response: duration is integer ms (got ${responseEvents[0].extra.duration})`
+        );
+        Assert.ok(
           "chat_id" in responseEvents[0].extra,
           "model_response: chat_id exists"
         );
@@ -140,13 +173,20 @@ describe("SmartWindowRequestResponseTelemetry", () => {
           "request_id" in responseEvents[0].extra,
           "model_response: request_id exists"
         );
-        Assert.ok(
-          "error" in responseEvents[0].extra,
-          "model_response: error attribute exists"
+        Assert.equal(
+          responseEvents[0].extra.request_id,
+          requestEvents[0].extra.request_id,
+          "model_request and model_response share the same request_id"
         );
-        Assert.ok(
-          !responseEvents[0].extra.error,
-          "model_response: error is empty"
+        Assert.equal(
+          responseEvents[0].extra.error,
+          "",
+          "model_response: error is empty on success"
+        );
+        Assert.equal(
+          Number(responseEvents[0].extra.http_status),
+          0,
+          "model_response: http_status is 0 on success"
         );
       }
     );
@@ -244,6 +284,16 @@ describe("SmartWindowRequestResponseTelemetry", () => {
           4,
           "Turn 2 model_response message_seq is 4"
         );
+        Assert.equal(
+          modelResponses[0].extra.request_id,
+          modelRequests[0].extra.request_id,
+          "Turn 1 model_request and model_response share the same request_id"
+        );
+        Assert.equal(
+          modelResponses[1].extra.request_id,
+          modelRequests[1].extra.request_id,
+          "Turn 2 model_request and model_response share the same request_id"
+        );
         Assert.greater(
           Number(modelResponses[0].extra.latency),
           0,
@@ -267,15 +317,16 @@ describe("SmartWindowRequestResponseTelemetry", () => {
 
         const chatBuildCalls = buildSpy
           .getCalls()
-          .filter(call => call.args[0] === "chat");
+          .filter(call => call.args[0]?.feature === "chat");
         Assert.greaterOrEqual(
           chatBuildCalls.length,
           2,
           "At least two chat engine builds (one per turn)"
         );
         for (const call of chatBuildCalls) {
+          const flowId = call.args[0].flowId;
           Assert.equal(
-            call.args[1],
+            flowId,
             chatId,
             "Every chat engine build receives conversationId as flowId"
           );
@@ -351,14 +402,14 @@ describe("SmartWindowRequestResponseTelemetry", () => {
 
         const chatBuilds = buildSpy
           .getCalls()
-          .filter(call => call.args[0] === "chat");
+          .filter(call => call.args[0]?.feature === "chat");
         Assert.greaterOrEqual(
           chatBuilds.length,
           2,
           "At least two chat engine builds"
         );
 
-        const flowIds = new Set(chatBuilds.map(call => call.args[1]));
+        const flowIds = new Set(chatBuilds.map(call => call.args[0].flowId));
         Assert.ok(
           flowIds.has(chatIdA),
           "Engine build for conversation A used chatIdA as flowId"
@@ -481,14 +532,458 @@ describe("SmartWindowRequestResponseTelemetry", () => {
       "chat_id" in responseEvents[0].extra,
       "model_response: chat_id exists"
     );
-    Assert.ok(
-      "error" in responseEvents[0].extra,
-      "model_response: error attribute exists"
-    );
     Assert.equal(
       responseEvents[0].extra.error,
-      "Budget exceeded",
-      "model_response: error code is 1 which is budget exceeded"
+      "budgetExceeded",
+      "model_response: error is budgetExceeded"
+    );
+    Assert.equal(
+      Number(responseEvents[0].extra.http_status),
+      0,
+      "model_response: http_status is 0"
+    );
+  });
+
+  const ERROR_TELEMETRY_CASES = [
+    {
+      errorProps: { error: 5, status: 429 },
+      expectedName: "upstreamRateLimit",
+      expectedHttpStatus: 429,
+    },
+    {
+      errorProps: { error: 6, status: 429 },
+      expectedName: "fastlyWafRateLimit",
+      expectedHttpStatus: 429,
+    },
+    {
+      errorProps: { error: 4, status: 403 },
+      expectedName: "maxUsersReached",
+      expectedHttpStatus: 403,
+    },
+    {
+      errorProps: { clientReason: "fxaTokenUnavailable" },
+      expectedName: "fxaTokenUnavailable",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { clientReason: "remoteSettingsUnavailable" },
+      expectedName: "remoteSettingsUnavailable",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { clientReason: "modelConfigUnavailable" },
+      expectedName: "modelConfigUnavailable",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { clientReason: "promptLoadFailure" },
+      expectedName: "promptLoadFailure",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { clientReason: "missingBrowsingContext" },
+      expectedName: "missingBrowsingContext",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { clientReason: "offline" },
+      expectedName: "offline",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { clientReason: "connectionFailure" },
+      expectedName: "connectionFailure",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { status: 401 },
+      expectedName: "serverError",
+      expectedHttpStatus: 401,
+    },
+    {
+      errorProps: { error: 99, status: 500 },
+      expectedName: "serverError",
+      expectedHttpStatus: 500,
+    },
+    {
+      errorProps: { status: 502 },
+      expectedName: "serverError",
+      expectedHttpStatus: 502,
+    },
+    {
+      errorProps: {},
+      expectedName: "Error",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { name: "TypeError" },
+      expectedName: "TypeError",
+      expectedHttpStatus: 0,
+    },
+    {
+      errorProps: { name: "APIConnectionError" },
+      expectedName: "APIConnectionError",
+      expectedHttpStatus: 0,
+    },
+  ];
+
+  // Share one AI window across all error cases — a fresh window per case
+  // pushed the file past the per-task timeout in test-verify chaos mode.
+  it("records expected error name and http_status for build errors", async () => {
+    // Stub build *before* opening the window. Background flows scheduled
+    // during window startup (e.g. memory-related work) would otherwise reach
+    // the real openAIEngine.build and surface as an uncaught Connection
+    // error from the ML pipeline. Re-arm the stub per iteration via
+    // `.rejects(error)` instead of restoring between cases.
+    const buildStub = sb
+      .stub(openAIEngine, "build")
+      .rejects(new Error("build errors test setup"));
+
+    win = await openAIWindow();
+    const browser = win.gBrowser.selectedBrowser;
+
+    for (const {
+      errorProps,
+      expectedName,
+      expectedHttpStatus,
+    } of ERROR_TELEMETRY_CASES) {
+      info(`Error case: ${JSON.stringify(errorProps)} -> ${expectedName}`);
+      Services.fog.testResetFOG();
+
+      const error = new Error("test error");
+      Object.assign(error, errorProps);
+      buildStub.rejects(error);
+
+      await typeInSmartbar(browser, "trigger error");
+      await submitSmartbar(browser);
+
+      await TestUtils.waitForCondition(
+        () => Glean.smartWindow.modelResponse.testGetValue()?.length > 0,
+        `Wait for model_response event for ${expectedName}`
+      );
+
+      const events = Glean.smartWindow.modelResponse.testGetValue();
+      Assert.equal(
+        events.length,
+        1,
+        `${expectedName}: one model_response event was recorded`
+      );
+      Assert.equal(
+        events[0].extra.error,
+        expectedName,
+        `${expectedName}: model_response.error matches`
+      );
+      Assert.equal(
+        Number(events[0].extra.http_status),
+        expectedHttpStatus,
+        `${expectedName}: model_response.http_status is ${expectedHttpStatus}`
+      );
+    }
+  });
+
+  function makeFakeEngine({ runWithGenerator } = {}) {
+    return {
+      feature: "chat",
+      model: "custom-model",
+      runWithGenerator: runWithGenerator ?? async function* () {},
+    };
+  }
+
+  it("records fxaTokenUnavailable when FxA token is missing", async () => {
+    sb.stub(openAIEngine, "build").resolves(makeFakeEngine());
+    sb.stub(openAIEngine, "getFxAccountToken").resolves(null);
+
+    win = await openAIWindow();
+    const browser = win.gBrowser.selectedBrowser;
+    await typeInSmartbar(browser, "trigger fxa error");
+    await submitSmartbar(browser);
+
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length > 0,
+      "Wait for model_response event with FxA error"
+    );
+
+    const events = Glean.smartWindow.modelResponse.testGetValue();
+    Assert.equal(events.length, 1, "One model_response event was recorded");
+    Assert.equal(
+      events[0].extra.error,
+      "fxaTokenUnavailable",
+      "model_response: error is fxaTokenUnavailable"
+    );
+    Assert.equal(
+      Number(events[0].extra.http_status),
+      0,
+      "model_response: http_status is 0"
+    );
+  });
+
+  it("records connectionFailure when streaming fails with no status or error code", async () => {
+    sb.stub(openAIEngine, "build").resolves(
+      makeFakeEngine({
+        // eslint-disable-next-line require-yield
+        async *runWithGenerator() {
+          throw new Error("network request failed");
+        },
+      })
+    );
+    sb.stub(openAIEngine, "getFxAccountToken").resolves("mock-fxa-token");
+
+    const originalOffline = Services.io.offline;
+    Services.io.offline = false;
+    try {
+      win = await openAIWindow();
+      const browser = win.gBrowser.selectedBrowser;
+      await typeInSmartbar(browser, "trigger connection failure");
+      await submitSmartbar(browser);
+
+      await TestUtils.waitForCondition(
+        () => Glean.smartWindow.modelResponse.testGetValue()?.length > 0,
+        "Wait for model_response event with connectionFailure"
+      );
+
+      const events = Glean.smartWindow.modelResponse.testGetValue();
+      Assert.equal(events.length, 1, "One model_response event was recorded");
+      Assert.equal(
+        events[0].extra.error,
+        "connectionFailure",
+        "model_response: error is connectionFailure"
+      );
+      Assert.equal(
+        Number(events[0].extra.http_status),
+        0,
+        "model_response: http_status is 0"
+      );
+    } finally {
+      Services.io.offline = originalOffline;
+    }
+  });
+
+  it("records offline when streaming fails while the browser is offline", async () => {
+    sb.stub(openAIEngine, "build").resolves(
+      makeFakeEngine({
+        // eslint-disable-next-line require-yield
+        async *runWithGenerator() {
+          throw new Error("network request failed");
+        },
+      })
+    );
+    sb.stub(openAIEngine, "getFxAccountToken").resolves("mock-fxa-token");
+
+    const originalOffline = Services.io.offline;
+    Services.io.offline = true;
+    try {
+      win = await openAIWindow();
+      const browser = win.gBrowser.selectedBrowser;
+      await typeInSmartbar(browser, "trigger offline error");
+      await submitSmartbar(browser);
+
+      await TestUtils.waitForCondition(
+        () => Glean.smartWindow.modelResponse.testGetValue()?.length > 0,
+        "Wait for model_response event with offline"
+      );
+
+      const events = Glean.smartWindow.modelResponse.testGetValue();
+      Assert.equal(events.length, 1, "One model_response event was recorded");
+      Assert.equal(
+        events[0].extra.error,
+        "offline",
+        "model_response: error is offline"
+      );
+      Assert.equal(
+        Number(events[0].extra.http_status),
+        0,
+        "model_response: http_status is 0"
+      );
+    } finally {
+      Services.io.offline = originalOffline;
+    }
+  });
+
+  it("records fastlyBlocked and http_status 406 on streaming 406", async () => {
+    sb.stub(openAIEngine, "build").resolves(
+      makeFakeEngine({
+        // eslint-disable-next-line require-yield
+        async *runWithGenerator() {
+          const err = new Error("test 406 from upstream");
+          err.status = 406;
+          throw err;
+        },
+      })
+    );
+    sb.stub(openAIEngine, "getFxAccountToken").resolves("mock-fxa-token");
+
+    win = await openAIWindow();
+    const browser = win.gBrowser.selectedBrowser;
+    await typeInSmartbar(browser, "trigger 406");
+    await submitSmartbar(browser);
+
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length > 0,
+      "Wait for model_response event with 406 error"
+    );
+
+    const events = Glean.smartWindow.modelResponse.testGetValue();
+    Assert.equal(events.length, 1, "One model_response event was recorded");
+    Assert.equal(
+      events[0].extra.error,
+      "fastlyBlocked",
+      "model_response: error is fastlyBlocked"
+    );
+    Assert.equal(
+      Number(events[0].extra.http_status),
+      406,
+      "model_response: http_status is 406"
+    );
+  });
+
+  it("records is_retry true on a retried turn and false on the initial turn", async () => {
+    mockEngineManager = new MockEngineManager();
+    win = await openAIWindow();
+    const browser = win.gBrowser.selectedBrowser;
+
+    await typeInSmartbar(browser, "first attempt");
+    await submitSmartbar(browser);
+    await mockEngineManager.respondTo({
+      purpose: "chat",
+      response: "Reply from mock.",
+    });
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length >= 1,
+      "Wait for initial model_response"
+    );
+
+    const aiWindow = browser.contentDocument.querySelector("ai-window");
+    const lastAssistant = aiWindow.conversation.messages.findLast(
+      m => m.role === lazy.MESSAGE_ROLE.ASSISTANT
+    );
+    Assert.ok(lastAssistant, "Have an assistant message to retry from");
+
+    aiWindow.handleFooterAction({
+      action: "retry",
+      messageId: lastAssistant.id,
+    });
+
+    await mockEngineManager.respondTo({
+      purpose: "chat",
+      response: "Reply from mock.",
+    });
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length >= 2,
+      "Wait for retry model_response"
+    );
+
+    const responses = Glean.smartWindow.modelResponse.testGetValue();
+    Assert.equal(responses.length, 2, "Two model_response events recorded");
+    Assert.equal(
+      responses[0].extra.is_retry,
+      "false",
+      "Initial turn: is_retry is false"
+    );
+    Assert.equal(responses[0].extra.error, "", "Initial turn: no error");
+    Assert.equal(
+      responses[1].extra.is_retry,
+      "true",
+      "Retried turn: is_retry is true"
+    );
+    Assert.equal(responses[1].extra.error, "", "Retried turn: no error");
+  });
+
+  it("records retry orchestration failure in model_response with is_retry true", async () => {
+    mockEngineManager = new MockEngineManager();
+    win = await openAIWindow();
+    const browser = win.gBrowser.selectedBrowser;
+
+    await typeInSmartbar(browser, "first attempt");
+    await submitSmartbar(browser);
+    await mockEngineManager.respondTo({
+      purpose: "chat",
+      response: "Reply from mock.",
+    });
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length >= 1,
+      "Wait for initial model_response"
+    );
+
+    const aiWindow = browser.contentDocument.querySelector("ai-window");
+    const lastAssistant = aiWindow.conversation.messages.findLast(
+      m => m.role === lazy.MESSAGE_ROLE.ASSISTANT
+    );
+
+    // Force the retry orchestration to throw before #fetchAIResponse
+    // takes over, so the catch in #retryFromAssistantMessageId is the
+    // only path that can record telemetry for this attempt.
+    const orchestrationError = new Error("boom");
+    sb.stub(aiWindow.conversation, "retryMessage").rejects(orchestrationError);
+
+    aiWindow.handleFooterAction({
+      action: "retry",
+      messageId: lastAssistant.id,
+    });
+
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length >= 2,
+      "Wait for retry-failure model_response"
+    );
+
+    const responses = Glean.smartWindow.modelResponse.testGetValue();
+    Assert.equal(responses.length, 2, "Two model_response events recorded");
+    Assert.equal(
+      responses[1].extra.is_retry,
+      "true",
+      "Orchestration failure: is_retry is true"
+    );
+    Assert.equal(
+      responses[1].extra.error,
+      "retryOrchestrationFailure",
+      "Orchestration failure: error is retryOrchestrationFailure"
+    );
+  });
+
+  it("preserves retryInvalidMessage clientReason when retryMessage rejects with one", async () => {
+    mockEngineManager = new MockEngineManager();
+    win = await openAIWindow();
+    const browser = win.gBrowser.selectedBrowser;
+
+    await typeInSmartbar(browser, "first attempt");
+    await submitSmartbar(browser);
+    await mockEngineManager.respondTo({
+      purpose: "chat",
+      response: "Reply from mock.",
+    });
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length >= 1,
+      "Wait for initial model_response"
+    );
+
+    const aiWindow = browser.contentDocument.querySelector("ai-window");
+    const lastAssistant = aiWindow.conversation.messages.findLast(
+      m => m.role === lazy.MESSAGE_ROLE.ASSISTANT
+    );
+
+    const taggedError = new Error("unrelated");
+    taggedError.clientReason = "retryInvalidMessage";
+    sb.stub(aiWindow.conversation, "retryMessage").rejects(taggedError);
+
+    aiWindow.handleFooterAction({
+      action: "retry",
+      messageId: lastAssistant.id,
+    });
+
+    await TestUtils.waitForCondition(
+      () => Glean.smartWindow.modelResponse.testGetValue()?.length >= 2,
+      "Wait for retry-invalid model_response"
+    );
+
+    const responses = Glean.smartWindow.modelResponse.testGetValue();
+    Assert.equal(
+      responses[1].extra.error,
+      "retryInvalidMessage",
+      "Existing clientReason on the rejection is preserved"
+    );
+    Assert.equal(
+      responses[1].extra.is_retry,
+      "true",
+      "Existing clientReason path still marks is_retry=true"
     );
   });
 });

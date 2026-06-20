@@ -117,22 +117,25 @@ class nsInlineFrame : public nsContainerFrame {
       mozilla::ServoRestyleState& aRestyleState);
 
  protected:
+  // Used to defer setting the parent pointer of child frames pulled from a
+  // prev-in-flow's overflow list until they are reflowed. See
+  // InlineReflowInput::mSetParentDuringReflow.
+  enum class SetParentDuringReflow : bool { No, Yes };
+
   // Additional reflow input used during our reflow methods
   struct InlineReflowInput {
-    nsIFrame* mPrevFrame;
-    nsInlineFrame* mNextInFlow;
-    nsIFrame* mLineContainer;
-    nsLineLayout* mLineLayout;
-    bool mSetParentPointer;  // when reflowing child frame first set its
-                             // parent frame pointer
+    nsIFrame* mPrevFrame = nullptr;
+    nsInlineFrame* mNextInFlow = nullptr;
+    nsIFrame* mLineContainer = nullptr;
+    nsLineLayout* mLineLayout = nullptr;
 
-    InlineReflowInput() {
-      mPrevFrame = nullptr;
-      mNextInFlow = nullptr;
-      mLineContainer = nullptr;
-      mLineLayout = nullptr;
-      mSetParentPointer = false;
-    }
+    // Yes if we should set each child frame's parent pointer when reflowing it,
+    // having deferred that when we pulled the frames from our prev-in-flow's
+    // overflow list. See nsInlineFrame::Reflow().
+    SetParentDuringReflow mSetParentDuringReflow = SetParentDuringReflow::No;
+
+    InlineReflowInput(const ReflowInput& aReflowInput,
+                      SetParentDuringReflow aSetParentDuringReflow);
   };
 
   nsInlineFrame(ComputedStyle* aStyle, nsPresContext* aPresContext, ClassID aID)
@@ -157,6 +160,12 @@ class nsInlineFrame : public nsContainerFrame {
 
   virtual void PushFrames(nsPresContext* aPresContext, nsIFrame* aFromChild,
                           nsIFrame* aPrevSibling, InlineReflowInput& aState);
+
+  // If this inline frame has abspos children, set
+  // NS_BLOCK_HAS_INLINE_ABSPOS_DESCENDANT on the block ancestor that will
+  // reflow them in nsBlockFrame::ReflowAbsoluteDescendantsInInlineFrame().
+  void MarkBlockAncestorHavingAbsoluteDescendants(
+      const ReflowInput& aReflowInput) const;
 
  private:
   explicit nsInlineFrame(ComputedStyle* aStyle, nsPresContext* aPresContext)

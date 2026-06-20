@@ -34,16 +34,7 @@ const JSClass AsyncGeneratorObject::class_ = {
 };
 
 const JSClassOps AsyncGeneratorObject::classOps_ = {
-    nullptr,                                   // addProperty
-    nullptr,                                   // delProperty
-    nullptr,                                   // enumerate
-    nullptr,                                   // newEnumerate
-    nullptr,                                   // resolve
-    nullptr,                                   // mayResolve
-    nullptr,                                   // finalize
-    nullptr,                                   // call
-    nullptr,                                   // construct
-    CallTraceMethod<AbstractGeneratorObject>,  // trace
+    .trace = CallTraceMethod<AbstractGeneratorObject>,
 };
 
 // ES2026 draft rev bdfd596ffad5aeb2957aed4e1db36be3665c69ec
@@ -152,10 +143,8 @@ AsyncGeneratorRequest* AsyncGeneratorObject::createRequest(
       return false;
     }
 
-    if (!queue->append(cx, ObjectValue(*generator->singleQueueRequest()))) {
-      return false;
-    }
-    if (!queue->append(cx, ObjectValue(*request))) {
+    if (!queue->append(cx, ObjectValue(*generator->singleQueueRequest()),
+                       ObjectValue(*request))) {
       return false;
     }
 

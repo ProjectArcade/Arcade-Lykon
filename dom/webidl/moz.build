@@ -368,6 +368,9 @@ with Files("VRDisplay.webidl"):
 with Files("Video*"):
     BUG_COMPONENT = ("Core", "Audio/Video")
 
+with Files("ViewTimeline.webidl"):
+    BUG_COMPONENT = ("Core", "DOM: Animation")
+
 with Files("ViewTransition.webidl"):
     BUG_COMPONENT = ("Core", "CSS Parsing and Computation")
 
@@ -453,6 +456,7 @@ WEBIDL_FILES = [
     "AudioParamMap.webidl",
     "AudioProcessingEvent.webidl",
     "AudioScheduledSourceNode.webidl",
+    "AudioSession.webidl",
     "AudioTrack.webidl",
     "AudioTrackList.webidl",
     "AudioWorklet.webidl",
@@ -724,6 +728,7 @@ WEBIDL_FILES = [
     "HTMLProgressElement.webidl",
     "HTMLQuoteElement.webidl",
     "HTMLScriptElement.webidl",
+    "HTMLSelectedContentElement.webidl",
     "HTMLSelectElement.webidl",
     "HTMLSlotElement.webidl",
     "HTMLSourceElement.webidl",
@@ -742,6 +747,7 @@ WEBIDL_FILES = [
     "HTMLTrackElement.webidl",
     "HTMLUListElement.webidl",
     "HTMLVideoElement.webidl",
+    "HyperlinkElementUtils.webidl",
     "IDBCursor.webidl",
     "IDBDatabase.webidl",
     "IDBFactory.webidl",
@@ -749,6 +755,7 @@ WEBIDL_FILES = [
     "IDBKeyRange.webidl",
     "IDBObjectStore.webidl",
     "IDBOpenDBRequest.webidl",
+    "IDBRecord.webidl",
     "IDBRequest.webidl",
     "IDBTransaction.webidl",
     "IDBVersionChangeEvent.webidl",
@@ -879,6 +886,7 @@ WEBIDL_FILES = [
     "PeriodicWave.webidl",
     "Permissions.webidl",
     "PermissionStatus.webidl",
+    "PictureInPictureWindow.webidl",
     "Plugin.webidl",
     "PluginArray.webidl",
     "PointerEvent.webidl",
@@ -1090,6 +1098,7 @@ WEBIDL_FILES = [
     "VideoPlaybackQuality.webidl",
     "VideoTrack.webidl",
     "VideoTrackList.webidl",
+    "ViewTimeline.webidl",
     "ViewTransition.webidl",
     "VisualViewport.webidl",
     "VRDisplay.webidl",
@@ -1209,6 +1218,7 @@ WEBIDL_FILES += [
     "ExtensionMockAPI.webidl",
     "ExtensionPort.webidl",
     "ExtensionProxy.webidl",
+    "ExtensionPublicSuffix.webidl",
     "ExtensionRuntime.webidl",
     "ExtensionScripting.webidl",
     "ExtensionSetting.webidl",
@@ -1272,6 +1282,7 @@ GENERATED_EVENTS_WEBIDL_FILES = [
     "PageSwapEvent.webidl",
     "PageTransitionEvent.webidl",
     "PerformanceEntryEvent.webidl",
+    "PictureInPictureEvent.webidl",
     "PopStateEvent.webidl",
     "PopupBlockedEvent.webidl",
     "PositionStateEvent.webidl",

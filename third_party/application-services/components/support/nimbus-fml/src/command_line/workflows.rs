@@ -32,6 +32,11 @@ pub(crate) fn generate_struct(cmd: &GenerateStructCmd) -> Result<()> {
     let filename = &cmd.manifest;
     let input = files.file_path(filename)?;
 
+    validate(&ValidateCmd {
+        manifest: cmd.manifest.clone(),
+        loader: cmd.loader.clone(),
+    })?;
+
     match (&input, &cmd.output.is_dir()) {
         (FilePath::Remote(_), _) => generate_struct_single(&files, input, cmd),
         (FilePath::Local(file), _) if !file.exists() => Err(FMLError::CliError(format!(
@@ -564,6 +569,76 @@ mod test {
         assert!(manifest.contains_key("homescreen"));
         assert!(manifest.contains_key("search"));
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_generate_experimenter_gecko_prefs() -> Result<()> {
+        let tmpfile = NamedTempFile::new()?;
+        let cmd = create_experimenter_manifest_cmd("fixtures/fe/gecko-pref.yaml", tmpfile.path())?;
+        generate_experimenter_manifest(&cmd)?;
+
+        let manifest: serde_yaml::Value = serde_yaml::from_reader(&tmpfile)?;
+        println!("{:?}", manifest);
+
+        let variables = manifest
+            .get("gecko-nimbus-validation")
+            .unwrap()
+            .get("variables")
+            .unwrap();
+
+        fn assert_pref_var(
+            variable: &serde_yaml::Value,
+            expected_pref: &str,
+            expected_branch: &str,
+        ) {
+            let pref_annotation = variable.get("setPref").unwrap();
+            let pref = pref_annotation.get("pref").unwrap().as_str().unwrap();
+            assert_eq!(pref, expected_pref);
+            let branch = pref_annotation.get("branch").unwrap().as_str().unwrap();
+            assert_eq!(branch, expected_branch);
+        }
+
+        assert_pref_var(
+            variables.get("test-preference-bool").unwrap(),
+            "gecko.nimbus.test.bool",
+            "default",
+        );
+
+        assert_pref_var(
+            variables.get("test-preference-int").unwrap(),
+            "gecko.nimbus.test.int",
+            "default",
+        );
+
+        assert_pref_var(
+            variables.get("test-preference-string").unwrap(),
+            "gecko.nimbus.test.string",
+            "default",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_generate_catches_invalid_feature() -> Result<(), FMLError> {
+        let manifest = join(
+            pkg_dir(),
+            "fixtures/fe/invalid/invalid_default_value_for_one_channel.fml.yaml",
+        );
+        let output = NamedTempFile::new()?;
+
+        let cmd: GenerateStructCmd = GenerateStructCmd {
+            manifest,
+            output: output.path().into(),
+            language: TargetLanguage::ExperimenterYAML,
+            load_from_ir: false,
+            channel: "app-debug".to_string(),
+            loader: Default::default(),
+        };
+
+        let result = generate_struct(&cmd);
+        assert!(result.is_err());
         Ok(())
     }
 

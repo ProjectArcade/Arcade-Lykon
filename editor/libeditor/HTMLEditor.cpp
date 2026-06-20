@@ -55,6 +55,7 @@
 #include "mozilla/dom/CharacterDataBuffer.h"
 #include "mozilla/dom/DocumentFragment.h"
 #include "mozilla/dom/DocumentInlines.h"
+#include "mozilla/dom/EditContext.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/ElementInlines.h"
 #include "mozilla/dom/Event.h"
@@ -295,6 +296,7 @@ NS_IMPL_CYCLE_COLLECTION_CLASS(HTMLEditor)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(HTMLEditor, EditorBase)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mPendingStylesToApplyToNewContent)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mComposerCommandsUpdater)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mSelectedRangeForTopLevelEditSubAction)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mChangedRangeForTopLevelEditSubAction)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mPaddingBRElementForEmptyEditor)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mLastCollapsibleWhiteSpaceAppendedTextNode)
@@ -304,6 +306,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(HTMLEditor, EditorBase)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mPendingStylesToApplyToNewContent)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mComposerCommandsUpdater)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mSelectedRangeForTopLevelEditSubAction)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mChangedRangeForTopLevelEditSubAction)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mPaddingBRElementForEmptyEditor)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mLastCollapsibleWhiteSpaceAppendedTextNode)
@@ -477,17 +480,22 @@ void HTMLEditor::PreDestroy() {
   PreDestroyInternal();
 }
 
-bool HTMLEditor::IsStyleEditable() const {
+bool HTMLEditor::IsStyleEditable(const Element* aEditingHost) const {
   if (IsInDesignMode()) {
     return true;
   }
   if (IsPlaintextMailComposer()) {
     return false;
   }
-  const Element* const editingHost = ComputeEditingHost(LimitInBodyElement::No);
+  const Element* const editingHost =
+      aEditingHost ? aEditingHost : ComputeEditingHost(LimitInBodyElement::No);
   // Let's return true if there is no focused editing host for the backward
   // compatibility.
-  return !editingHost || !editingHost->IsContentEditablePlainTextOnly();
+  if (!editingHost) {
+    return true;
+  }
+  return !editingHost->IsContentEditablePlainTextOnly() &&
+         !editingHost->HasFlag(ELEMENT_HAS_EDIT_CONTEXT);
 }
 
 NS_IMETHODIMP HTMLEditor::GetDocumentCharacterSet(nsACString& aCharacterSet) {
@@ -661,6 +669,20 @@ NS_IMETHODIMP HTMLEditor::NotifySelectionChanged(Document* aDocument,
     }
   }
 
+  if (mHasFocus) {
+    if (auto focusedElement = GetFocusedElement()) {
+      // Selection may have moved into/out of contenteditable=false, so
+      // we should update IME state to reflect that.
+      auto newStateOrError = GetPreferredIMEState();
+      NS_WARNING_ASSERTION(newStateOrError.isOk(),
+                           "EditorBase::GetPreferredIMEState() failed");
+      if (MOZ_LIKELY(newStateOrError.isOk())) {
+        IMEStateManager::UpdateIMEState(newStateOrError.unwrap(),
+                                        focusedElement, *this);
+      }
+    }
+  }
+
   if (mComposerCommandsUpdater) {
     RefPtr<ComposerCommandsUpdater> updater = mComposerCommandsUpdater;
     updater->OnSelectionChange();
@@ -687,6 +709,48 @@ void HTMLEditor::UpdateRootElement() {
     }
     // else leave it null, for lack of anything better.
   }
+}
+
+static bool ShouldHandleFocusOn(const nsINode* aNode) {
+  if (!aNode) {
+    // Don't handle the window level focus event.
+    return false;
+  }
+  if (aNode->IsDocument()) {
+    if (!aNode->IsInDesignMode()) {
+      return false;
+    }
+  } else if (!aNode->IsContent()) {
+    return false;
+  }
+  return true;
+}
+
+// static
+void HTMLEditor::WillFocusNode(PresShell& aPresShell, nsINode* aNode) {
+  if (!ShouldHandleFocusOn(aNode)) {
+    return;
+  }
+  const RefPtr<HTMLEditor> htmlEditor =
+      nsContentUtils::GetHTMLEditor(aPresShell.GetPresContext());
+  if (!htmlEditor) {
+    return;
+  }
+  DebugOnly<nsresult> rv = htmlEditor->OnFocus(*aNode);
+  NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
+                       "HTMLEditor::OnFocus() failed, but ignore");
+}
+
+// static
+void HTMLEditor::WillBlurNode(PresShell& aPresShell, nsINode* aNode) {
+  const RefPtr<HTMLEditor> htmlEditor =
+      nsContentUtils::GetHTMLEditor(aPresShell.GetPresContext());
+  if (!htmlEditor) {
+    return;
+  }
+  DebugOnly<nsresult> rv = htmlEditor->OnBlur(aNode);
+  NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
+                       "HTMLEditor::OnBlur() failed, but ignore");
 }
 
 nsresult HTMLEditor::FocusedElementOrDocumentBecomesEditable(
@@ -726,11 +790,11 @@ nsresult HTMLEditor::FocusedElementOrDocumentBecomesEditable(
       if (textControlElement &&
           textControlElement->IsSingleLineTextControlOrTextArea()) {
         // Let's emulate blur first.
+        mHasFocus = false;
         DebugOnly<nsresult> rv = FinalizeSelection();
         NS_WARNING_ASSERTION(
             NS_SUCCEEDED(rv),
             "HTMLEditor::FinalizeSelection() failed, but ignored");
-        mHasFocus = false;
         mIsInDesignMode = false;
       }
       IMEStateManager::UpdateIMEState(newStateOrError.unwrap(), focusedElement,
@@ -773,7 +837,7 @@ nsresult HTMLEditor::FocusedElementOrDocumentBecomesEditable(
 
 nsresult HTMLEditor::OnFocus(const nsINode& aOriginalEventTargetNode) {
   MOZ_LOG(gHTMLEditorFocusLog, LogLevel::Info,
-          ("%s(aOriginalEventTarget=%s): mIsInDesignMode=%s, "
+          ("%s(aOriginalEventTargetNode=%s): mIsInDesignMode=%s, "
            "aOriginalEventTargetNode.IsInDesignMode()=%s",
            __FUNCTION__, ToString(RefPtr{&aOriginalEventTargetNode}).c_str(),
            mIsInDesignMode ? "true" : "false",
@@ -790,14 +854,47 @@ nsresult HTMLEditor::OnFocus(const nsINode& aOriginalEventTargetNode) {
     return NS_ERROR_FAILURE;
   }
 
+  mHasFocus = true;
   nsresult rv = EditorBase::OnFocus(aOriginalEventTargetNode);
   if (NS_FAILED(rv)) {
+    mHasFocus = false;
     NS_WARNING("EditorBase::OnFocus() failed");
     return rv;
   }
-  mHasFocus = true;
   mIsInDesignMode = aOriginalEventTargetNode.IsInDesignMode();
+  if (StaticPrefs::dom_editcontext_enabled() && EditContext::IsAnyAttached()) {
+    // Active EditContext may have changed
+    aOriginalEventTargetNode.OwnerDoc()->UpdateTextEditContext();
+  }
+
   return NS_OK;
+}
+
+void HTMLEditor::PostHandleFocusEvent(const nsINode& aFocusEventTargetNode) {
+  if (!ShouldHandleFocusOn(&aFocusEventTargetNode)) {
+    return;
+  }
+
+  MOZ_LOG(
+      gHTMLEditorFocusLog, LogLevel::Info,
+      ("%s(aFocusEvent={ GetOriginalDOMEventTarget()=%s }): "
+       "mIsInDesignMode=%s, "
+       "aOriginalEventTargetNode.IsInDesignMode()=%s, mHasFocus=%s, "
+       "GetFocusedElement()=%s",
+       __FUNCTION__, ToString(RefPtr{&aFocusEventTargetNode}).c_str(),
+       mIsInDesignMode ? "true" : "false",
+       aFocusEventTargetNode.IsInDesignMode() ? "true" : "false",
+       TrueOrFalse(mHasFocus), ToString(RefPtr{GetFocusedElement()}).c_str()));
+
+  if (!CanKeepHandlingFocusEvent(aFocusEventTargetNode)) {
+    return;
+  }
+
+  AutoEditActionDataSetter editActionData(*this, EditAction::eNotEditing);
+  if (NS_WARN_IF(!editActionData.CanHandle())) [[unlikely]] {
+    return;
+  }
+  return EditorBase::PostHandleFocusEvent(aFocusEventTargetNode);
 }
 
 nsresult HTMLEditor::FocusedElementOrDocumentBecomesNotEditable(
@@ -824,11 +921,17 @@ nsresult HTMLEditor::FocusedElementOrDocumentBecomesNotEditable(
     }
 
     // Let's emulate blur first.
+    aHTMLEditor->mHasFocus = false;
     nsresult rv = aHTMLEditor->FinalizeSelection();
     NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                          "HTMLEditor::FinalizeSelection() failed");
-    aHTMLEditor->mHasFocus = false;
     aHTMLEditor->mIsInDesignMode = false;
+
+    if (StaticPrefs::dom_editcontext_enabled() &&
+        EditContext::IsAnyAttached()) {
+      // Active EditContext may have changed
+      aDocument.UpdateTextEditContext();
+    }
 
     RefPtr<Element> focusedElement = nsFocusManager::GetFocusedElementStatic();
     if (focusedElement && !focusedElement->IsInComposedDoc()) {
@@ -914,11 +1017,17 @@ nsresult HTMLEditor::OnBlur(const EventTarget* aEventTarget) {
     return NS_OK;
   }
 
+  mHasFocus = false;
   nsresult rv = FinalizeSelection();
   NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                        "EditorBase::FinalizeSelection() failed");
   mIsInDesignMode = false;
-  mHasFocus = false;
+  if (StaticPrefs::dom_editcontext_enabled() && EditContext::IsAnyAttached() &&
+      eventTargetAsElement) {
+    // Active EditContext may have changed
+    eventTargetAsElement->OwnerDoc()->UpdateTextEditContext();
+  }
+
   return rv;
 }
 
@@ -955,6 +1064,18 @@ bool HTMLEditor::EntireDocumentIsEditable() const {
   return document && document->GetDocumentElement() &&
          (document->GetDocumentElement()->IsEditable() ||
           (document->GetBody() && document->GetBody()->IsEditable()));
+}
+
+dom::EditContext* HTMLEditor::GetEditContext() const {
+  if (!StaticPrefs::dom_editcontext_enabled() ||
+      !EditContext::IsAnyAttached()) {
+    return nullptr;
+  }
+  if (auto* element = nsGenericHTMLElement::FromNodeOrNull(
+          ComputeEditingHost(LimitInBodyElement::No))) {
+    return element->GetEditContext();
+  }
+  return nullptr;
 }
 
 void HTMLEditor::CreateEventListeners() {
@@ -2198,7 +2319,7 @@ nsresult HTMLEditor::FormatBlockAsAction(const nsAString& aParagraphFormat,
 
   const RefPtr<Element> editingHost =
       ComputeEditingHost(LimitInBodyElement::No);
-  if (!editingHost || editingHost->IsContentEditablePlainTextOnly()) {
+  if (!editingHost || !IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -2251,7 +2372,7 @@ nsresult HTMLEditor::SetParagraphStateAsAction(
 
   const RefPtr<Element> editingHost =
       ComputeEditingHost(LimitInBodyElement::No);
-  if (!editingHost || editingHost->IsContentEditablePlainTextOnly()) {
+  if (!editingHost || !IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -2701,7 +2822,7 @@ nsresult HTMLEditor::MakeOrChangeListAsAction(
 
   const RefPtr<Element> editingHost =
       ComputeEditingHost(LimitInBodyElement::No);
-  if (!editingHost || editingHost->IsContentEditablePlainTextOnly()) {
+  if (!editingHost || !IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -2937,7 +3058,7 @@ nsresult HTMLEditor::IndentAsAction(nsIPrincipal* aPrincipal) {
 
   const RefPtr<Element> editingHost =
       ComputeEditingHost(LimitInBodyElement::No);
-  if (!editingHost || editingHost->IsContentEditablePlainTextOnly()) {
+  if (!editingHost || !IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -2969,7 +3090,7 @@ nsresult HTMLEditor::OutdentAsAction(nsIPrincipal* aPrincipal) {
 
   const RefPtr<Element> editingHost =
       ComputeEditingHost(LimitInBodyElement::No);
-  if (!editingHost || editingHost->IsContentEditablePlainTextOnly()) {
+  if (!editingHost || !IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -3000,7 +3121,7 @@ nsresult HTMLEditor::AlignAsAction(const nsAString& aAlignType,
 
   const RefPtr<Element> editingHost =
       ComputeEditingHost(LimitInBodyElement::No);
-  if (!editingHost || editingHost->IsContentEditablePlainTextOnly()) {
+  if (!editingHost || !IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -3466,7 +3587,8 @@ nsresult HTMLEditor::CopyAttributes(WithTransaction aWithTransaction,
       nsString attrValue;
       attrInfo.mValue->ToString(attrValue);
       srcAttrs.AppendElement(AttrCache{attrInfo.mName->NamespaceID(),
-                                       *attrName->LocalName(), attrValue});
+                                       *attrName->LocalName(),
+                                       std::move(attrValue)});
     }
   }
   if (aWithTransaction == WithTransaction::No) {
@@ -3609,8 +3731,7 @@ nsresult HTMLEditor::InsertLinkAroundSelectionAsAction(
     return NS_ERROR_FAILURE;
   }
 
-  if (IsPlaintextMailComposer() ||
-      editingHost->IsContentEditablePlainTextOnly()) {
+  if (!IsStyleEditable(editingHost)) {
     return NS_SUCCESS_DOM_NO_OPERATION;
   }
 
@@ -4798,6 +4919,13 @@ nsresult HTMLEditor::SelectAllInternal() {
     }
     if (MOZ_UNLIKELY(!computedSelectionRootContent->IsElement())) {
       return computedSelectionRootContent;
+    }
+    // GetSelectionRootContent() returns shadow host element if selection is in
+    // a shadow in the focused editing host. Then, we should select all content
+    // in the shadow root rather than the host.
+    if (ShadowRoot* const shadowRoot =
+            computedSelectionRootContent->GetShadowRootForSelection()) {
+      return shadowRoot;
     }
     return GetBodyElementIfElementIsParentOfHTMLBody(
         *computedSelectionRootContent->AsElement());
@@ -7226,7 +7354,16 @@ Element* HTMLEditor::ComputeEditingHostInternal(
   // shouldn't touch native anonymous subtree so that return nullptr in such
   // case.
   if (MOZ_UNLIKELY(content->IsInNativeAnonymousSubtree())) {
-    return nullptr;
+    bool isInEditContextSubtree = false;
+    if (EditContext* editContext = document->GetActiveEditContext()) {
+      // If content is inside the EditContext anonymous subtree,
+      // then we don't want to return null here.
+      isInEditContextSubtree = content == &editContext->TextContainer() ||
+                               content == &editContext->TextNode();
+    }
+    if (!isInEditContextSubtree) {
+      return nullptr;
+    }
   }
 
   // Note that `Selection` can be in <input> or <textarea>.  In the case, we
@@ -7455,7 +7592,24 @@ bool HTMLEditor::IsAcceptableInputEvent(WidgetGUIEvent* aGUIEvent) const {
 
 Result<widget::IMEState, nsresult> HTMLEditor::GetPreferredIMEState() const {
   // HTML editor don't prefer the CSS ime-mode because IE didn't do so too.
-  return IMEState{IsReadonly() ? IMEEnabled::Disabled : IMEEnabled::Enabled,
+  bool enableIME = [&]() {
+    if (IsReadonly()) {
+      return false;
+    }
+    const Selection* selection = GetSelection();
+    if (NS_WARN_IF(!selection)) {
+      return false;
+    }
+    if (selection->RangeCount() == 0) {
+      return true;
+    }
+    // Don't show IME when first selection range is in a non-editable node.
+    // (Currently, first selection range determines whether input is allowed.)
+    const nsRange* range = selection->GetRangeAt(0);
+    return range->IsPositioned() && range->GetStartContainer()->IsEditable() &&
+           range->GetEndContainer()->IsEditable();
+  }();
+  return IMEState{enableIME ? IMEEnabled::Enabled : IMEEnabled::Disabled,
                   IMEState::DONT_CHANGE_OPEN_STATE};
 }
 

@@ -224,7 +224,11 @@ void nsDisplayTextOverflowMarker::PaintTextToContext(gfxContext* aCtx,
     return;
   }
 
-  MOZ_ASSERT(!mStyle.IsEllipsis());
+  if (mStyle.IsEllipsis()) [[unlikely]] {
+    // Text-run allocation might've failed, in which case well...
+    return;
+  }
+
   RefPtr<nsFontMetrics> fm =
       nsLayoutUtils::GetInflatedFontMetricsForFrame(mFrame);
   nsDependentAtomString str16(mStyle.AsString().AsAtom());
@@ -243,8 +247,8 @@ bool nsDisplayTextOverflowMarker::CreateWebRenderCommands(
   }
 
   // Run the rendering algorithm to capture the glyphs and shadows
-  RefPtr<TextDrawTarget> textDrawer =
-      new TextDrawTarget(aBuilder, aResources, aSc, aManager, this, bounds);
+  auto textDrawer = MakeRefPtr<TextDrawTarget>(aBuilder, aResources, aSc,
+                                               aManager, this, bounds);
   MOZ_ASSERT(textDrawer->IsValid());
   if (!textDrawer->IsValid()) {
     return false;
@@ -575,10 +579,8 @@ LogicalRect TextOverflow::ExamineLineFrames(nsLineBox* aLine,
     // Analyze the frames on aLine for the overflow situation at the content
     // edges and at the edges of the area between the markers.
     bool foundVisibleTextOrAtomic = false;
-    int32_t n = aLine->GetChildCount();
-    nsIFrame* child = aLine->mFirstChild;
     InnerClipEdges clippedMarkerEdges;
-    for (; n-- > 0; child = child->GetNextSibling()) {
+    for (nsIFrame* child : aLine->ChildFrames()) {
       ExamineFrameSubtree(child, contentArea, insideMarkersArea, aFramesToHide,
                           aAlignmentEdges, &foundVisibleTextOrAtomic,
                           &clippedMarkerEdges);
@@ -819,7 +821,7 @@ bool TextOverflow::CanHaveOverflowMarkers(nsBlockFrame* aBlockFrame,
   }
 
   // Inhibit the markers if a descendant content owns the caret.
-  RefPtr<nsCaret> caret = aBlockFrame->PresShell()->GetCaret();
+  RefPtr<nsCaret> caret = aBlockFrame->PresShell()->GetActiveCaret();
   if (caret && caret->IsVisible()) {
     RefPtr<dom::Selection> domSelection = caret->GetSelection();
     if (domSelection) {

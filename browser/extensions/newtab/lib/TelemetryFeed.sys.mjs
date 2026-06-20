@@ -19,6 +19,10 @@ import {
   actionTypes as at,
   actionUtils as au,
 } from "resource://newtab/common/Actions.mjs";
+import {
+  WIDGET_REGISTRY,
+  isWidgetEnabled,
+} from "resource://newtab/common/WidgetsRegistry.mjs";
 import { Prefs } from "resource://newtab/lib/ActivityStreamPrefs.sys.mjs";
 import { classifySite } from "resource://newtab/lib/SiteClassifier.sys.mjs";
 
@@ -1451,7 +1455,7 @@ export class TelemetryFeed {
         : PRIVATE_PING_SURFACE_COUNTRY_MAP[surfaceId][0];
     }
 
-    if (prefs.inferredPersonalizationConfig?.normalized_time_zone_offset) {
+    if (prefs?.inferredPersonalizationConfig?.normalized_time_zone_offset) {
       privateMetrics.utcOffset = lazy.NewTabUtils.getUtcOffset(surfaceId);
     }
     // To prevent fingerprinting we only send one current experiment / branch
@@ -1540,6 +1544,8 @@ export class TelemetryFeed {
       // Intentional fall-through
       case at.CARD_SECTION_IMPRESSION:
       // Intentional fall-through
+      case at.CLICK_SECTION_LEARN_MORE:
+      // Intentional fall-through
       case at.FOLLOW_SECTION:
       // Intentional fall-through
       case at.UNBLOCK_SECTION:
@@ -1592,6 +1598,7 @@ export class TelemetryFeed {
         break;
       case at.PREFS_INITIAL_VALUES:
         this.initializeGleanSession();
+        this.recordEnabledWidgets();
         break;
     }
   }
@@ -1721,7 +1728,21 @@ export class TelemetryFeed {
       }
 
       Glean.newtab.widgetsEnabled.record(payload);
+      this.recordEnabledWidgets();
     }
+  }
+
+  recordEnabledWidgets() {
+    const prefs = this.store?.getState()?.Prefs.values;
+    if (!prefs) {
+      return;
+    }
+    const widgetsEnabled = prefs["widgets.enabled"];
+    Glean.newtab.widgetsEnabledList.set(
+      WIDGET_REGISTRY.filter(w =>
+        isWidgetEnabled(w, prefs, widgetsEnabled)
+      ).map(w => w.telemetryName)
+    );
   }
 
   handleWidgetsHideAll(action) {
@@ -1936,6 +1957,11 @@ export class TelemetryFeed {
             );
           }
           break;
+        case "CLICK_SECTION_LEARN_MORE":
+          Glean.newtab.sectionsLearnMore.record({
+            newtab_visit_id: session.session_id,
+          });
+          break;
         default:
           break;
       }
@@ -2013,12 +2039,14 @@ export class TelemetryFeed {
           newtab_visit_id: session.session_id,
           display_status: action.data.value,
         });
+        this.recordEnabledWidgets();
         break;
       case "widgets.focusTimer.enabled":
         Glean.newtab.widgetsTimerChangeDisplay.record({
           newtab_visit_id: session.session_id,
           display_status: action.data.value,
         });
+        this.recordEnabledWidgets();
         break;
     }
   }

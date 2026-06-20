@@ -10,6 +10,7 @@ import org.mozilla.fenix.tabstray.data.TabsTrayItem
 import org.mozilla.fenix.tabstray.redux.state.Page
 import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
 import org.mozilla.fenix.tabstray.redux.store.TabsTrayStore
+import org.mozilla.fenix.tabstray.repository.uistate.data.PersistedUIState
 import org.mozilla.fenix.tabstray.syncedtabs.SyncedTabsListItem
 
 /**
@@ -26,17 +27,29 @@ sealed interface TabsTrayAction : Action {
     /**
      * Dispatched when the Store has initialized.
      */
-    object InitAction : TabsTrayAction, TabsStorageAction
+    object InitAction : TabsTrayAction, TabsStorageAction, TabManagerUiStateStorageAction
 
     /**
      * Dispatched when a tab data update has been received.
      */
-    data class TabDataUpdateReceived(val tabStorageUpdate: TabStorageUpdate) : TabsTrayAction
+    data class TabDataUpdateReceived(val tabStorageUpdate: TabStorageUpdate) :
+        TabsTrayAction,
+        TabManagerUiStateStorageAction
+
+    /**
+     * Dispatched when a UI state update has been received from the UI state persistence layer.
+     */
+    data class PersistedUiStateUpdateReceived(val update: PersistedUIState) : TabsTrayAction
 
     /**
      * Entered multi-select mode.
      */
     object EnterSelectMode : TabsTrayAction
+
+    /**
+     * Dispatched when the user requests to select all tabs in the current tray.
+     */
+    object SelectAllNormalTabs : TabsTrayAction
 
     /**
      * Exited multi-select mode.
@@ -156,4 +169,38 @@ sealed interface TabsTrayAction : Action {
      * [TabsTrayAction] fired when the user dismisses the inactive tabs auto-close dialog.
      */
     object DismissInactiveTabsAutoCloseDialog : TabsTrayAction
+
+    /**
+     * [TabsTrayAction] Fired when a reorder is requested from a TabsTray gesture.
+     *
+     * @property sourceId The id of the item being reordered
+     * @property destinationId The id of the reorder target
+     * @property placeAfter Whether to place the item before or after the target
+     */
+    data class ReorderTabsTrayItem(
+        val sourceId: String,
+        val destinationId: String?,
+        val placeAfter: Boolean,
+    ) : TabsTrayAction, TabsStorageAction
+
+    /**
+     * [TabsTrayAction] fired when a tab drag is started from the tabs tray.
+     *
+     * @property sourceId The id of the item being dragged.
+     * @property preserveSelectMode Whether select mode should be preserved on a drag.
+     */
+    data class TabDragStart(
+        val sourceId: String,
+        val preserveSelectMode: Boolean,
+    ) : TabsTrayAction
+
+    /**
+     * [TabsTrayAction] fired when a tab drag is cancelled from the tabs tray.
+     */
+    object TabDragCancel : TabsTrayAction
+
+    /**
+     * Long pressed a [TabsTrayItem] in the TabsTray.
+     */
+    data class TabItemLongClicked(val item: TabsTrayItem) : TabsTrayAction
 }

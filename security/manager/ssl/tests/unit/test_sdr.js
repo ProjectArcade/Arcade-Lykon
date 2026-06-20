@@ -211,11 +211,11 @@ add_task(async function testAsyncDecryptInvalidStrings() {
 
 add_task(async function testAsyncDecryptLoggedOut() {
   // Set a primary password.
-  let token = Cc["@mozilla.org/security/pk11tokendb;1"]
-    .getService(Ci.nsIPK11TokenDB)
-    .getInternalKeyToken();
-  token.initPassword("password");
-  token.logoutSimple();
+  let token = Cc["@mozilla.org/security/internalkeytoken;1"].createInstance(
+    Ci.nsIPKCS11Token
+  );
+  token.changePassword("", "password");
+  token.logout();
 
   let sdr = Cc["@mozilla.org/security/sdr;1"].getService(
     Ci.nsISecretDecoderRing
@@ -228,5 +228,4 @@ add_task(async function testAsyncDecryptLoggedOut() {
   );
 
   token.reset();
-  token.initPassword("");
 });

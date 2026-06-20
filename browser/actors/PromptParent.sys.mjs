@@ -102,7 +102,10 @@ export class PromptParent extends JSWindowActorParent {
     }
     // Extensions in the sidebar have more layers of nesting, and this causes
     // window leaks in tests. We would like to fix this at some point (bug 1513656)
-    if (browser.getAttribute("messagemanagergroup") == "webext-browsers") {
+    if (
+      browser.getAttribute("messagemanagergroup") == "webext-browsers" ||
+      browser.getAttribute("messagemanagergroup") == "chatbot-browser"
+    ) {
       return false;
     }
     return true;

@@ -185,10 +185,7 @@ void FinalizeSchedulingStateWrapper(JS::GCContext* aGCX, JSObject* aObjSelf) {
 }
 
 static const JSClassOps sSchedulingStateWrapper = {
-    nullptr /* addProperty */,     nullptr /* delProperty */,
-    nullptr /* enumerate */,       nullptr /* newEnumerate */,
-    nullptr /* resolve */,         nullptr /* mayResolve */,
-    FinalizeSchedulingStateWrapper /* finalize */
+    .finalize = FinalizeSchedulingStateWrapper,
 };
 
 static const JSClass sSchedulingStateClass = {
@@ -426,8 +423,8 @@ void CycleCollectedJSContext::PromiseRejectionTrackerCallback(
             PromiseRejectionEvent::Constructor(owner, u"rejectionhandled"_ns,
                                                init);
 
-        RefPtr<AsyncEventDispatcher> asyncDispatcher =
-            new AsyncEventDispatcher(owner, event.forget());
+        RefPtr asyncDispatcher =
+            MakeRefPtr<AsyncEventDispatcher>(owner, event.forget());
         asyncDispatcher->PostDOMEvent();
       }
     }
@@ -540,7 +537,7 @@ void CycleCollectedJSContext::AfterProcessMicrotasks() {
   // Notify unhandled promise rejections:
   // https://html.spec.whatwg.org/multipage/webappapis.html#notify-about-rejected-promises
   if (mAboutToBeNotifiedRejectedPromises.Length()) {
-    RefPtr<NotifyUnhandledRejections> runnable = new NotifyUnhandledRejections(
+    RefPtr runnable = MakeRefPtr<NotifyUnhandledRejections>(
         std::move(mAboutToBeNotifiedRejectedPromises));
     NS_DispatchToCurrentThread(runnable);
   }
@@ -592,7 +589,7 @@ uint32_t CycleCollectedJSContext::RecursionDepth() const {
 }
 
 void CycleCollectedJSContext::RunInStableState(
-    already_AddRefed<nsIRunnable>&& aRunnable) {
+    already_AddRefed<nsIRunnable> aRunnable) {
   MOZ_ASSERT(mJSContext);
   nsCOMPtr<nsIRunnable> runnable = std::move(aRunnable);
   PROFILER_MARKER("CycleCollectedJSContext::RunInStableState", OTHER, {},
@@ -601,7 +598,7 @@ void CycleCollectedJSContext::RunInStableState(
 }
 
 void CycleCollectedJSContext::AddPendingIDBTransaction(
-    already_AddRefed<nsIRunnable>&& aTransaction) {
+    already_AddRefed<nsIRunnable> aTransaction) {
   MOZ_ASSERT(mJSContext);
 
   PendingIDBTransactionData data;
@@ -991,41 +988,46 @@ void RunJSMicroTask(JSContext* aCx, CycleCollectedJSContext* aCCJS,
       asyncStackSetter.emplace(aCx, allocStack, reason);
     }
 
-    bool propagate = ShouldPropagateUserInputEventHandlingState(aMicroTask);
-    AutoHandlingUserInputStatePusher userInputStateSwitcher(propagate);
+    {
+      // A new scope is used to make sure the UserInputState is reset before
+      // potentially draining more microtasks.
+      bool propagate = ShouldPropagateUserInputEventHandlingState(aMicroTask);
+      AutoHandlingUserInputStatePusher userInputStateSwitcher(propagate);
 
-    // Inform the profiler about the flow for this microtask.
-    mozilla::Maybe<AutoProfilerTerminatingFlowMarkerFlowOnly> terminatingMarker;
-    MaybeGetFlowMarker(aMicroTask, terminatingMarker);
+      // Inform the profiler about the flow for this microtask.
+      mozilla::Maybe<AutoProfilerTerminatingFlowMarkerFlowOnly>
+          terminatingMarker;
+      MaybeGetFlowMarker(aMicroTask, terminatingMarker);
 
-    if (incumbentGlobal) {
-      // https://wicg.github.io/scheduling-apis/#sec-patches-html-hostcalljobcallback
-      // 2. Set event loop’s current scheduling state to
-      // callback.[[HostDefined]].[[SchedulingState]].
-      incumbentGlobal->SetWebTaskSchedulingState(schedulingState);
+      if (incumbentGlobal) {
+        // https://wicg.github.io/scheduling-apis/#sec-patches-html-hostcalljobcallback
+        // 2. Set event loop’s current scheduling state to
+        // callback.[[HostDefined]].[[SchedulingState]].
+        incumbentGlobal->SetWebTaskSchedulingState(schedulingState);
+      }
+
+      // Note: We're dropping the return value on the floor here, however
+      // cleanup and exception handling are done as part of the CallSetup
+      // destructor if necessary.
+      bool ret = aMicroTask.get().RunAndConsumeJSMicroTask(aCx);
+
+      // (The step after step 7): Set event loop’s current scheduling
+      // state to null
+      if (incumbentGlobal) {
+        incumbentGlobal->SetWebTaskSchedulingState(nullptr);
+      }
+
+      // If we failed to execute, we should not attempt to execute more
+      // tasks without running cleanup.
+      if (!ret) {
+        return;
+      }
     }
 
-    // Note: We're dropping the return value on the floor here, however
-    // cleanup and exception handling are done as part of the CallSetup
-    // destructor if necessary.
-    bool ret = aMicroTask.get().RunAndConsumeJSMicroTask(aCx);
-
-    // (The step after step 7): Set event loop’s current scheduling
-    // state to null
-    if (incumbentGlobal) {
-      incumbentGlobal->SetWebTaskSchedulingState(nullptr);
-    }
-
-    // Note: It's quite costly to set up all the execution state, and there's a
-    // common case where the next task is run in the same execution state.
+    // Note: It's quite costly to set up all the execution state, and there's
+    // a common case where the next task is run in the same execution state.
     // To avoid setting it up again, we'll try to drain more if it's possible.
     if (!StaticPrefs::javascript_options_batch_microtask_execution()) {
-      return;
-    }
-
-    // If we failed to execute, we should not attempt to execute more
-    // tasks without running cleanup.
-    if (!ret) {
       return;
     }
 
@@ -1104,7 +1106,7 @@ void RunJSMicroTask(JSContext* aCx, CycleCollectedJSContext* aCCJS,
 
       // If this task fails we need cleanup code, which is in AutoJSAPI's
       // destructor to run, so abort execution.
-      ret = aMicroTask.get().RunAndConsumeJSMicroTask(aCx);
+      bool ret = aMicroTask.get().RunAndConsumeJSMicroTask(aCx);
 
       // (The step after step 7): Set event loop’s current scheduling
       // state to null
@@ -1194,7 +1196,7 @@ bool CycleCollectedJSContext::PerformMicroTaskCheckPoint(bool aForce) {
   if (NS_IsMainThread() && !nsContentUtils::IsSafeToRunScript()) {
     // Special case for main thread where DOM mutations may happen when
     // it is not safe to run scripts.
-    nsContentUtils::AddScriptRunner(new AsyncMutationHandler());
+    nsContentUtils::AddScriptRunner(MakeAndAddRef<AsyncMutationHandler>());
     return false;
   }
 

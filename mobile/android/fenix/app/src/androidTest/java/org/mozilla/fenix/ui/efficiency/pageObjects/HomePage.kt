@@ -10,6 +10,8 @@ import org.mozilla.fenix.ui.efficiency.helpers.BasePage
 import org.mozilla.fenix.ui.efficiency.helpers.Selector
 import org.mozilla.fenix.ui.efficiency.navigation.NavigationRegistry
 import org.mozilla.fenix.ui.efficiency.navigation.NavigationStep
+import org.mozilla.fenix.ui.efficiency.selectors.CollectionsSelectors.COLLECTION_TAB_WITH_TITLE
+import org.mozilla.fenix.ui.efficiency.selectors.CollectionsSelectors.COLLECTION_WITH_TITLE
 import org.mozilla.fenix.ui.efficiency.selectors.HomeSelectors
 import org.mozilla.fenix.ui.efficiency.selectors.MainMenuSelectors
 
@@ -54,7 +56,7 @@ class HomePage(composeRule: AndroidComposeTestRule<HomeActivityIntentTestRule, *
         NavigationRegistry.register(
             from = "MainMenuPage",
             to = "DownloadsPage",
-            steps = listOf(NavigationStep.Click(MainMenuSelectors.DOWLOADS_BUTTON)),
+            steps = listOf(NavigationStep.Click(MainMenuSelectors.DOWNLOADS_BUTTON)),
         )
 
         NavigationRegistry.register(
@@ -81,5 +83,14 @@ class HomePage(composeRule: AndroidComposeTestRule<HomeActivityIntentTestRule, *
      */
     fun visitWebsite(url: String) {
         throw UnsupportedOperationException("visitWebsite is not supported by ${this::class.simpleName}")
+    }
+
+    fun verifyTabsInExpandedCollection(collectionTitle: String, vararg tabTitles: String): HomePage {
+        mozClick(COLLECTION_WITH_TITLE(collectionTitle))
+        for (tabTitle in tabTitles) {
+            mozVerify(COLLECTION_TAB_WITH_TITLE(tabTitle))
+        }
+
+        return this
     }
 }

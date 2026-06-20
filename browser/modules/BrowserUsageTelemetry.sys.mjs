@@ -144,19 +144,24 @@ const ENTRYPOINT_TRACKED_CONTEXT_MENU_IDS = {
 
 // A list of the expected panes in about:preferences
 const PREFERENCES_PANES = [
-  "paneHome",
+  "paneAbout",
+  "paneAccessibility",
+  "paneAi",
+  "paneAppearance",
+  "paneContainers",
+  "paneDownloads",
+  "paneExperimental",
   "paneGeneral",
+  "paneHome",
+  "paneLanguages",
+  "paneMoreFromMozilla",
+  "panePasswordsAutofill",
+  "panePermissionsData",
   "panePrivacy",
   "paneSearch",
   "paneSearchResults",
   "paneSync",
-  "paneContainers",
-  "paneExperimental",
-  "paneMoreFromMozilla",
-  "paneAi",
-  "paneAbout",
-  "paneAccessibility",
-  "paneLanguages",
+  "paneTabsBrowsing",
 ];
 
 const IGNORABLE_EVENTS = new WeakMap();
@@ -831,6 +836,14 @@ export let BrowserUsageTelemetry = {
       return shareItem.browsersToShare !== null
         ? "context-copy-multiple-urls"
         : "context-copy-url";
+    }
+
+    if (node.classList?.contains("share-qrcode-item")) {
+      return "generate-qr-code";
+    }
+
+    if (node.classList?.contains("share-windows-item")) {
+      return "microsoft-system-share";
     }
 
     if (node.hasAttribute("data-share-name")) {

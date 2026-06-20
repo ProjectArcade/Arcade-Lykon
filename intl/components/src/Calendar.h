@@ -8,6 +8,7 @@
 #include "mozilla/EnumSet.h"
 #include "mozilla/intl/ICU4CGlue.h"
 #include "mozilla/intl/ICUError.h"
+#include "mozilla/intl/Locale.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/Result.h"
 #include "mozilla/Span.h"
@@ -53,6 +54,12 @@ class Calendar final {
   static Result<UniquePtr<Calendar>, ICUError> TryCreate(
       const char* aLocale,
       Maybe<Span<const char16_t>> aTimeZoneOverride = Nothing{});
+
+  /**
+   * Create a Calendar.
+   */
+  static Result<UniquePtr<Calendar>, ICUError> TryCreate(
+      const RegionSubtag& aRegion);
 
   /**
    * Get the BCP 47 keyword value string designating the calendar type. For
@@ -110,6 +117,13 @@ class Calendar final {
    */
   static Result<Bcp47IdentifierEnumeration, ICUError>
   GetBcp47KeywordValuesForLocale(const char* aLocale,
+                                 CommonlyUsed aCommonlyUsed = CommonlyUsed::No);
+
+  /**
+   * Return BCP 47 Unicode locale extension type keywords.
+   */
+  static Result<Bcp47IdentifierEnumeration, ICUError>
+  GetBcp47KeywordValuesForRegion(const RegionSubtag& aRegion,
                                  CommonlyUsed aCommonlyUsed = CommonlyUsed::No);
 
   ~Calendar();

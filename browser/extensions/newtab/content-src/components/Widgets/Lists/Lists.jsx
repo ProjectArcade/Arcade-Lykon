@@ -11,10 +11,12 @@ import React, {
 } from "react";
 import { useSelector, batch } from "react-redux";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
-import { useIntersectionObserver } from "../../../lib/utils";
-import { WIDGET_REGISTRY, resolveWidgetSize } from "../WidgetsRegistry.mjs";
+import { useSizeSubmenu } from "../../../lib/utils";
+import { WIDGET_REGISTRY, resolveWidgetSize } from "common/WidgetsRegistry.mjs";
 import { WidgetCelebration } from "../WidgetCelebration";
 import { useWidgetCelebration } from "../useWidgetCelebration";
+import { MoveSubmenu } from "../MoveSubmenu";
+import { useWidgetTelemetry } from "../useWidgetTelemetry";
 
 const TASK_TYPE = {
   IN_PROGRESS: "tasks",
@@ -40,7 +42,7 @@ const PREF_WIDGETS_LISTS_BADGE_LABEL = "widgets.lists.badge.label";
 const PREF_WIDGETS_LISTS_SIZE = "widgets.lists.size";
 const PREF_NOVA_ENABLED = "nova.enabled";
 const LISTS_EMPTY_STATE_ILLUSTRATION =
-  "chrome://newtab/content/data/content/assets/firefox-pictorgram-pencil-rgb.svg";
+  "chrome://newtab/content/data/content/assets/lists-empty-state-comet.svg";
 const LISTS_CELEBRATION = {
   headlineL10nId: "newtab-widget-lists-celebration-headline",
   illustrationSrc:
@@ -158,13 +160,14 @@ function Lists({
   handleUserInteraction,
   isMaximized,
   widgetsMayBeMaximized,
+  widgetEnabledMap,
 }) {
   const prefs = useSelector(state => state.Prefs.values);
   const { selected, lists } = useSelector(state => state.ListsWidget);
   const [newTask, setNewTask] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [pendingNewList, setPendingNewList] = useState(null);
+  const [isCreatingNewList, setIsCreatingNewList] = useState(false);
   const [showCompactCompleted, setShowCompactCompleted] = useState(false);
   const selectedList = useMemo(() => lists[selected], [lists, selected]);
 
@@ -193,12 +196,9 @@ function Lists({
   const widgetSize = getListsWidgetSize();
   const isMediumSize = widgetSize === "medium";
 
-  const prevCompletedCount = useRef(selectedList?.completed?.length || 0);
   const inputRef = useRef(null);
   const reorderListRef = useRef(null);
-  const sizeSubmenuRef = useRef(null);
   const widgetRef = useRef(null);
-  const impressionFired = useRef(false);
   const {
     celebrationFrame,
     celebrationId,
@@ -206,6 +206,19 @@ function Lists({
     isCelebrating,
     triggerCelebration,
   } = useWidgetCelebration(widgetRef);
+
+  // Pre-hook code reported widget_size as "medium" when the widgets row is
+  // not maximizable, regardless of the resolved widgetSize. Preserve that.
+  const telemetrySize = widgetsMayBeMaximized ? widgetSize : "medium";
+  const { impressionRef, recordUserAction, recordEnabled } = useWidgetTelemetry(
+    {
+      dispatch,
+      widget: listsWidget,
+      widgetSize: telemetrySize,
+      legacyImpressionTypes: [at.WIDGETS_LISTS_USER_IMPRESSION],
+      legacyUserEventType: at.WIDGETS_LISTS_USER_EVENT,
+    }
+  );
 
   const handleListInteraction = useCallback(
     () => handleUserInteraction("lists"),
@@ -215,7 +228,7 @@ function Lists({
   const handleSelectList = useCallback(
     listId => {
       setIsEditing(false);
-      setPendingNewList(null);
+      setIsCreatingNewList(false);
       dispatch(
         ac.AlsoToMain({
           type: at.WIDGETS_LISTS_CHANGE_SELECTED,
@@ -227,35 +240,8 @@ function Lists({
     [dispatch, handleListInteraction]
   );
 
-  // store selectedList with useMemo so it isnt re-calculated on every re-render
+  // store selectedList with useMemo so it isn't re-calculated on every re-render
   const isValidUrl = useCallback(str => URL.canParse(str), []);
-
-  const handleIntersection = useCallback(() => {
-    if (impressionFired.current) {
-      return;
-    }
-    impressionFired.current = true;
-
-    batch(() => {
-      dispatch(
-        ac.AlsoToMain({
-          type: at.WIDGETS_LISTS_USER_IMPRESSION,
-        })
-      );
-      const telemetryData = {
-        widget_name: "lists",
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-      };
-      dispatch(
-        ac.AlsoToMain({
-          type: at.WIDGETS_IMPRESSION,
-          data: telemetryData,
-        })
-      );
-    });
-  }, [dispatch, widgetsMayBeMaximized, widgetSize]);
-
-  const listsRef = useIntersectionObserver(handleIntersection);
 
   const reorderLists = useCallback(
     (draggedElement, targetElement, before = false) => {
@@ -339,14 +325,6 @@ function Lists({
     };
   }, [reorderLists]);
 
-  // effect that enables editing new list name only after store has been hydrated
-  useEffect(() => {
-    if (selected === pendingNewList) {
-      setIsEditing(true);
-      setPendingNewList(null);
-    }
-  }, [selected, pendingNewList]);
-
   useEffect(() => {
     if (isAddingTask) {
       inputRef.current?.focus();
@@ -388,24 +366,10 @@ function Lists({
             data: { lists: updatedLists },
           })
         );
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_LISTS_USER_EVENT,
-            data: { userAction: USER_ACTION_TYPES.TASK_CREATE },
-          })
-        );
-        const telemetryData = {
-          widget_name: "lists",
-          widget_source: "widget",
-          user_action: USER_ACTION_TYPES.TASK_CREATE,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-        };
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_USER_EVENT,
-            data: telemetryData,
-          })
-        );
+        recordUserAction(USER_ACTION_TYPES.TASK_CREATE, {
+          source: "widget",
+          legacy: true,
+        });
       });
       setNewTask("");
     }
@@ -439,6 +403,9 @@ function Lists({
       newCompleted = [...selectedList.completed, updatedTask];
 
       userAction = USER_ACTION_TYPES.TASK_COMPLETE;
+      if (!newTasks.length && newCompleted.length) {
+        triggerCelebration();
+      }
     } else {
       const targetKey = isCompletedType ? "completed" : "tasks";
       const updatedArray = selectedList[targetKey].map(task =>
@@ -470,24 +437,11 @@ function Lists({
         })
       );
       if (userAction) {
-        dispatch(
-          ac.AlsoToMain({
-            type: at.WIDGETS_LISTS_USER_EVENT,
-            data: { userAction },
-          })
-        );
-        const telemetryData = {
-          widget_name: "lists",
-          widget_source: "widget",
-          user_action: userAction,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-        };
-        dispatch(
-          ac.AlsoToMain({
-            type: at.WIDGETS_USER_EVENT,
-            data: telemetryData,
-          })
-        );
+        recordUserAction(userAction, {
+          source: "widget",
+          legacy: true,
+          alsoToMain: true,
+        });
       }
     });
     handleListInteraction();
@@ -511,24 +465,10 @@ function Lists({
           data: { lists: updatedLists },
         })
       );
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_LISTS_USER_EVENT,
-          data: { userAction: USER_ACTION_TYPES.TASK_DELETE },
-        })
-      );
-      const telemetryData = {
-        widget_name: "lists",
-        widget_source: "widget",
-        user_action: USER_ACTION_TYPES.TASK_DELETE,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-      };
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: telemetryData,
-        })
-      );
+      recordUserAction(USER_ACTION_TYPES.TASK_DELETE, {
+        source: "widget",
+        legacy: true,
+      });
     });
     handleListInteraction();
   }
@@ -553,6 +493,47 @@ function Lists({
 
   function handleListNameSave(newLabel) {
     const trimmedLabel = newLabel.trimEnd();
+
+    if (isCreatingNewList) {
+      setIsCreatingNewList(false);
+
+      if (!trimmedLabel) {
+        handleListInteraction();
+        return;
+      }
+
+      const id = crypto.randomUUID();
+      const newLists = {
+        ...lists,
+        [id]: {
+          label: trimmedLabel,
+          tasks: [],
+          completed: [],
+        },
+      };
+
+      batch(() => {
+        dispatch(
+          ac.AlsoToMain({
+            type: at.WIDGETS_LISTS_UPDATE,
+            data: { lists: newLists },
+          })
+        );
+        dispatch(
+          ac.AlsoToMain({
+            type: at.WIDGETS_LISTS_CHANGE_SELECTED,
+            data: id,
+          })
+        );
+        recordUserAction(USER_ACTION_TYPES.LIST_CREATE, {
+          source: "widget",
+          legacy: true,
+        });
+      });
+      handleListInteraction();
+      return;
+    }
+
     if (trimmedLabel && trimmedLabel !== selectedList?.label) {
       const updatedLists = {
         ...lists,
@@ -568,24 +549,10 @@ function Lists({
             data: { lists: updatedLists },
           })
         );
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_LISTS_USER_EVENT,
-            data: { userAction: USER_ACTION_TYPES.LIST_EDIT },
-          })
-        );
-        const telemetryData = {
-          widget_name: "lists",
-          widget_source: "widget",
-          user_action: USER_ACTION_TYPES.LIST_EDIT,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-        };
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_USER_EVENT,
-            data: telemetryData,
-          })
-        );
+        recordUserAction(USER_ACTION_TYPES.LIST_EDIT, {
+          source: "widget",
+          legacy: true,
+        });
       });
       setIsEditing(false);
       handleListInteraction();
@@ -593,92 +560,14 @@ function Lists({
   }
 
   function handleCreateNewList() {
-    const id = crypto.randomUUID();
-    const newLists = {
-      ...lists,
-      [id]: {
-        label: "",
-        tasks: [],
-        completed: [],
-      },
-    };
-
-    batch(() => {
-      dispatch(
-        ac.AlsoToMain({
-          type: at.WIDGETS_LISTS_UPDATE,
-          data: { lists: newLists },
-        })
-      );
-      dispatch(
-        ac.AlsoToMain({
-          type: at.WIDGETS_LISTS_CHANGE_SELECTED,
-          data: id,
-        })
-      );
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_LISTS_USER_EVENT,
-          data: { userAction: USER_ACTION_TYPES.LIST_CREATE },
-        })
-      );
-      const telemetryData = {
-        widget_name: "lists",
-        widget_source: "widget",
-        user_action: USER_ACTION_TYPES.LIST_CREATE,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-      };
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: telemetryData,
-        })
-      );
-    });
-    setPendingNewList(id);
+    setIsCreatingNewList(true);
+    setIsEditing(true);
     handleListInteraction();
   }
 
   function handleCancelNewList() {
-    // If current list is new and has no label/tasks, remove it
-    if (!selectedList?.label && selectedList?.tasks?.length === 0) {
-      const updatedLists = { ...lists };
-      delete updatedLists[selected];
-
-      const listKeys = Object.keys(updatedLists);
-      const key = listKeys[listKeys.length - 1];
-      batch(() => {
-        dispatch(
-          ac.AlsoToMain({
-            type: at.WIDGETS_LISTS_UPDATE,
-            data: { lists: updatedLists },
-          })
-        );
-        dispatch(
-          ac.AlsoToMain({
-            type: at.WIDGETS_LISTS_CHANGE_SELECTED,
-            data: key,
-          })
-        );
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_LISTS_USER_EVENT,
-            data: { userAction: USER_ACTION_TYPES.LIST_DELETE },
-          })
-        );
-        const telemetryData = {
-          widget_name: "lists",
-          widget_source: "widget",
-          user_action: USER_ACTION_TYPES.LIST_DELETE,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-        };
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_USER_EVENT,
-            data: telemetryData,
-          })
-        );
-      });
+    if (isCreatingNewList) {
+      setIsCreatingNewList(false);
     }
 
     handleListInteraction();
@@ -714,24 +603,10 @@ function Lists({
             data: key,
           })
         );
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_LISTS_USER_EVENT,
-            data: { userAction: USER_ACTION_TYPES.LIST_DELETE },
-          })
-        );
-        const telemetryData = {
-          widget_name: "lists",
-          widget_source: "widget",
-          user_action: USER_ACTION_TYPES.LIST_DELETE,
-          widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-        };
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_USER_EVENT,
-            data: telemetryData,
-          })
-        );
+        recordUserAction(USER_ACTION_TYPES.LIST_DELETE, {
+          source: "widget",
+          legacy: true,
+        });
       });
     }
     handleListInteraction();
@@ -748,20 +623,8 @@ function Lists({
           },
         })
       );
-      const telemetryData = {
-        widget_name: "lists",
-        widget_source: "context_menu",
-        enabled: false,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-      };
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_ENABLED,
-          data: telemetryData,
-        })
-      );
+      recordEnabled(false, { source: "context_menu" });
     });
-    handleListInteraction();
   }
 
   function handleCopyListToClipboard() {
@@ -791,25 +654,9 @@ function Lists({
       console.error("Copy failed", err);
     }
 
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_LISTS_USER_EVENT,
-          data: { userAction: USER_ACTION_TYPES.LIST_COPY },
-        })
-      );
-      const telemetryData = {
-        widget_name: "lists",
-        widget_source: "widget",
-        user_action: USER_ACTION_TYPES.LIST_COPY,
-        widget_size: widgetsMayBeMaximized ? widgetSize : "medium",
-      };
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: telemetryData,
-        })
-      );
+    recordUserAction(USER_ACTION_TYPES.LIST_COPY, {
+      source: "widget",
+      legacy: true,
     });
     handleListInteraction();
   }
@@ -836,60 +683,21 @@ function Lists({
             data: { name: PREF_WIDGETS_LISTS_SIZE, value: size },
           })
         );
-        dispatch(
-          ac.OnlyToMain({
-            type: at.WIDGETS_USER_EVENT,
-            data: {
-              widget_name: "lists",
-              widget_source: "context_menu",
-              user_action: USER_ACTION_TYPES.CHANGE_SIZE,
-              action_value: size,
-              widget_size: size,
-            },
-          })
-        );
+        recordUserAction(USER_ACTION_TYPES.CHANGE_SIZE, {
+          source: "context_menu",
+          value: size,
+          size,
+        });
       });
     },
-    [dispatch]
+    [dispatch, recordUserAction]
   );
 
+  const sizeSubmenuRef = useSizeSubmenu(handleChangeSize);
+
   useEffect(() => {
-    const el = sizeSubmenuRef.current;
-    if (!el) {
-      return undefined;
-    }
-
-    const listener = e => {
-      const item = e.composedPath().find(node => node.dataset?.size);
-      if (item) {
-        handleChangeSize(item.dataset.size);
-      }
-    };
-
-    el.addEventListener("click", listener);
-    return () => el.removeEventListener("click", listener);
-  }, [handleChangeSize]);
-
-  // Reset baseline only when switching lists
-  useEffect(() => {
-    prevCompletedCount.current = selectedList?.completed?.length || 0;
     setIsAddingTask(false);
-    // intentionally leaving out selectedList from dependency array
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
-
-  useEffect(() => {
-    if (selectedList) {
-      const doneCount = selectedList.completed?.length || 0;
-      const previous = Math.floor(prevCompletedCount.current / 5);
-      const current = Math.floor(doneCount / 5);
-
-      if (current > previous) {
-        triggerCelebration();
-      }
-      prevCompletedCount.current = doneCount;
-    }
-  }, [selectedList, triggerCelebration, selected]);
 
   if (!lists) {
     return null;
@@ -986,7 +794,7 @@ function Lists({
       className={`lists widget ${novaEnabled ? "col-4" : ""} ${listsSizeClass} ${isMaximized ? "is-maximized" : ""}${showEmptyState ? " is-empty" : ""}${hasVisibleTasks ? " has-visible-tasks" : ""}${isAddingTask ? " is-adding-task" : ""}${isCelebrating ? " is-celebrating" : ""}`}
       ref={el => {
         widgetRef.current = el;
-        listsRef.current = [el];
+        impressionRef(el);
       }}
     >
       {isCelebrating && celebrationFrame ? (
@@ -1002,7 +810,8 @@ function Lists({
       ) : null}
       <div className="lists-header">
         <EditableText
-          value={lists[selected]?.label || ""}
+          key={`${selected}-${isCreatingNewList ? "draft" : "saved"}`}
+          value={isCreatingNewList ? "" : lists[selected]?.label || ""}
           onSave={handleListNameSave}
           isEditing={isEditing}
           setIsEditing={setIsEditing}
@@ -1010,7 +819,12 @@ function Lists({
           type="list"
           maxLength={30}
           ariaLabelL10nId="newtab-widget-lists-menu-edit2"
-          dataL10nId={listNamePlaceholder}
+          saveOnBlur={!isCreatingNewList}
+          dataL10nId={
+            isCreatingNewList
+              ? "newtab-widget-lists-name-placeholder-new2"
+              : listNamePlaceholder
+          }
         >
           {renderListSwitcherOrTitle({
             currentListsCount,
@@ -1088,10 +902,8 @@ function Lists({
             onClick={() => handleCopyListToClipboard()}
           ></panel-item>
           {novaEnabled && widgetsMayBeMaximized && (
-            <panel-item
-              submenu="lists-size-submenu"
-              data-l10n-id="newtab-widget-menu-change-size"
-            >
+            <panel-item submenu="lists-size-submenu">
+              <span data-l10n-id="newtab-widget-menu-change-size"></span>
               <panel-list
                 ref={sizeSubmenuRef}
                 slot="submenu"
@@ -1109,6 +921,7 @@ function Lists({
               </panel-list>
             </panel-item>
           )}
+          <MoveSubmenu widgetId="lists" widgetEnabledMap={widgetEnabledMap} />
           <panel-item
             data-l10n-id="newtab-widget-menu-hide"
             onClick={() => handleHideLists()}
@@ -1147,11 +960,11 @@ function Lists({
         {showEmptyState ? (
           <div className="empty-list">
             <img
-              className="empty-list-illustration"
-              src={LISTS_EMPTY_STATE_ILLUSTRATION}
-              width="68"
-              height="68"
               alt=""
+              className="empty-list-illustration"
+              height="66"
+              src={LISTS_EMPTY_STATE_ILLUSTRATION}
+              width="75"
             />
           </div>
         ) : (
@@ -1379,9 +1192,13 @@ function EditableText({
   dataL10nId = null,
   ariaLabelL10nId = null,
   maxLength = 100,
+  saveOnBlur = true,
 }) {
   const [tempValue, setTempValue] = useState(value);
   const inputRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const previousFocusRef = useRef(null);
+  const cancellingRef = useRef(false);
 
   // True if tempValue is empty, null/undefined, or only whitespace
   const showPlaceholder = (tempValue ?? "").trim() === "";
@@ -1392,29 +1209,70 @@ function EditableText({
 
   useEffect(() => {
     if (isEditing) {
+      cancellingRef.current = false;
+      previousFocusRef.current = document.activeElement;
       inputRef.current?.focus();
-    } else {
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!isEditing) {
       setTempValue(value);
     }
   }, [isEditing, value]);
+
+  const handleRestoreFocus = () => {
+    const target = previousFocusRef.current;
+    if (target && document.contains(target)) {
+      target.focus();
+    }
+  };
 
   function handleKeyDown(e) {
     if (e.key === "Enter") {
       onSave(tempValue.trim());
       setIsEditing(false);
     } else if (e.key === "Escape") {
+      cancellingRef.current = true;
       setIsEditing(false);
       setTempValue(value);
       onCancel?.();
+      handleRestoreFocus();
     }
   }
 
-  function handleOnBlur() {
+  function handleOnBlur(e) {
+    // Skip save when cancelling via Escape or the clear button — the
+    // restored focus would otherwise trip handleOnBlur into saving.
+    if (cancellingRef.current) {
+      cancellingRef.current = false;
+      return;
+    }
+    // Skip save when focus moved to the cancel button so its click handler can run.
+    if (e.relatedTarget && wrapperRef.current?.contains(e.relatedTarget)) {
+      return;
+    }
+    if (!saveOnBlur) {
+      if (tempValue.trim()) {
+        return;
+      }
+      setIsEditing(false);
+      onCancel?.();
+      return;
+    }
     onSave(tempValue.trim());
     setIsEditing(false);
   }
 
-  return isEditing ? (
+  function handleClear() {
+    cancellingRef.current = true;
+    setIsEditing(false);
+    setTempValue(value);
+    onCancel?.();
+    handleRestoreFocus();
+  }
+
+  const input = (
     <input
       className={`edit-${type}`}
       ref={inputRef}
@@ -1427,9 +1285,29 @@ function EditableText({
       {...(inputL10nId ? { "data-l10n-id": inputL10nId } : {})}
       {...(inputL10nId ? { "data-l10n-attrs": inputL10nAttrs } : {})}
     />
-  ) : (
-    [children]
   );
+
+  if (!isEditing) {
+    return [children];
+  }
+
+  if (type === "list") {
+    return (
+      <div className="edit-list-wrapper" ref={wrapperRef}>
+        {input}
+        <moz-button
+          className="edit-list-clear"
+          type="icon ghost"
+          size="small"
+          iconSrc="chrome://global/skin/icons/close.svg"
+          data-l10n-id="newtab-widget-lists-edit-clear"
+          onClick={handleClear}
+        />
+      </div>
+    );
+  }
+
+  return input;
 }
 
 export { Lists };

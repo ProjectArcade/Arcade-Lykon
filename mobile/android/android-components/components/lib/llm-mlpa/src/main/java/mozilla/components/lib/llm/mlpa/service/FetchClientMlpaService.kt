@@ -18,7 +18,9 @@ import mozilla.components.concept.fetch.MutableHeaders
 import mozilla.components.concept.fetch.Request
 import mozilla.components.concept.fetch.Response
 import mozilla.components.concept.fetch.isClientError
+import mozilla.components.concept.llm.Llm
 import mozilla.components.lib.llm.mlpa.service.ext.contentFlow
+import mozilla.components.lib.llm.mlpa.service.ext.rateLimitDetailedError
 import java.io.IOException
 
 /**
@@ -53,23 +55,30 @@ class FetchClientMlpaService(
     override suspend fun verify(
         request: AuthenticationService.Request,
     ): Result<AuthenticationService.Response> = withContext(dispatcher) {
-            val fetchRequest = Request(
-                url = "${config.baseUrl}/verify/play",
-                method = Request.Method.POST,
-                headers = MutableHeaders(),
-                body = Request.Body.fromString(json.encodeToString(request)),
-            )
+        val fetchRequest = Request(
+            url = "${config.baseUrl}/verify/play",
+            method = Request.Method.POST,
+            headers = MutableHeaders(
+                "content-type" to "application/json",
+            ),
+            body = Request.Body.fromString(json.encodeToString(request)),
+        )
 
-            return@withContext Result.runCatching {
-                client.fetch(fetchRequest).use { httpResponse ->
-                    if (httpResponse.isClientError) {
-                        throw VerificationServiceFailed("Received status code ${httpResponse.status}")
-                    }
-
-                    json.decodeFromString(httpResponse.body.string(Charsets.UTF_8))
+        return@withContext Result.runCatching {
+            client.fetch(fetchRequest).use { httpResponse ->
+                if (httpResponse.isClientError) {
+                    throw VerificationServiceFailed("Received status code ${httpResponse.status}")
                 }
+                json.decodeFromString<AuthenticationService.Response>(httpResponse.body.string(Charsets.UTF_8))
+            }
+        }.recoverCatching { e ->
+            throw when (e) {
+                is IOException -> VerificationNetworkError(e)
+                is SerializationException -> VerificationResponseParseError(e)
+                else -> e
             }
         }
+    }
 
     /**
      * Calls the `/chat/completions` endpoint to request a chat completion.
@@ -103,13 +112,13 @@ class FetchClientMlpaService(
             val httpResponse = try {
                 client.fetch(fetchRequest)
             } catch (e: IOException) {
-                throw ChatServiceError.NetworkError(e)
+                throw ChatNetworkError(e)
             }
             httpResponse.use {
                 it.error?.also { error -> throw error }
 
                 if (request.stream) {
-                    emitAll(it.contentFlow)
+                    emitAll(it.contentFlow(it.retryAfter))
                 } else {
                     emit(it.nonStreamedResponse)
                 }
@@ -120,30 +129,22 @@ class FetchClientMlpaService(
     private val Response.nonStreamedResponse get() = try {
         json.decodeFromString<ChatService.Response>(bodyString).choices.first().message.content
     } catch (e: SerializationException) {
-        throw ChatServiceError.ResponseParseError(e)
+        throw ResponseParseError(e)
     }
 
     private val Response.bodyString get() = use { body.string(Charsets.UTF_8) }
     private val Response.retryAfter: Long? get() = headers["Retry-After"]?.toLongOrNull()
-    private val Response.error: ChatServiceError? get() = when (status) {
+    private val Response.error: Llm.Exception? get() = when (status) {
         in 200..299 -> null
-        401 -> ChatServiceError.InvalidToken()
-        403 -> ChatServiceError.UserBlocked()
-        413 -> ChatServiceError.RequestTooLarge()
-        429 -> try {
-            when (json.decodeFromString<ChatService.ResponseErrorCode>(bodyString).error) {
-                1 -> ChatServiceError.BudgetExceeded(retryAfter)
-                2 -> ChatServiceError.RateLimited(retryAfter)
-                else -> ChatServiceError.ServerError(status)
-            }
-        } catch (e: SerializationException) {
-            ChatServiceError.RateLimitResponseParseError(e)
-        }
+        401 -> InvalidToken()
+        403 -> UserBlocked()
+        413 -> RequestTooLarge()
+        429 -> json.rateLimitDetailedError(bodyString, retryAfter)
         502 -> try {
-            ChatServiceError.UpstreamError(json.decodeFromString<ChatService.ResponseErrorReason>(bodyString).error)
+            UpstreamError(json.decodeFromString<ChatService.ResponseErrorReason>(bodyString).error)
         } catch (e: SerializationException) {
-            ChatServiceError.UpstreamResponseParseError(e)
+            UpstreamResponseParseError(e)
         }
-        else -> ChatServiceError.ServerError(status)
+        else -> ServerError(status)
     }
 }

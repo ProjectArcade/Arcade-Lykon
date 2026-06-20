@@ -34,10 +34,10 @@
 <html:setting-group id="profilesGroup" groupid="profiles" data-category="paneGeneral" hidden="true" data-srd-migrated="" />
 
 <!-- Tab preferences -->
-<html:setting-group data-category="paneGeneral" hidden="true" groupid="tabs" />
+<html:setting-group data-category="paneGeneral" hidden="true" groupid="tabs" data-srd-migrated="" />
 
 <!-- Browser layout -->
-<html:setting-group groupid="browserLayout" data-category="paneGeneral" data-subcategory="layout" hidden="true"></html:setting-group>
+<html:setting-group groupid="browserLayout" data-category="paneGeneral" data-subcategory="layout" data-srd-migrated="" hidden="true"></html:setting-group>
 
 <hbox id="languageAndAppearanceCategory"
       class="subcategory"
@@ -47,7 +47,7 @@
 </hbox>
 
 <!-- Website appearance -->
-<html:setting-group groupid="appearance" data-category="paneGeneral" hidden="true"></html:setting-group>
+<html:setting-group groupid="appearance" data-category="paneGeneral" data-srd-migrated="" hidden="true"></html:setting-group>
 
 <!-- Zoom -->
 <html:setting-group id="zoomGroup" groupid="zoom" data-category="paneGeneral" hidden="true" data-srd-migrated="" />
@@ -104,18 +104,6 @@
             data-l10n-args='{"localeName": "und"}'
             preference="intl.regional_prefs.use_os_locales"/>
 
-  <!-- This Translations UI manages the prefs for the addon only.
-       We were planning to remove this once ESR 115 went away, but it seems
-       that it may live forever. I think it can be safely removed from a current
-       version of Firefox, though, especially once the Settings Redesign is finalized. -->
-  <hbox id="fxtranslationsBox" hidden="true" data-subcategory="fxtranslations">
-    <description flex="1" control="fxtranslateButton" data-l10n-id="fx-translate-web-pages"/>
-    <button id="fxtranslateButton"
-            is="highlightable-button"
-            class="accessory-button"
-            data-l10n-id="translate-exceptions"/>
-  </hbox>
-
   <!-- This Translations UI is the pre-settings-redesign UI and should be removed
        when getting ready for the settings redesign to fully ship. -->
   <vbox id="translationsGroup" data-srd-groupid="translations" hidden="true" data-subcategory="translations">
@@ -152,15 +140,17 @@
 <hbox id="filesAndApplicationsCategory"
       class="subcategory"
       hidden="true"
+      data-srd-groupid="applications"
       data-category="paneGeneral">
   <html:h1 data-l10n-id="files-and-applications-title"/>
 </hbox>
 
 <!-- Downloads -->
-<html:setting-group groupid="downloads" data-category="paneGeneral" hidden="true"/>
+<html:setting-group groupid="downloads" data-category="paneGeneral" data-srd-migrated="" hidden="true"/>
 
 <!-- Applications -->
-<groupbox id="applicationsGroup" data-category="paneGeneral" hidden="true" data-srd-groupid="applications">
+<groupbox id="applicationsGroup" data-category="paneGeneral" hidden="true" data-srd-migrated=""
+  data-srd-groupid="applications">
   <label><html:h2 data-l10n-id="applications-header"/></label>
   <description class="description-deemphasized" data-l10n-id="applications-description"/>
   <html:moz-input-search
@@ -192,16 +182,14 @@
   </radiogroup>
 </groupbox>
 
-<html:setting-group data-category="paneGeneral" groupid="applications" hidden="true" />
-
 <!-- DRM Content -->
-<html:setting-group groupid="drm" data-category="paneGeneral" data-subcategory="drm" hidden="true" />
+<html:setting-group groupid="drm" data-category="paneGeneral" data-subcategory="drm" hidden="true" data-srd-migrated="" />
 
 <!-- Update -->
 <html:setting-group groupid="updates" data-category="paneGeneral" hidden="true" data-srd-migrated="" />
 
 <!-- Performance -->
-<html:setting-group groupid="performance" data-category="paneGeneral" hidden="true" />
+<html:setting-group groupid="performance" data-category="paneGeneral" hidden="true" data-srd-migrated="" />
 
 <!-- Browsing -->
 <html:setting-group groupid="browsing" data-category="paneGeneral" hidden="true"/>

@@ -27,6 +27,7 @@
 #include "nsIURI.h"
 #include "nsJSUtils.h"
 #include "nsNetUtil.h"
+#include "nsPIDOMWindowInlines.h"
 #include "ExpandedPrincipal.h"
 #include "WrapperFactory.h"
 #include "xpcprivate.h"
@@ -582,16 +583,11 @@ static size_t sandbox_moved(JSObject* obj, JSObject* old) {
   (XPCONNECT_GLOBAL_EXTRA_SLOT_OFFSET)
 
 static const JSClassOps SandboxClassOps = {
-    nullptr,                         // addProperty
-    nullptr,                         // delProperty
-    nullptr,                         // enumerate
-    JS_NewEnumerateStandardClasses,  // newEnumerate
-    JS_ResolveStandardClass,         // resolve
-    JS_MayResolveStandardClass,      // mayResolve
-    sandbox_finalize,                // finalize
-    nullptr,                         // call
-    nullptr,                         // construct
-    JS_GlobalObjectTraceHook,        // trace
+    .newEnumerate = JS_NewEnumerateStandardClasses,
+    .resolve = JS_ResolveStandardClass,
+    .mayResolve = JS_MayResolveStandardClass,
+    .finalize = sandbox_finalize,
+    .trace = JS_GlobalObjectTraceHook,
 };
 
 static const js::ClassExtension SandboxClassExtension = {

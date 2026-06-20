@@ -35,14 +35,9 @@ add_setup(async function () {
  * Tests that a signed in status sends a status changed event.
  */
 add_task(async function test_IPProtectionService_updateState_signedIn() {
-  let sandbox = sinon.createSandbox();
-  sandbox
-    .stub(IPPEnrollAndEntitleManager, "isEnrolledAndEntitled")
-    .get(() => true);
-
   await IPProtectionService.init();
 
-  setupStubs(sandbox);
+  setupStubs();
 
   let signedInEventPromise = waitForEvent(
     IPProtectionService,
@@ -54,25 +49,23 @@ add_task(async function test_IPProtectionService_updateState_signedIn() {
 
   await signedInEventPromise;
 
-  Assert.ok(IPPSignInWatcher.isSignedIn, "Should be signed in after update");
+  Assert.ok(
+    IPProtectionService.authProvider.isReady,
+    "Auth provider should be ready after update"
+  );
 
   IPProtectionService.uninit();
-  sandbox.restore();
 });
 
 /**
  * Tests that any other status sends a changed event event.
  */
 add_task(async function test_IPProtectionService_updateState_signedOut() {
-  let sandbox = sinon.createSandbox();
-  setupStubs(sandbox);
-  sandbox
-    .stub(IPPEnrollAndEntitleManager, "isEnrolledAndEntitled")
-    .get(() => true);
+  setupStubs();
 
   await IPProtectionService.init();
 
-  sandbox.stub(IPPSignInWatcher, "isSignedIn").get(() => false);
+  IPPDummyAuthProvider.simulateSignIn(false);
 
   let signedOutEventPromise = waitForEvent(
     IPProtectionService,
@@ -85,135 +78,25 @@ add_task(async function test_IPProtectionService_updateState_signedOut() {
   await signedOutEventPromise;
 
   Assert.ok(
-    !IPPSignInWatcher.isSignedIn,
-    "Should not be signed in after update"
+    !IPProtectionService.authProvider.isReady,
+    "Auth provider should not be ready after sign-out"
   );
 
   IPProtectionService.uninit();
-  sandbox.restore();
 });
-
-/**
- * Tests that updateEntitlement refreshes usage when an entitlement is found.
- */
-add_task(
-  async function test_IPProtectionService_updateEntitlement_refreshes_usage() {
-    const sandbox = sinon.createSandbox();
-    setupStubs(sandbox);
-
-    IPProtectionService.init();
-    IPPEnrollAndEntitleManager.resetEntitlement();
-
-    const refreshUsageStub = sandbox.stub(IPPProxyManager, "refreshUsage");
-
-    await IPPEnrollAndEntitleManager.updateEntitlement();
-
-    Assert.ok(
-      IPPEnrollAndEntitleManager.isEnrolledAndEntitled,
-      "Should be entitled after updateEntitlement"
-    );
-
-    Assert.ok(
-      refreshUsageStub.calledOnce,
-      "refreshUsage should be called when entitlement is found"
-    );
-
-    IPProtectionService.uninit();
-    sandbox.restore();
-  }
-);
-
-/**
- * Tests that refetchEntitlement works as expected if a linked VPN is found and sends an event.
- */
-add_task(
-  async function test_IPProtectionService_refetchEntitlement_has_vpn_linked() {
-    const sandbox = sinon.createSandbox();
-    setupStubs(sandbox);
-
-    const waitForReady = waitForEvent(
-      IPProtectionService,
-      "IPProtectionService:StateChanged",
-      () => IPProtectionService.state === IPProtectionStates.READY
-    );
-
-    IPProtectionService.init();
-    await IPPEnrollAndEntitleManager.maybeEnrollAndEntitle();
-    IPProtectionService.updateState();
-
-    await waitForReady;
-
-    IPPFxaAuthProvider.getEntitlement.resolves({
-      entitlement: createTestEntitlement({ subscribed: true }),
-    });
-
-    let hasUpgradedEventPromise = waitForEvent(
-      IPPEnrollAndEntitleManager,
-      "IPPEnrollAndEntitleManager:StateChanged",
-      () => IPPEnrollAndEntitleManager.hasUpgraded
-    );
-
-    await IPPEnrollAndEntitleManager.refetchEntitlement();
-
-    await hasUpgradedEventPromise;
-
-    Assert.ok(
-      IPPEnrollAndEntitleManager.hasUpgraded,
-      "hasUpgraded should be true"
-    );
-
-    IPProtectionService.uninit();
-    sandbox.restore();
-  }
-);
-
-/**
- * Tests that refetchEntitlement returns errors if no linked VPN is found and
- * sends an event.
- */
-add_task(
-  async function test_IPProtectionService_refetchEntitlement_no_vpn_linked() {
-    const sandbox = sinon.createSandbox();
-    setupStubs(sandbox);
-
-    await IPProtectionService.init();
-    await IPPEnrollAndEntitleManager.maybeEnrollAndEntitle();
-    IPProtectionService.updateState();
-
-    IPPFxaAuthProvider.getEntitlement.resolves({ error: "invalid_response" });
-
-    let hasUpgradedEventPromise = waitForEvent(
-      IPPEnrollAndEntitleManager,
-      "IPPEnrollAndEntitleManager:StateChanged"
-    );
-
-    await IPPEnrollAndEntitleManager.refetchEntitlement();
-
-    await hasUpgradedEventPromise;
-
-    Assert.ok(
-      !IPPEnrollAndEntitleManager.hasUpgraded,
-      "hasUpgraded should be false"
-    );
-
-    IPProtectionService.uninit();
-    sandbox.restore();
-  }
-);
 
 /**
  * Tests that signing off generates a reset of the entitlement and the sending
  * of an event.
  */
 add_task(async function test_IPProtectionService_hasUpgraded_signed_out() {
-  let sandbox = sinon.createSandbox();
-  setupStubs(sandbox);
+  setupStubs();
 
   await IPProtectionService.init();
-  await IPPEnrollAndEntitleManager.maybeEnrollAndEntitle();
+  await IPProtectionService.authProvider.enroll();
   IPProtectionService.updateState();
 
-  sandbox.stub(IPPSignInWatcher, "isSignedIn").get(() => false);
+  IPPDummyAuthProvider.simulateSignIn(false);
 
   let signedOutEventPromise = waitForEvent(
     IPProtectionService,
@@ -224,152 +107,51 @@ add_task(async function test_IPProtectionService_hasUpgraded_signed_out() {
   await signedOutEventPromise;
 
   Assert.ok(
-    !IPPEnrollAndEntitleManager.hasUpgraded,
+    !IPProtectionService.authProvider.hasUpgraded,
     "hasUpgraded should be false in after signing out"
   );
 
   IPProtectionService.uninit();
-  sandbox.restore();
 });
-
-/**
- * Tests that changing the guardian endpoint preference and reinitializing
- * the service correctly updates the guardian's endpoint configuration.
- */
-add_task(async function test_guardian_endpoint_updates_on_reinit() {
-  await IPProtectionService.init();
-
-  Assert.equal(
-    IPPFxaAuthProvider.guardian.guardianEndpoint,
-    "https://vpn.mozilla.org/",
-    "Guardian should have default endpoint"
-  );
-
-  Services.prefs.setCharPref(
-    "browser.ipProtection.guardian.endpoint",
-    "https://test.example.com/"
-  );
-
-  Assert.equal(
-    IPPFxaAuthProvider.guardian.guardianEndpoint,
-    "https://test.example.com/",
-    "Guardian should reflect updated endpoint after pref change"
-  );
-
-  IPProtectionService.uninit();
-  Services.prefs.clearUserPref("browser.ipProtection.guardian.endpoint");
-});
-
-/**
- * Tests that isCheckingEntitlement is true while updateEntitlement is in
- * progress and false once it completes.
- */
-add_task(async function test_isCheckingEntitlement_during_updateEntitlement() {
-  const sandbox = sinon.createSandbox();
-  setupStubs(sandbox);
-
-  await IPProtectionService.init();
-
-  let resolveEntitlement;
-  // Slow down fetching entitlement info so that we can properly test
-  // isCheckingEntitlement. The promise only resolves when we call resolveEntitlement().
-  IPPFxaAuthProvider.getEntitlement.returns(
-    new Promise(resolve => {
-      resolveEntitlement = resolve;
-    })
-  );
-
-  Assert.ok(
-    !IPPEnrollAndEntitleManager.isCheckingEntitlement,
-    "isCheckingEntitlement should be false before updateEntitlement"
-  );
-
-  let updatePromise = IPPEnrollAndEntitleManager.updateEntitlement(true);
-
-  Assert.ok(
-    IPPEnrollAndEntitleManager.isCheckingEntitlement,
-    "isCheckingEntitlement should be true while updateEntitlement is in progress"
-  );
-
-  resolveEntitlement({ entitlement: createTestEntitlement() });
-  await updatePromise;
-
-  Assert.ok(
-    !IPPEnrollAndEntitleManager.isCheckingEntitlement,
-    "isCheckingEntitlement should be false after updateEntitlement completes"
-  );
-
-  IPProtectionService.uninit();
-  sandbox.restore();
-});
-
-/**
- * Tests that StateChanged fires after updateEntitlement even when entitlement
- * is already cached.
- */
-add_task(
-  async function test_updateEntitlement_fires_StateChanged_when_cached() {
-    const sandbox = sinon.createSandbox();
-    setupStubs(sandbox);
-
-    await IPProtectionService.init();
-    await IPPEnrollAndEntitleManager.updateEntitlement();
-
-    let stateChangedFired = false;
-    IPPEnrollAndEntitleManager.addEventListener(
-      "IPPEnrollAndEntitleManager:StateChanged",
-      () => {
-        stateChangedFired = true;
-      },
-      { once: true }
-    );
-
-    await IPPEnrollAndEntitleManager.updateEntitlement();
-
-    Assert.ok(
-      stateChangedFired,
-      "StateChanged should fire even when entitlement is already cached"
-    );
-
-    IPProtectionService.uninit();
-    sandbox.restore();
-  }
-);
 
 /**
  * Tests that isEnrolling is true while maybeEnrollAndEntitle is in progress and
  * false once it completes.
  */
 add_task(async function test_isEnrolling_during_maybeEnrollAndEntitle() {
-  const sandbox = sinon.createSandbox();
-  setupStubs(sandbox);
+  setupStubs();
 
   await IPProtectionService.init();
+
+  // initOnStartupCompleted() runs updateEntitlement() which sets the
+  // entitlement via the configured getEntitlement response. Reset it so that
+  // enroll() takes the slow path and isEnrolling stays true while in progress.
+  IPPDummyAuthProvider.resetEntitlement();
 
   let resolveEnroll;
   // Slow down enrolling step info so that we can properly test
   // isEnrolling. The promise only resolves when we call resolveEnroll().
-  IPPFxaAuthProvider.enrollAndEntitle.returns(
+  IPPDummyAuthProvider.setEnrollResponse(
     new Promise(resolve => {
       resolveEnroll = resolve;
     })
   );
 
   Assert.ok(
-    !IPPEnrollAndEntitleManager.isEnrolling,
+    !IPPDummyAuthProvider.isEnrolling,
     "isEnrolling should be false before maybeEnrollAndEntitle"
   );
 
-  let enrollPromise = IPPEnrollAndEntitleManager.maybeEnrollAndEntitle();
+  let enrollPromise = IPPDummyAuthProvider.enroll();
 
   Assert.ok(
-    IPPEnrollAndEntitleManager.isEnrolling,
+    IPPDummyAuthProvider.isEnrolling,
     "isEnrolling should be true while maybeEnrollAndEntitle is in progress"
   );
 
   let stateChangedFired = false;
-  IPPEnrollAndEntitleManager.addEventListener(
-    "IPPEnrollAndEntitleManager:StateChanged",
+  IPProtectionService.authProvider.addEventListener(
+    "IPPAuthProvider:StateChanged",
     () => {
       stateChangedFired = true;
     },
@@ -380,7 +162,7 @@ add_task(async function test_isEnrolling_during_maybeEnrollAndEntitle() {
   await enrollPromise;
 
   Assert.ok(
-    !IPPEnrollAndEntitleManager.isEnrolling,
+    !IPPDummyAuthProvider.isEnrolling,
     "isEnrolling should be false after maybeEnrollAndEntitle completes"
   );
   Assert.ok(
@@ -389,5 +171,4 @@ add_task(async function test_isEnrolling_during_maybeEnrollAndEntitle() {
   );
 
   IPProtectionService.uninit();
-  sandbox.restore();
 });

@@ -61,13 +61,9 @@ if (!Services.prefs.getBoolPref("dom.select.customizable_select.enabled")) {
     errorMessage: /Unknown pseudo-class or pseudo-element ‘picker’./i,
     isFromDevTools: false,
   });
-}
-
-if (!Services.prefs.getBoolPref("layout.css.fake-webkit-scrollbar.enabled")) {
   ignoreList.push({
-    sourceName: /\bwebcompat\/injections\/css\/.*\.css$/i,
-    errorMessage:
-      /Unknown pseudo-class or pseudo-element ‘-webkit-scrollbar’./i,
+    sourceName: /\bforms\.css$/i,
+    errorMessage: /Unknown pseudo-class or pseudo-element ‘checkmark’./i,
     isFromDevTools: false,
   });
 }
@@ -115,6 +111,24 @@ if (!Services.prefs.getBoolPref("dom.viewTransitions.enabled")) {
   });
 }
 
+if (
+  !Services.prefs.getBoolPref("layout.css.scroll-driven-animations.enabled")
+) {
+  ignoreList.push({
+    sourceName: /smartbar\.css$/i,
+    errorMessage: /Unknown property .*animation-timeline/i,
+    isFromDevTools: false,
+  });
+}
+
+if (!Services.prefs.getBoolPref("dom.headingoffset.enabled")) {
+  ignoreList.push({
+    sourceName: /\b(html)\.css$/i,
+    errorMessage: /Unknown pseudo-class.*heading/i,
+    isFromDevTools: false,
+  });
+}
+
 let propNameAllowlist = [
   // These custom properties are retrieved directly from CSSOM
   // in videocontrols.xml to get pre-defined style instead of computed
@@ -145,10 +159,16 @@ let propNameAllowlist = [
   // styles, which confuses the test.
   { propName: "--panel-border-radius", isFromDevTools: true },
   { propName: "--panel-padding", isFromDevTools: true },
-  { propName: "--panel-background", isFromDevTools: true },
+  { propName: "--panel-background-color", isFromDevTools: true },
   { propName: "--panel-border-color", isFromDevTools: true },
-  { propName: "--panel-shadow", isFromDevTools: true },
-  { propName: "--panel-shadow-margin", isFromDevTools: true },
+  { propName: "--panel-box-shadow", isFromDevTools: true },
+
+  // This is a semantic panel design token provided by the design system that
+  // currently has no chrome CSS consumer, so it isn't referenced via var().
+  {
+    propName: "--panel-background-color-dimmed-further",
+    isFromDevTools: false,
+  },
 
   // These variables are set in host CSS but consumed in shadow DOM CSS
   // (content-search-handoff-ui component), which confuses the test.
@@ -202,8 +222,66 @@ let propNameAllowlist = [
   { propName: "--tab-group-color-gray-invert", isFromDevTools: false },
   { propName: "--tab-group-color-gray-pale", isFromDevTools: false },
 
+  { propName: "--tab-group-blue", isFromDevTools: false },
+  { propName: "--tab-group-blue-invert", isFromDevTools: false },
+  { propName: "--tab-group-blue-hover", isFromDevTools: false },
+  { propName: "--tab-group-blue-text", isFromDevTools: false },
+  { propName: "--tab-group-blue-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-purple", isFromDevTools: false },
+  { propName: "--tab-group-purple-invert", isFromDevTools: false },
+  { propName: "--tab-group-purple-hover", isFromDevTools: false },
+  { propName: "--tab-group-purple-text", isFromDevTools: false },
+  { propName: "--tab-group-purple-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-cyan", isFromDevTools: false },
+  { propName: "--tab-group-cyan-invert", isFromDevTools: false },
+  { propName: "--tab-group-cyan-hover", isFromDevTools: false },
+  { propName: "--tab-group-cyan-text", isFromDevTools: false },
+  { propName: "--tab-group-cyan-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-orange", isFromDevTools: false },
+  { propName: "--tab-group-orange-invert", isFromDevTools: false },
+  { propName: "--tab-group-orange-hover", isFromDevTools: false },
+  { propName: "--tab-group-orange-text", isFromDevTools: false },
+  { propName: "--tab-group-orange-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-yellow", isFromDevTools: false },
+  { propName: "--tab-group-yellow-invert", isFromDevTools: false },
+  { propName: "--tab-group-yellow-hover", isFromDevTools: false },
+  { propName: "--tab-group-yellow-text", isFromDevTools: false },
+  { propName: "--tab-group-yellow-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-pink", isFromDevTools: false },
+  { propName: "--tab-group-pink-invert", isFromDevTools: false },
+  { propName: "--tab-group-pink-hover", isFromDevTools: false },
+  { propName: "--tab-group-pink-text", isFromDevTools: false },
+  { propName: "--tab-group-pink-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-green", isFromDevTools: false },
+  { propName: "--tab-group-green-invert", isFromDevTools: false },
+  { propName: "--tab-group-green-hover", isFromDevTools: false },
+  { propName: "--tab-group-green-text", isFromDevTools: false },
+  { propName: "--tab-group-green-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-red", isFromDevTools: false },
+  { propName: "--tab-group-red-invert", isFromDevTools: false },
+  { propName: "--tab-group-red-hover", isFromDevTools: false },
+  { propName: "--tab-group-red-text", isFromDevTools: false },
+  { propName: "--tab-group-red-text-invert", isFromDevTools: false },
+
+  { propName: "--tab-group-gray", isFromDevTools: false },
+  { propName: "--tab-group-gray-invert", isFromDevTools: false },
+  { propName: "--tab-group-gray-hover", isFromDevTools: false },
+  { propName: "--tab-group-gray-text", isFromDevTools: false },
+  { propName: "--tab-group-gray-text-invert", isFromDevTools: false },
+
+  /* This variable is used in a radial-gradient function, which confuses the test. */
+  { propName: "--radio-indicator-background-color", isFromDevTools: false },
+
   /* Allow design tokens in devtools without all variables being used there */
   { sourceName: /\/design-system\/tokens-.*\.css$/, isFromDevTools: true },
+  { sourceName: /\/in-content\/common-shared\.css/, isFromDevTools: true },
 
   // Ignore token properties that follow the patterns --color-[name], --color-[name]-[number], or --color-[name]-alpha-[number]
   // This enables us to provide our full color palette for developers.

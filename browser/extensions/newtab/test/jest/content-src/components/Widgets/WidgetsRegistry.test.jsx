@@ -5,14 +5,85 @@
 import {
   WIDGET_REGISTRY,
   getWidgetOrder,
+  isWidgetAddable,
   isWidgetEnabled,
+  isWidgetToggleVisible,
+  isWidgetsContainerVisible,
   resolveWidgetSize,
   resolveWidgetOrder,
   resolveWidgetHasSidebar,
   PREF_WIDGETS_ORDER,
-} from "content-src/components/Widgets/WidgetsRegistry.mjs";
+} from "common/WidgetsRegistry.mjs";
 
 const registryIds = WIDGET_REGISTRY.map(w => w.id);
+const listsWidget = WIDGET_REGISTRY.find(w => w.id === "lists");
+
+describe("isWidgetToggleVisible", () => {
+  it("is false when nothing enables it", () => {
+    expect(isWidgetToggleVisible(listsWidget, {})).toBe(false);
+  });
+
+  it("is true via the system pref", () => {
+    expect(
+      isWidgetToggleVisible(listsWidget, {
+        "widgets.system.lists.enabled": true,
+      })
+    ).toBe(true);
+  });
+
+  it("is true via trainhopConfig.widgets (addable)", () => {
+    expect(
+      isWidgetToggleVisible(listsWidget, {
+        trainhopConfig: { widgets: { listsEnabled: true } },
+      })
+    ).toBe(true);
+  });
+
+  it("is true via the widgetsSettings.*Visible override", () => {
+    expect(
+      isWidgetToggleVisible(listsWidget, {
+        trainhopConfig: { widgetsSettings: { listsVisible: true } },
+      })
+    ).toBe(true);
+  });
+
+  it("is additive only — a false widgetsSettings value cannot hide a system-enabled toggle", () => {
+    expect(
+      isWidgetToggleVisible(listsWidget, {
+        "widgets.system.lists.enabled": true,
+        trainhopConfig: { widgetsSettings: { listsVisible: false } },
+      })
+    ).toBe(true);
+  });
+});
+
+describe("isWidgetsContainerVisible", () => {
+  it("is false when nothing enables it", () => {
+    expect(isWidgetsContainerVisible({})).toBe(false);
+  });
+
+  it("is true via the system pref", () => {
+    expect(isWidgetsContainerVisible({ "widgets.system.enabled": true })).toBe(
+      true
+    );
+  });
+
+  it("is true via trainhopConfig.widgets.enabled", () => {
+    expect(
+      isWidgetsContainerVisible({
+        trainhopConfig: { widgets: { enabled: true } },
+      })
+    ).toBe(true);
+  });
+
+  it("is true via widgetsSettings.enabled", () => {
+    expect(
+      isWidgetsContainerVisible({
+        trainhopConfig: { widgetsSettings: { enabled: true } },
+      })
+    ).toBe(true);
+  });
+});
 
 describe("getWidgetOrder", () => {
   it("returns registry default order when pref is empty", () => {
@@ -25,20 +96,18 @@ describe("getWidgetOrder", () => {
   });
 
   it("respects a fully-specified custom order", () => {
-    expect(getWidgetOrder("focusTimer,lists,weather,sportsWidget")).toEqual([
-      "focusTimer",
-      "lists",
-      "weather",
-      "sportsWidget",
-    ]);
+    expect(
+      getWidgetOrder("focusTimer,lists,weather,sportsWidget,clocks")
+    ).toEqual(["focusTimer", "lists", "weather", "sportsWidget", "clocks"]);
   });
 
   it("appends missing registry IDs after saved ones", () => {
     expect(getWidgetOrder("weather")).toEqual([
       "weather",
+      "sportsWidget",
+      "clocks",
       "lists",
       "focusTimer",
-      "sportsWidget",
     ]);
   });
 
@@ -46,8 +115,9 @@ describe("getWidgetOrder", () => {
     expect(getWidgetOrder("unknownWidget,lists,weather")).toEqual([
       "lists",
       "weather",
-      "focusTimer",
       "sportsWidget",
+      "clocks",
+      "focusTimer",
     ]);
   });
 
@@ -59,7 +129,13 @@ describe("getWidgetOrder", () => {
 
   it("deduplicates repeated IDs in the saved pref", () => {
     const result = getWidgetOrder("focusTimer,focusTimer,lists");
-    expect(result).toEqual(["focusTimer", "lists", "weather", "sportsWidget"]);
+    expect(result).toEqual([
+      "focusTimer",
+      "lists",
+      "sportsWidget",
+      "clocks",
+      "weather",
+    ]);
     expect(result.length).toBe(registryIds.length);
   });
 });
@@ -74,7 +150,7 @@ describe("resolveWidgetOrder", () => {
   it("uses the user-saved order when set", () => {
     expect(
       resolveWidgetOrder({ [PREF_WIDGETS_ORDER]: "weather,lists,focusTimer" })
-    ).toEqual(["weather", "lists", "focusTimer", "sportsWidget"]);
+    ).toEqual(["weather", "lists", "focusTimer", "sportsWidget", "clocks"]);
   });
 
   it("uses trainhop order when no user order is saved", () => {
@@ -83,7 +159,7 @@ describe("resolveWidgetOrder", () => {
         [PREF_WIDGETS_ORDER]: "",
         trainhopConfig: { widgets: { order: "focusTimer,weather,lists" } },
       })
-    ).toEqual(["focusTimer", "weather", "lists", "sportsWidget"]);
+    ).toEqual(["focusTimer", "weather", "lists", "sportsWidget", "clocks"]);
   });
 
   it("user order takes precedence over trainhop order", () => {
@@ -92,7 +168,56 @@ describe("resolveWidgetOrder", () => {
         [PREF_WIDGETS_ORDER]: "lists,focusTimer,weather",
         trainhopConfig: { widgets: { order: "weather,lists,focusTimer" } },
       })
-    ).toEqual(["lists", "focusTimer", "weather", "sportsWidget"]);
+    ).toEqual(["lists", "focusTimer", "weather", "sportsWidget", "clocks"]);
+  });
+});
+
+describe("isWidgetAddable", () => {
+  const listsWidget = WIDGET_REGISTRY.find(w => w.id === "lists");
+
+  it("returns true when system pref is set", () => {
+    expect(
+      isWidgetAddable(listsWidget, {
+        [listsWidget.systemEnabledPref]: true,
+      })
+    ).toBe(true);
+  });
+
+  it("returns true when trainhop overrides the system gate", () => {
+    expect(
+      isWidgetAddable(listsWidget, {
+        [listsWidget.systemEnabledPref]: false,
+        trainhopConfig: {
+          widgets: { [listsWidget.trainhopEnabledKey]: true },
+        },
+      })
+    ).toBe(true);
+  });
+
+  it("returns false when neither system nor trainhop are set", () => {
+    expect(
+      isWidgetAddable(listsWidget, {
+        [listsWidget.systemEnabledPref]: false,
+      })
+    ).toBe(false);
+  });
+
+  it("is addable when revealed via widgetsSettings (so the toggle is functional)", () => {
+    expect(
+      isWidgetAddable(listsWidget, {
+        [listsWidget.systemEnabledPref]: false,
+        trainhopConfig: { widgetsSettings: { listsVisible: true } },
+      })
+    ).toBe(true);
+  });
+
+  it("does not consider the user's enabled pref", () => {
+    expect(
+      isWidgetAddable(listsWidget, {
+        [listsWidget.systemEnabledPref]: true,
+        [listsWidget.enabledPref]: false,
+      })
+    ).toBe(true);
   });
 });
 

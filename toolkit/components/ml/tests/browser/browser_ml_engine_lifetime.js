@@ -571,3 +571,64 @@ add_task(async function test_ml_engine_get_status_by_engine_id() {
 
   await cleanup();
 });
+
+add_task(
+  async function test_deletePreviousModelRevisions_cleans_stale_revision() {
+    const { cleanup } = await setup();
+
+    const mlEngineParent = await EngineProcess.getMLEngineParent();
+
+    const FAKE_HUB =
+      "chrome://mochitests/content/browser/toolkit/components/ml/tests/browser/data";
+    const FAKE_URL_TEMPLATE = "{model}/resolve/{revision}";
+    const TASK_NAME = "regress-2038342-task";
+
+    await mlEngineParent.getModelFile({
+      engineId: "regress-2038342",
+      taskName: TASK_NAME,
+      url: `${FAKE_HUB}/acme/bert/resolve/main/config.json`,
+      rootUrl: FAKE_HUB,
+      urlTemplate: FAKE_URL_TEMPLATE,
+      featureId: TASK_NAME,
+      sessionId: "regress-2038342-session",
+    });
+
+    const hub = mlEngineParent.modelHub;
+    ok(hub, "ModelHub is initialized after getModelFile");
+    const hostname = new URL(FAKE_HUB).hostname;
+    const modelWithHostname = `${hostname}/acme/bert`;
+
+    await hub.cache.put({
+      taskName: TASK_NAME,
+      model: modelWithHostname,
+      revision: "stale-revision",
+      file: "config.json",
+      data: new Blob(["stale-payload"]),
+      headers: { ETag: "STALE_ETAG" },
+    });
+
+    const stalePre = await hub.cache.getFile({
+      model: modelWithHostname,
+      revision: "stale-revision",
+      file: "config.json",
+    });
+    Assert.notEqual(stalePre, null, "Stale revision exists before cleanup");
+
+    await mlEngineParent.deletePreviousModelRevisions();
+
+    const stalePost = await hub.cache.getFile({
+      model: modelWithHostname,
+      revision: "stale-revision",
+      file: "config.json",
+    });
+    Assert.equal(
+      stalePost,
+      null,
+      "Stale revision must be deleted by deletePreviousModelRevisions"
+    );
+
+    await hub.cache.dispose();
+    await EngineProcess.destroyMLEngine();
+    await cleanup();
+  }
+);

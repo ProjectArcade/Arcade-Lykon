@@ -586,16 +586,23 @@ def image_digest(args):
 )
 @argument("--try-task-config-file", help="path to try task configuration file")
 @argument(
+    "--allow-parameter-override",
+    default=False,
+    action="store_true",
+    help="Allow user to override computed decision task parameters.",
+)
+@argument(
     "--no-verify",
     dest="verify",
     default=True,
     action="store_false",
     help="Skip graph verifications.",
 )
-def decision(options):
+def decision(options, parameters):
+
     from gecko_taskgraph.decision import taskgraph_decision
 
-    taskgraph_decision(options)
+    taskgraph_decision(options, parameters)
 
 
 @command("action-callback", description="Run action callback used by action tasks")

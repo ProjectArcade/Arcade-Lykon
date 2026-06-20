@@ -98,6 +98,7 @@
 #include "prtime.h"
 #include "prenv.h"
 
+#include "nsComponentManagerUtils.h"
 #include "nsContentUtils.h"
 #include "nsISupportsPrimitives.h"
 #include "nsITheme.h"
@@ -331,6 +332,9 @@ bool nsWindow::sIsRestoringSession = false;
 
 bool nsWindow::sTouchInjectInitialized = false;
 InjectTouchInputPtr nsWindow::sInjectTouchFuncPtr;
+
+bool nsWindow::sIsNativePointLocked = false;
+bool nsWindow::sIsUsingRawInputForMouseMove = false;
 
 static SystemTimeConverter<DWORD>& TimeConverter() {
   static SystemTimeConverter<DWORD> timeConverterSingleton;
@@ -651,7 +655,7 @@ class TIPMessageHandler {
 
     mHook = ::SetWindowsHookEx(WH_GETMESSAGE, &TIPHook, nullptr,
                                ::GetCurrentThreadId());
-    MOZ_ASSERT(mHook);
+    NS_WARNING_ASSERTION(mHook, "SetWindowsHookEx(WH_GETMESSAGE) failed");
 
     if (!sSendMessageTimeoutWStub) {
       sUser32Intercept.Init("user32.dll");
@@ -776,21 +780,6 @@ class InitializeVirtualDesktopManagerTask : public Task {
     return TaskResult::Complete;
   }
 };
-
-// Ground-truth query: does Windows claim the window is cloaked right now?
-static bool IsCloaked(HWND hwnd) {
-  DWORD cloakedState;
-  HRESULT hr = ::DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloakedState,
-                                       sizeof(cloakedState));
-
-  if (FAILED(hr)) {
-    MOZ_LOG(sCloakingLog, LogLevel::Warning,
-            ("failed (%08lX) to query cloaking state for HWND %p", hr, hwnd));
-    return false;
-  }
-
-  return cloakedState != 0;
-}
 
 }  // namespace mozilla
 
@@ -1069,7 +1058,7 @@ nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
       // If we successfully consumed the pre-XUL skeleton UI, just update
       // our internal state to match what is currently being displayed.
       mIsVisible = true;
-      mIsCloaked = mozilla::IsCloaked(mWnd);
+      mIsCloaked = WinUtils::QueryCloaked(mWnd);
       mFrameState->ConsumePreXULSkeletonState(WasPreXULSkeletonUIMaximized());
 
       mBounds = mLastPaintBounds = GetBounds();
@@ -1306,6 +1295,10 @@ void nsWindow::Destroy() {
 
   DestroyDirectManipulation();
 
+  // Before destroying the native window, we need to clean up the resource
+  // allocated/stored for handling IME on this window.
+  IMEHandler::OnDestroyWindow(this);
+
   /**
    * On windows the LayerManagerOGL destructor wants the widget to be around for
    * cleanup. It also would like to have the HWND intact, so we nullptr it here.
@@ -1515,13 +1508,7 @@ DWORD nsWindow::WindowExStyle() {
  **************************************************************/
 
 bool nsWindow::ShouldAssociateWithWinAppSDK() const {
-  // We currently don't need any SDK functionality for for PiP windows,
-  // and using the SDK on these windows causes them to go under the
-  // taskbar (bug 1995838).
-  //
-  // TODO(emilio): That might not be true anymore after bug 1993474,
-  // consider re-testing and removing that special-case.
-  return IsTopLevelWidget() && mPiPType == PiPType::NoPiP;
+  return IsTopLevelWidget();
 }
 
 bool nsWindow::AssociateWithNativeWindow() {
@@ -4116,7 +4103,8 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
                                   LPARAM lParam, bool aIsContextMenuKey,
                                   int16_t aButton, uint16_t aInputSource,
                                   WinPointerInfo* aPointerInfo,
-                                  IsNonclient aIsNonclient) {
+                                  IsNonclient aIsNonclient,
+                                  Maybe<LayoutDeviceIntPoint> aMovement) {
   ContextMenuPreventer contextMenuPreventer(this);
   bool result = false;
 
@@ -4308,6 +4296,7 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
       if (!insideMovementThreshold) {
         sLastClickCount = 0;
       }
+      mouseOrPointerEvent.mMovement = aMovement;
       break;
     case eMouseExitFromWidget:
       mouseOrPointerEvent.mExitFrom =
@@ -5096,7 +5085,59 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       result = true;
     } break;
 
+    case WM_INPUT: {
+      if (!IsUsingRawInputForMouseMove()) {
+        break;
+      }
+      MOZ_ASSERT(IsNativePointerLocked());
+
+      HRAWINPUT inputHandle = reinterpret_cast<HRAWINPUT>(lParam);
+      UINT size = 0;
+      if (GetRawInputData(inputHandle, RID_INPUT, nullptr, &size,
+                          sizeof(RAWINPUTHEADER)) == UINT(-1)) {
+        break;
+      }
+
+      nsTArray<uint8_t> data(size);
+      data.SetLength(size);
+      if (GetRawInputData(inputHandle, RID_INPUT, data.Elements(), &size,
+                          sizeof(RAWINPUTHEADER)) == UINT(-1)) {
+        break;
+      }
+
+      PRAWINPUT raw = reinterpret_cast<PRAWINPUT>(data.Elements());
+      if (raw->header.dwType == RIM_TYPEMOUSE &&
+          raw->data.mouse.usButtonFlags != RI_MOUSE_WHEEL) {
+        // Not excluding absolute mouse position would cause analog-stick like
+        // motion for tablet devices due to mouse repositioning.
+        if (!(raw->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
+          int32_t movementX = int32_t(raw->data.mouse.lLastX);
+          int32_t movementY = int32_t(raw->data.mouse.lLastY);
+          if (movementX != 0 || movementY != 0) {
+            DWORD messagePos = ::GetMessagePos();
+            POINT cursorPos;
+            cursorPos.x = GET_X_LPARAM(messagePos);
+            cursorPos.y = GET_Y_LPARAM(messagePos);
+            ScreenToClient(mWnd, &cursorPos);
+            result = DispatchMouseEvent(
+                eMouseMove, wParamFromGlobalMouseState(),
+                MAKELPARAM(cursorPos.x, cursorPos.y), false,
+                MouseButton::ePrimary, MOUSE_INPUT_SOURCE(), nullptr,
+                IsNonclient::No,
+                Some(LayoutDeviceIntPoint(movementX, movementY)));
+            if (GET_RAWINPUT_CODE_WPARAM(wParam) == RIM_INPUT) {
+              result = false;  // should always bubble to DefWindowProc
+            }
+          }
+        }
+      }
+    } break;
+
     case WM_MOUSEMOVE: {
+      if (IsUsingRawInputForMouseMove()) {
+        break;
+      }
+
       LPARAM lParamScreen = lParamToScreen(lParam);
       mSimulatedClientArea = IsSimulatedClientArea(GET_X_LPARAM(lParamScreen),
                                                    GET_Y_LPARAM(lParamScreen));
@@ -6197,7 +6238,7 @@ LRESULT nsWindow::ProcessKeyDownMessage(const MSG& aMsg,
 
 nsresult nsWindow::SynthesizeNativeKeyEvent(
     int32_t aNativeKeyboardLayout, int32_t aNativeKeyCode,
-    uint32_t aModifierFlags, const nsAString& aCharacters,
+    nsIWidget::NativeModifiers aModifierFlags, const nsAString& aCharacters,
     const nsAString& aUnmodifiedCharacters,
     nsISynthesizedEventCallback* aCallback) {
   AutoSynthesizedEventCallbackNotifier notifier(aCallback);
@@ -6210,7 +6251,7 @@ nsresult nsWindow::SynthesizeNativeKeyEvent(
 
 nsresult nsWindow::SynthesizeNativeMouseEvent(
     LayoutDeviceIntPoint aPoint, NativeMouseMessage aNativeMessage,
-    MouseButton aButton, nsIWidget::Modifiers aModifierFlags,
+    MouseButton aButton, nsIWidget::NativeModifiers aModifierFlags,
     nsISynthesizedEventCallback* aCallback) {
   AutoSynthesizedEventCallbackNotifier notifier(aCallback);
 
@@ -6275,7 +6316,7 @@ nsresult nsWindow::SynthesizeNativeMouseEvent(
 
 nsresult nsWindow::SynthesizeNativeMouseScrollEvent(
     LayoutDeviceIntPoint aPoint, uint32_t aNativeMessage, double aDeltaX,
-    double aDeltaY, double aDeltaZ, uint32_t aModifierFlags,
+    double aDeltaY, double aDeltaZ, nsIWidget::NativeModifiers aModifierFlags,
     uint32_t aAdditionalFlags, nsISynthesizedEventCallback* aCallback) {
   AutoSynthesizedEventCallbackNotifier notifier(aCallback);
   return MouseScrollHandler::SynthesizeNativeMouseScrollEvent(
@@ -6841,6 +6882,10 @@ void nsWindow::OnDestroy() {
 
   DestroyDirectManipulation();
 
+  // Before destroying the native window, we need to clean up the resource
+  // allocated/stored for handling IME on this window.
+  IMEHandler::OnDestroyWindow(this);
+
   if (mWnd == mLastKillFocusWindow) {
     mLastKillFocusWindow = nullptr;
   }
@@ -6877,8 +6922,6 @@ void nsWindow::OnDestroy() {
     rollupListener->Rollup({});
     CaptureRollupEvents(false);
   }
-
-  IMEHandler::OnDestroyWindow(this);
 
   // Destroy any custom cursor resources.
   if (mCursor.IsCustom()) {
@@ -7012,7 +7055,7 @@ void nsWindow::OnCloakEvent(HWND aWnd, bool aCloaked) {
   }
 
   const char* const kWasCloakedStr = pWin->mIsCloaked ? "cloaked" : "uncloaked";
-  if (mozilla::IsCloaked(aWnd) == pWin->mIsCloaked) {
+  if (WinUtils::QueryCloaked(aWnd) == pWin->mIsCloaked) {
     MOZ_LOG(sCloakingLog, LogLevel::Debug,
             ("Received redundant %s event for %s HWND %p; discarding",
              kEventName, kWasCloakedStr, aWnd));
@@ -7039,7 +7082,7 @@ void nsWindow::OnCloakEvent(HWND aWnd, bool aCloaked) {
       return;
     }
 
-    const bool isCloaked = mozilla::IsCloaked(hwnd);
+    const bool isCloaked = WinUtils::QueryCloaked(hwnd);
     if (isCloaked != pWin->mIsCloaked) {
       changedWindows.AppendElement(Item{pWin, isCloaked});
     }
@@ -8609,6 +8652,50 @@ bool nsWindow::HandleAppCommandMsg(const MSG& aAppCommandMsg,
   bool consumed = nativeKey.HandleAppCommandMessage();
   *aRetValue = consumed ? 1 : 0;
   return consumed;
+}
+
+void nsWindow::LockNativePointer(NativePointerLockMode aNativePointerLockMode) {
+  if (IsNativePointerLocked()) {
+    return;
+  }
+
+  // SetNativePointerLockMode() have to be called after setting
+  // sIsNativePointLocked.
+  sIsNativePointLocked = true;
+  SetNativePointerLockMode(aNativePointerLockMode);
+}
+
+void nsWindow::UnlockNativePointer() {
+  if (NS_WARN_IF(!IsNativePointerLocked())) {
+    return;
+  }
+
+  // SetNativePointerLockMode() have to be called before resetting
+  // sIsNativePointLocked.
+  SetNativePointerLockMode(NativePointerLockMode::Regular);
+  sIsNativePointLocked = false;
+}
+
+void nsWindow::SetNativePointerLockMode(
+    NativePointerLockMode aNativePointerLockMode) {
+  if (!IsNativePointerLocked()) {
+    return;
+  }
+
+  const bool usingRawInput =
+      (aNativePointerLockMode == NativePointerLockMode::Unadjusted);
+  if (sIsUsingRawInputForMouseMove == usingRawInput) {
+    return;
+  }
+
+  RAWINPUTDEVICE device;
+  device.usUsagePage = 0x01;  // HID_USAGE_PAGE_GENERIC
+  device.usUsage = 0x02;      // HID_USAGE_GENERIC_MOUSE
+  device.dwFlags = usingRawInput ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+  device.hwndTarget = usingRawInput ? mWnd : nullptr;
+  RegisterRawInputDevices(&device, 1, sizeof(device));
+
+  sIsUsingRawInputForMouseMove = usingRawInput;
 }
 
 #ifdef DEBUG

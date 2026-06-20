@@ -394,8 +394,7 @@ template <class Reporter>
 static void TryRegisterStrongMemoryReporter() {
   static Atomic<bool> registered;
   if (registered.compareExchange(false, true)) {
-    RefPtr<Reporter> reporter = new Reporter();
-    if (NS_FAILED(RegisterStrongMemoryReporter(reporter))) {
+    if (NS_FAILED(RegisterStrongMemoryReporter(MakeAndAddRef<Reporter>()))) {
       registered = false;
     }
   }
@@ -1110,7 +1109,7 @@ void MessageChannel::OnMessageReceivedFromLink(UniquePtr<Message> aMsg) {
   // blocked. This is okay, since we always check for pending events before
   // blocking again.
 
-  RefPtr<MessageTask> task = new MessageTask(this, std::move(aMsg));
+  RefPtr task = MakeRefPtr<MessageTask>(this, std::move(aMsg));
   mPending.insertBack(task);
 
   if (!alwaysDeferred) {
@@ -2399,7 +2398,7 @@ void MessageChannel::RepostAllMessages() {
   MessageQueue queue = std::move(mPending);
   while (RefPtr<MessageTask> task = queue.popFirst()) {
     task->AssertMonitorHeld(*mMonitor);
-    RefPtr<MessageTask> newTask = new MessageTask(this, std::move(task->Msg()));
+    RefPtr newTask = MakeRefPtr<MessageTask>(this, std::move(task->Msg()));
     newTask->AssertMonitorHeld(*mMonitor);
     mPending.insertBack(newTask);
     newTask->Post();

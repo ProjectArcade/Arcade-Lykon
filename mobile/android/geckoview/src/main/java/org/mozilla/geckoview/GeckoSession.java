@@ -413,7 +413,10 @@ public class GeckoSession {
     // be replaced with the new viewport information provided.
     @WrapForJNI(calledFrom = "ui")
     private void notifyCompositorScrollUpdate(
-        final float scrollX, final float scrollY, final float zoom, final int source) {
+        final float scrollX,
+        final float scrollY,
+        final float zoom,
+        final @ScrollPositionUpdate.SourceType int source) {
       GeckoSession.this.onCompositorScrollUpdate(scrollX, scrollY, zoom, source);
     }
 
@@ -3593,8 +3596,9 @@ public class GeckoSession {
       // When the delegate is changed or cleared, make sure onHideAction is called
       // one last time to hide any existing selection action UI. Gecko doesn't keep
       // track of the old delegate, so we can't rely on Gecko to do that for us.
-      getSelectionActionDelegate()
-          .onHideAction(this, GeckoSession.SelectionActionDelegate.HIDE_REASON_NO_SELECTION);
+      final SelectionActionDelegate oldDelegate = getSelectionActionDelegate();
+      oldDelegate.onHideAction(this, GeckoSession.SelectionActionDelegate.HIDE_REASON_NO_SELECTION);
+      oldDelegate.onDismissClipboardPermissionRequest(this);
     }
     mSelectionActionDelegate.setDelegate(delegate, this);
   }
@@ -5088,6 +5092,52 @@ public class GeckoSession {
       }
     }
 
+    /** WebAuthnRelatedOriginPrompt is shown to confirm a WebAuthn related origin request. */
+    class WebAuthnRelatedOriginPrompt extends BasePrompt {
+      /** The origin of the site making the request. */
+      public final @Nullable String origin;
+
+      /** The relying party ID for the passkey. */
+      public final @Nullable String rpId;
+
+      /** Whether this is a create (true) or use (false) request. */
+      public final boolean isCreate;
+
+      /**
+       * A constructor for WebAuthnRelatedOriginPrompt.
+       *
+       * @param id The identification for this prompt.
+       * @param origin The origin of the site making the request.
+       * @param rpId The relying party ID for the passkey.
+       * @param isCreate Whether this is a create (true) or use (false) request.
+       * @param observer A callback to notify when the prompt has been completed.
+       */
+      protected WebAuthnRelatedOriginPrompt(
+          @NonNull final String id,
+          @Nullable final String origin,
+          @Nullable final String rpId,
+          final boolean isCreate,
+          @NonNull final Observer observer) {
+        super(id, null, observer);
+        this.origin = origin;
+        this.rpId = rpId;
+        this.isCreate = isCreate;
+      }
+
+      /**
+       * Confirms the prompt.
+       *
+       * @param allowOrDeny whether the user confirmed or denied the request.
+       * @return A {@link PromptResponse} which can be used to complete the {@link GeckoResult}
+       *     associated with this prompt.
+       */
+      @UiThread
+      public @NonNull PromptResponse confirm(final @Nullable AllowOrDeny allowOrDeny) {
+        ensureResult().putBoolean("allow", allowOrDeny != AllowOrDeny.DENY);
+        return super.confirm();
+      }
+    }
+
     /**
      * RepostConfirmPrompt represents a prompt shown whenever the browser needs to resubmit POST
      * data (e.g. due to page refresh).
@@ -6500,6 +6550,20 @@ public class GeckoSession {
     }
 
     /**
+     * Display a WebAuthn related origin confirmation prompt.
+     *
+     * @param session GeckoSession that triggered the prompt.
+     * @param prompt The {@link WebAuthnRelatedOriginPrompt} that describes the prompt.
+     * @return A {@link GeckoResult} resolving to a {@link PromptResponse} with allow=true if the
+     *     user confirmed, or allow=false if the user denied.
+     */
+    @UiThread
+    default @Nullable GeckoResult<PromptResponse> onWebAuthnRelatedOriginPrompt(
+        @NonNull final GeckoSession session, @NonNull final WebAuthnRelatedOriginPrompt prompt) {
+      return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY));
+    }
+
+    /**
      * Display a text prompt.
      *
      * @param session GeckoSession that triggered the prompt.
@@ -6830,6 +6894,11 @@ public class GeckoSession {
      */
     @WrapForJNI public static final int SOURCE_OTHER = 1;
 
+    /** Valid source types for scroll position updates. */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({SOURCE_USER_INTERACTION, SOURCE_OTHER})
+    public @interface SourceType {}
+
     /** The new horizontal scroll position in CSS pixels. */
     public float scrollX;
 
@@ -6842,8 +6911,11 @@ public class GeckoSession {
      */
     public float zoom;
 
-    /** The source of the scroll position change. One of SOURCE_USER_INTERACTION or SOURCE_OTHER. */
-    public int source;
+    /**
+     * The source of the scroll position change. One of {@link #SOURCE_USER_INTERACTION} or {@link
+     * #SOURCE_OTHER}.
+     */
+    public @SourceType int source;
   }
 
   /**
@@ -7189,6 +7261,13 @@ public class GeckoSession {
       private final String mPrincipal;
 
       /**
+       * The in-flight request id that originated this prompt, used to notify Gecko once the UI has
+       * been shown. Null for {@link ContentPermission}s restored from JSON or {@link
+       * StorageController}, which don't represent live prompts.
+       */
+      private final @Nullable String mRequestId;
+
+      /**
        * Default constructor for ContentPermission. Initializes all fields to their default values.
        */
       protected ContentPermission() {
@@ -7199,12 +7278,14 @@ public class GeckoSession {
         this.value = VALUE_ALLOW;
         this.mPrincipal = "";
         this.contextId = null;
+        this.mRequestId = null;
       }
 
       private ContentPermission(final @NonNull GeckoBundle bundle) {
         this.uri = bundle.getString("uri");
         this.mPrincipal = bundle.getString("principal");
         this.privateMode = bundle.getBoolean("privateMode");
+        this.mRequestId = bundle.getString("requestId");
 
         final String permission = bundle.getString("perm");
         this.permission = convertType(permission);
@@ -7332,6 +7413,28 @@ public class GeckoSession {
           res.add(temp);
         }
         return res;
+      }
+
+      /**
+       * Notify Gecko that this permission prompt has been displayed to the user. This must be
+       * called once per prompt, after the UI has actually been shown. Embedders that present a UI
+       * for {@link PermissionDelegate#onContentPermissionRequest} are expected to invoke this
+       * method.
+       */
+      @ExperimentalGeckoViewApi
+      @AnyThread
+      public void notifyShown() {
+        if (mRequestId == null) {
+          Log.w(
+              LOGTAG,
+              "Tried to notify the engine that a permission of type "
+                  + permission
+                  + " was shown, but found no request id generated. This is an unexpected state.");
+          return;
+        }
+        final GeckoBundle data = new GeckoBundle(1);
+        data.putString("requestId", mRequestId);
+        EventDispatcher.getInstance().dispatch("GeckoView:ContentPermissionShown", data);
       }
 
       /* package */ @NonNull
@@ -7921,7 +8024,10 @@ public class GeckoSession {
   }
 
   /* package */ void onCompositorScrollUpdate(
-      final float scrollX, final float scrollY, final float zoom, final int source) {
+      final float scrollX,
+      final float scrollY,
+      final float zoom,
+      final @ScrollPositionUpdate.SourceType int source) {
     if (DEBUG) {
       ThreadUtils.assertOnUiThread();
     }

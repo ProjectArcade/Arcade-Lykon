@@ -35,12 +35,14 @@ TEST_VARIANTS = {}
 if os.path.exists(VARIANTS_YML):
     TEST_VARIANTS = load_yaml(VARIANTS_YML)
 
+# Must stay in sync with WPT_SUBSUITES in tools/lint/wpt-subsuite-tagging/__init__.py.
 WPT_SUBSUITES = {
     "canvas": ["html/canvas"],
-    "webgpu": ["_mozilla/webgpu"],
+    "webgpu": ["webgpu"],
     "webcodecs": ["webcodecs"],
     "eme": ["encrypted-media"],
 }
+# Must stay in sync with WPT_SUBSUITES in tools/lint/wpt-subsuite-tagging/__init__.py.
 
 
 def get_test_tags(config, env):

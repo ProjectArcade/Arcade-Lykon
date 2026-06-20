@@ -17,18 +17,16 @@ add_task(async function test_search_mode_app_provided_engines() {
   let cleanup = await installPersistTestEngines();
 
   let switcher = gURLBar.querySelector(".searchmode-switcher");
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => BrowserTestUtils.isVisible(switcher),
     `Wait until unified search button is visible`
   );
 
-  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
-
-  info("Press on the example menu button and enter search mode");
-  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("panel-item[data-engine-id=Example]").button.click();
-
-  await popupHidden;
+  info("Press on the example panel item to enter search mode");
+  await UrlbarTestUtils.activateSearchModeSwitcherItem(
+    window,
+    "panel-item[data-engine-id=Example]"
+  );
 
   info("Search mode has been changed");
   await UrlbarTestUtils.assertSearchMode(window, {

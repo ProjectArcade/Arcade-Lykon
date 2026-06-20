@@ -434,8 +434,7 @@ LoadingSessionHistoryInfo::LoadingSessionHistoryInfo(
 
 already_AddRefed<nsDocShellLoadState>
 LoadingSessionHistoryInfo::CreateLoadInfo() const {
-  RefPtr<nsDocShellLoadState> loadState(
-      new nsDocShellLoadState(mInfo.GetURI()));
+  RefPtr loadState = MakeRefPtr<nsDocShellLoadState>(mInfo.GetURI());
 
   mInfo.FillLoadInfo(*loadState);
 
@@ -485,11 +484,12 @@ void SessionHistoryEntry::RemoveLoadId(uint64_t aLoadId) {
 }
 
 SessionHistoryEntry::SessionHistoryEntry()
-    : mInfo(new SessionHistoryInfo()), mID(++gEntryID) {}
+    : mInfo(MakeUnique<SessionHistoryInfo>()), mID(++gEntryID) {}
 
 SessionHistoryEntry::SessionHistoryEntry(nsDocShellLoadState* aLoadState,
                                          nsIChannel* aChannel)
-    : mInfo(new SessionHistoryInfo(aLoadState, aChannel)), mID(++gEntryID) {}
+    : mInfo(MakeUnique<SessionHistoryInfo>(aLoadState, aChannel)),
+      mID(++gEntryID) {}
 
 SessionHistoryEntry::SessionHistoryEntry(SessionHistoryInfo* aInfo)
     : mInfo(MakeUnique<SessionHistoryInfo>(*aInfo)), mID(++gEntryID) {}
@@ -600,7 +600,7 @@ SessionHistoryEntry::SetTitle(const nsAString& aTitle) {
   mInfo->SetTitle(aTitle);
   if (nsCOMPtr<nsISHistory> sHistory =
           do_QueryReferent(SharedInfo()->mSHistory)) {
-    sHistory->NotifyOnEntryTitleUpdated(this);
+    sHistory->NotifyOnEntryUpdated(this);
   }
   return NS_OK;
 }
@@ -614,6 +614,10 @@ SessionHistoryEntry::GetName(nsAString& aName) {
 NS_IMETHODIMP
 SessionHistoryEntry::SetName(const nsAString& aName) {
   mInfo->mName = aName;
+  if (nsCOMPtr<nsISHistory> sHistory =
+          do_QueryReferent(SharedInfo()->mSHistory)) {
+    sHistory->NotifyOnEntryUpdated(this);
+  }
   return NS_OK;
 }
 
@@ -1091,7 +1095,7 @@ SessionHistoryEntry::Create(
 
 NS_IMETHODIMP
 SessionHistoryEntry::Clone(nsISHEntry** aEntry) {
-  RefPtr<SessionHistoryEntry> entry = new SessionHistoryEntry(*this);
+  RefPtr entry = MakeRefPtr<SessionHistoryEntry>(*this);
 
   // These are not copied for some reason, we're not sure why.
   entry->mInfo->mLoadType = 0;

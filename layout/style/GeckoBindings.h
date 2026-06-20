@@ -192,8 +192,6 @@ SERVO_DECLARE_ELEMENT_ATTR_MATCHING_FUNCTIONS(
 const mozilla::StyleLockedDeclarationBlock* Gecko_GetStyleAttrDeclarationBlock(
     const mozilla::dom::Element* element);
 
-void Gecko_UnsetDirtyStyleAttr(const mozilla::dom::Element* element);
-
 const mozilla::StyleLockedDeclarationBlock* Gecko_GetViewTransitionDynamicRule(
     const mozilla::dom::Element* element);
 
@@ -413,6 +411,16 @@ mozilla::Keyframe* Gecko_GetOrCreateKeyframeAtStart(
     const mozilla::StyleComputedTimingFunction* timingFunction,
     const mozilla::dom::CompositeOperationOrAuto composition);
 
+// The variant of the above method but this is specialized for the keyframe
+// offset with the timeline range name.
+// @param aRangeName The timeline range name to search for.
+mozilla::Keyframe* Gecko_GetOrCreateKeyframeWithRangeName(
+    nsTArray<mozilla::Keyframe>* aKeyframes,
+    const mozilla::StyleTimelineRangeName aRangeName, float aOffset,
+    const mozilla::StyleComputedTimingFunction* aTimingFunction,
+    const mozilla::dom::CompositeOperationOrAuto aComposition,
+    size_t* aMatchedIdx);
+
 // As with Gecko_GetOrCreateKeyframeAtStart except that this method will search
 // from the beginning of |keyframes| for a Keyframe with matching timing
 // function, composition, and an offset of 0.0.
@@ -459,6 +467,12 @@ void Gecko_nsIReferrerInfo_Debug(nsIReferrerInfo* aReferrerInfo,
 
 NS_DECL_THREADSAFE_FFI_REFCOUNTING(mozilla::URLExtraData, URLExtraData);
 NS_DECL_THREADSAFE_FFI_REFCOUNTING(nsIReferrerInfo, nsIReferrerInfo);
+
+// Returns whether the base URI of `aData` matches a domain in the
+// comma-separated `aList` value, using the same syntax as
+// `nsContentUtils::IsURIInPrefList`.
+bool Gecko_IsURIInList(const mozilla::URLExtraData* aData,
+                       const nsACString* aList);
 
 void Gecko_FillAllImageLayers(nsStyleImageLayers* layers, uint32_t max_len);
 

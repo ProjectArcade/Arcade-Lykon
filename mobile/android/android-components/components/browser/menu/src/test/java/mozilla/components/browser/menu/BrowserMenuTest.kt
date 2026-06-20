@@ -29,7 +29,6 @@ import mozilla.components.support.test.mock
 import mozilla.components.support.test.robolectric.testContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -41,6 +40,7 @@ import org.mockito.Mockito.verify
 import org.robolectric.Shadows
 import org.robolectric.shadows.ShadowDisplay
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class BrowserMenuTest {
@@ -145,7 +145,7 @@ class BrowserMenuTest {
         val recyclerView: RecyclerView = popup.contentView.findViewById(R.id.mozac_browser_menu_recyclerView)
         assertNotNull(recyclerView)
 
-        val recyclerAdapter = recyclerView.adapter!!
+        val recyclerAdapter = recyclerView.adapter
         assertNotNull(recyclerAdapter)
         assertEquals(2, recyclerAdapter.itemCount)
     }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -115,11 +114,11 @@ fun ThumbnailImage(
         }
     } else {
         trace(TabsTrayTraceTag.TRACE_THUMBNAIL_IMAGE_CREATION) {
-            var state by remember { mutableStateOf(ThumbnailImageState(null, false)) }
+            var state by remember(request) { mutableStateOf(ThumbnailImageState(null, false)) }
             val scope = rememberCoroutineScope()
             val storage = components.core.thumbnailStorage
 
-            DisposableEffect(Unit) {
+            DisposableEffect(request) {
                 if (!state.hasLoaded) {
                     scope.launch {
                         val thumbnailBitmap = storage.loadThumbnail(request).await()
@@ -194,7 +193,7 @@ private fun FallbackContent(
                 contentDescription = contentDescription,
                 modifier = Modifier
                     .size(FallbackIconSize)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(MaterialTheme.shapes.small),
                 contentScale = ContentScale.FillWidth,
             )
         } else if (tabUrl == ABOUT_HOME_URL) {
@@ -203,7 +202,7 @@ private fun FallbackContent(
                 contentDescription = null,
                 modifier = Modifier
                     .size(FallbackIconSize)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(MaterialTheme.shapes.small),
             )
         } else {
             Favicon(

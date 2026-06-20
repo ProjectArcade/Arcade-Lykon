@@ -698,7 +698,9 @@ bitflags_array! {
         const PIPELINE_STATISTICS_QUERY = 1 << 4;
         /// Allows for timestamp queries directly on command encoders.
         ///
-        /// Implies [`Features::TIMESTAMP_QUERY`] is supported.
+        /// Adapters that support this feature also support
+        /// [`Features::TIMESTAMP_QUERY`]. Both features must be requested
+        /// explicitly to use timestamp queries on command encoders.
         ///
         /// Additionally allows for timestamp writes on command encoders
         /// using [`CommandEncoder::write_timestamp`].
@@ -714,9 +716,13 @@ bitflags_array! {
         #[doc = link_to_wgpu_docs!(["`CommandEncoder::write_timestamp`"]: "struct.CommandEncoder.html#method.write_timestamp")]
         #[name("wgpu-timestamp-query-inside-encoders")]
         const TIMESTAMP_QUERY_INSIDE_ENCODERS = 1 << 5;
-        /// Allows for timestamp queries directly on command encoders.
+        /// Allows for timestamp queries directly inside render and compute passes.
         ///
-        /// Implies [`Features::TIMESTAMP_QUERY`] & [`Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`] is supported.
+        /// Adapters that support this feature also support
+        /// [`Features::TIMESTAMP_QUERY`] and [`Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`].
+        /// This feature must be requested with [`Features::TIMESTAMP_QUERY`] to use timestamp
+        /// queries inside passes. Additionally, [`Features::TIMESTAMP_QUERY_INSIDE_ENCODERS`]
+        /// must be requested to use timestamp queries on command encoders.
         ///
         /// Additionally allows for timestamp queries to be used inside render & compute passes using:
         /// - [`RenderPass::write_timestamp`]
@@ -1060,10 +1066,14 @@ bitflags_array! {
         /// This is a native only feature.
         #[name("wgpu-shader-f64", "shader-f64")]
         const SHADER_F64 = 1 << 33;
-        /// Allows shaders to use i16. Not currently supported in `naga`, only available through `spirv-passthrough`.
+        /// Allows shaders to use `i16` and `u16` 16-bit integer types.
+        ///
+        /// Requires `enable wgpu_int16;` in WGSL shaders.
         ///
         /// Supported platforms:
-        /// - Vulkan
+        /// - Vulkan (with `shaderInt16` and `VK_KHR_16bit_storage`)
+        /// - Metal (always available)
+        /// - DX12 (with `Native16BitShaderOpsSupported`, SM 6.2+)
         ///
         /// This is a native only feature.
         #[name("wgpu-shader-i16", "shader-i16")]

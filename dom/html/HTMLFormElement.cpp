@@ -95,7 +95,7 @@ static constexpr const nsAttrValue::EnumTableEntry* kFormDefaultAutocomplete =
     &kFormAutocompleteTable[0];
 
 HTMLFormElement::HTMLFormElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
     : nsGenericHTMLElement(std::move(aNodeInfo)),
       mControls(new HTMLFormControlsCollection(this)),
       mPendingSubmission(nullptr),
@@ -602,7 +602,7 @@ nsresult HTMLFormElement::PostHandleEvent(EventChainPostVisitor& aVisitor) {
         case eFormSubmit: {
           if (!aVisitor.mEvent->IsTrusted()) {
             // Warning about the form submission is from untrusted event.
-            OwnerDoc()->WarnOnceAbout(
+            OwnerDoc()->WarnOnceAndReportAbout(
                 DeprecatedOperations::eFormSubmissionUntrustedEvent);
           }
           RefPtr<Event> event = aVisitor.mDOMEvent;
@@ -886,9 +886,8 @@ nsresult HTMLFormElement::SubmitSubmission(
       loadState->SetUserNavigationInvolvement(
           UserNavigationInvolvement::Activation);
     }
-    if (FormData* formData = aFormSubmission->GetFormData();
-        formData && formData->GetSubmitterElement()) {
-      loadState->SetSourceElement(formData->GetSubmitterElement());
+    if (Element* element = aFormSubmission->GetSubmitterElement()) {
+      loadState->SetSourceElement(element);
     } else {
       loadState->SetSourceElement(this);
     }
@@ -1269,7 +1268,7 @@ nsresult HTMLFormElement::RemoveElement(nsGenericHTMLFormElement* aChild,
     // Need to reset mDefaultSubmitElement.  Do this asynchronously so
     // that we're not doing it while the DOM is in flux.
     SetDefaultSubmitElement(nullptr);
-    nsContentUtils::AddScriptRunner(new RemoveElementRunnable(this));
+    nsContentUtils::AddScriptRunner(MakeAndAddRef<RemoveElementRunnable>(this));
 
     // Note that we don't need to notify on the old default submit (which is
     // being removed) because it's either being removed from the DOM or

@@ -21,7 +21,6 @@ import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.concept.awesomebar.AwesomeBar.SuggestionProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -42,6 +41,7 @@ import org.mozilla.fenix.search.fixtures.EMPTY_SEARCH_FRAGMENT_STATE
 import org.mozilla.fenix.utils.Settings
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(RobolectricTestRunner::class)
 class SearchFragmentStoreTest {

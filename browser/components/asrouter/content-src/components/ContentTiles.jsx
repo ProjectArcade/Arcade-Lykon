@@ -16,6 +16,7 @@ import { EmbeddedBrowser } from "./EmbeddedBrowser";
 import { ConfirmationChecklist } from "./ConfirmationChecklist";
 import { MultiStageUtils } from "../lib/multistage-utils.mjs";
 import { EmbeddedBackupRestore } from "./EmbeddedBackupRestore";
+import { PinnableSitesList } from "./PinnableSitesList";
 
 const HEADER_STYLES = [
   "backgroundColor",
@@ -189,8 +190,7 @@ export const ContentTiles = props => {
     MultiStageUtils.sendActionTelemetry(
       props.messageId,
       tileId,
-      "CLICK_BUTTON",
-      { writeInMicrosurvey: props.writeInMicrosurvey }
+      "CLICK_BUTTON"
     );
     if (tile.type === "link" && tile.action) {
       props.handleAction(
@@ -211,8 +211,7 @@ export const ContentTiles = props => {
     MultiStageUtils.sendActionTelemetry(
       props.messageId,
       "content_tiles_header",
-      "CLICK_BUTTON",
-      { writeInMicrosurvey: props.writeInMicrosurvey }
+      "CLICK_BUTTON"
     );
   };
 
@@ -295,7 +294,6 @@ export const ContentTiles = props => {
                 message_id={props.messageId}
                 handleAction={props.handleAction}
                 layout={content.position}
-                writeInMicrosurvey={props.writeInMicrosurvey}
               />
             )}
             {["theme", "single-select"].includes(tile.type) && tile.data && (
@@ -349,11 +347,7 @@ export const ContentTiles = props => {
               />
             )}
             {tile.type === "action_checklist" && tile.data && (
-              <ActionChecklist
-                content={content}
-                message_id={props.messageId}
-                writeInMicrosurvey={props.writeInMicrosurvey}
-              />
+              <ActionChecklist content={content} message_id={props.messageId} />
             )}
             {tile.type === "embedded_browser" && tile.data?.url && (
               <EmbeddedBrowser url={tile.data.url} style={tile.data.style} />
@@ -370,6 +364,7 @@ export const ContentTiles = props => {
                 handleAction={props.handleAction}
                 isEncryptedBackup={content.isEncryptedBackup}
                 options={tile.options}
+                messageId={props.messageId}
               />
             )}
             {tile.type === "fx_backup_password" && (
@@ -377,11 +372,19 @@ export const ContentTiles = props => {
                 handleAction={props.handleAction}
                 isEncryptedBackup={content.isEncryptedBackup}
                 options={tile.options}
+                messageId={props.messageId}
               />
             )}
             {tile.type === "confirmation-checklist" && tile.data && (
               <ConfirmationChecklist
                 content={tile.data}
+                handleAction={props.handleAction}
+              />
+            )}
+            {tile.type === "pinnable_sites" && tile.data && (
+              <PinnableSitesList
+                tile={tile}
+                messageId={props.messageId}
                 handleAction={props.handleAction}
               />
             )}

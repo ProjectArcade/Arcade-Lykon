@@ -252,7 +252,7 @@ with only_when(host_is_osx | target_is_osx):
     )
 
     def mac_sdk_min_version():
-        return "26.4"
+        return "26.5"
 
     @depends(
         "--with-macos-sdk",
@@ -2080,7 +2080,17 @@ def default_debug_flags(compiler_info, target):
     flags = ("-gdwarf-4",)
     if compiler_info.type == "clang":
         # This improves debuginfo size.
-        flags += ("-gsimple-template-names",)
+        flags += (
+            "-gsimple-template-names",
+            # clang will warn about this argument not being used in some compiler
+            # invocations that don't involve codegen (like clang-plugin checks or
+            # linking), and we don't have a great way of conditionally skipping it...
+            # See https://reviews.llvm.org/D18706 and http://reviews.llvm.org/D11374 for
+            # context about this flag.
+            "--start-no-unused-arguments",
+            "-mllvm=-dwarf-linkage-names=Abstract",
+            "--end-no-unused-arguments",
+        )
     return flags
 
 

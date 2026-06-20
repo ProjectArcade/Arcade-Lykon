@@ -31,6 +31,9 @@
 #  include <sys/ioccom.h>
 #endif
 #include <sys/ioctl.h>
+#ifdef MOZ_LOGGING
+#  include "gfxUtils.h"
+#endif
 
 // DMABufDevice defines its own version of this which collides with the
 // official version in drm_fourcc.h
@@ -207,7 +210,7 @@ NS_IMPL_ISUPPORTS(DMABufSurfaceReporter, nsIMemoryReporter)
 size_t DMABufSurfaceRGBA::GetUsedMemoryRGBA() { return mWidth * mHeight * 4; }
 
 void DMABufSurface::InitMemoryReporting() {
-  RegisterStrongMemoryReporter(new DMABufSurfaceReporter());
+  RegisterStrongMemoryReporter(MakeAndAddRef<DMABufSurfaceReporter>());
 }
 
 // We should release all resources allocated by SnapshotGLContext before
@@ -498,29 +501,37 @@ already_AddRefed<DMABufSurface> DMABufSurface::CreateDMABufSurface(
   return surf.forget();
 }
 
-void DMABufSurface::FenceDelete() {
-  if (mSyncFd) {
-    mSyncFd = nullptr;
+/* static */
+void DMABufSurface::FenceDelete(RefPtr<gl::GLContext> aGL, EGLSyncKHR aSync) {
+  if (!aSync) {
+    return;
   }
+  const auto& gle = gl::GLContextEGL::Cast(aGL);
+  const auto& egl = gle->mEgl;
+  egl->fDestroySync(aSync);
+}
 
+void DMABufSurface::FenceDeleteLocked(const MutexAutoLock& aProofOfLock) {
+  mSyncFd = nullptr;
   if (!mGL) {
     return;
   }
-  const auto& gle = gl::GLContextEGL::Cast(mGL);
-  const auto& egl = gle->mEgl;
+  EGLSyncKHR sync = mSync;
+  mSync = nullptr;
+  FenceDelete(mGL, sync);
+}
 
-  if (mSync) {
-    egl->fDestroySync(mSync);
-    mSync = nullptr;
-  }
+void DMABufSurface::FenceDelete() {
+  MutexAutoLock lock(mSurfaceLock);
+  FenceDeleteLocked(lock);
 }
 
 void DMABufSurface::FenceSet() {
-  // There's nothing to sync as we're missing textures/eglimages here.
   if (!HoldsTexture()) {
     return;
   }
 
+  MutexAutoLock lock(mSurfaceLock);
   if (!mGL || !mGL->MakeCurrent()) {
     MOZ_DIAGNOSTIC_ASSERT(mGL,
                           "DMABufSurface::FenceSet(): missing GL context!");
@@ -531,7 +542,7 @@ void DMABufSurface::FenceSet() {
 
   if (egl->IsExtensionSupported(EGLExtension::KHR_fence_sync) &&
       egl->IsExtensionSupported(EGLExtension::ANDROID_native_fence_sync)) {
-    FenceDelete();
+    FenceDeleteLocked(lock);
 
     mSync = egl->fCreateSync(LOCAL_EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
     if (mSync) {
@@ -542,28 +553,15 @@ void DMABufSurface::FenceSet() {
     }
   }
 
-  // ANDROID_native_fence_sync may not be supported so call glFinish()
-  // as a slow path.
   mGL->fFinish();
 }
 
-void DMABufSurface::FenceWait() {
-  // There's nothing to sync as we're missing textures/eglimages here.
-  if (!HoldsTexture()) {
-    return;
-  }
-
-  if (!mGL || !mSyncFd) {
-    MOZ_DIAGNOSTIC_ASSERT(mGL,
-                          "DMABufSurface::FenceWait() missing GL context!");
-    return;
-  }
-
-  const auto& gle = gl::GLContextEGL::Cast(mGL);
+/* static */
+void DMABufSurface::FenceWait(RefPtr<gl::GLContext> aGL,
+                              RefPtr<gfx::FileHandleWrapper> aSyncFd) {
+  const auto& gle = gl::GLContextEGL::Cast(aGL);
   const auto& egl = gle->mEgl;
-  auto syncFd = mSyncFd->ClonePlatformHandle();
-  // No need to try mSyncFd twice.
-  mSyncFd = nullptr;
+  auto syncFd = aSyncFd->ClonePlatformHandle();
 
   const EGLint attribs[] = {LOCAL_EGL_SYNC_NATIVE_FENCE_FD_ANDROID,
                             syncFd.get(), LOCAL_EGL_NONE};
@@ -597,7 +595,29 @@ void DMABufSurface::FenceWait() {
   egl->fDestroySync(sync);
 }
 
+void DMABufSurface::FenceWait() {
+  if (!HoldsTexture()) {
+    return;
+  }
+
+  RefPtr<gl::GLContext> gl;
+  RefPtr<gfx::FileHandleWrapper> syncFd;
+  {
+    MutexAutoLock lock(mSurfaceLock);
+    if (!mGL || !mSyncFd) {
+      MOZ_DIAGNOSTIC_ASSERT(mGL,
+                            "DMABufSurface::FenceWait() missing GL context!");
+      return;
+    }
+    gl = mGL;
+    syncFd = mSyncFd.forget();
+  }
+
+  FenceWait(std::move(gl), std::move(syncFd));
+}
+
 void DMABufSurface::SetSemaphoreFd(int aDuppedRawFd, bool aIsSyncFd) {
+  MutexAutoLock lock(mSurfaceLock);
   mSemaphoreFd = new gfx::FileHandleWrapper(UniqueFileHandle(aDuppedRawFd));
   mSemaphoreFdIsSyncFd = aIsSyncFd;
 }
@@ -605,60 +625,62 @@ void DMABufSurface::SetSemaphoreFd(int aDuppedRawFd, bool aIsSyncFd) {
 void DMABufSurface::MaybeSemaphoreWait(GLuint aGlTexture) {
   MOZ_ASSERT(aGlTexture);
 
-  if (!mSemaphoreFd) {
-    return;
+  RefPtr<gl::GLContext> gl;
+  RefPtr<gfx::FileHandleWrapper> semFdWrapper;
+  bool isSyncFd;
+  {
+    MutexAutoLock lock(mSurfaceLock);
+    if (!mSemaphoreFd) {
+      return;
+    }
+    if (!mGL) {
+      MOZ_DIAGNOSTIC_ASSERT(
+          mGL, "DMABufSurface::SemaphoreWait() missing GL context!");
+      return;
+    }
+    gl = mGL;
+    semFdWrapper = mSemaphoreFd.forget();
+    isSyncFd = mSemaphoreFdIsSyncFd;
   }
 
-  if (!mGL) {
-    MOZ_DIAGNOSTIC_ASSERT(mGL,
-                          "DMABufSurface::SemaphoreWait() missing GL context!");
-    return;
-  }
+  auto fd = semFdWrapper->ClonePlatformHandle();
 
-  auto fd = mSemaphoreFd->ClonePlatformHandle();
-  // No need to try mSemaphoreFd twice.
-  mSemaphoreFd = nullptr;
-
-  if (mSemaphoreFdIsSyncFd) {
-    // Vulkan semaphore can be exported as opaque (semaphore) or sync (fence)
-    // fd: single GPU case: VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT,
-    // cross GPU case: VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT
-    const auto& gle = gl::GLContextEGL::Cast(mGL);
+  if (isSyncFd) {
+    const auto& gle = gl::GLContextEGL::Cast(gl);
     const auto& egl = gle->mEgl;
     if (egl->IsExtensionSupported(EGLExtension::ANDROID_native_fence_sync)) {
-      mSyncFd = new gfx::FileHandleWrapper(std::move(fd));
-      FenceWait();
+      FenceWait(gl, new gfx::FileHandleWrapper(std::move(fd)));
     }
     return;
   }
 
-  if (!mGL->IsExtensionSupported(gl::GLContext::EXT_semaphore) ||
-      !mGL->IsExtensionSupported(gl::GLContext::EXT_semaphore_fd)) {
+  if (!gl->IsExtensionSupported(gl::GLContext::EXT_semaphore) ||
+      !gl->IsExtensionSupported(gl::GLContext::EXT_semaphore_fd)) {
     MOZ_ASSERT_UNREACHABLE("unexpected to be called");
     gfxCriticalNoteOnce << "EXT_semaphore_fd is not suppored";
     return;
   }
 
   GLuint semaphoreHandle = 0;
-  mGL->fGenSemaphoresEXT(1, &semaphoreHandle);
-  mGL->fImportSemaphoreFdEXT(semaphoreHandle,
-                             LOCAL_GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd.release());
-  auto error = mGL->fGetError();
+  gl->fGenSemaphoresEXT(1, &semaphoreHandle);
+  gl->fImportSemaphoreFdEXT(semaphoreHandle, LOCAL_GL_HANDLE_TYPE_OPAQUE_FD_EXT,
+                            fd.release());
+  auto error = gl->fGetError();
   if (error != LOCAL_GL_NO_ERROR) {
     gfxCriticalNoteOnce << "glImportSemaphoreFdEXT failed: " << error;
     return;
   }
 
   GLenum srcLayout = LOCAL_GL_LAYOUT_COLOR_ATTACHMENT_EXT;
-  mGL->fWaitSemaphoreEXT(semaphoreHandle, 0, nullptr, 1, &aGlTexture,
-                         &srcLayout);
-  error = mGL->fGetError();
+  gl->fWaitSemaphoreEXT(semaphoreHandle, 0, nullptr, 1, &aGlTexture,
+                        &srcLayout);
+  error = gl->fGetError();
   if (error != LOCAL_GL_NO_ERROR) {
     gfxCriticalNoteOnce << "glWaitSemaphoreEXT failed: " << error;
-    mGL->fDeleteSemaphoresEXT(1, &semaphoreHandle);
+    gl->fDeleteSemaphoresEXT(1, &semaphoreHandle);
     return;
   }
-  mGL->fDeleteSemaphoresEXT(1, &semaphoreHandle);
+  gl->fDeleteSemaphoresEXT(1, &semaphoreHandle);
   LOGDMABUF("MaybeSemaphoreWait: done (GL semaphore wait)");
 }
 
@@ -1451,6 +1473,14 @@ nsresult DMABufSurface::BuildSurfaceDescriptorBuffer(
 }
 
 #ifdef MOZ_LOGGING
+// Universal OpenGL version but needs GL/textures.
+void DMABufSurfaceRGBA::DumpToFile(const char* aFile) {
+  RefPtr<gfx::DataSourceSurface> surf = GetAsSourceSurface();
+  gfxUtils::WriteAsPNG(surf, aFile);
+}
+
+#  if 0
+// A direct mapping version without GL.
 void DMABufSurfaceRGBA::DumpToFile(const char* pFile) {
   uint32_t stride;
 
@@ -1473,6 +1503,7 @@ void DMABufSurfaceRGBA::DumpToFile(const char* pFile) {
     cairo_surface_write_to_png(surface, pFile);
   }
 }
+#  endif
 #endif
 
 #if 0
@@ -1553,7 +1584,7 @@ gfx::SurfaceFormat DMABufSurfaceRGBA::GetFormat() {
 already_AddRefed<DMABufSurfaceRGBA> DMABufSurfaceRGBA::CreateDMABufSurface(
     mozilla::gl::GLContext* aGLContext, int aWidth, int aHeight,
     int aDMABufSurfaceFlags, RefPtr<mozilla::widget::DRMFormat> aFormat) {
-  RefPtr<DMABufSurfaceRGBA> surf = new DMABufSurfaceRGBA();
+  auto surf = MakeRefPtr<DMABufSurfaceRGBA>();
   if (!surf->Create(aGLContext, aWidth, aHeight, aDMABufSurfaceFlags,
                     aFormat)) {
     return nullptr;
@@ -1565,7 +1596,7 @@ already_AddRefed<DMABufSurface> DMABufSurfaceRGBA::CreateDMABufSurface(
     RefPtr<mozilla::gfx::FileHandleWrapper>&& aFd,
     const mozilla::webgpu::ffi::WGPUDMABufInfo& aDMABufInfo, int aWidth,
     int aHeight) {
-  RefPtr<DMABufSurfaceRGBA> surf = new DMABufSurfaceRGBA();
+  auto surf = MakeRefPtr<DMABufSurfaceRGBA>();
   if (!surf->Create(std::move(aFd), aDMABufInfo, aWidth, aHeight)) {
     return nullptr;
   }
@@ -1574,7 +1605,7 @@ already_AddRefed<DMABufSurface> DMABufSurfaceRGBA::CreateDMABufSurface(
 
 already_AddRefed<DMABufSurfaceYUV> DMABufSurfaceYUV::CreateYUVSurface(
     const VADRMPRIMESurfaceDescriptor& aDesc, int aWidth, int aHeight) {
-  RefPtr<DMABufSurfaceYUV> surf = new DMABufSurfaceYUV();
+  auto surf = MakeRefPtr<DMABufSurfaceYUV>();
   LOGDMABUFS("[%p] DMABufSurfaceYUV::CreateYUVSurface() UID %d from desc\n",
              surf.get(), surf->GetUID());
   if (!surf->UpdateYUVData(aDesc, aWidth, aHeight, /* aCopy */ false)) {
@@ -1585,7 +1616,7 @@ already_AddRefed<DMABufSurfaceYUV> DMABufSurfaceYUV::CreateYUVSurface(
 
 already_AddRefed<DMABufSurfaceYUV> DMABufSurfaceYUV::CopyYUVSurface(
     const VADRMPRIMESurfaceDescriptor& aDesc, int aWidth, int aHeight) {
-  RefPtr<DMABufSurfaceYUV> surf = new DMABufSurfaceYUV();
+  auto surf = MakeRefPtr<DMABufSurfaceYUV>();
   LOGDMABUFS("[%p] DMABufSurfaceYUV::CreateYUVSurfaceCopy() UID %d from desc\n",
              surf.get(), surf->GetUID());
   if (!surf->UpdateYUVData(aDesc, aWidth, aHeight, /* aCopy */ true)) {
@@ -2573,9 +2604,9 @@ void DMABufSurfaceYUV::ClearPlane(int aPlane) {
          mMappedRegionStride[aPlane] * mHeight[aPlane]);
   Unmap(aPlane);
 }
+#endif
 
-#  include "gfxUtils.h"
-
+#ifdef MOZ_LOGGING
 void DMABufSurfaceYUV::DumpToFile(const char* aFile) {
   RefPtr<gfx::DataSourceSurface> surf = GetAsSourceSurface();
   gfxUtils::WriteAsPNG(surf, aFile);

@@ -8,10 +8,10 @@ package org.mozilla.fenix.tabstray.ui.banner
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -24,7 +24,6 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -66,7 +65,6 @@ import mozilla.components.ui.icons.R as iconsR
 
 private const val TAB_COUNT_SHOW_CFR = 6
 private val RowHeight = 48.dp
-private val TabIndicatorRoundedCornerDp = 100.dp
 
 /**
  * Top-level UI for displaying the banner in [TabsTray].
@@ -79,11 +77,10 @@ private val TabIndicatorRoundedCornerDp = 100.dp
  * @param syncedTabCount The total number of open synced tabs.
  * @param selectionMode [TabsTrayState.Mode] indicating the current selection mode (e.g., normal, multi-select).
  * @param isInDebugMode True for debug variant or if secret menu is enabled for this session.
- * @param statusBarHeight The height of the system status bar.
  * @param shouldShowTabAutoCloseBanner Whether the tab auto-close banner should be displayed.
  * @param shouldShowLockPbmBanner Whether the lock private browsing mode banner should be displayed.
  * @param shouldShowAddToTabGroupButton Whether the add to tab group button should be displayed.
- * @param scrollBehavior Defines how the [TabPageBanner] should behave when the content under it is scrolled.
+ * @param hasTabDataLoaded Whether the tab data has loaded.
  * @param onTabPageIndicatorClicked Invoked when the user clicks on a tab page indicator.
  * @param onSaveToCollectionClick Invoked when the user clicks the "Save to Collection" button in multi-select mode.
  * @param onShareSelectedTabsClick Invoked when the user clicks the "Share" button in multi-select mode.
@@ -110,11 +107,10 @@ fun TabsTrayBanner(
     syncedTabCount: Int,
     selectionMode: Mode,
     isInDebugMode: Boolean,
-    statusBarHeight: Dp,
     shouldShowTabAutoCloseBanner: Boolean,
     shouldShowLockPbmBanner: Boolean,
     shouldShowAddToTabGroupButton: Boolean,
-    scrollBehavior: TopAppBarScrollBehavior,
+    hasTabDataLoaded: Boolean,
     onTabPageIndicatorClicked: (Page) -> Unit,
     onSaveToCollectionClick: () -> Unit,
     onShareSelectedTabsClick: () -> Unit,
@@ -174,16 +170,14 @@ fun TabsTrayBanner(
                 shouldShowTabGroupsPage = shouldShowTabGroupsPage,
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
-                statusBarHeight = statusBarHeight,
                 onTabPageIndicatorClicked = onTabPageIndicatorClicked,
+                hasTabDataLoaded = hasTabDataLoaded,
             )
         }
 
         when {
             !hasAcknowledgedAutoCloseBanner && showTabAutoCloseBanner -> {
                 onTabAutoCloseBannerShown()
-
-                BannerPadding(scrollBehavior = scrollBehavior, statusBarHeight = statusBarHeight)
 
                 HorizontalDivider()
 
@@ -203,8 +197,6 @@ fun TabsTrayBanner(
             }
 
             !hasAcknowledgedPbmLockBanner && shouldShowLockPbmBanner -> {
-                BannerPadding(scrollBehavior = scrollBehavior, statusBarHeight = statusBarHeight)
-
                 // After this bug: https://bugzilla.mozilla.org/show_bug.cgi?id=1965545
                 // is resolved, we should swap the button 1 and button 2 click actions.
                 Banner(
@@ -226,18 +218,6 @@ fun TabsTrayBanner(
     }
 }
 
-@Composable
-private fun BannerPadding(
-    scrollBehavior: TopAppBarScrollBehavior,
-    statusBarHeight: Dp,
-) {
-    val padding by remember(statusBarHeight, scrollBehavior.state.collapsedFraction) {
-        derivedStateOf { statusBarHeight * scrollBehavior.state.collapsedFraction }
-    }
-
-    Spacer(modifier = Modifier.height(padding))
-}
-
 /**
  * Banner displayed when in [Mode.Normal].
  *
@@ -247,7 +227,7 @@ private fun BannerPadding(
  * @param shouldShowTabGroupsPage Whether to show the tab groups page.
  * @param tabGroupCount The amount of tab groups.
  * @param syncedTabCount The amount of synced tabs.
- * @param statusBarHeight The height of the system status bar.
+ * @param hasTabDataLoaded Whether the tab data has loaded.
  * @param onTabPageIndicatorClicked Invoked when the user clicks on a tab page button. Passes along the
  * [Page] that was clicked.
  */
@@ -260,53 +240,48 @@ private fun TabPageBanner(
     shouldShowTabGroupsPage: Boolean,
     tabGroupCount: Int,
     syncedTabCount: Int,
-    statusBarHeight: Dp,
+    hasTabDataLoaded: Boolean,
     onTabPageIndicatorClicked: (Page) -> Unit,
 ) {
-    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
     val selectedTabIndex = Page.pageToPosition(
         page = selectedPage,
         shouldShowTabGroupsPage = shouldShowTabGroupsPage,
     )
 
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Column {
-            Spacer(
-                modifier = Modifier
-                    .height(statusBarHeight)
-                    .fillMaxWidth(),
-            )
-            PrimaryTabRow(
-                selectedTabIndex = selectedTabIndex,
-                modifier = Modifier.fillMaxWidth(),
-                contentColor = MaterialTheme.colorScheme.primary,
-                containerColor = Color.Transparent,
-                indicator = {
-                    TabRowDefaults.PrimaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(
-                            selectedTabIndex = selectedTabIndex,
-                            matchContentSize = true,
-                        ),
-                        width = Dp.Unspecified,
-                        shape = RoundedCornerShape(
-                            topStart = TabIndicatorRoundedCornerDp,
-                            topEnd = TabIndicatorRoundedCornerDp,
-                        ),
-                    )
-                },
-                divider = {},
-            ) {
-                TabPageBannerTabs(
-                    selectedPage = selectedPage,
-                    normalTabCount = normalTabCount,
-                    privateTabCount = privateTabCount,
-                    shouldShowTabGroupsPage = shouldShowTabGroupsPage,
-                    tabGroupCount = tabGroupCount,
-                    syncedTabCount = syncedTabCount,
-                    inactiveColor = inactiveColor,
-                    onTabPageIndicatorClicked = onTabPageIndicatorClicked,
+        PrimaryTabRow(
+            selectedTabIndex = selectedTabIndex,
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(insets = TopAppBarDefaults.windowInsets),
+            contentColor = MaterialTheme.colorScheme.primary,
+            containerColor = Color.Transparent,
+            indicator = {
+                TabRowDefaults.PrimaryIndicator(
+                    modifier = Modifier.tabIndicatorOffset(
+                        selectedTabIndex = selectedTabIndex,
+                        matchContentSize = true,
+                    ),
+                    width = Dp.Unspecified,
+                    shape = RoundedCornerShape(
+                        topStartPercent = 50,
+                        topEndPercent = 50,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-            }
+            },
+            divider = {},
+        ) {
+            TabPageBannerTabs(
+                selectedPage = selectedPage,
+                normalTabCount = normalTabCount,
+                privateTabCount = privateTabCount,
+                shouldShowTabGroupsPage = shouldShowTabGroupsPage,
+                tabGroupCount = tabGroupCount,
+                syncedTabCount = syncedTabCount,
+                onTabPageIndicatorClicked = onTabPageIndicatorClicked,
+                hasTabDataLoaded = hasTabDataLoaded,
+            )
         }
     }
 }
@@ -320,7 +295,7 @@ private fun TabPageBannerTabs(
     shouldShowTabGroupsPage: Boolean,
     tabGroupCount: Int,
     syncedTabCount: Int,
-    inactiveColor: Color,
+    hasTabDataLoaded: Boolean,
     onTabPageIndicatorClicked: (Page) -> Unit,
 ) {
     val privateTabDescription = stringResource(
@@ -345,7 +320,6 @@ private fun TabPageBannerTabs(
         selected = selectedPage == Page.PrivateTabs,
         testTag = TabsTrayTestTag.PRIVATE_TABS_PAGE_BUTTON,
         contentDescription = privateTabDescription,
-        inactiveColor = inactiveColor,
         onClick = { onTabPageIndicatorClicked(Page.PrivateTabs) },
     ) {
         Icon(painterResource(iconsR.drawable.mozac_ic_private_mode_24), null)
@@ -355,10 +329,12 @@ private fun TabPageBannerTabs(
         selected = selectedPage == Page.NormalTabs,
         testTag = TabsTrayTestTag.NORMAL_TABS_PAGE_BUTTON,
         contentDescription = normalTabDescription,
-        inactiveColor = inactiveColor,
         onClick = { onTabPageIndicatorClicked(Page.NormalTabs) },
     ) {
-        TabCounter(tabCount = normalTabCount)
+        TabCounter(
+            tabCount = normalTabCount,
+            showTabCount = hasTabDataLoaded,
+        )
     }
 
     if (shouldShowTabGroupsPage) {
@@ -366,7 +342,6 @@ private fun TabPageBannerTabs(
             selected = selectedPage == Page.TabGroups,
             testTag = TabsTrayTestTag.TAB_GROUPS_PAGE_BUTTON,
             contentDescription = tabGroupsDescription,
-            inactiveColor = inactiveColor,
             onClick = { onTabPageIndicatorClicked(Page.TabGroups) },
         ) {
             Icon(painterResource(iconsR.drawable.mozac_ic_tab_group_24), null)
@@ -377,7 +352,6 @@ private fun TabPageBannerTabs(
         selected = selectedPage == Page.SyncedTabs,
         testTag = TabsTrayTestTag.SYNCED_TABS_PAGE_BUTTON,
         contentDescription = syncedTabDescription,
-        inactiveColor = inactiveColor,
         onClick = { onTabPageIndicatorClicked(Page.SyncedTabs) },
     ) {
         Icon(painterResource(iconsR.drawable.mozac_ic_sync_tabs_24), null)
@@ -389,7 +363,6 @@ private fun BannerTab(
     selected: Boolean,
     testTag: String,
     contentDescription: String,
-    inactiveColor: Color,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -400,7 +373,8 @@ private fun BannerTab(
             .testTag(testTag)
             .semantics { this.contentDescription = contentDescription }
             .height(RowHeight),
-        unselectedContentColor = inactiveColor,
+        selectedContentColor = MaterialTheme.colorScheme.onSurface,
+        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         content()
     }
@@ -647,11 +621,10 @@ private fun TabsTrayBannerPreviewRoot(
                 syncedTabCount = 0,
                 selectionMode = state.mode,
                 isInDebugMode = false,
-                statusBarHeight = 50.dp,
+                hasTabDataLoaded = true,
                 shouldShowTabAutoCloseBanner = shouldShowTabAutoCloseBanner,
                 shouldShowLockPbmBanner = shouldShowLockPbmBanner,
                 shouldShowAddToTabGroupButton = shouldShowAddToTabGroupButton,
-                scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
                 onTabPageIndicatorClicked = { page ->
                     tabsTrayStore.dispatch(TabsTrayAction.PageSelected(page))
                 },

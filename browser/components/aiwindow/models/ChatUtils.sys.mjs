@@ -17,6 +17,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/aiwindow/models/memories/MemoriesManager.sys.mjs",
   renderPrompt: "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs",
   MODEL_FEATURES: "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs",
+  loadPrompt:
+    "moz-src:///browser/components/aiwindow/models/PromptLoader.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "md", () => {
@@ -25,6 +27,21 @@ ChromeUtils.defineLazyGetter(lazy, "md", () => {
   );
   return new MarkdownIt({ html: false, linkify: true });
 });
+
+let _savedLoadPromptDescriptor = null;
+export function _setLoadPromptForTesting(fn) {
+  if (fn !== null) {
+    _savedLoadPromptDescriptor = Object.getOwnPropertyDescriptor(
+      lazy,
+      "loadPrompt"
+    );
+    lazy.loadPrompt = fn;
+  } else if (_savedLoadPromptDescriptor) {
+    // eslint-disable-next-line mozilla/valid-lazy
+    Object.defineProperty(lazy, "loadPrompt", _savedLoadPromptDescriptor);
+    _savedLoadPromptDescriptor = null;
+  }
+}
 
 /**
  * Truncates and spotlights untrusted metadata text to guard against prompt injection by adding an
@@ -158,13 +175,9 @@ export async function constructRealTimeInfoInjectionMessage(
  * Constructs the relevant memories context message to be inejcted before the user message.
  *
  * @param {string} message                                                          User message to find relevant memories for
- * @param {openAIEngine} engineInstance
  * @returns {Promise<null|{role: string, tool_call_id: string, content: string}>}   Relevant memories context message or null if no relevant memories
  */
-export async function constructRelevantMemoriesContextMessage(
-  message,
-  engineInstance
-) {
+export async function constructRelevantMemoriesContextMessage(message) {
   const relevantMemories =
     await lazy.MemoriesManager.getRelevantMemories(message);
 
@@ -177,7 +190,7 @@ export async function constructRelevantMemoriesContextMessage(
           return `${memory.id} - ${memory.memory_summary}`;
         })
         .join("\n- ");
-    const relevantMemoriesContextPrompt = await engineInstance.loadPrompt(
+    const { prompt: relevantMemoriesContextPrompt } = await lazy.loadPrompt(
       lazy.MODEL_FEATURES.MEMORIES_RELEVANT_CONTEXT
     );
     const content = lazy.renderPrompt(relevantMemoriesContextPrompt, {
@@ -301,6 +314,39 @@ export function stripUnresolvedUrlTokens(text) {
 }
 
 /**
+ * Resolve inline `@mention` markdown to URLs.
+ * The smartbar editor contains inline mentions as `[label](mention:?href=url)`.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function resolveMentionUrls(text) {
+  return text.replace(/\]\(mention:\?([^)]*)\)/g, (match, query) => {
+    const href = new URLSearchParams(query).get("href");
+    return href ? `](${href})` : match;
+  });
+}
+
+/**
+ * Filters for stray characters that may be emitted in token.
+ * (e.g. "§url_token: UNKNOWN_1§,")
+ *
+ * @param {string} item
+ * @param {Map<string, string>} tokenToUrl
+ * @returns {string}
+ */
+function resolveUrlTokenItem(item, tokenToUrl) {
+  const matches = [...item.matchAll(/§url_token:\s*([A-Z0-9_]+_\d+)§/g)];
+  if (matches.length === 1) {
+    const url = tokenToUrl.get(matches[0][1]);
+    if (url) {
+      return url;
+    }
+  }
+  return expandUrlTokens(item, tokenToUrl);
+}
+
+/**
  * Expands URL tokens in tool call parameters in-place.
  * Handles both string values and arrays of strings.
  *
@@ -316,7 +362,7 @@ export function expandUrlTokensInToolParams(toolParams, tokenToUrl) {
       toolParams[key] = expandUrlTokens(value, tokenToUrl);
     } else if (Array.isArray(value)) {
       toolParams[key] = value.map(item =>
-        typeof item === "string" ? expandUrlTokens(item, tokenToUrl) : item
+        typeof item === "string" ? resolveUrlTokenItem(item, tokenToUrl) : item
       );
     }
   }
@@ -383,14 +429,24 @@ function constructUrlTokensFromMessageContent(content, conversation, role) {
  * @param {object[]} messages
  */
 export function replaceUrlsWithTokens(conversation, messages) {
-  // Construct all of the URL tokens from the message content.
+  // Construct all of the URL tokens from the message content and from any
+  // assistant tool call arguments.
   for (const msg of messages) {
     if (msg.role != "system" && typeof msg.content === "string") {
       constructUrlTokensFromMessageContent(msg.content, conversation, msg.role);
     }
+    if (Array.isArray(msg.tool_calls)) {
+      for (const toolCall of msg.tool_calls) {
+        const args = toolCall.function?.arguments;
+        if (typeof args === "string") {
+          constructUrlTokensFromMessageContent(args, conversation, "tool");
+        }
+      }
+    }
   }
 
-  // Replace full URLs with their short tokens in user and tool messages.
+  // Replace full URLs with their short tokens in user, tool, and assistant
+  // tool call messages.
   if (conversation.tokenToUrl.size) {
     // Sorting the entries ensures that http://example.com/v1 gets replaced before
     // http://example.com
@@ -398,10 +454,24 @@ export function replaceUrlsWithTokens(conversation, messages) {
       ([, a], [, b]) => b.length - a.length
     );
 
+    const tokenizeUrls = text => {
+      for (const [token, url] of sortedEntries) {
+        text = text.replaceAll(url, `§url_token: ${token}§`);
+      }
+      return text;
+    };
+
     for (const msg of messages) {
       if (msg.role != "system" && typeof msg.content === "string") {
-        for (const [token, url] of sortedEntries) {
-          msg.content = msg.content.replaceAll(url, `§url_token: ${token}§`);
+        msg.content = tokenizeUrls(msg.content);
+      }
+      if (Array.isArray(msg.tool_calls)) {
+        for (const toolCall of msg.tool_calls) {
+          if (typeof toolCall.function?.arguments === "string") {
+            toolCall.function.arguments = tokenizeUrls(
+              toolCall.function.arguments
+            );
+          }
         }
       }
     }

@@ -23,6 +23,7 @@
 #include "nsGenericHTMLElement.h"
 #include "nsGkAtoms.h"
 #include "nsIMutationObserver.h"
+#include "nsIURIWithSizeOf.h"
 #include "nsImageFrame.h"
 #include "nsNodeInfoManager.h"
 #include "nsPresContext.h"
@@ -69,7 +70,7 @@ static bool IsPreviousSibling(const nsINode* aSubject, const nsINode* aNode) {
 namespace mozilla::dom {
 
 HTMLImageElement::HTMLImageElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
     : nsGenericHTMLElement(std::move(aNodeInfo)) {
   // We start out broken
   AddStatesSilently(ElementState::BROKEN);
@@ -605,14 +606,10 @@ JSObject* HTMLImageElement::WrapNode(JSContext* aCx,
   return HTMLImageElement_Binding::Wrap(aCx, this, aGivenProto);
 }
 
-#ifdef DEBUG
-HTMLFormElement* HTMLImageElement::GetFormInternal() const { return mForm; }
-#endif
-
 void HTMLImageElement::SetForm(HTMLFormElement* aForm) {
   MOZ_ASSERT(aForm, "Don't pass null here");
-  NS_ASSERTION(!mForm,
-               "We don't support switching from one non-null form to another.");
+  MOZ_ASSERT(!mForm && !HasFlag(ADDED_TO_FORM),
+             "We don't support switching from one non-null form to another.");
 
   mForm = aForm;
 }
@@ -682,7 +679,7 @@ bool HTMLImageElement::SelectedSourceMatchesLast(nsIURI* aSelectedSource) {
 }
 
 bool HTMLImageElement::AllowsAutoSizes() const {
-  if (!StaticPrefs::dom_image_sizes_auto_enabled()) {
+  if (!OwnerDoc()->AutoSizesEnabled()) {
     return false;
   }
   const nsAttrValue* val = GetParsedAttr(nsGkAtoms::loading);
@@ -1224,9 +1221,10 @@ void HTMLImageElement::AddSizeOfExcludingThis(nsWindowSizes& aSizes,
   // It is okay to include the size of mSrcURI here even though it might have
   // strong references from elsewhere because the URI was created for this
   // object, in nsImageLoadingContent::StringToURI(). Only objects that created
-  // their own URI will call nsIURI::SizeOfIncludingThis().
+  // their own URI will call nsIURIWithSizeOf::SizeOfIncludingThis().
   if (mSrcURI) {
-    *aNodeSize += mSrcURI->SizeOfIncludingThis(aSizes.mState.mMallocSizeOf);
+    *aNodeSize += SizeOfIncludingThisIfURIWithSizeOf(
+        mSrcURI, aSizes.mState.mMallocSizeOf);
   }
 }
 

@@ -62,6 +62,8 @@ enum Command {
     ///   * This time there shouldn't be a token exchange request, since the refresh token now has
     ///     the relay scope.
     GetAccessToken {
+        #[arg(long)]
+        ignore_cache: bool,
         scope: String,
     },
     /// Log in to FxA with the given scopes
@@ -75,7 +77,7 @@ enum Command {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    nss::ensure_initialized();
+    nss_as::ensure_initialized();
     viaduct_hyper::viaduct_init_backend_hyper()?;
     cli_support::init_logging_with("info");
 
@@ -107,10 +109,13 @@ fn main() -> Result<()> {
             match command {
                 Command::Devices(args) => devices::run(account, args)?,
                 Command::SendTab(args) => send_tab::run(account, args)?,
-                Command::GetAccessToken { scope } => {
+                Command::GetAccessToken {
+                    scope,
+                    ignore_cache,
+                } => {
                     println!("Requesting access token with scope: {scope}");
-                    account.get_access_token(&scope, false)?;
-                    println!("Success");
+                    let tok = account.get_access_token(&scope, !ignore_cache)?;
+                    println!("Success: {tok:?}");
                 }
                 Command::Disconnect => {
                     account.disconnect();

@@ -4,9 +4,6 @@
 
 package mozilla.components.feature.summarize.content
 
-import mozilla.components.concept.llm.ErrorCode
-import mozilla.components.concept.llm.Llm
-
 /**
  * An interface to conform to do deliver page content for summarization.
  */
@@ -17,14 +14,7 @@ fun interface PageContentExtractor {
     suspend fun getPageContent(options: Options): Result<String>
 
     /**
-     * An exception that occurs in page content extraction.
-     */
-    class Exception : Llm.Exception("Could not extract content", errorCode)
-
-    /**
      * Options defining how the content should be extracted.
      */
     data class Options(val shouldUseReaderModeContent: Boolean)
 }
-
-private val errorCode = ErrorCode(2001)

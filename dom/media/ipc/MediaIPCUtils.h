@@ -15,7 +15,6 @@
 #include "mozilla/CDMProxy.h"
 #include "mozilla/GfxMessageUtils.h"
 #include "mozilla/Maybe.h"
-#include "mozilla/ParamTraits_TiedFields.h"
 #include "mozilla/dom/MFCDMSerializers.h"
 #include "mozilla/dom/MediaKeysBinding.h"
 #include "mozilla/gfx/Rect.h"
@@ -224,8 +223,9 @@ struct ParamTraits<mozilla::MediaDataDecoder::ConversionRequired>
               mozilla::MediaDataDecoder::ConversionRequired::kNeedHVCC)> {};
 
 template <>
-struct ParamTraits<mozilla::MediaDataDecoder::PropertyName>
-    : public ContiguousEnumSerializer<
+struct MOZ_ENUM_SERIALIZER_ALLOW_SENTINEL_UPPER_BOUND
+    ParamTraits<mozilla::MediaDataDecoder::PropertyName>
+    : public ContiguousEnumSerializerInclusive<
           mozilla::MediaDataDecoder::PropertyName,
           mozilla::MediaDataDecoder::PropertyName(0),
           mozilla::MediaDataDecoder::sHighestPropertyName> {};

@@ -170,7 +170,7 @@ const MESSAGES = () => {
         ],
       },
       targeting:
-        "'browser.ipProtection.hasUpgraded' | preferenceValue == false && 'browser.ipProtection.bandwidthThreshold' | preferenceValue == 50 && !hasActiveEnterprisePolicies && !activeNotifications && previousSessionEnd && (messageImpressions.IP_PROTECTION_CALLOUT_MOZILLA_VPN_UPGRADE_SECONDARY || []) | length == 0",
+        "'browser.ipProtection.hasUpgraded' | preferenceValue == false && 'browser.ipProtection.upgradeNotAvailable' | preferenceValue == false && 'browser.ipProtection.bandwidthThreshold' | preferenceValue == 50 && !hasActiveEnterprisePolicies && !activeNotifications && previousSessionEnd && (messageImpressions.IP_PROTECTION_CALLOUT_MOZILLA_VPN_UPGRADE_SECONDARY || []) | length == 0",
       trigger: {
         id: "preferenceObserver",
         params: ["browser.ipProtection.bandwidthThreshold"],
@@ -267,7 +267,7 @@ const MESSAGES = () => {
         ],
       },
       targeting:
-        "'browser.ipProtection.hasUpgraded' | preferenceValue == false && 'browser.ipProtection.bandwidthThreshold' | preferenceValue == 50 && !hasActiveEnterprisePolicies && !activeNotifications && previousSessionEnd && (messageImpressions.IP_PROTECTION_CALLOUT_MOZILLA_VPN_UPGRADE || []) | length == 0",
+        "'browser.ipProtection.hasUpgraded' | preferenceValue == false && 'browser.ipProtection.upgradeNotAvailable' | preferenceValue == false && 'browser.ipProtection.bandwidthThreshold' | preferenceValue == 50 && !hasActiveEnterprisePolicies && !activeNotifications && previousSessionEnd && (messageImpressions.IP_PROTECTION_CALLOUT_MOZILLA_VPN_UPGRADE || []) | length == 0",
       trigger: {
         id: "ipProtectionReady",
       },
@@ -1121,7 +1121,7 @@ const MESSAGES = () => {
     {
       id: "SMARTWINDOW_NEWTAB_CALLOUT",
       template: "feature_callout",
-      groups: ["cfr"],
+      groups: [],
       content: {
         id: "SMARTWINDOW_NEWTAB_CALLOUT",
         template: "multistage",
@@ -1137,8 +1137,6 @@ const MESSAGES = () => {
                   anchor_attachment: "bottomcenter",
                   callout_attachment: "topright",
                 },
-                arrow_width: 23,
-                arrow_corner_distance: 4,
               },
             ],
             content: {
@@ -1174,6 +1172,53 @@ const MESSAGES = () => {
       frequency: {
         lifetime: 1,
       },
+    },
+    {
+      id: "SMARTWINDOW_CLOSE_CURRENT_TAB",
+      template: "feature_callout",
+      content: {
+        id: "SMARTWINDOW_CLOSE_CURRENT_TAB",
+        template: "multistage",
+        backdrop: "transparent",
+        transitions: false,
+        disableHistoryUpdates: true,
+        screens: [
+          {
+            id: "SMARTWINDOW_CLOSE_CURRENT_TAB_SCREEN",
+            anchors: [
+              {
+                selector: "#PanelUI-menu-button",
+                panel_position: {
+                  anchor_attachment: "bottomcenter",
+                  callout_attachment: "topright",
+                },
+              },
+            ],
+            content: {
+              position: "callout",
+              width: "320px",
+              padding: 16,
+              title: {
+                string_id: "smartwindow-close-tab-callout-title",
+              },
+              subtitle: {
+                string_id: "smartwindow-close-tab-callout-subtitle",
+              },
+              dismiss_button: {
+                size: "small",
+                action: { dismiss: true },
+              },
+            },
+          },
+        ],
+      },
+      targeting: "isAIWindow && actionSource == 'close_current_tab'",
+      // Bug 2037624 - "close_current_tab" toolcall sets
+      // tab.smartWindowActionSource before removeTab();
+      trigger: {
+        id: "nthTabClosed",
+      },
+      skip_in_tests: "it's not tested in automation",
     },
     {
       id: "SMARTWINDOW_SIDEBAR_AUTO_OPEN_PROMPT",

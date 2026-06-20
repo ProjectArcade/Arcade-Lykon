@@ -33,6 +33,7 @@
 #include "nsIPrefBranch.h"
 #include "nsIPrefService.h"
 #include "nsPIDOMWindow.h"
+#include "nsPIDOMWindowInlines.h"
 #include "nsServiceManagerUtils.h"
 #include "nsThreadManager.h"
 #include "nsTHashSet.h"
@@ -539,14 +540,14 @@ nsUrlClassifierUtils::MakeUpdateRequestV4(
 
   // Then serialize.
   std::string s;
-  r.SerializeToString(&s);
+  (void)r.SerializeToString(&s);
 
   nsCString out;
   nsresult rv = Base64URLEncode(s.size(), (const uint8_t*)s.c_str(),
                                 Base64URLEncodePaddingPolicy::Include, out);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  aRequest = out;
+  aRequest = std::move(out);
 
   return NS_OK;
 }
@@ -573,7 +574,7 @@ nsUrlClassifierUtils::MakeUpdateRequestV5(
       continue;
     }
 
-    serverListNames.AppendElement(serverListName);
+    serverListNames.AppendElement(std::move(serverListName));
   }
 
   // We omit the size_constraints to indicates that there is no size constraints
@@ -592,7 +593,7 @@ nsUrlClassifierUtils::MakeUpdateRequestV5(
     query.Append(stateBase64);
   }
 
-  aRequest = query;
+  aRequest = std::move(query);
 
   return NS_OK;
 }
@@ -666,14 +667,14 @@ nsUrlClassifierUtils::MakeFindFullHashRequestV4(
 
   // Then serialize.
   std::string s;
-  r.SerializeToString(&s);
+  (void)r.SerializeToString(&s);
 
   nsCString out;
   rv = Base64URLEncode(s.size(), (const uint8_t*)s.c_str(),
                        Base64URLEncodePaddingPolicy::Include, out);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  aRequest = out;
+  aRequest = std::move(out);
 
   return NS_OK;
 }
@@ -909,14 +910,14 @@ nsUrlClassifierUtils::MakeThreatHitReport(nsIChannel* aChannel,
   hit.set_allocated_client_info(CreateClientInfo());
 
   std::string s;
-  hit.SerializeToString(&s);
+  (void)hit.SerializeToString(&s);
 
   nsCString out;
   rv = Base64URLEncode(s.size(), reinterpret_cast<const uint8_t*>(s.c_str()),
                        Base64URLEncodePaddingPolicy::Include, out);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  aRequest = out;
+  aRequest = std::move(out);
 
   return NS_OK;
 }
@@ -1094,7 +1095,7 @@ nsresult nsUrlClassifierUtils::ReadProvidersFromPrefs(ProviderDictType& aDict) {
     nsTArray<nsCString> tables;
     Classifier::SplitTables(owningLists, tables);
     nsAutoCString providerToUse(provider);
-    for (auto tableName : tables) {
+    for (const auto& tableName : tables) {
       // If the Safe Browsing V5 is disabled, we will use V4 instead. This means
       // that we will put the V5 lists to the V4 provider to instruct using
       // Safe Browsing V4 for those tables.

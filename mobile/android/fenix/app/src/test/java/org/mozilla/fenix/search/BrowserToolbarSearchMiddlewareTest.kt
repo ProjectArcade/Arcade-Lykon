@@ -54,7 +54,6 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.telemetry.glean.testing.GleanTestRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -105,6 +104,7 @@ import org.mozilla.fenix.telemetry.ACTION_SEARCH_ENGINE_SELECTOR_CLICKED
 import org.mozilla.fenix.telemetry.SOURCE_ADDRESS_BAR
 import org.mozilla.fenix.utils.Settings
 import org.robolectric.RobolectricTestRunner
+import kotlin.test.assertNotNull
 import mozilla.components.browser.toolbar.R as toolbarR
 import mozilla.components.feature.qr.R as qrR
 import mozilla.components.ui.icons.R as iconsR
@@ -295,6 +295,29 @@ class BrowserToolbarSearchMiddlewareTest {
             expectedSearchSelector(newEngineSelection),
             store.state.editState.editActionsStart[0] as SearchSelectorAction,
         )
+    }
+
+    @Test
+    fun `GIVEN a search was started from a tab WHEN the search engine is changed THEN keep the source tab so the search loads in it`() {
+        val captorMiddleware = CaptureActionsMiddleware<AppState, AppAction>()
+        val appStore = AppStore(
+            initialState = AppState(
+                searchState = AppSearchState.EMPTY.copy(
+                    isSearchActive = true,
+                    sourceTabId = "test",
+                ),
+            ),
+            middlewares = listOf(captorMiddleware),
+        )
+        val (_, store) = buildMiddlewareAndAddToStore(appStore = appStore)
+        val newEngineSelection = fakeSearchState().searchEngineShortcuts.last()
+
+        store.dispatch(SearchSelectorItemClicked(newEngineSelection))
+
+        assertEquals("test", appStore.state.searchState.sourceTabId)
+        captorMiddleware.assertLastAction(SearchStarted::class) { action ->
+            assertEquals("test", action.tabId)
+        }
     }
 
     @Test
@@ -1270,6 +1293,7 @@ class BrowserToolbarSearchMiddlewareTest {
     @Test
     fun `GIVEN Google search engine and Lens enabled WHEN toolbar enters edit mode with blank query THEN a Lens button is shown`() {
         every { settings.googleLensIntegrationEnabled } returns true
+        every { settings.googleLensIntegrationUserEnabled } returns true
         val appStore: AppStore = mockk(relaxed = true) {
             every { state.searchState.selectedSearchEngine?.searchEngine } returns googleSearchEngine()
         }
@@ -1313,8 +1337,26 @@ class BrowserToolbarSearchMiddlewareTest {
     }
 
     @Test
+    fun `GIVEN Lens enabled but user disabled WHEN toolbar enters edit mode with Google engine THEN no Lens button is shown`() {
+        every { settings.googleLensIntegrationEnabled } returns true
+        every { settings.googleLensIntegrationUserEnabled } returns false
+        val appStore: AppStore = mockk(relaxed = true) {
+            every { state.searchState.selectedSearchEngine?.searchEngine } returns googleSearchEngine()
+        }
+        val (_, store) = buildMiddlewareAndAddToStore(appStore = appStore)
+
+        store.dispatch(EnterEditMode(false))
+        store.dispatch(SearchQueryUpdated(BrowserToolbarQuery("")))
+
+        val actions = store.state.editState.editActionsEnd
+        val lensButton = actions.filterIsInstance<ActionButtonRes>().find { it.onClick == LensButtonClicked }
+        assertEquals(null, lensButton)
+    }
+
+    @Test
     fun `WHEN the Lens button is clicked THEN dispatch LensRequested and record telemetry`() {
         every { settings.googleLensIntegrationEnabled } returns true
+        every { settings.googleLensIntegrationUserEnabled } returns true
         val appStore: AppStore = mockk(relaxed = true) {
             every { state.searchState.selectedSearchEngine?.searchEngine } returns googleSearchEngine()
         }
@@ -1329,6 +1371,48 @@ class BrowserToolbarSearchMiddlewareTest {
         store.dispatch(lensButton.onClick as BrowserToolbarEvent)
         assertTelemetryRecorded(ACTION_LENS_CLICKED)
         verify { appStore.dispatch(LensRequested) }
+    }
+
+    @Test
+    fun `GIVEN the Lens button was clicked WHEN a QR scanner result arrives THEN the URL bar is populated`() {
+        val appStoreActionsCaptor = CaptureActionsMiddleware<AppState, AppAction>()
+        val appStore = AppStore(
+            initialState = AppState(
+                searchState = AppSearchState.EMPTY.copy(
+                    selectedSearchEngine = SelectedSearchEngine(
+                        searchEngine = googleSearchEngine(),
+                        isUserSelected = false,
+                    ),
+                ),
+            ),
+            middlewares = listOf(appStoreActionsCaptor),
+        )
+        val browserUseCases: FenixBrowserUseCases = mockk(relaxed = true)
+        every { components.useCases.fenixBrowserUseCases } returns browserUseCases
+        every { settings.googleLensIntegrationEnabled } returns true
+        every { settings.googleLensIntegrationUserEnabled } returns true
+        val browsingModeManager: BrowsingModeManager = mockk(relaxed = true) {
+            every { mode } returns Normal
+        }
+        val (_, store) = buildMiddlewareAndAddToStore(
+            appStore = appStore,
+            components = components,
+            browsingModeManager = browsingModeManager,
+        )
+        store.dispatch(EnterEditMode(false))
+        store.dispatch(SearchQueryUpdated(BrowserToolbarQuery("")))
+
+        val lensButton = store.state.editState.editActionsEnd
+            .filterIsInstance<ActionButtonRes>()
+            .find { it.onClick == LensButtonClicked }!!
+
+        store.dispatch(lensButton.onClick as BrowserToolbarEvent)
+        appStore.dispatch(QrScannerInputAvailable("scanned.example"))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("scanned.example", store.state.editState.query.current)
+        assertTrue(store.state.editState.isQueryPrefilled)
+        appStoreActionsCaptor.assertLastAction(QrScannerInputConsumed::class)
     }
 
     @Test
@@ -1348,6 +1432,7 @@ class BrowserToolbarSearchMiddlewareTest {
         val browserUseCases: FenixBrowserUseCases = mockk(relaxed = true)
         every { components.useCases.fenixBrowserUseCases } returns browserUseCases
         every { settings.googleLensIntegrationEnabled } returns true
+        every { settings.googleLensIntegrationUserEnabled } returns true
         val browsingModeManager: BrowsingModeManager = mockk(relaxed = true) {
             every { mode } returns Normal
         }
@@ -1396,6 +1481,7 @@ class BrowserToolbarSearchMiddlewareTest {
         val browserUseCases: FenixBrowserUseCases = mockk(relaxed = true)
         every { components.useCases.fenixBrowserUseCases } returns browserUseCases
         every { settings.googleLensIntegrationEnabled } returns true
+        every { settings.googleLensIntegrationUserEnabled } returns true
         val browsingModeManager: BrowsingModeManager = mockk(relaxed = true) {
             every { mode } returns Private
         }
@@ -1617,7 +1703,7 @@ class BrowserToolbarSearchMiddlewareTest {
     private fun assertTelemetryRecorded(item: String) {
        val values = Toolbar.buttonTapped.testGetValue()
        assertNotNull(values)
-       val last = values!!.last()
+       val last = values.last()
        assertEquals(item, last.extra?.get("item"))
        assertEquals(SOURCE_ADDRESS_BAR, last.extra?.get("source"))
     }

@@ -35,6 +35,8 @@ support-files = [
 
 ["test_extensionsettings.js"]
 
+["test_extensionsettings_blocked_permissions.js"]
+
 ["test_import_enterprise_roots.js"]
 
 ["test_local_network_access.js"]
@@ -45,6 +47,8 @@ run-if = [
 ]
 
 ["test_permissions.js"]
+
+["test_policy_descriptions.js"]
 
 ["test_policy_search_engine.js"]
 
@@ -68,3 +72,5 @@ support-files = ["config_popups_cookies_addons.json"]
 ["test_sorted_alphabetically.js"]
 
 ["test_telemetry.js"]
+
+["test_webserial.js"]

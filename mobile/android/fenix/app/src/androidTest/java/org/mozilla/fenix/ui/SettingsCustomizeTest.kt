@@ -5,10 +5,9 @@
 package org.mozilla.fenix.ui
 
 import android.content.res.Configuration
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import org.junit.Rule
 import org.junit.Test
-import org.mozilla.fenix.customannotations.SkipLeaks
+import org.mozilla.fenix.customannotations.Converted
 import org.mozilla.fenix.customannotations.SmokeTest
 import org.mozilla.fenix.helpers.AppAndSystemHelper.enableOrDisableBackGestureNavigationOnDevice
 import org.mozilla.fenix.helpers.FenixTestRule
@@ -25,6 +24,7 @@ import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
 import org.mozilla.fenix.ui.robots.browserScreen
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.navigationToolbar
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 class SettingsCustomizeTest {
     @get:Rule(order = 0)
@@ -32,14 +32,14 @@ class SettingsCustomizeTest {
 
     private val mockWebServer get() = fenixTestRule.mockWebServer
 
-    @get:Rule
+    @get:Rule(order = 1)
     val composeTestRule =
-        AndroidComposeTestRule(
+        AndroidComposeTestRuleV2(
             HomeActivityIntentTestRule.withDefaultSettingsOverrides(),
         ) { it.activity }
 
-    @get:Rule
-    val memoryLeaksRule = DetectMemoryLeaksRule()
+    @get:Rule(order = 2)
+    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
 
     private fun getUiTheme(): Boolean {
         val mode =
@@ -95,7 +95,6 @@ class SettingsCustomizeTest {
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1058682
     @Test
-    @SkipLeaks
     fun turnOffSwipeToSwitchTabsPreferenceTest() {
         val firstWebPage = mockWebServer.getGenericAsset(1)
         val secondWebPage = mockWebServer.getGenericAsset(2)
@@ -138,6 +137,11 @@ class SettingsCustomizeTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3186732
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.SettingsCustomizeTest#verifyTheDefaultAppIconSettingTest"],
+        bug = 2039839,
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun verifyTheDefaultAppIconSettingTest() {
@@ -150,6 +154,11 @@ class SettingsCustomizeTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3186731
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.SettingsCustomizeTest#verifyTheAppIconSelectionPageTest"],
+        bug = 2040906,
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun verifyTheAppIconSelectionPageTest() {
@@ -163,6 +172,11 @@ class SettingsCustomizeTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3186734
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.SettingsCustomizeTest#verifyTheChangeAppIconButtonTest"],
+        bug = 2040906,
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun verifyTheChangeAppIconButtonTest() {
@@ -186,6 +200,11 @@ class SettingsCustomizeTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3333174
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.SettingsCustomizeTest#verifyTheToolbarLayoutSectionTest"],
+        bug = 2040906,
+        since = "2026-05",
+    )
     @Test
     fun verifyTheToolbarLayoutSectionTest() {
         homeScreen(composeTestRule) {

@@ -23,6 +23,13 @@
 //   AssemblerBufferWithConstantPools
 //
 
+namespace {
+js::jit::BufferOffset operator+(const js::jit::BufferOffset& bo, int offset) {
+  MOZ_ASSERT(bo.assigned());
+  return js::jit::BufferOffset(bo.getOffset() + offset);
+}
+}  // namespace
+
 BEGIN_TEST(testAssemblerBuffer_BufferOffset) {
   using js::jit::BufferOffset;
 
@@ -361,6 +368,7 @@ static constexpr auto AsmBufSettings = js::jit::AssemblerBufferSettings{
     .instSize = InstSize,
     .guardSize = 1,
     .headerSize = 1,
+    .veneerSize = 1,
     .pcBias = 0,
     .alignFillInst = Instr::AlignFiller(0),
     .nopFillInst = Instr::NoopFiller(0),
@@ -467,7 +475,10 @@ struct TestAssembler {
     // some adjustment of the label linked-list.
     *buffer->getInst(veneer) = Instr::VeneerBranch(*branch & 0xffff);
     MOZ_ASSERT(veneerOff > branchOff, "Veneer should follow branch");
-    *branch = Instr::PatchedShortBranch(veneerOff - branchOff);
+    size_t offset = veneerOff - branchOff;
+    MOZ_ASSERT(offset <= BranchRangeFor(rangeIdx),
+               "Veneer reachable from branch");
+    *branch = Instr::PatchedShortBranch(offset);
   }
 };
 
@@ -504,10 +515,8 @@ BEGIN_TEST(testAssemblerBuffer_AssemblerBufferWithConstantPools) {
   // Each slice holds 5 instructions. Trigger a constant pool inside the slice.
   uint32_t poolLoad[] = {Instr::PoolLoadUninit(0)};
   uint32_t poolData[] = {0xdddd0000, 0xdddd0001, 0xdddd0002, 0xdddd0003};
-  AsmBufWithPool::PoolEntry pe;
   BufferOffset load =
-      ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData, &pe);
-  CHECK_EQUAL(pe.index(), 0u);
+      ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData);
   CHECK_EQUAL(load.getOffset(), 0);
 
   // Pool hasn't been emitted yet. Load has been patched by
@@ -540,8 +549,7 @@ BEGIN_TEST(testAssemblerBuffer_AssemblerBufferWithConstantPools) {
   poolLoad[0] = Instr::PoolLoadUninit(0);
 
   // Now try with load and pool data on separate slices.
-  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData, &pe);
-  CHECK_EQUAL(pe.index(), 1u);  // Global pool entry index.
+  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData);
   CHECK_EQUAL(load.getOffset(), 24);
   CHECK_EQUAL(*ab.getInst(load),
               Instr::PoolLoadIndex(0));  // Index into current pool.
@@ -556,15 +564,13 @@ BEGIN_TEST(testAssemblerBuffer_AssemblerBufferWithConstantPools) {
 
   // Two adjacent loads to the same pool.
   poolLoad[0] = Instr::PoolLoadUninit(0);
-  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData, &pe);
-  CHECK_EQUAL(pe.index(), 2u);  // Global pool entry index.
+  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData);
   CHECK_EQUAL(load.getOffset(), 48);
   CHECK_EQUAL(*ab.getInst(load),
               Instr::PoolLoadIndex(0));  // Index into current pool.
 
   poolLoad[0] = Instr::PoolLoadUninit(0);
-  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)(poolData + 1), &pe);
-  CHECK_EQUAL(pe.index(), 3u);  // Global pool entry index.
+  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)(poolData + 1));
   CHECK_EQUAL(load.getOffset(), 52);
   CHECK_EQUAL(*ab.getInst(load),
               Instr::PoolLoadIndex(1));  // Index into current pool.
@@ -587,16 +593,13 @@ BEGIN_TEST(testAssemblerBuffer_AssemblerBufferWithConstantPools) {
   // second load wouldn't be able to reach its data. This must produce two
   // pools.
   poolLoad[0] = Instr::PoolLoadUninit(0);
-  load = ab.allocEntry(1, 2, (uint8_t*)poolLoad, (uint8_t*)(poolData + 2), &pe);
-  CHECK_EQUAL(pe.index(), 4u);  // Global pool entry index.
+  load = ab.allocEntry(1, 2, (uint8_t*)poolLoad, (uint8_t*)(poolData + 2));
   CHECK_EQUAL(load.getOffset(), 76);
   CHECK_EQUAL(*ab.getInst(load),
               Instr::PoolLoadIndex(0));  // Index into current pool.
 
   poolLoad[0] = Instr::PoolLoadUninit(0);
-  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData, &pe);
-  CHECK_EQUAL(pe.index(),
-              6u);  // Global pool entry index. (Prev one is two indexes).
+  load = ab.allocEntry(1, 1, (uint8_t*)poolLoad, (uint8_t*)poolData);
   CHECK_EQUAL(load.getOffset(), 96);
   CHECK_EQUAL(*ab.getInst(load),
               Instr::PoolLoadIndex(0));  // Index into current pool.
@@ -916,6 +919,348 @@ BEGIN_TEST(
 END_TEST(
     testAssemblerBuffer_AssemblerBufferWithConstantPools_ShortBranchVeneerExpiresTooFastNoPool)
 
+namespace {
+
+struct LongVeneerTestAssembler;
+
+static constexpr auto LongVeneerAsmBufSettings =
+    js::jit::AssemblerBufferSettings{
+        .instSize = InstSize,
+        .guardSize = 2,
+        .headerSize = 1,
+        .veneerSize = 2,
+        .pcBias = 0,
+        .alignFillInst = Instr::AlignFiller(0),
+        .nopFillInst = Instr::NoopFiller(0),
+        .numShortBranchRanges = NumShortBranchRanges,
+        .shortRangeBranchHysteresis = ShortRangeBranchHysteresis,
+    };
+
+using LongVeneerAsmBufWithPool =
+    js::jit::AssemblerBufferWithConstantPools<Inst, LongVeneerTestAssembler,
+                                              LongVeneerAsmBufSettings>;
+
+struct LongVeneerTestAssembler {
+  using BufferOffset = js::jit::BufferOffset;
+
+  static constexpr auto InstSize = LongVeneerAsmBufSettings.instSize;
+  static constexpr auto GuardSize = LongVeneerAsmBufSettings.guardSize;
+  static constexpr auto VeneerSize = LongVeneerAsmBufSettings.veneerSize;
+
+  static constexpr unsigned BranchIndex = 1;
+  static constexpr unsigned BranchRange = 48;
+
+  static constexpr size_t poolMaxOffset = 1024;
+  static constexpr unsigned nopFill = 0;
+
+  LongVeneerAsmBufWithPool buffer;
+
+  LongVeneerTestAssembler() : buffer(poolMaxOffset, nopFill) {}
+
+  BufferOffset nextOffset() { return buffer.nextOffset(); }
+
+  int32_t currentOffset() { return buffer.nextOffset().getOffset(); }
+
+  BufferOffset nextInstrOffset(unsigned numInsts, unsigned numNewDeadlines) {
+    return buffer.nextInstrOffset(numInsts, numNewDeadlines);
+  }
+
+  Inst* getInst(BufferOffset bo) { return buffer.getInst(bo); }
+
+  BufferOffset nop() { return buffer.putInt(Instr::NoopFiller(0)); }
+
+  BufferOffset branch(int16_t offset) {
+    [[maybe_unused]] BufferOffset reserved = nextInstrOffset(1, 1);
+    BufferOffset bo = buffer.putInt(Instr::ShortBranch(offset));
+    buffer.registerBranchDeadline(BranchIndex, bo + BranchRange);
+    MOZ_ASSERT(reserved == bo);
+    return bo;
+  }
+
+  /**
+   * Dump instructions to help debugging.
+   */
+  void dumpInstructions() {
+    BufferOffset cur(0);
+    BufferOffset last = buffer.nextOffset();
+    while (cur < last) {
+      auto [op, bytes] = Instr::Decode(*getInst(cur));
+      printf("%04x: %s[%04x]\n", cur.getOffset(), Instr::ToName(op), bytes);
+
+      cur = cur + InstSize;
+    }
+  }
+
+  static void InsertIndexIntoTag(uint8_t* load_, uint32_t index) {
+    MOZ_CRASH("constant pool not used");
+  }
+
+  static void PatchConstantPoolLoad(void* loadAddr, void* constPoolAddr) {
+    MOZ_CRASH("constant pool not used");
+  }
+
+  static void WritePoolGuard(BufferOffset branch, Inst* dest,
+                             BufferOffset afterPool) {
+    MOZ_ASSERT(branch.assigned());
+    MOZ_ASSERT(afterPool.assigned());
+    size_t branchOff = branch.getOffset();
+    size_t afterPoolOff = afterPool.getOffset();
+    MOZ_ASSERT(afterPoolOff > branchOff);
+    uint32_t delta = afterPoolOff - branchOff;
+    *dest = Instr::Branch(delta);
+
+    for (size_t i = 1; i < GuardSize; i++) {
+      dest[i] = Instr::NoopFiller(0x1111 * i);
+    }
+  }
+
+  static void WritePoolHeader(void* start, js::jit::Pool* p, bool isNatural) {
+    MOZ_ASSERT(!isNatural, "Natural pool guards not implemented.");
+    Inst* hdr = reinterpret_cast<Inst*>(start);
+    *hdr = Instr::PoolHeader(p->getPoolSize());
+  }
+
+  static unsigned BranchRangeFor(unsigned rangeIdx) {
+    MOZ_ASSERT(rangeIdx < NumShortBranchRanges);
+
+    switch (rangeIdx) {
+      case 0:
+        MOZ_CRASH("unused branch type");
+      case BranchIndex:
+        return BranchRange;
+      case 2:
+        MOZ_CRASH("unused branch type");
+    }
+    MOZ_CRASH("bad branch type");
+  }
+
+  static void PatchShortRangeBranchToVeneer(LongVeneerAsmBufWithPool* buffer,
+                                            unsigned rangeIdx,
+                                            BufferOffset deadline,
+                                            BufferOffset veneer) {
+    size_t branchOff = deadline.getOffset() - BranchRangeFor(rangeIdx);
+    size_t veneerOff = veneer.getOffset();
+    Inst* branch = buffer->getInst(BufferOffset(branchOff));
+
+    MOZ_ASSERT(Instr::Is(Instr::Op::ShortBranch, *branch),
+               "Expected short-range branch instruction");
+    // Copy branch offset to veneer. A real instruction set would require
+    // some adjustment of the label linked-list.
+    *buffer->getInst(veneer) = Instr::VeneerBranch(*branch & 0xffff);
+
+    // Pad veneer to VeneerSize instructions.
+    for (size_t i = 1; i < VeneerSize; i++) {
+      BufferOffset pad = veneer + i * 4;
+      *buffer->getInst(pad) = Instr::NoopFiller(i);
+    }
+
+    MOZ_ASSERT(veneerOff > branchOff, "Veneer should follow branch");
+    size_t offset = veneerOff - branchOff;
+    MOZ_ASSERT(offset <= BranchRangeFor(rangeIdx),
+               "Veneer reachable from branch");
+    *branch = Instr::PatchedShortBranch(offset);
+  }
+};
+
+class LongVeneerAutoForbidPoolsAndNops {
+  LongVeneerTestAssembler* ab_;
+
+ public:
+  LongVeneerAutoForbidPoolsAndNops(LongVeneerTestAssembler* ab, size_t maxInst)
+      : ab_(ab) {
+    ab_->buffer.enterNoPool(maxInst);
+    ab_->buffer.enterNoNops();
+  }
+  ~LongVeneerAutoForbidPoolsAndNops() {
+    ab_->buffer.leaveNoNops();
+    ab_->buffer.leaveNoPool();
+  }
+};
+
+}  // namespace
+
+BEGIN_TEST(
+    testAssemblerBuffer_AssemblerBufferWithConstantPools_LongVeneer_SingleBranch) {
+  using js::jit::BufferOffset;
+
+  constexpr int InstSize = LongVeneerAsmBufSettings.instSize;
+  constexpr int GuardSize = LongVeneerAsmBufSettings.guardSize;
+  constexpr int VeneerSize = LongVeneerAsmBufSettings.veneerSize;
+  constexpr int HeaderSize = LongVeneerAsmBufSettings.headerSize;
+
+  LongVeneerTestAssembler tas{};
+
+  BufferOffset br1 = tas.branch(0xaa);
+  BufferOffset br1_deadline1 = br1 + LongVeneerTestAssembler::BranchRange;
+
+  // Branch should not have been patched yet here.
+  CHECK_EQUAL(*tas.getInst(br1), Instr::ShortBranch(0xaa));
+
+  // Instructions until deadline is reached.
+  int32_t instr_until_deadline =
+      (br1_deadline1.getOffset() - tas.currentOffset()) / InstSize;
+
+  // Compute how many nops to insert until deadline is reached.
+  int32_t sizeOfPrimaryVeneers = (VeneerSize - 1) * 1;
+  int32_t nops =
+      instr_until_deadline - GuardSize - HeaderSize - sizeOfPrimaryVeneers;
+
+  // Fill up with more nops to trigger veneer construction.
+  for (int i = 0; i < nops; ++i) {
+    tas.nop();
+  }
+
+  BufferOffset guard = tas.nextOffset();
+
+  // Branch should not have been patched yet here.
+  CHECK_EQUAL(*tas.getInst(br1), Instr::ShortBranch(0xaa));
+
+  // Now veneer is created.
+  BufferOffset lastNop = tas.nop();
+
+  CHECK_EQUAL(*tas.getInst(guard),
+              Instr::Branch(lastNop.getOffset() - guard.getOffset()));
+  CHECK_EQUAL(*tas.getInst(guard + InstSize), Instr::NoopFiller(0x1111));
+
+  CHECK_EQUAL(*tas.getInst(guard + GuardSize * InstSize), Instr::PoolHeader(0));
+
+  BufferOffset veneer = guard + (GuardSize + HeaderSize) * InstSize;
+  CHECK_EQUAL(*tas.getInst(veneer), Instr::VeneerBranch(0xaa));
+  CHECK_EQUAL(*tas.getInst(veneer + InstSize), Instr::NoopFiller(1));
+
+  // Now patched.
+  CHECK_EQUAL(*tas.getInst(br1),
+              Instr::PatchedShortBranch(veneer.getOffset() - br1.getOffset()));
+
+  return true;
+}
+END_TEST(
+    testAssemblerBuffer_AssemblerBufferWithConstantPools_LongVeneer_SingleBranch)
+
+BEGIN_TEST(
+    testAssemblerBuffer_AssemblerBufferWithConstantPools_LongVeneer_MultiBranch) {
+  using js::jit::BufferOffset;
+
+  // When VeneerSize > 1, it is possible for branch deadlines to expire faster
+  // than we can insert veneers. Suppose branches are 4 bytes each and veneers
+  // are 8 bytes each, we could have the following deadline set:
+  //
+  //   Range 0: 40, 44, 48
+  //
+  // It is not good enough to start inserting veneers at the 40 deadline; we
+  // would not be able to create veneers for the 44 deadline.
+  // Instead, we need to start at 32:
+  //
+  //   32: veneer(40)
+  //   40: veneer(44)
+  //   48: veneer(48)
+  //
+  // This is a pretty conservative solution to the problem: We reserve space
+  // for all deadlines in the range with the earliest deadline, assuming worst
+  // case deadlines.
+
+  constexpr int InstSize = LongVeneerAsmBufSettings.instSize;
+  constexpr int GuardSize = LongVeneerAsmBufSettings.guardSize;
+  constexpr int VeneerSize = LongVeneerAsmBufSettings.veneerSize;
+  constexpr int HeaderSize = LongVeneerAsmBufSettings.headerSize;
+
+  // Action which triggers veneer creation.
+  enum class CreateVeneer {
+    Nop,
+    AutoForbidPoolsAndNops,
+    NextInstrOffset,
+  };
+
+  for (auto action : {
+           CreateVeneer::Nop,
+           CreateVeneer::AutoForbidPoolsAndNops,
+           CreateVeneer::NextInstrOffset,
+       }) {
+    LongVeneerTestAssembler tas{};
+
+    BufferOffset br1 = tas.branch(0xaa);
+    BufferOffset br1_deadline1 = br1 + LongVeneerTestAssembler::BranchRange;
+
+    BufferOffset br2 = tas.branch(0xbb);
+    BufferOffset br3 = tas.branch(0xcc);
+
+    // Branches should not have been patched yet here.
+    CHECK_EQUAL(*tas.getInst(br1), Instr::ShortBranch(0xaa));
+    CHECK_EQUAL(*tas.getInst(br2), Instr::ShortBranch(0xbb));
+    CHECK_EQUAL(*tas.getInst(br3), Instr::ShortBranch(0xcc));
+
+    // Instructions until deadline is reached.
+    int32_t instr_until_deadline =
+        (br1_deadline1.getOffset() - tas.currentOffset()) / InstSize;
+
+    // Compute how many nops to insert until deadline is reached.
+    int32_t sizeOfPrimaryVeneers = (VeneerSize - 1) * 3;
+    int32_t nops =
+        instr_until_deadline - GuardSize - HeaderSize - sizeOfPrimaryVeneers;
+
+    // Fill up with more nops to trigger veneer construction.
+    for (int i = 0; i < nops; ++i) {
+      tas.nop();
+    }
+
+    BufferOffset guard = tas.nextOffset();
+
+    // Branches should not have been patched yet here.
+    CHECK_EQUAL(*tas.getInst(br1), Instr::ShortBranch(0xaa));
+    CHECK_EQUAL(*tas.getInst(br2), Instr::ShortBranch(0xbb));
+    CHECK_EQUAL(*tas.getInst(br3), Instr::ShortBranch(0xcc));
+
+    // Now veneers are created.
+    BufferOffset lastNop;
+    switch (action) {
+      case CreateVeneer::Nop: {
+        lastNop = tas.nop();
+        break;
+      }
+      case CreateVeneer::AutoForbidPoolsAndNops: {
+        LongVeneerAutoForbidPoolsAndNops afp(&tas, 1);
+        lastNop = tas.nop();
+        break;
+      }
+      case CreateVeneer::NextInstrOffset: {
+        BufferOffset next = tas.nextInstrOffset(1, 0);
+        lastNop = tas.nop();
+        CHECK_EQUAL(lastNop.getOffset(), next.getOffset());
+        break;
+      }
+    }
+
+    CHECK_EQUAL(*tas.getInst(guard),
+                Instr::Branch(lastNop.getOffset() - guard.getOffset()));
+    CHECK_EQUAL(*tas.getInst(guard + InstSize), Instr::NoopFiller(0x1111));
+
+    BufferOffset header = guard + GuardSize * InstSize;
+    CHECK_EQUAL(*tas.getInst(header), Instr::PoolHeader(0));
+
+    BufferOffset veneer1 = header + HeaderSize * InstSize;
+    CHECK_EQUAL(*tas.getInst(veneer1), Instr::VeneerBranch(0xaa));
+    CHECK_EQUAL(*tas.getInst(veneer1 + InstSize), Instr::NoopFiller(1));
+
+    BufferOffset veneer2 = veneer1 + VeneerSize * InstSize;
+    CHECK_EQUAL(*tas.getInst(veneer2), Instr::VeneerBranch(0xbb));
+    CHECK_EQUAL(*tas.getInst(veneer2 + InstSize), Instr::NoopFiller(1));
+
+    BufferOffset veneer3 = veneer2 + VeneerSize * InstSize;
+    CHECK_EQUAL(*tas.getInst(veneer3), Instr::VeneerBranch(0xcc));
+    CHECK_EQUAL(*tas.getInst(veneer3 + InstSize), Instr::NoopFiller(1));
+
+    // Now patched.
+    CHECK_EQUAL(*tas.getInst(br1), Instr::PatchedShortBranch(
+                                       veneer1.getOffset() - br1.getOffset()));
+    CHECK_EQUAL(*tas.getInst(br2), Instr::PatchedShortBranch(
+                                       veneer2.getOffset() - br2.getOffset()));
+  }
+
+  return true;
+}
+END_TEST(
+    testAssemblerBuffer_AssemblerBufferWithConstantPools_LongVeneer_MultiBranch)
+
 // Test that everything is put together correctly in the ARM64 assembler.
 #if defined(JS_CODEGEN_ARM64)
 
@@ -1022,6 +1367,11 @@ auto cbz(vixl::Register rt, ptrdiff_t offset) {
 
 auto tbz(vixl::Register rt, unsigned bitPos, ptrdiff_t offset) {
   return vixl::TBZ | vixl::Assembler::ImmTestBranchBit(bitPos) |
+         vixl::Assembler::ImmTestBranch(offset) | vixl::Assembler::Rt(rt);
+}
+
+auto tbnz(vixl::Register rt, unsigned bitPos, ptrdiff_t offset) {
+  return vixl::TBNZ | vixl::Assembler::ImmTestBranchBit(bitPos) |
          vixl::Assembler::ImmTestBranch(offset) | vixl::Assembler::Rt(rt);
 }
 
@@ -1398,22 +1748,11 @@ BEGIN_TEST(
   for (int32_t i = 0; i < nops; ++i) {
     masm.Nop();
   }
+  BufferOffset after_last_nop(masm.currentOffset());
 
   // tbz1 is still unbound after emitting nops.
   CHECK_EQUAL(masm.getInstructionAt(tbz1)->InstructionBits(),
               tbz(tbz1_bitpos, unbound));
-
-  // 30 determined through testing, but there's probably a way to compute it.
-  constexpr int32_t more_instr = 30;
-
-  // Minus one to leave room for the final tbz instruction.
-  constexpr int32_t more_nops = more_instr - 1;
-
-  // Insert more nops.
-  for (int32_t i = 0; i < more_nops; ++i) {
-    masm.Nop();
-  }
-  BufferOffset after_last_nop(masm.currentOffset());
 
   // Create the final tbz instruction.
   unsigned tbz2_bitpos = 1;
@@ -1442,4 +1781,113 @@ BEGIN_TEST(
   return true;
 }
 END_TEST(testAssemblerBuffer_ARM64_ShortBranchSecondaryVeneerRegisterDeadline)
+
+BEGIN_TEST(testAssemblerBuffer_ARM64_BoundLabelBranchDeadline) {
+  using namespace js::jit;
+  using namespace AArch64;
+
+  js::LifoAlloc lifo(4096, js::MallocArena);
+  TempAllocator alloc(&lifo);
+  JitContext jc(cx);
+  StackMacroAssembler masm(cx, alloc);
+  AutoCreatedBy acb(masm, __func__);
+
+  auto rt = vixl::x1;
+
+  auto tbz = std::bind_front(AArch64::tbz, rt);
+  auto tbnz = std::bind_front(AArch64::tbnz, rt);
+
+  // Like vixl::MacroAssembler::LabelIsOutOfRange, except that currentOffset()
+  // instead of nextInstrOffset() is used. That ensures we don't accidentally
+  // flush the constant pool.
+  auto LabelIsOutOfRange = [&](Label* label, vixl::ImmBranchType branch_type) {
+    int32_t diff = int32_t(masm.currentOffset()) - label->offset();
+    return !Instruction::IsValidImmPCOffset(branch_type, diff / 4);
+  };
+
+  Label tbz_lbl1, tbz_lbl2, tbz_lbl3;
+
+  // Bind tbz_lbl3 to the start.
+  masm.bind(&tbz_lbl3);
+
+  BufferOffset tbz1(masm.currentOffset());
+  unsigned tbz1_bitpos = 12;
+  masm.Tbz(rt, tbz1_bitpos, &tbz_lbl1);
+
+  // Add some additional Tbz to ensure we have enough veneers to make the pool
+  // large enough that the last Tbz for |tbz_lbl3| gets out of range.
+  for (int32_t i = 0; i < 10; ++i) {
+    masm.Tbz(rt, 0, &tbz_lbl2);
+  }
+
+  // Compute deadline for |tbz1|.
+  BufferOffset tbz_deadline1(
+      tbz1.getOffset() +
+      vixl::Instruction::ImmBranchMaxForwardOffset(vixl::TestBranchRangeType));
+
+  // Instructions until deadline is reached.
+  int32_t current = int32_t(masm.currentOffset());
+  int32_t instr_until_deadline = (tbz_deadline1.getOffset() - current) / 4;
+
+  // Compute how many nops to insert until deadline is reached, excluding the
+  // pool guard and pool header.
+  int32_t nops = instr_until_deadline - 2;
+
+  // Insert nops.
+  for (int32_t i = 0; i < nops; ++i) {
+    masm.Nop();
+  }
+  int32_t pool_start_offset = masm.currentOffset();
+
+  // tbz1 is unbound.
+  CHECK_EQUAL(masm.getInstructionAt(tbz1)->InstructionBits(),
+              tbz(tbz1_bitpos, unbound));
+
+  // tbz_lbl3 is still in range.
+  CHECK_EQUAL(LabelIsOutOfRange(&tbz_lbl3, vixl::TestBranchType), false);
+
+  // Emit Tbz. This should trigger pool construction, because tbz1 is about to
+  // get out of range.
+  unsigned tbz3_bitpos = 15;
+  masm.Tbz(rt, tbz3_bitpos, &tbz_lbl3);
+  BufferOffset after_tbz3(masm.currentOffset());
+
+  // Unconditional branch to |tbz_lbl3|.
+  BufferOffset uncondBranch(after_tbz3.getOffset() - 4);
+  CHECK_EQUAL(masm.getInstructionAt(uncondBranch)->InstructionBits(),
+              b(label_offset(uncondBranch, &tbz_lbl3)));
+
+  // Tbz was inverted to Tbnz.
+  BufferOffset tbnz1(after_tbz3.getOffset() - 8);
+  CHECK_EQUAL(masm.getInstructionAt(tbnz1)->InstructionBits(),
+              tbnz(tbz3_bitpos, offset(tbnz1, after_tbz3)));
+
+  // Pool guard branch
+  BufferOffset guard(pool_start_offset);
+  CHECK_EQUAL(masm.getInstructionAt(guard)->InstructionBits(),
+              b(offset(guard, tbnz1)));
+
+  // Pool header
+  BufferOffset header(pool_start_offset + 4);
+  CHECK_EQUAL(masm.getInstructionAt(header)->InstructionBits(), poolheader(1));
+
+  // Veneer branches
+  BufferOffset veneer1(pool_start_offset + 8);
+  CHECK_EQUAL(masm.getInstructionAt(veneer1)->InstructionBits(), b(unbound));
+
+  // + 10 more veneer branches for |tbz_lbl2| (not checked).
+
+  // Finally bind all labels.
+  masm.bind(&tbz_lbl1);
+  masm.bind(&tbz_lbl2);
+
+  // Check veneer branch for |tbz_lbl1| is correctly bound.
+  CHECK_EQUAL(masm.getInstructionAt(tbz1)->InstructionBits(),
+              tbz(tbz1_bitpos, offset(tbz1, veneer1)));
+  CHECK_EQUAL(masm.getInstructionAt(veneer1)->InstructionBits(),
+              b(label_offset(veneer1, &tbz_lbl1)));
+
+  return true;
+}
+END_TEST(testAssemblerBuffer_ARM64_BoundLabelBranchDeadline)
 #endif /* JS_CODEGEN_ARM64 */

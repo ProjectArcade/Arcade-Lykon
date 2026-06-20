@@ -73,7 +73,6 @@ describe("<SectionsMgmtPanel>", () => {
     sandbox = sinon.createSandbox();
 
     DEFAULT_PROPS = {
-      exitEventFired: false,
       pocketEnabled: true,
       onSubpanelToggle: sandbox.stub(),
       togglePanel: sandbox.stub(),
@@ -164,56 +163,6 @@ describe("<SectionsMgmtPanel>", () => {
     });
 
     assert.called(DEFAULT_PROPS.onSubpanelToggle);
-  });
-
-  it("should call togglePanel when exitEventFired becomes true and showPanel is true", () => {
-    wrapper = mount(
-      <WrapWithProvider>
-        <SectionsMgmtPanel
-          {...DEFAULT_PROPS}
-          showPanel={true}
-          exitEventFired={false}
-        />
-      </WrapWithProvider>
-    );
-
-    wrapper.setProps({
-      children: (
-        <SectionsMgmtPanel
-          {...DEFAULT_PROPS}
-          showPanel={true}
-          exitEventFired={true}
-          togglePanel={DEFAULT_PROPS.togglePanel}
-        />
-      ),
-    });
-
-    assert.called(DEFAULT_PROPS.togglePanel);
-  });
-
-  it("should not call togglePanel when exitEventFired becomes true but showPanel is false", () => {
-    wrapper = mount(
-      <WrapWithProvider>
-        <SectionsMgmtPanel
-          {...DEFAULT_PROPS}
-          showPanel={false}
-          exitEventFired={false}
-        />
-      </WrapWithProvider>
-    );
-
-    wrapper.setProps({
-      children: (
-        <SectionsMgmtPanel
-          {...DEFAULT_PROPS}
-          showPanel={false}
-          exitEventFired={true}
-          togglePanel={DEFAULT_PROPS.togglePanel}
-        />
-      ),
-    });
-
-    assert.notCalled(DEFAULT_PROPS.togglePanel);
   });
 
   it("should call togglePanel when arrow button is clicked (non-nova)", () => {

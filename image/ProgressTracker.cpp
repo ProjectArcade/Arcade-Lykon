@@ -152,7 +152,7 @@ class AsyncNotifyRunnable : public Runnable {
 };
 
 ProgressTracker::RenderBlockingRunnable::RenderBlockingRunnable(
-    already_AddRefed<AsyncNotifyRunnable>&& aEvent)
+    already_AddRefed<AsyncNotifyRunnable> aEvent)
     : PrioritizableRunnable(std::move(aEvent),
                             nsIRunnablePriority::PRIORITY_RENDER_BLOCKING) {}
 
@@ -169,7 +169,7 @@ void ProgressTracker::RenderBlockingRunnable::RemoveObserver(
 /* static */
 already_AddRefed<ProgressTracker::RenderBlockingRunnable>
 ProgressTracker::RenderBlockingRunnable::Create(
-    already_AddRefed<AsyncNotifyRunnable>&& aEvent) {
+    already_AddRefed<AsyncNotifyRunnable> aEvent) {
   MOZ_ASSERT(NS_IsMainThread());
   RefPtr<ProgressTracker::RenderBlockingRunnable> event(
       new ProgressTracker::RenderBlockingRunnable(std::move(aEvent)));
@@ -198,7 +198,7 @@ void ProgressTracker::Notify(IProgressObserver* aObserver) {
     mRunnable->AddObserver(aObserver);
   } else if (!AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMShutdownThreads)) {
     // Avoid dispatch if we are late in shutdown.
-    RefPtr<AsyncNotifyRunnable> ev = new AsyncNotifyRunnable(this, aObserver);
+    auto ev = MakeRefPtr<AsyncNotifyRunnable>(this, aObserver);
     mRunnable = ProgressTracker::RenderBlockingRunnable::Create(ev.forget());
     SchedulerGroup::Dispatch(do_AddRef(mRunnable));
   }

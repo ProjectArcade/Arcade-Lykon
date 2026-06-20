@@ -47,13 +47,7 @@ using namespace js;
 using namespace js::intl;
 
 const JSClassOps DisplayNamesObject::classOps_ = {
-    nullptr, /* addProperty */
-    nullptr, /* delProperty */
-    nullptr, /* enumerate */
-    nullptr, /* newEnumerate */
-    nullptr, /* resolve */
-    nullptr, /* mayResolve */
-    DisplayNamesObject::finalize,
+    .finalize = DisplayNamesObject::finalize,
 };
 
 const JSClass DisplayNamesObject::class_ = {

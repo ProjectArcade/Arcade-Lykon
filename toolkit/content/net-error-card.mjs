@@ -27,7 +27,7 @@ import {
   getResolvedErrorConfig,
   resolveErrorID,
 } from "chrome://global/content/errors/error-lookup.mjs";
-import { html } from "chrome://global/content/vendor/lit.all.mjs";
+import { html, ifDefined } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 import { NET_ERROR_ILLUSTRATIONS } from "chrome://global/content/errors/net-error-illustrations.mjs";
 import "chrome://global/content/elements/moz-button-group.mjs";
@@ -39,6 +39,7 @@ const FELT_PRIVACY_REFRESH = RPMGetBoolPref(
   "security.certerrors.felt-privacy-v1",
   false
 );
+const EXPERT_BAD_CERT = getCSSClass() === "expertBadCert";
 
 export class NetErrorCard extends MozLitElement {
   static properties = {
@@ -60,6 +61,7 @@ export class NetErrorCard extends MozLitElement {
     advancedContainer: ".advanced-container",
     advancedButton: "#advanced-button",
     errorIntro: "#error-intro",
+    dnsSuggestion: "#dns-suggestion",
     certErrorDebugInfo: "#certificateErrorDebugInformation",
     certErrorText: "#certificateErrorText",
     viewCertificate: "#viewCertificate",
@@ -89,14 +91,26 @@ export class NetErrorCard extends MozLitElement {
         : document.getNetErrorInfo();
     } catch {}
 
-    return (
-      resolveErrorID({
-        errorCodeString: errorInfo.errorCodeString,
-        gErrorCode,
-        noConnectivity: gNoConnectivity,
-        vpnActive: VPN_ACTIVE,
-      }) !== null
-    );
+    const resolvedErrorId = resolveErrorID({
+      errorCodeString: errorInfo.errorCodeString,
+      gErrorCode,
+      noConnectivity: gNoConnectivity,
+      vpnActive: VPN_ACTIVE,
+    });
+
+    // Bug 2038887: the felt privacy error page does not surface the DoH
+    // domain, learn-more link, exclude-domain button, or settings shortcut
+    // that the legacy page provides for TRR-only failures. Fall back to the
+    // legacy page until the felt privacy page supports this case.
+    if (
+      resolvedErrorId === "dnsNotFound" &&
+      !gNoConnectivity &&
+      RPMIsTRROnlyFailure()
+    ) {
+      return false;
+    }
+
+    return resolvedErrorId !== null;
   }
 
   constructor() {
@@ -458,8 +472,10 @@ export class NetErrorCard extends MozLitElement {
     );
 
     return html`<div class="advanced-container">
-      <h2 data-l10n-id="fp-certerror-advanced-title"></h2>
-      ${content}
+      ${EXPERT_BAD_CERT
+        ? null
+        : html`<h2 data-l10n-id="fp-certerror-advanced-title"></h2>`}
+      ${EXPERT_BAD_CERT ? this.certErrorCodeTemplate() : null} ${content}
     </div>`;
   }
 
@@ -506,6 +522,23 @@ export class NetErrorCard extends MozLitElement {
 
   getNSSErrorWhyDangerousL10nId(errorString) {
     return errorString.toLowerCase().replace(/_/g, "-");
+  }
+
+  certErrorCodeTemplate() {
+    if (!this.errorConfig?.errorCode || !gIsCertError) {
+      return null;
+    }
+    return html`<p>
+      <a
+        id="errorCode"
+        data-l10n-id="fp-cert-error-code"
+        data-l10n-name="error-code-link"
+        data-telemetry-id="error_code_link"
+        data-l10n-args='{"error": "${this.errorConfig.errorCode}"}'
+        @click=${this.toggleCertErrorDebugInfoShowing}
+        href="#certificateErrorDebugInformation"
+      ></a>
+    </p>`;
   }
 
   advancedSectionTemplate(params) {
@@ -565,19 +598,7 @@ export class NetErrorCard extends MozLitElement {
             ></a>
           </p>`
         : null}
-      ${this.errorConfig?.errorCode && gIsCertError
-        ? html`<p>
-            <a
-              id="errorCode"
-              data-l10n-id="fp-cert-error-code"
-              data-l10n-name="error-code-link"
-              data-telemetry-id="error_code_link"
-              data-l10n-args='{"error": "${this.errorConfig.errorCode}"}'
-              @click=${this.toggleCertErrorDebugInfoShowing}
-              href="#certificateErrorDebugInformation"
-            ></a>
-          </p>`
-        : null}
+      ${EXPERT_BAD_CERT ? null : this.certErrorCodeTemplate()}
       ${this.errorConfig?.errorCode && !gIsCertError
         ? html`<p
             data-l10n-id="fp-cert-error-code"
@@ -656,7 +677,9 @@ export class NetErrorCard extends MozLitElement {
       whatCanYouDoItems: customNetError.whatCanYouDoItems,
       learnMoreL10nId: customNetError.learnMoreL10nId,
       learnMoreSupportPage: customNetError.learnMoreSupportPage,
-      errorCode: customNetError.showErrorCode ? config.errorCode : null,
+      errorCode:
+        this.errorInfo?.errorCodeString ||
+        (customNetError.showErrorCode ? config.errorCode : null),
       buttons: {
         tryAgain: config.buttons?.showTryAgain,
         goBack: config.buttons?.showGoBack && window.self === window.top,
@@ -1035,6 +1058,12 @@ export class NetErrorCard extends MozLitElement {
       const category = gIsCertError
         ? "securityUiCerterror"
         : "securityUiNeterror";
+      let errorInfo = this.errorInfo;
+      if (!gIsCertError && !errorInfo.errorCodeString) {
+        errorInfo = Object.assign({}, errorInfo, {
+          errorCodeString: gErrorCode,
+        });
+      }
       void recordSecurityUITelemetry(
         category,
         "click" +
@@ -1042,7 +1071,7 @@ export class NetErrorCard extends MozLitElement {
             .split("_")
             .map(word => word[0].toUpperCase() + word.slice(1))
             .join(""),
-        this.errorInfo
+        errorInfo
       );
     }
   }
@@ -1053,7 +1082,11 @@ export class NetErrorCard extends MozLitElement {
     }
 
     const { bodyTitleL10nId, image } = this.errorConfig;
-    const { src, alt } = image ?? NET_ERROR_ILLUSTRATIONS.securityError;
+    const {
+      src,
+      alt = "",
+      className,
+    } = image ?? NET_ERROR_ILLUSTRATIONS.securityError;
     const title = bodyTitleL10nId ?? "fp-certerror-body-title";
 
     return html`<link
@@ -1066,7 +1099,7 @@ export class NetErrorCard extends MozLitElement {
         aria-describedby="error-intro whatCanYouDo"
       >
         <div class="img-container">
-          <img src=${src} data-l10n-id=${alt} data-l10n-attrs="alt" />
+          <img src=${src} class=${ifDefined(className)} alt=${alt} />
         </div>
         <div class="container">
           ${this.showCustomNetErrorCard
@@ -1074,15 +1107,17 @@ export class NetErrorCard extends MozLitElement {
             : html`<h1 id="error-title" data-l10n-id=${title}></h1>
                 ${this.introContentTemplate()}
                 <moz-button-group
-                  >${this.returnButtonTemplate()}<moz-button
-                    id="advanced-button"
-                    data-l10n-id=${this.advancedShowing
-                      ? "fp-certerror-hide-advanced-button"
-                      : "fp-certerror-advanced-button"}
-                    data-telemetry-id="advanced_button"
-                    @click=${this.toggleAdvancedShowing}
-                  ></moz-button
-                ></moz-button-group>
+                  >${this.returnButtonTemplate()}${EXPERT_BAD_CERT
+                    ? null
+                    : html`<moz-button
+                        id="advanced-button"
+                        data-l10n-id=${this.advancedShowing
+                          ? "fp-certerror-hide-advanced-button"
+                          : "fp-certerror-advanced-button"}
+                        data-telemetry-id="advanced_button"
+                        @click=${this.toggleAdvancedShowing}
+                      ></moz-button>`}</moz-button-group
+                >
                 ${this.advancedContainerTemplate()}
                 ${this.certErrorDebugInfoTemplate()}`}
         </div>

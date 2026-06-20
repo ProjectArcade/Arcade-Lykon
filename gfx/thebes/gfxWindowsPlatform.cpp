@@ -235,37 +235,20 @@ class D3DSharedTexturesReporter final : public nsIMemoryReporter {
 NS_IMPL_ISUPPORTS(D3DSharedTexturesReporter, nsIMemoryReporter)
 
 gfxWindowsPlatform::gfxWindowsPlatform() {
-  // If win32k is locked down then we can't use COM STA and shouldn't need it.
-  // Also, we won't be using any GPU memory in this process.
   if (!IsWin32kLockedDown()) {
-    /*
-     * Initialize COM
-     */
-    CoInitialize(nullptr);
-
-    RegisterStrongMemoryReporter(new GPUAdapterReporter());
-    RegisterStrongMemoryReporter(new D3DSharedTexturesReporter());
+    RegisterStrongMemoryReporter(MakeAndAddRef<GPUAdapterReporter>());
+    RegisterStrongMemoryReporter(MakeAndAddRef<D3DSharedTexturesReporter>());
   }
 }
 
-gfxWindowsPlatform::~gfxWindowsPlatform() {
-  DeviceManagerDx::Shutdown();
-
-  // We don't initialize COM when win32k is locked down.
-  if (!IsWin32kLockedDown()) {
-    /*
-     * Uninitialize COM
-     */
-    CoUninitialize();
-  }
-}
+gfxWindowsPlatform::~gfxWindowsPlatform() { DeviceManagerDx::Shutdown(); }
 
 /* static */
 void gfxWindowsPlatform::InitMemoryReportersForGPUProcess() {
   MOZ_RELEASE_ASSERT(XRE_IsGPUProcess());
 
-  RegisterStrongMemoryReporter(new GPUAdapterReporter());
-  RegisterStrongMemoryReporter(new D3DSharedTexturesReporter());
+  RegisterStrongMemoryReporter(MakeAndAddRef<GPUAdapterReporter>());
+  RegisterStrongMemoryReporter(MakeAndAddRef<D3DSharedTexturesReporter>());
 }
 
 /* static */

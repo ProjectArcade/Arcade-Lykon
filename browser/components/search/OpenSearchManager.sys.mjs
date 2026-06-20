@@ -15,19 +15,19 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 
 /**
+ * @typedef {object} OpenSearchData
+ * @property {string} uri
+ *   The uri of the opensearch XML.
+ * @property {string} title
+ *   The name of the engine.
+ * @property {string} icon
+ *   Data URI containing the engine's icon.
+ */
+
+/**
  * Manages the set of available opensearch engines per browser.
  */
 class _OpenSearchManager {
-  /**
-   * @typedef {object} OpenSearchData
-   * @property {string} uri
-   *   The uri of the opensearch XML.
-   * @property {string} title
-   *   The name of the engine.
-   * @property {string} icon
-   *   Data URI containing the engine's icon.
-   */
-
   /**
    * @type {WeakMap<MozBrowser, OpenSearchData[]>}
    */

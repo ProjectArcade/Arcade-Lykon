@@ -541,7 +541,7 @@ class NS_NO_VTABLE nsXPCOMCycleCollectionParticipant
 
 // The default implementation of this class template is empty, because it
 // should never be used: see the partial specializations below.
-template <typename T, bool IsXPCOM = std::is_base_of<nsISupports, T>::value>
+template <typename T, bool IsXPCOM = std::is_base_of_v<nsISupports, T>>
 struct DowncastCCParticipantImpl {};
 
 // Specialization for XPCOM CC participants
@@ -723,10 +723,23 @@ T* DowncastCCParticipant(void* aPtr) {
 // If a class defines a participant, then QIing an instance of that class to
 // nsXPCOMCycleCollectionParticipant should produce that participant.
 #ifdef DEBUG
+#  ifdef __clang__
+/* clang-format off */
+#    define IGNORE_UNNECESSARY_VIRTUAL_SPECIFIER(...)                         \
+      _Pragma("clang diagnostic push")                                        \
+      _Pragma("clang diagnostic ignored \"-Wunnecessary-virtual-specifier\"") \
+      __VA_ARGS__                                                             \
+      _Pragma("clang diagnostic pop")
+/* clang-format on */
+#  else
+#    define IGNORE_UNNECESSARY_VIRTUAL_SPECIFIER(...) __VA_ARGS__
+#  endif
 #  define NS_CHECK_FOR_RIGHT_PARTICIPANT_BASE \
-    virtual void CheckForRightParticipant()
+    IGNORE_UNNECESSARY_VIRTUAL_SPECIFIER(     \
+        virtual void CheckForRightParticipant())
 #  define NS_CHECK_FOR_RIGHT_PARTICIPANT_DERIVED \
-    virtual void CheckForRightParticipant() override
+    IGNORE_UNNECESSARY_VIRTUAL_SPECIFIER(        \
+        virtual void CheckForRightParticipant() override)
 #  define NS_CHECK_FOR_RIGHT_PARTICIPANT_BODY(_class)             \
     {                                                             \
       nsXPCOMCycleCollectionParticipant* p;                       \
@@ -781,8 +794,9 @@ T* DowncastCCParticipant(void* aPtr) {
  * builds.
  */
 #ifdef DEBUG
-#  define NOT_INHERITED_CANT_OVERRIDE \
-    virtual void BaseCycleCollectable() final {}
+#  define NOT_INHERITED_CANT_OVERRIDE                                        \
+    IGNORE_UNNECESSARY_VIRTUAL_SPECIFIER(virtual void BaseCycleCollectable() \
+                                             final{})
 #else
 #  define NOT_INHERITED_CANT_OVERRIDE
 #endif

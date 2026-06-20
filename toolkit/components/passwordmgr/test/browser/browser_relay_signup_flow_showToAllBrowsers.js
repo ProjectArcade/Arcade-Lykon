@@ -166,7 +166,7 @@ add_task(async function test_dismiss_Relay_optin_shows_Relay_again_later() {
       await clickRelayItemAndWaitForPopup(acPopup);
 
       const secondaryDismissButton = notificationPopup.querySelector(
-        "button.popup-notification-secondary-button"
+        "moz-button.popup-notification-secondary-button"
       );
       await clickButtonAndWaitForPopupToClose(secondaryDismissButton);
 
@@ -183,7 +183,8 @@ add_task(async function test_dismiss_Relay_optin_shows_Relay_again_later() {
 
 async function clickThruMoreActionsToDisableRelay(notificationPopup) {
   notificationPopup
-    .querySelector("button.popup-notification-dropmarker")
+    .querySelector("moz-button.popup-notification-secondary-button")
+    .shadowRoot.querySelector("#chevron-button")
     .click();
   const menuPopup = document.querySelector(
     "[data-l10n-id='popup-notification-more-actions-button']"
@@ -264,10 +265,16 @@ add_task(
         const relayIntegrationCheckbox = content.document.querySelector(
           "moz-checkbox#relayIntegration"
         );
+        let prefChanged = TestUtils.waitForCondition(() => {
+          return Services.prefs.getBoolPref(
+            "signon.firefoxRelay.feature",
+            true
+          );
+        }, "Waiting for signon.firefoxRelay.feature pref to be enabled");
         relayIntegrationCheckbox.click();
+        await prefChanged;
       }
     );
-
     // Visit the test page again and see the Relay autocomplete item is back
     await BrowserTestUtils.withNewTab(
       {
@@ -339,7 +346,7 @@ add_task(
         await clickRelayItemAndWaitForPopup(acPopup);
 
         const primaryButton = notificationPopup.querySelector(
-          "button.popup-notification-primary-button"
+          "moz-button.popup-notification-primary-button"
         );
 
         // oauth makes checking the url as a string difficult.

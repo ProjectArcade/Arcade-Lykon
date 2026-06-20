@@ -17,7 +17,7 @@ import mozilla.components.support.remotesettings.into
 import org.mozilla.fenix.R
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.ext.settings
+import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.utils.view.addToRadioGroup
 
@@ -28,6 +28,9 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
     private lateinit var radioProduction: RadioButtonPreference
     private lateinit var radioStaging: RadioButtonPreference
     private lateinit var radioDevelopment: RadioButtonPreference
+    private lateinit var radioProductionV2: RadioButtonPreference
+    private lateinit var radioStagingV2: RadioButtonPreference
+    private lateinit var radioDevelopmentV2: RadioButtonPreference
     private var syncingToast: Toast? = null
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -36,6 +39,9 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
         radioProduction = requirePreference(R.string.pref_key_remote_settings_server_prod)
         radioStaging = requirePreference(R.string.pref_key_remote_settings_server_stage)
         radioDevelopment = requirePreference(R.string.pref_key_remote_settings_server_dev)
+        radioProductionV2 = requirePreference(R.string.pref_key_remote_settings_server_prod_v2)
+        radioStagingV2 = requirePreference(R.string.pref_key_remote_settings_server_stage_v2)
+        radioDevelopmentV2 = requirePreference(R.string.pref_key_remote_settings_server_dev_v2)
     }
 
     override fun onResume() {
@@ -46,13 +52,19 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
     }
 
     private fun setupPreferences() {
-        when (requireContext().settings().remoteSettingsServer) {
+        when (requireComponents.settings.remoteSettingsServer) {
             getString(R.string.remote_settings_server_prod) ->
                 radioProduction.setCheckedWithoutClickListener(true)
             getString(R.string.remote_settings_server_stage) ->
                 radioStaging.setCheckedWithoutClickListener(true)
             getString(R.string.remote_settings_server_dev) ->
                 radioDevelopment.setCheckedWithoutClickListener(true)
+            getString(R.string.remote_settings_server_prod_v2) ->
+                radioProductionV2.setCheckedWithoutClickListener(true)
+            getString(R.string.remote_settings_server_stage_v2) ->
+                radioStagingV2.setCheckedWithoutClickListener(true)
+            getString(R.string.remote_settings_server_dev_v2) ->
+                radioDevelopmentV2.setCheckedWithoutClickListener(true)
         }
 
         radioProduction.onClickListener {
@@ -67,10 +79,25 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
             updateRemoteSettingsServer(getString(R.string.remote_settings_server_dev))
         }
 
+        radioProductionV2.onClickListener {
+            updateRemoteSettingsServer(getString(R.string.remote_settings_server_prod_v2))
+        }
+
+        radioStagingV2.onClickListener {
+            updateRemoteSettingsServer(getString(R.string.remote_settings_server_stage_v2))
+        }
+
+        radioDevelopmentV2.onClickListener {
+            updateRemoteSettingsServer(getString(R.string.remote_settings_server_dev_v2))
+        }
+
         addToRadioGroup(
             radioProduction,
             radioStaging,
             radioDevelopment,
+            radioProductionV2,
+            radioStagingV2,
+            radioDevelopmentV2,
         )
     }
 
@@ -78,7 +105,7 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
     private fun updateRemoteSettingsServer(serverValue: String) {
         setRadioButtonsEnabled(false)
 
-        requireContext().settings().remoteSettingsServer = serverValue
+        requireComponents.settings.remoteSettingsServer = serverValue
 
         syncingToast = Toast.makeText(
             requireContext(),
@@ -100,6 +127,12 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
                                     RemoteSettingsServer.Dev.into()
                                 getString(R.string.remote_settings_server_stage) ->
                                     RemoteSettingsServer.Stage.into()
+                                getString(R.string.remote_settings_server_prod_v2) ->
+                                    RemoteSettingsServer.ProdV2.into()
+                                getString(R.string.remote_settings_server_dev_v2) ->
+                                    RemoteSettingsServer.DevV2.into()
+                                getString(R.string.remote_settings_server_stage_v2) ->
+                                    RemoteSettingsServer.StageV2.into()
                                 else -> RemoteSettingsServer.Prod.into()
                             },
                         ).into(),
@@ -130,5 +163,8 @@ class RemoteSettingsServerFragment : PreferenceFragmentCompat(), SystemInsetsPad
         radioProduction.isEnabled = enabled
         radioStaging.isEnabled = enabled
         radioDevelopment.isEnabled = enabled
+        radioProductionV2.isEnabled = enabled
+        radioStagingV2.isEnabled = enabled
+        radioDevelopmentV2.isEnabled = enabled
     }
 }

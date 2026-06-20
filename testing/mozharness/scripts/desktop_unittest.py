@@ -24,7 +24,7 @@ from mozharness.base.errors import BaseErrorList
 from mozharness.base.log import INFO, WARNING
 from mozharness.base.script import PreScriptAction
 from mozharness.base.vcs.vcsbase import MercurialScript
-from mozharness.mozilla.automation import TBPL_EXCEPTION, TBPL_RETRY
+from mozharness.mozilla.automation import TBPL_RETRY
 from mozharness.mozilla.mozbase import MozbaseMixin
 from mozharness.mozilla.structuredlog import StructuredOutputParser
 from mozharness.mozilla.testing.codecoverage import (
@@ -240,6 +240,15 @@ class DesktopUnittest(TestingMixin, MercurialScript, MozbaseMixin, CodeCoverageM
                     "dest": "filter_set",
                     "default": "",
                     "help": "Use a predefined filter.",
+                },
+            ],
+            [
+                ["--combine-suites"],
+                {
+                    "action": "store_true",
+                    "dest": "combine_suites",
+                    "default": False,
+                    "help": "Combine test suites into one gtest invocation.",
                 },
             ],
             [
@@ -827,7 +836,16 @@ class DesktopUnittest(TestingMixin, MercurialScript, MozbaseMixin, CodeCoverageM
                     base_cmd.append("--filter-set={}".format(c["filter_set"]))
                 else:
                     self.warning(
-                        "--filter-set does not currently work with suites other then "
+                        "--filter-set does not currently work with suites other than "
+                        "gtest."
+                    )
+
+            if c["combine_suites"]:
+                if suite_category == "gtest":
+                    base_cmd.append("--combine-suites")
+                else:
+                    self.warning(
+                        "--combine-suites does not currently work with suites other than "
                         "gtest."
                     )
 
@@ -984,35 +1002,6 @@ class DesktopUnittest(TestingMixin, MercurialScript, MozbaseMixin, CodeCoverageM
     # create_virtualenv is in VirtualenvMixin.
     # preflight_install is in TestingMixin.
     # install is in TestingMixin.
-
-    @PreScriptAction("download-and-extract")
-    def _pre_download_and_extract(self, action):
-        """Abort if --artifact try syntax is used with compiled-code tests"""
-        dir = self.query_abs_dirs()["abs_blob_upload_dir"]
-        self.mkdir_p(dir)
-
-        if not self.try_message_has_flag("artifact"):
-            return
-        self.info("Artifact build requested in try syntax.")
-        rejected = []
-        compiled_code_suites = [
-            "cppunit",
-            "gtest",
-            "jittest",
-        ]
-        for category in SUITE_CATEGORIES:
-            suites = self._query_specified_suites(category) or []
-            for suite in suites:
-                if any([suite.startswith(c) for c in compiled_code_suites]):
-                    rejected.append(suite)
-                    break
-        if rejected:
-            self.record_status(TBPL_EXCEPTION)
-            self.fatal(
-                "There are specified suites that are incompatible with "
-                "--artifact try syntax flag: {}".format(", ".join(rejected)),
-                exit_code=self.return_code,
-            )
 
     def download_and_extract(self):
         """
@@ -1357,10 +1346,7 @@ class DesktopUnittest(TestingMixin, MercurialScript, MozbaseMixin, CodeCoverageM
                 if self.mochitest_flavor:
                     replace_dict.update({"mochitest_flavor": flavor})
 
-                try_options, try_tests = self.try_args(flavor)
-
                 suite_name = suite_category + "-" + suite
-                tbpl_status, log_level = None, None
                 error_list = BaseErrorList + HarnessErrorList
                 parser = self.get_test_output_parser(
                     suite_category,
@@ -1436,13 +1422,11 @@ class DesktopUnittest(TestingMixin, MercurialScript, MozbaseMixin, CodeCoverageM
                     abs_base_cmd = self._query_abs_base_cmd(suite_category, suite)
                     cmd = abs_base_cmd[:]
                     cmd.extend(
-                        self.query_options(
-                            options_list, try_options, str_format_values=replace_dict
-                        )
+                        self.query_options(options_list, str_format_values=replace_dict)
                     )
                     cmd.extend(
                         self.query_tests_args(
-                            tests_list, try_tests, str_format_values=replace_dict
+                            tests_list, str_format_values=replace_dict
                         )
                     )
 

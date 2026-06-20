@@ -154,6 +154,11 @@ add_task(async function test_1_qwac() {
     "QWAC location text as expected"
   );
 
+  let euTrustMark = document.getElementById(
+    "identity-popup-content-eu-trust-mark"
+  );
+  Assert.ok(BrowserTestUtils.isVisible(euTrustMark), "EU trust mark visible");
+
   await UrlbarTestUtils.closeTrustPanel(window);
   await BrowserTestUtils.removeTab(tab);
 });
@@ -234,6 +239,11 @@ add_task(async function test_2_qwac() {
     "QWAC location text as expected"
   );
 
+  let euTrustMark = document.getElementById(
+    "identity-popup-content-eu-trust-mark"
+  );
+  Assert.ok(BrowserTestUtils.isVisible(euTrustMark), "EU trust mark visible");
+
   await UrlbarTestUtils.closeTrustPanel(window);
   await BrowserTestUtils.removeTab(tab);
 });
@@ -287,6 +297,14 @@ add_task(async function test_non_qwac() {
         document.getElementById("identity-popup-content-supplemental")
       ),
       "QWAC location text not visible"
+    );
+
+    let euTrustMark = document.getElementById(
+      "identity-popup-content-eu-trust-mark"
+    );
+    Assert.ok(
+      !BrowserTestUtils.isVisible(euTrustMark),
+      "EU trust mark not visible"
     );
 
     await UrlbarTestUtils.closeTrustPanel(window);

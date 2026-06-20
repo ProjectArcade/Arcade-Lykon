@@ -26,6 +26,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import kotlinx.coroutines.suspendCancellableCoroutine
 import mozilla.components.browser.state.selector.selectedTab
+import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.pageextraction.ContentParams
 import mozilla.components.feature.summarize.SummarizationState
@@ -34,11 +35,11 @@ import mozilla.components.feature.summarize.ViewDismissed
 import mozilla.components.feature.summarize.content.PageContentExtractor
 import mozilla.components.feature.summarize.content.PageMetadata
 import mozilla.components.feature.summarize.content.PageMetadataExtractor
-import mozilla.components.feature.summarize.settings.SummarizationSettings
 import mozilla.components.feature.summarize.settings.SummarizeSettingsMiddleware
 import mozilla.components.feature.summarize.settings.SummarizeSettingsState
 import mozilla.components.feature.summarize.settings.SummarizeSettingsStore
 import mozilla.components.feature.summarize.settings.summarizeSettingsReducer
+import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.ktx.android.view.setNavigationBarColorCompat
 import mozilla.components.support.utils.ext.top
 import org.mozilla.fenix.R
@@ -65,7 +66,7 @@ private fun EngineSession?.asPageContentExtractor(): PageContentExtractor = { op
                     continuation.resume(content)
                 },
                 onException = { error ->
-                    continuation.resumeWithException(PageContentExtractor.Exception())
+                    continuation.resumeWithException(error)
                 },
             )
         }
@@ -87,7 +88,7 @@ private fun EngineSession?.asPageMetadataExtractor(): PageMetadataExtractor = {
                     )
                 },
                 onException = { error ->
-                    continuation.resumeWithException(PageMetadataExtractor.Exception())
+                    continuation.resumeWithException(error)
                 },
             )
         }
@@ -110,8 +111,9 @@ private fun Context.getConnectionType(): ConnectionType {
  */
 class SummarizationFragment : BottomSheetDialogFragment() {
     private val args by navArgs<SummarizationFragmentArgs>()
+    private val currentTab: TabSessionState? get() = requireComponents.core.store.state.selectedTab
+    private val isEngineAvailable: Boolean get() = currentTab?.engineState?.engineSession != null
     private val storeViewModel: SummarizationStoreViewModel by viewModels {
-        val currentTab = requireComponents.core.store.state.selectedTab
         val engineSession = currentTab?.engineState?.engineSession
         val provider = requireComponents.llm.mlpaProvider
         val title = currentTab?.toDisplayTitle() ?: ""
@@ -120,11 +122,23 @@ class SummarizationFragment : BottomSheetDialogFragment() {
             pageTitle = title,
             connectionType = requireContext().getConnectionType(),
             llmProvider = provider,
-            settings = SummarizationSettings.dataStore(requireContext()),
+            settings = requireComponents.summarizationSettings,
             pageContentExtractor = engineSession.asPageContentExtractor(),
             pageMetadataExtractor = engineSession.asPageMetadataExtractor(),
-            errorReporter = { requireComponents.analytics.crashReporter.submitCaughtException(it) },
+            errorReporter = { tag, exception ->
+                requireComponents.analytics.crashReporter.submitCaughtException(exception)
+                Logger(tag).error(exception.message ?: "", exception)
+            },
         )
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // if we're recreating the backstack while resuming, we need to check that the tab hasn't been killed in the
+        // background
+        if (savedInstanceState != null && !isEngineAvailable) {
+            dismiss()
+        }
     }
 
     override fun onStart() {
@@ -141,7 +155,7 @@ class SummarizationFragment : BottomSheetDialogFragment() {
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
-        storeViewModel.store.dispatch(ViewDismissed)
+        storeViewModel.store.dispatch(ViewDismissed(isEngineAvailable))
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
@@ -163,24 +177,15 @@ class SummarizationFragment : BottomSheetDialogFragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View = content {
-        val summarizeSettings = SummarizationSettings.dataStore(requireContext())
-
-        val state by storeViewModel.store.stateFlow.collectAsStateWithLifecycle()
-        LaunchedEffect(state) {
-            when (state) {
-                SummarizationState.LearnMoreAboutShakeConsent -> {
-                    openLearnMoreLink()
-                }
-                is SummarizationState.Finished -> {
-                    dismiss()
-                }
-                else -> {}
-            }
-        }
+    ): View {
+        val summarizeSettings = requireComponents.summarizationSettings
+        val cache = requireComponents.summarizationSettingsCache
 
         val settingsStore = SummarizeSettingsStore(
-            initialState = SummarizeSettingsState(),
+            initialState = SummarizeSettingsState(
+                isFeatureEnabled = cache.featureEnabled.value,
+                isGestureEnabled = cache.gestureEnabled.value,
+            ),
             reducer = ::summarizeSettingsReducer,
             middleware = listOf(
                 SummarizeSettingsMiddleware(
@@ -191,12 +196,28 @@ class SummarizationFragment : BottomSheetDialogFragment() {
             ),
         )
 
-        FirefoxTheme {
-            SummarizationUi(
-                productName = getString(R.string.app_name),
-                store = storeViewModel.store,
-                settingsStore = settingsStore,
-            )
+        return content {
+            val state by storeViewModel.store.stateFlow.collectAsStateWithLifecycle()
+            LaunchedEffect(state) {
+                when (state) {
+                    SummarizationState.LearnMoreAboutShakeConsent -> {
+                        openLearnMoreLink()
+                    }
+                    is SummarizationState.Finished -> {
+                        dismiss()
+                    }
+                    else -> {}
+                }
+            }
+
+            FirefoxTheme {
+                SummarizationUi(
+                    productName = getString(R.string.app_name),
+                    store = storeViewModel.store,
+                    settingsStore = settingsStore,
+                    resolveError = { throwable -> ErrorCodeLookup.lookup(throwable).code },
+                )
+            }
         }
     }
 

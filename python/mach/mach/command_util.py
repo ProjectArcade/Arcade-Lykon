@@ -60,6 +60,9 @@ MACH_COMMANDS = {
         "python/mozbuild/mozbuild/artifact_commands.py",
     ),
     "awsy-test": MachCommandReference("testing/awsy/mach_commands.py"),
+    "bhr-aggregate": MachCommandReference(
+        "toolkit/components/backgroundhangmonitor/mach_commands.py"
+    ),
     "bootstrap": MachCommandReference(
         "python/mozboot/mozboot/mach_commands.py",
     ),
@@ -95,6 +98,7 @@ MACH_COMMANDS = {
     "data-review": MachCommandReference(
         "toolkit/components/glean/build_scripts/mach_commands.py"
     ),
+    "devtools-mcp": MachCommandReference("tools/mach_commands.py"),
     "devtools-node-test": MachCommandReference("devtools/mach_commands.py"),
     "doc": MachCommandReference("tools/moztreedocs/mach_commands.py"),
     "doctor": MachCommandReference("python/mozbuild/mozbuild/mach_commands.py"),
@@ -185,6 +189,7 @@ MACH_COMMANDS = {
     "perf-data-review": MachCommandReference(
         "toolkit/components/glean/build_scripts/mach_commands.py"
     ),
+    "perfdocs": MachCommandReference("python/mozperftest/mozperftest/mach_commands.py"),
     "perftest": MachCommandReference("python/mozperftest/mozperftest/mach_commands.py"),
     "perftest-test": MachCommandReference(
         "python/mozperftest/mozperftest/mach_commands.py",
@@ -284,6 +289,7 @@ MACH_COMMANDS = {
     "wpt-test-paths": MachCommandReference("testing/web-platform/mach_commands.py"),
     "wpt-unittest": MachCommandReference("testing/web-platform/mach_commands.py"),
     "wpt-update": MachCommandReference("testing/web-platform/mach_commands.py"),
+    "wrshell": MachCommandReference("gfx/wr/mach_commands.py"),
     "xpcshell": MachCommandReference("js/xpconnect/mach_commands.py"),
     "xpcshell-test": MachCommandReference(
         "testing/xpcshell/mach_commands.py", ["test"]

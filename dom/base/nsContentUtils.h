@@ -172,6 +172,7 @@ struct CustomElementDefinition;
 class CustomElementFormValue;
 class CustomElementRegistry;
 class DataTransfer;
+enum class DeprecatedOperations : uint16_t;
 class Document;
 class DocumentFragment;
 class DOMArena;
@@ -1057,6 +1058,13 @@ class nsContentUtils {
    */
   static bool IsCustomElementName(nsAtom* aName, uint32_t aNameSpaceID);
 
+  /**
+   * Returns true if |aName| is a valid shadow host name, per
+   * https://dom.spec.whatwg.org/#valid-shadow-host-name
+   */
+  static bool IsValidShadowHostName(nsAtom* aName,
+                                    uint32_t aNameSpaceID = kNameSpaceID_XHTML);
+
   static nsresult CheckQName(const nsAString& aQualifiedName,
                              bool aNamespaceAware = true,
                              const char16_t** aColon = nullptr);
@@ -1385,6 +1393,24 @@ class nsContentUtils {
       const mozilla::SourceLocation& aLocation =
           mozilla::JSCallingLocation::Get());
 
+  /**
+   * Queue a deprecation report for a deprecated operation, to be delivered
+   * through the Reporting API. The localized warning message for the operation
+   * is looked up in the DOM properties file.
+   *   @param aGlobal The global object the report is associated with.
+   *   @param aDoc Document used to localize the warning message. May be null.
+   *   @param aURI URI to attribute the report to. If it uses the data scheme,
+   *          only the scheme is reported to avoid copying a potentially long
+   *          spec.
+   *   @param aOperation The deprecated operation being reported.
+   *   @param aLocation Source location of the operation. Pass the empty
+   *          location to omit line and column information.
+   */
+  static void ReportDeprecation(nsIGlobalObject* aGlobal, const Document* aDoc,
+                                nsIURI* aURI,
+                                mozilla::dom::DeprecatedOperations aOperation,
+                                const mozilla::JSCallingLocation& aLocation);
+
   static void ReportEmptyGetElementByIdArg(const Document* aDoc);
 
   static void LogMessageToConsole(const char* aMsg);
@@ -1401,7 +1427,8 @@ class nsContentUtils {
    * page.
    */
   static nsresult GetMaybeLocalizedString(PropertiesFile aFile,
-                                          const char* aKey, Document* aDocument,
+                                          const char* aKey,
+                                          const Document* aDocument,
                                           nsAString& aResult);
 
   /**
@@ -1581,6 +1608,14 @@ class nsContentUtils {
    */
   MOZ_CAN_RUN_SCRIPT static void NotifyDevToolsOfNodeRemoval(
       nsINode& aRemovingNode);
+
+  /**
+   * Return inclusive ancestor element of aExplicitEventTargetContent if
+   * aEvent's target should be an Element node.
+   */
+  [[nodiscard]] static nsIContent* GetEventTargetContent(
+      nsIContent* aExplicitEventTargetContent,
+      const mozilla::WidgetEvent* aEvent);
 
   /**
    * These methods create and dispatch a trusted event.
@@ -3870,6 +3905,9 @@ nsContentUtils::InternalContentPolicyTypeToExternal(nsContentPolicyType aType) {
     case nsIContentPolicy::TYPE_INTERNAL_JSON_PRELOAD:
       return ExtContentPolicy::TYPE_JSON;
 
+    case nsIContentPolicy::TYPE_INTERNAL_TEXT_PRELOAD:
+      return ExtContentPolicy::TYPE_TEXT;
+
     case nsIContentPolicy::TYPE_INVALID:
     case nsIContentPolicy::TYPE_OTHER:
     case nsIContentPolicy::TYPE_SCRIPT:
@@ -3897,6 +3935,7 @@ nsContentUtils::InternalContentPolicyTypeToExternal(nsContentPolicyType aType) {
     case nsIContentPolicy::TYPE_WEB_IDENTITY:
     case nsIContentPolicy::TYPE_WEB_TRANSPORT:
     case nsIContentPolicy::TYPE_JSON:
+    case nsIContentPolicy::TYPE_TEXT:
       // NOTE: When adding something here make sure the enumerator is defined!
       return static_cast<ExtContentPolicyType>(aType);
 

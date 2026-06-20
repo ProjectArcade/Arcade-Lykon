@@ -140,11 +140,13 @@ crate::enumerate_interners!(declare_data_stores);
 
 impl DataStores {
     /// Returns the local rect for a primitive. For most primitives, this is
-    /// stored in the template. For pictures, this is stored inside the picture
-    /// primitive instance itself, since this is determined during frame building.
+    /// the device-snapped local rect carried on the per-draw header. For
+    /// pictures, the rect is reconstructed from the picture's raster surface
+    /// since it's only known during frame building.
     pub fn get_local_prim_rect(
         &self,
         prim_instance: &PrimitiveInstance,
+        snapped_local_rect: LayoutRect,
         pictures: &[PictureInstance],
         surfaces: &[SurfaceInfo],
     ) -> LayoutRect {
@@ -163,19 +165,18 @@ impl DataStores {
                     }
                 }
             }
-            _ => {
-                let common = self.as_common_data(prim_instance);
-                LayoutRect::from_origin_and_size(prim_instance.prim_origin, common.prim_size)
-            }
+            _ => snapped_local_rect,
         }
     }
 
-    /// Returns the local coverage (space occupied) for a primitive. For most primitives,
-    /// this is stored in the template. For pictures, this is stored inside the picture
-    /// primitive instance itself, since this is determined during frame building.
+    /// Returns the local coverage (space occupied) for a primitive. For most
+    /// primitives, this is the device-snapped local rect carried on the
+    /// per-draw header. For pictures, the coverage is reconstructed from the
+    /// picture's raster surface since it's only known during frame building.
     pub fn get_local_prim_coverage_rect(
         &self,
         prim_instance: &PrimitiveInstance,
+        snapped_local_rect: LayoutRect,
         pictures: &[PictureInstance],
         surfaces: &[SurfaceInfo],
     ) -> LayoutRect {
@@ -194,27 +195,7 @@ impl DataStores {
                     }
                 }
             }
-            _ => {
-                let common = self.as_common_data(prim_instance);
-                LayoutRect::from_origin_and_size(prim_instance.prim_origin, common.prim_size)
-            }
-        }
-    }
-
-    /// Returns true if this primitive might need repition.
-    // TODO(gw): This seems like the wrong place for this - maybe this flag should
-    //           not be in the common prim template data?
-    pub fn prim_may_need_repetition(
-        &self,
-        prim_instance: &PrimitiveInstance,
-    ) -> bool {
-        match prim_instance.kind {
-            PrimitiveKind::Picture { .. } => {
-                false
-            }
-            _ => {
-                self.as_common_data(prim_instance).may_need_repetition
-            }
+            _ => snapped_local_rect,
         }
     }
 
@@ -1183,6 +1164,53 @@ impl RenderBackend {
 
                         return RenderBackendStatus::Continue;
                     }
+                    #[cfg(feature = "debugger")]
+                    DebugCommand::CaptureRenderDoc(..) => {
+                        // A single-frame RenderDoc capture can't replay WebRender's
+                        // persistent caches (picture tiles, glyph atlas, image cache)
+                        // populated in earlier frames. So make the captured frame
+                        // re-render everything from scratch: clear cached resources so
+                        // glyphs/images re-rasterize and re-upload, and force a full
+                        // invalidated rebuild so all picture cache tiles re-rasterize.
+                        // Then forward the command so the renderer captures that frame.
+                        self.resource_cache.clear(ClearCache::all());
+
+                        let documents: Vec<DocumentId> = self.documents.keys()
+                            .cloned()
+                            .collect();
+                        for document_id in documents {
+                            let mut invalidation_config = false;
+                            if let Some(doc) = self.documents.get_mut(&document_id) {
+                                doc.frame_is_valid = false;
+                                invalidation_config = doc.scene.config.force_invalidation;
+                                doc.scene.config.force_invalidation = true;
+                            }
+
+                            self.update_document(
+                                document_id,
+                                Vec::default(),
+                                Vec::default(),
+                                Vec::default(),
+                                true,
+                                true,
+                                false,
+                                RenderReasons::empty(),
+                                None,
+                                true,
+                                frame_counter,
+                                false,
+                                None,
+                            );
+
+                            if let Some(doc) = self.documents.get_mut(&document_id) {
+                                doc.scene.config.force_invalidation = invalidation_config;
+                            }
+                        }
+
+                        // Forward to the renderer to arm the capture for the frame
+                        // just published by the rebuild above.
+                        ResultMsg::DebugCommand(option)
+                    }
                     #[cfg(feature = "capture")]
                     DebugCommand::SaveCapture(root, bits) => {
                         let output = self.save_capture(root, bits);
@@ -1477,7 +1505,6 @@ impl RenderBackend {
                 .cloned()
                 .filter(|key| !document_already_present(*key))
                 .collect();
-            #[allow(unused_variables)]
             let mut built_frame = false;
             for &document_id in &nop_documents {
                 built_frame |= self.update_document(
@@ -1495,9 +1522,12 @@ impl RenderBackend {
                     false,
                     None);
             }
-            #[cfg(feature = "capture")]
             match built_frame {
-                true => self.save_capture_sequence(),
+                true =>
+                {
+                    #[cfg(feature = "capture")]
+                    self.save_capture_sequence()
+                }
                 _ => {},
             }
         }

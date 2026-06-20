@@ -258,6 +258,7 @@ class PrintHelper {
       printerInfoPromise = Promise.resolve(),
       paperSizeUnit = Ci.nsIPrintSettings.kPaperSizeInches,
       paperId,
+      sortAfterLocal = false,
     } = opts;
     let PSSVC = Cc["@mozilla.org/gfx/printsettings-service;1"].getService(
       Ci.nsIPrintSettingsService
@@ -297,6 +298,7 @@ class PrintHelper {
 
     let printer = {
       name,
+      sortAfterLocal,
       supportsColor: Promise.resolve(true),
       supportsMonochrome: Promise.resolve(true),
       printerInfo: printerInfoPromise.then(() => ({
@@ -407,7 +409,7 @@ class PrintHelper {
   async waitForSettingsEvent(changeFn) {
     let changed = BrowserTestUtils.waitForEvent(this.doc, "print-settings");
     await changeFn?.();
-    await BrowserTestUtils.waitForCondition(
+    await TestUtils.waitForCondition(
       () => !this.win.PrintEventHandler._delayedSettingsChangeTask.isArmed,
       "Wait for all delayed tasks to execute"
     );
@@ -549,7 +551,7 @@ class PrintHelper {
 }
 
 function waitForPreviewVisible() {
-  return BrowserTestUtils.waitForCondition(function () {
+  return TestUtils.waitForCondition(function () {
     let preview = document.querySelector(".printPreviewBrowser");
     return preview && BrowserTestUtils.isVisible(preview);
   });

@@ -708,6 +708,13 @@ void BrowserParent::Deactivated() {
   }
   UnlockNativePointer();
   UnsetTopLevelWebFocus(this);
+  if (sFocus == this) {
+    sFocus = sTopLevelWebFocus;
+    LOGBROWSERFOCUS(
+        ("Deactivated moved focus to top-level web; old: %p, new: %p", this,
+         sFocus));
+    IMEStateManager::OnFocusMovedBetweenBrowsers(this, sFocus);
+  }
   UnsetLastMouseRemoteTarget(this);
   PointerLockManager::ReleaseLockedRemoteTarget(this);
   PointerEventHandler::ReleasePointerCaptureRemoteTarget(this);
@@ -1009,6 +1016,8 @@ void BrowserParent::InitRendering() {
   RefPtr<nsIWidget> widget = GetTopLevelWidget();
   if (widget) {
     (void)SendSafeAreaInsetsChanged(widget->GetSafeAreaInsets());
+    (void)SendInitSupportsUnadjustedMovement(
+        widget->SupportsUnadjustedMovement());
   }
 
 #if defined(MOZ_WIDGET_ANDROID)
@@ -1130,7 +1139,6 @@ void BrowserParent::UpdateDimensions(const LayoutDeviceIntRect& rect,
     mChromeOffset = chromeOffset;
 
     (void)SendUpdateDimensions(GetDimensionInfo());
-    UpdateNativePointerLockCenter(widget);
   }
 }
 
@@ -1139,14 +1147,6 @@ DimensionInfo BrowserParent::GetDimensionInfo() {
   CSSSize unscaledSize = mDimensions / mDefaultScale;
   return DimensionInfo(unscaledRect, unscaledSize, mClientOffset,
                        mChromeOffset);
-}
-
-void BrowserParent::UpdateNativePointerLockCenter(nsIWidget* aWidget) {
-  if (!mLockedNativePointer) {
-    return;
-  }
-  aWidget->SetNativePointerLockCenter(
-      LayoutDeviceIntRect(mChromeOffset, mDimensions).Center());
 }
 
 void BrowserParent::SizeModeChanged(const nsSizeMode& aSizeMode) {
@@ -1364,46 +1364,41 @@ IPCResult BrowserParent::RecvNewWindowGlobal(
   if (!browsingContext) {
     return IPC_FAIL(this, "Cannot create for missing BrowsingContext");
   }
+  if (!browsingContext->Group()->IsKnownForChildID(OtherChildID())) {
+    return IPC_FAIL(this, "Invalid BrowsingContextGroup for process");
+  }
   if (!aInit.principal()) {
     return IPC_FAIL(this, "Cannot create without valid principal");
   }
+  if (!aInit.documentURI()) {
+    return IPC_FAIL(this, "Cannot create without valid documentURI");
+  }
+
+  nsCOMPtr<nsIURI> docURI = aInit.documentURI();
+  WindowGlobalParent* parentWgp = browsingContext->GetParentWindowContext();
 
   // Ensure we never load a document with a content principal in
   // the wrong type of webIsolated process
+  // NOTE: Keep this in sync with the similar check in
+  // DocumentLoadListener::TriggerRedirectToRealChannel.
   EnumSet<ValidatePrincipalOptions> validationOptions = {};
-  nsCOMPtr<nsIURI> docURI = aInit.documentURI();
-  if (docURI->SchemeIs("blob") || docURI->SchemeIs("chrome")) {
-    // XXXckerschb TODO - Do not use SystemPrincipal for:
-    // Bug 1699385: Remove allowSystem for blobs
-    // Bug 1698087: chrome://devtools/content/shared/webextension-fallback.html
-    // chrome reftests, e.g.
-    //   * chrome://reftest/content/writing-mode/ua-style-sheet-button-1a-ref.html
-    //   * chrome://reftest/content/xul-document-load/test003.xhtml
-    //   * chrome://reftest/content/forms/input/text/centering-1.xhtml
-    validationOptions = {ValidatePrincipalOptions::AllowSystem};
+  // FIXME(bug 1699385): Remove allowSystem for blobs
+  // FIXME(bug 1698087): chrome://devtools/**/webextension-fallback.html
+  // Automation-Only: chrome://reftest/** + blank subframes
+  if (docURI->SchemeIs("blob") || docURI->SchemeIs("chrome") ||
+      (xpc::IsInAutomation() && NS_IsAboutBlank(docURI) && parentWgp &&
+       parentWgp->Manager() == this &&
+       parentWgp->DocumentPrincipal()->IsSystemPrincipal())) {
+    validationOptions += ValidatePrincipalOptions::AllowSystem;
   }
-
-  // Some reftests have frames inside their chrome URIs and those load
-  // about:blank:
-  if (xpc::IsInAutomation() && docURI->SchemeIs("about")) {
-    WindowGlobalParent* wgp = browsingContext->GetParentWindowContext();
-    nsAutoCString spec;
-    NS_ENSURE_SUCCESS(docURI->GetSpec(spec),
-                      IPC_FAIL(this, "Should have spec for about: URI"));
-    if (spec.Equals("about:blank") && wgp &&
-        wgp->DocumentPrincipal()->IsSystemPrincipal()) {
-      validationOptions = {ValidatePrincipalOptions::AllowSystem};
-    }
-  }
-
   if (!Manager()->ValidatePrincipal(aInit.principal(), validationOptions)) {
-    ContentParent::LogAndAssertFailedPrincipalValidationInfo(aInit.principal(),
-                                                             __func__);
+    return ContentParent::PrincipalValidationIpcFail(aInit.principal(), this,
+                                                     __func__);
   }
 
   // Construct our new WindowGlobalParent, bind, and initialize it.
   RefPtr<WindowGlobalParent> wgp =
-      WindowGlobalParent::CreateDisconnected(aInit);
+      WindowGlobalParent::CreateDisconnected(aInit, Manager());
   BindPWindowGlobalEndpoint(std::move(aEndpoint), wgp);
   wgp->Init();
   return IPC_OK();
@@ -1576,23 +1571,30 @@ void BrowserParent::SendRealMouseEvent(WidgetMouseEvent& aMouseOrPointerEvent) {
       return;
     }
 
-    if (!aMouseOrPointerEvent.mFlags.mIsSynthesizedForTests) {
+    // Don't compress mousemove events:
+    // - Every event is important for tests, since synthesized input events
+    //   may occur faster than real user interactions.
+    // - If the platform provides movement data, avoid compression to prevent
+    //   losing that data.
+    if (aMouseOrPointerEvent.mFlags.mIsSynthesizedForTests ||
+        aMouseOrPointerEvent.mMovement) {
       DebugOnly<bool> ret =
           isInputPriorityEventEnabled
-              ? SendRealMouseMoveEvent(aMouseOrPointerEvent, guid, blockId)
-              : SendNormalPriorityRealMouseMoveEvent(aMouseOrPointerEvent, guid,
-                                                     blockId);
-      NS_WARNING_ASSERTION(ret, "SendRealMouseMoveEvent() failed");
+              ? SendRealMouseMoveEventNoCompress(aMouseOrPointerEvent, guid,
+                                                 blockId)
+              : SendNormalPriorityRealMouseMoveEventNoCompress(
+                    aMouseOrPointerEvent, guid, blockId);
+      NS_WARNING_ASSERTION(ret, "SendRealMouseMoveEventNoCompress() failed");
       MOZ_ASSERT(!ret || aMouseOrPointerEvent.HasBeenPostedToRemoteProcess());
       return;
     }
 
-    DebugOnly<bool> ret = isInputPriorityEventEnabled
-                              ? SendRealMouseMoveEventForTests(
-                                    aMouseOrPointerEvent, guid, blockId)
-                              : SendNormalPriorityRealMouseMoveEventForTests(
-                                    aMouseOrPointerEvent, guid, blockId);
-    NS_WARNING_ASSERTION(ret, "SendRealMouseMoveEventForTests() failed");
+    DebugOnly<bool> ret =
+        isInputPriorityEventEnabled
+            ? SendRealMouseMoveEvent(aMouseOrPointerEvent, guid, blockId)
+            : SendNormalPriorityRealMouseMoveEvent(aMouseOrPointerEvent, guid,
+                                                   blockId);
+    NS_WARNING_ASSERTION(ret, "SendRealMouseMoveEvent() failed");
     MOZ_ASSERT(!ret || aMouseOrPointerEvent.HasBeenPostedToRemoteProcess());
     return;
   }
@@ -1911,8 +1913,9 @@ NS_IMPL_ISUPPORTS(SynthesizedEventCallback, nsISynthesizedEventCallback)
 
 mozilla::ipc::IPCResult BrowserParent::RecvSynthesizeNativeKeyEvent(
     const int32_t& aNativeKeyboardLayout, const int32_t& aNativeKeyCode,
-    const uint32_t& aModifierFlags, const nsString& aCharacters,
-    const nsString& aUnmodifiedCharacters, const Maybe<uint64_t>& aCallbackId) {
+    const nsIWidget::NativeModifiers& aModifierFlags,
+    const nsString& aCharacters, const nsString& aUnmodifiedCharacters,
+    const Maybe<uint64_t>& aCallbackId) {
   NS_ENSURE_TRUE(xpc::IsInAutomation(), IPC_FAIL(this, "Unexpected event"));
 
   nsCOMPtr<nsISynthesizedEventCallback> callback =
@@ -1926,22 +1929,18 @@ mozilla::ipc::IPCResult BrowserParent::RecvSynthesizeNativeKeyEvent(
 }
 
 mozilla::ipc::IPCResult BrowserParent::RecvSynthesizeNativeMouseEvent(
-    const LayoutDeviceIntPoint& aPoint, const uint32_t& aNativeMessage,
-    const int16_t& aButton, const uint32_t& aModifierFlags,
+    const LayoutDeviceIntPoint& aPoint,
+    const nsIWidget::NativeMouseMessage& aNativeMessage,
+    const mozilla::MouseButton& aButton,
+    const nsIWidget::NativeModifiers& aModifierFlags,
     const Maybe<uint64_t>& aCallbackId) {
   NS_ENSURE_TRUE(xpc::IsInAutomation(), IPC_FAIL(this, "Unexpected event"));
-
-  const uint32_t last =
-      static_cast<uint32_t>(nsIWidget::NativeMouseMessage::LeaveWindow);
-  NS_ENSURE_TRUE(aNativeMessage <= last, IPC_FAIL(this, "Bogus message"));
 
   nsCOMPtr<nsISynthesizedEventCallback> callback =
       SynthesizedEventCallback::MaybeCreate(this, aCallbackId);
   if (nsCOMPtr<nsIWidget> widget = GetWidget()) {
-    widget->SynthesizeNativeMouseEvent(
-        aPoint, static_cast<nsIWidget::NativeMouseMessage>(aNativeMessage),
-        static_cast<mozilla::MouseButton>(aButton),
-        static_cast<nsIWidget::Modifiers>(aModifierFlags), callback);
+    widget->SynthesizeNativeMouseEvent(aPoint, aNativeMessage, aButton,
+                                       aModifierFlags, callback);
   }
   return IPC_OK();
 }
@@ -1961,8 +1960,8 @@ mozilla::ipc::IPCResult BrowserParent::RecvSynthesizeNativeMouseMove(
 mozilla::ipc::IPCResult BrowserParent::RecvSynthesizeNativeMouseScrollEvent(
     const LayoutDeviceIntPoint& aPoint, const uint32_t& aNativeMessage,
     const double& aDeltaX, const double& aDeltaY, const double& aDeltaZ,
-    const uint32_t& aModifierFlags, const uint32_t& aAdditionalFlags,
-    const Maybe<uint64_t>& aCallbackId) {
+    const nsIWidget::NativeModifiers& aModifierFlags,
+    const uint32_t& aAdditionalFlags, const Maybe<uint64_t>& aCallbackId) {
   NS_ENSURE_TRUE(xpc::IsInAutomation(), IPC_FAIL(this, "Unexpected event"));
 
   nsCOMPtr<nsISynthesizedEventCallback> callback =
@@ -2060,11 +2059,11 @@ mozilla::ipc::IPCResult BrowserParent::RecvSynthesizeNativeTouchpadPan(
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult BrowserParent::RecvLockNativePointer() {
+mozilla::ipc::IPCResult BrowserParent::RecvLockNativePointer(
+    const nsIWidget::NativePointerLockMode& aNativePointerLockMode) {
   if (nsCOMPtr<nsIWidget> widget = GetWidget()) {
-    mLockedNativePointer = true;  // do before updating the center
-    UpdateNativePointerLockCenter(widget);
-    widget->LockNativePointer();
+    mLockedNativePointer = true;
+    widget->LockNativePointer(aNativePointerLockMode);
   }
   return IPC_OK();
 }
@@ -2081,6 +2080,14 @@ void BrowserParent::UnlockNativePointer() {
 
 mozilla::ipc::IPCResult BrowserParent::RecvUnlockNativePointer() {
   UnlockNativePointer();
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult BrowserParent::RecvSetNativePointerLockMode(
+    const nsIWidget::NativePointerLockMode& aNativePointerLockMode) {
+  if (nsCOMPtr<nsIWidget> widget = GetWidget()) {
+    widget->SetNativePointerLockMode(aNativePointerLockMode);
+  }
   return IPC_OK();
 }
 

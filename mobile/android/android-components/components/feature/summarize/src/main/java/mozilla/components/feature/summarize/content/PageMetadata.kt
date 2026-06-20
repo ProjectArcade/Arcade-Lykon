@@ -4,9 +4,6 @@
 
 package mozilla.components.feature.summarize.content
 
-import mozilla.components.concept.llm.ErrorCode
-import mozilla.components.concept.llm.Llm
-
 /**
  * An interface to conform to do deliver page metadata.
  */
@@ -15,11 +12,6 @@ fun interface PageMetadataExtractor {
      * Retrieve the page metadata.
      */
     suspend fun getPageMetadata(): Result<PageMetadata>
-
-    /**
-     * An exception that occurs in page metadata extraction.
-     */
-    class Exception : Llm.Exception("Could not extract content metadata", errorCode)
 }
 
 /**
@@ -32,5 +24,3 @@ data class PageMetadata(
     val isReaderable: Boolean = false,
     val pageTitle: String = "",
 )
-
-private val errorCode = ErrorCode(2002)

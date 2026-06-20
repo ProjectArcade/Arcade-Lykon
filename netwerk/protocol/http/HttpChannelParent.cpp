@@ -1064,25 +1064,6 @@ mozilla::ipc::IPCResult HttpChannelParent::RecvRemoveCorsPreflightCacheEntry(
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult HttpChannelParent::RecvSetCookies(
-    const nsACString& aBaseDomain, const OriginAttributes& aOriginAttributes,
-    nsIURI* aHost, const bool& aIsThirdParty,
-    nsTArray<CookieStruct>&& aCookies) {
-  net::PCookieServiceParent* csParent =
-      LoneManagedOrNullAsserts(Manager()->ManagedPCookieServiceParent());
-  NS_ENSURE_TRUE(csParent, IPC_OK());
-
-  auto* cs = static_cast<net::CookieServiceParent*>(csParent);
-
-  BrowsingContext* browsingContext = nullptr;
-  if (mBrowserParent) {
-    browsingContext = mBrowserParent->GetBrowsingContext();
-  }
-
-  return cs->SetCookies(nsCString(aBaseDomain), aOriginAttributes, aHost,
-                        aIsThirdParty, aCookies, browsingContext);
-}
-
 //-----------------------------------------------------------------------------
 // HttpChannelParent::nsIRequestObserver
 //-----------------------------------------------------------------------------
@@ -1146,7 +1127,7 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
 
   LOG(("HttpChannelParent::OnStartRequest [this=%p, aRequest=%p]\n", this,
        aRequest));
-  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread());
 
   Maybe<uint32_t> multiPartID;
   bool isFirstPartOfMultiPart = false;
@@ -1197,7 +1178,7 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
   // NOTE: Transferring cookies in this way happens here, rather than in
   // `AboutToLoadDocumentForChild`, as we need the PCookieService actor to be
   // initialized before we can transmit cookies.
-  if (!mIPCClosed) {
+  if (!mIPCClosed && chan->IsNavigation()) {
     // FIXME: We should consider skipping sending cookies if the response isn't
     // going to result in the document being rendered (e.g. if we're going to
     // display a load error)
@@ -1357,6 +1338,10 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
   if (mIPCClosed) {
     rv = NS_ERROR_UNEXPECTED;
   } else {
+    MOZ_DIAGNOSTIC_ASSERT(
+        responseHead == &cleanedUpResponseHead ||
+            responseHead == chan->GetResponseHead(),
+        "mResponseHead changed between GetResponseHead and copy");
     nsHttpResponseHead newResponseHead = *responseHead;
     if (!mBgParent->OnStartRequest(
             std::move(newResponseHead), useResponseHead,
@@ -1918,6 +1903,7 @@ HttpChannelParent::StartRedirect(nsIChannel* newChannel, uint32_t redirectFlags,
   mozilla::ipc::LoadInfoToParentLoadInfoForwarder(loadInfo,
                                                   &loadInfoForwarderArg);
 
+  MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread());
   nsHttpResponseHead* responseHead = mChannel->GetResponseHead();
 
   nsHttpResponseHead cleanedUpResponseHead;

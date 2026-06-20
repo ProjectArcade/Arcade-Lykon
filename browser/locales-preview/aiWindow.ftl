@@ -39,10 +39,19 @@ toolbar-button-ai-window-toggle =
 
 ai-window-toggleview-switch-classic =
     .label = Classic Window
+    .value = Classic Window
+
+ai-window-toggleview-switch-classic-description =
+    .label = Standard browsing
+    .value = Standard browsing
 
 ai-window-toggleview-switch-ai =
     .label = Smart Window
     .value = Smart Window
+
+ai-window-toggleview-switch-ai-description =
+    .label = Ask as you browse
+    .value = Ask as you browse
 
 ai-window-toggleview-switch-private =
     .label = Private Window
@@ -72,10 +81,18 @@ aiwindow-input-cta-menu-label-search-with = Search with…
 
 aiwindow-input-cta-search-submenu-header = Search
 
+aiwindow-input-cta-stop-button =
+    .aria-label = Stop response generation
+    .title = Stop response
+
 ## Smartbar
 
 smartbar-placeholder =
     .placeholder = Ask, search, or type a URL
+smartbar-placeholder-hint-1 = Use @ to mention recent tabs…
+smartbar-placeholder-hint-2 = Ask anything…
+smartbar-placeholder-hint-3 = Enter a web address…
+smartbar-placeholder-hint-4 = Search the web…
 
 ## Mentions
 
@@ -114,6 +131,23 @@ aiwindow-firstrun-button = Let’s go!
 aiwindow-firstrun-back-button = Back
 aiwindow-firstrun-next-button = Next
 
+## These are labels describing model types in the smartbar model select.
+
+aiwindow-input-model-select-button-label-fast = Fast
+aiwindow-input-model-select-button-label-allpurpose = Flexible
+aiwindow-input-model-select-button-label-personal = Personal
+aiwindow-input-model-select-button-label-custom = Custom
+
+# Variables:
+# $ownerName (string) - The name of the model owner/provider
+# $model (string) - The model name
+aiwindow-input-model-select-menu-item-description = { $ownerName } { $model }
+aiwindow-input-model-select-menu-item-description-custom = Use your own LLM
+aiwindow-input-model-select-default-badge =
+    .label = Default
+    .title = The selected default model
+aiwindow-input-model-select-settings-link = Model settings
+
 ## Firstrun memories onboarding
 
 aiwindow-firstrun-memories-title = More helpful answers, on your terms
@@ -133,6 +167,13 @@ aiwindow-firstrun-memories-checkbox-chats = Chats in Smart Window
 aiwindow-firstrun-memories-checkbox-browsing = Browsing across { -brand-product-name }
 aiwindow-firstrun-memories-update-settings = Update in settings anytime.
 aiwindow-firstrun-memories-no-create = Got it. Smart Window won’t create memories. Update in settings anytime.
+
+## Firstrun set as default onboarding
+
+aiwindow-firstrun-default-title = Make Smart Window your go-to
+aiwindow-firstrun-default-subtitle = Browse, search, and ask in one place. You can still open Private and Classic Windows when you want.
+aiwindow-firstrun-default-checkbox-label = Always open { -brand-product-name } in Smart Window
+aiwindow-firstrun-default-checkbox-description = Switch in settings anytime
 
 ## Ask Toolbar Button
 
@@ -183,7 +224,7 @@ smartwindow-footer-history =
 ## Disclaimer
 ## Text displayed to user to warn user about potential mistakes.
 
-smartwindow-disclaimer = AI can make mistakes. <a data-l10n-name="report-link">Report any issues</a>.
+smartwindow-disclaimer = AI can make mistakes.
 
 ## FirefoxView Chats
 ## Chats in this context refers to chats saved from the Smart Window Assistant
@@ -253,3 +294,44 @@ smart-window-confirm-close-tabs =
         [one] Close { $count } tab
        *[other] Close { $count } tabs
     }
+
+## Natural Language action callouts
+
+# Shown after the Smart Window closes the user's current tab in response to a
+# natural language prompt action, anchored to the toolbar menu button.
+smartwindow-close-tab-callout-title = Tab closed
+smartwindow-close-tab-callout-subtitle = Reopen tabs from History anytime.
+
+## Smart Window new tab promo
+
+smart-window-default-promo-heading = Make Smart Window your default?
+smart-window-default-promo-message = { -brand-short-name } will open in Smart Window every time.
+smart-window-default-promo-primary-button = Set as default
+smart-window-default-promo-additional-button = Not now
+
+## Feedback modal
+
+aiwindow-feedback-modal-title = Share feedback
+aiwindow-feedback-what-worked-well = What worked well? No personal info, please.
+aiwindow-feedback-choose-any = Choose any that apply
+aiwindow-feedback-add-details = Add details if you’d like. No personal info, please.
+aiwindow-feedback-disclaimer = Submitting shares your feedback and a few details, like { -brand-shorter-name } version and model used, to help improve Smart Window. <a data-l10n-name="learn-more">Learn more</a>
+aiwindow-feedback-submit = Submit
+aiwindow-feedback-cancel = Cancel
+aiwindow-feedback-reason-incorrect-or-misleading = Incorrect or misleading
+aiwindow-feedback-reason-doesnt-address-my-request = Doesn’t address my request
+aiwindow-feedback-reason-lacks-personalization = Lacks personalization or context
+aiwindow-feedback-reason-performance-or-usability = Performance or usability issue
+aiwindow-feedback-reason-harmful-or-offensive = Harmful or offensive
+aiwindow-feedback-reason-other = Other
+
+## Smart Window ai-chat-grid
+
+aiwindow-ai-chat-grid-view-controls =
+    .aria-label = Switch view layout
+aiwindow-ai-chat-grid-list-view =
+    .aria-label = Switch mode: List View
+    .tooltiptext = List View
+aiwindow-ai-chat-grid-grid-view =
+    .aria-label = Switch mode: Grid View
+    .tooltiptext = Grid View

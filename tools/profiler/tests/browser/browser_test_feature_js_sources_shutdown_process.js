@@ -18,10 +18,7 @@ add_task(
       ],
     });
 
-    Assert.ok(
-      !Services.profiler.IsActive(),
-      "The profiler is not currently active"
-    );
+    await ProfilerTestUtils.assertProfilerInactive();
 
     await ProfilerTestUtils.startProfiler({ features: ["js", "jssources"] });
 
@@ -92,7 +89,7 @@ add_task(
 
     let foundTestFunction = false;
     for (const sourceId in sources) {
-      const sourceText = sources[sourceId];
+      const sourceText = sources[sourceId]?.sourceText;
       if (
         typeof sourceText === "string" &&
         sourceText.includes("shutdownTestFn_" + token)

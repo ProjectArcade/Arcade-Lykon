@@ -14,6 +14,7 @@
 #include "mozilla/ComputedStyleInlines.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/ProfilerLabels.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/RestyleManager.h"
 #include "mozilla/ScrollContainerFrame.h"
 #include "mozilla/ServoStyleSet.h"
@@ -469,9 +470,11 @@ void ViewportFrame::Reflow(nsPresContext* aPresContext,
     // height actually changes.
     AbsPosReflowFlags flags{AbsPosReflowFlag::CBWidthChanged,
                             AbsPosReflowFlag::CBHeightChanged};
+    nsReflowStatus absposStatus;
     GetAbsoluteContainingBlock()->Reflow(this, aPresContext, reflowInput,
-                                         aStatus, cb, flags,
+                                         absposStatus, cb, flags,
                                          /* aOverflowAreas = */ nullptr);
+    aStatus.MergeCompletionStatusFrom(absposStatus);
   }
 
   if (mFrames.NotEmpty()) {

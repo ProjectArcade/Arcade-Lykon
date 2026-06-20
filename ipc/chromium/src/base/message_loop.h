@@ -81,7 +81,7 @@ class MessageLoop : public base::MessagePump::Delegate {
   //
   class DestructionObserver {
    public:
-    virtual ~DestructionObserver() {}
+    virtual ~DestructionObserver() = default;
     virtual void WillDestroyCurrentMessageLoop() = 0;
   };
 
@@ -302,11 +302,7 @@ class MessageLoop : public base::MessagePump::Delegate {
           nestable(aOther.nestable) {}
 
     // std::priority_queue<T>::top is dumb, so we have to have this.
-    PendingTask(const PendingTask& aOther)
-        : task(aOther.task),
-          delayed_run_time(aOther.delayed_run_time),
-          sequence_num(aOther.sequence_num),
-          nestable(aOther.nestable) {}
+    PendingTask(const PendingTask& aOther) = default;
     PendingTask& operator=(const PendingTask& aOther) {
       task = aOther.task;
       delayed_run_time = aOther.delayed_run_time;
@@ -462,7 +458,7 @@ class MessageLoopForUI : public MessageLoop {
   // Returns the MessageLoopForUI of the current thread.
   static MessageLoopForUI* current() {
     MessageLoop* loop = MessageLoop::current();
-    if (!loop) return NULL;
+    if (!loop) return nullptr;
     Type type = loop->type();
     DCHECK(type == MessageLoop::TYPE_UI ||
            type == MessageLoop::TYPE_MOZILLA_PARENT ||

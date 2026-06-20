@@ -372,6 +372,13 @@ HTMLCanvasPrintState::HTMLCanvasPrintState(
 
 HTMLCanvasPrintState::~HTMLCanvasPrintState() = default;
 
+HTMLCanvasElement* HTMLCanvasPrintState::GetParentObject() {
+  if (auto* original = mCanvas->GetOriginalCanvas()) {
+    return original;
+  }
+  return mCanvas;
+}
+
 /* virtual */
 JSObject* HTMLCanvasPrintState::WrapObject(JSContext* aCx,
                                            JS::Handle<JSObject*> aGivenProto) {
@@ -473,7 +480,7 @@ NS_IMPL_ISUPPORTS(HTMLCanvasElementObserver, nsIObserver)
 // ---------------------------------------------------------------------------
 
 HTMLCanvasElement::HTMLCanvasElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
     : nsGenericHTMLElement(std::move(aNodeInfo)),
       mResetLayer(true),
       mMaybeModified(false),
@@ -645,23 +652,29 @@ nsresult HTMLCanvasElement::DispatchPrintCallback(nsITimerCallback* aCallback) {
   mPrintState = new HTMLCanvasPrintState(this, mCurrentContext, aCallback);
 
   RefPtr<nsRunnableMethod<HTMLCanvasElement>> renderEvent =
-      NewRunnableMethod("dom::HTMLCanvasElement::CallPrintCallback", this,
-                        &HTMLCanvasElement::CallPrintCallback);
+      NewRunnableMethod<RefPtr<HTMLCanvasPrintState>>(
+          "dom::HTMLCanvasElement::CallPrintCallback", this,
+          &HTMLCanvasElement::CallPrintCallback, mPrintState);
   return OwnerDoc()->Dispatch(renderEvent.forget());
 }
 
-void HTMLCanvasElement::CallPrintCallback() {
+void HTMLCanvasElement::CallPrintCallback(
+    RefPtr<HTMLCanvasPrintState> aPrintState) {
   AUTO_PROFILER_MARKER_TEXT("HTMLCanvasElement Printing", LAYOUT_Printing, {},
                             "HTMLCanvasElement::CallPrintCallback"_ns);
-  if (!mPrintState) {
-    // `mPrintState` might have been destroyed by cancelling the previous
-    // printing (especially the canvas frame destruction) during processing
-    // event loops in the printing.
+  MOZ_ASSERT(aPrintState,
+             "Our caller should always infallibly allocate a print state, "
+             "and give us a strong ref, before dispatching us");
+  if (mPrintState != aPrintState) {
+    // The PrintState has been cleared (and perhaps replaced with a fresh one),
+    // e.g. due to the canvas frame being reconstructed. This dispatched call
+    // (associated with a now-abandoned PrintState) is no longer needed.
     return;
   }
   RefPtr<PrintCallback> callback = GetMozPrintCallback();
-  RefPtr<HTMLCanvasPrintState> state = mPrintState;
-  callback->Call(*state);
+  // Note: aPrintState is a strong reference on the stack, so it'll stay alive
+  // no matter what JS runs in the callback here.
+  callback->Call(*aPrintState);
 }
 
 void HTMLCanvasElement::ResetPrintCallback() {
@@ -902,7 +915,8 @@ already_AddRefed<CanvasCaptureMediaStream> HTMLCanvasElement::CaptureStream(
   // If no permission, arrange for the frame capture listener to return
   // all-white, opaque image data.
   CanvasUtils::ImageExtraction extractionBehaviour =
-      CanvasUtils::ImageExtractionResult(this, nullptr, &aSubjectPrincipal);
+      CanvasUtils::ImageExtractionResult(
+          this, nsContentUtils::GetCurrentJSContext(), &aSubjectPrincipal);
 
   rv = RegisterFrameCaptureListener(
       stream->FrameCaptureListener(),
@@ -1454,7 +1468,8 @@ nsresult HTMLCanvasElement::RegisterFrameCaptureListener(
 }
 
 bool HTMLCanvasElement::IsFrameCaptureRequested(const TimeStamp& aTime) const {
-  for (WeakPtr<FrameCaptureListener> listener : mRequestedFrameListeners) {
+  for (const WeakPtr<FrameCaptureListener>& listener :
+       mRequestedFrameListeners) {
     if (!listener) {
       continue;
     }
@@ -1482,7 +1497,8 @@ void HTMLCanvasElement::SetFrameCapture(
   RefPtr<SourceSurfaceImage> image =
       new SourceSurfaceImage(surface->GetSize(), surface);
 
-  for (WeakPtr<FrameCaptureListener> listener : mRequestedFrameListeners) {
+  for (const WeakPtr<FrameCaptureListener>& listener :
+       mRequestedFrameListeners) {
     if (!listener) {
       continue;
     }

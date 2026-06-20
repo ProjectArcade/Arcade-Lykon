@@ -208,7 +208,6 @@ export const MultiStageProtonScreen = props => {
       addonIconURL={props.addonIconURL}
       themeScreenshots={props.themeScreenshots}
       messageId={props.messageId}
-      writeInMicrosurvey={props.writeInMicrosurvey}
       negotiatedLanguage={props.negotiatedLanguage}
       langPackInstallPhase={props.langPackInstallPhase}
       forceHideStepsIndicator={props.forceHideStepsIndicator}
@@ -216,6 +215,8 @@ export const MultiStageProtonScreen = props => {
       aboveButtonStepsIndicator={props.aboveButtonStepsIndicator}
       requireAction={props.requireAction}
       isWideScreen={isWideScreen}
+      animationsPaused={props.animationsPaused}
+      toggleAnimationsPaused={props.toggleAnimationsPaused}
     />
   );
 };
@@ -486,19 +487,19 @@ export class ProtonScreen extends React.PureComponent {
       <picture className={className} style={pictureStyle}>
         {darkModeReducedMotionImageURL ? (
           <source
-            srcSet={darkModeReducedMotionImageURL}
+            srcset={darkModeReducedMotionImageURL}
             media="(prefers-color-scheme: dark) and (prefers-reduced-motion: reduce)"
           />
         ) : null}
         {darkModeImageURL ? (
           <source
-            srcSet={darkModeImageURL}
+            srcset={darkModeImageURL}
             media="(prefers-color-scheme: dark)"
           />
         ) : null}
         {reducedMotionImageURL ? (
           <source
-            srcSet={reducedMotionImageURL}
+            srcset={reducedMotionImageURL}
             media="(prefers-reduced-motion: reduce)"
           />
         ) : null}
@@ -537,7 +538,6 @@ export class ProtonScreen extends React.PureComponent {
         negotiatedLanguage={this.props.negotiatedLanguage}
         langPackInstallPhase={this.props.langPackInstallPhase}
         messageId={this.props.messageId}
-        writeInMicrosurvey={this.props.writeInMicrosurvey}
       />
     ) : null;
   }
@@ -609,16 +609,70 @@ export class ProtonScreen extends React.PureComponent {
     );
   }
 
+  // We consider a screen to have animated content when it includes both
+  // default and _static versions of its background image or hero_image url.
+  // The pause toggle swaps the rendered asset to the _static asset when activated.
+  // Without _both_ default and static, there is nothing for the toggle to
+  // switch to, so we don't render the toggle button at all.
+  hasAnimatedContent(content) {
+    return !!(
+      (content.background && content.background_static) ||
+      (content.hero_image?.url && content.hero_image?.static_url)
+    );
+  }
+
+  getEffectiveBackground(content) {
+    return this.props.animationsPaused && content.background_static
+      ? content.background_static
+      : content.background;
+  }
+
+  getEffectiveHeroImageUrl(content) {
+    if (!content.hero_image) {
+      return null;
+    }
+    return this.props.animationsPaused && content.hero_image.static_url
+      ? content.hero_image.static_url
+      : content.hero_image.url;
+  }
+
+  renderAnimationPlayPauseButton() {
+    const { toggleAnimationsPaused } = this.props;
+    const paused = !!this.props.animationsPaused;
+    const labelId = paused
+      ? "onboarding-animation-play-button"
+      : "onboarding-animation-pause-button";
+    return (
+      <button
+        className={`animation-play-pause-button${paused ? " paused" : ""}`}
+        type="button"
+        aria-pressed={paused}
+        data-l10n-id={labelId}
+        onClick={toggleAnimationsPaused}
+      />
+    );
+  }
+
   renderSecondarySection(content) {
+    const background = this.getEffectiveBackground(content);
+    const heroImageUrl = this.getEffectiveHeroImageUrl(content);
+    // pinnable_sites exposes its background through a custom property so the
+    // stylesheet can swap the wide-layout image for a narrow gradient without
+    // overriding an inline `background` shorthand.
+    const tiles = Array.isArray(content.tiles)
+      ? content.tiles
+      : [content.tiles];
+    const isPinnableSites = tiles.some(tile => tile?.type === "pinnable_sites");
     return (
       <div
         className={`section-secondary ${
           content.hide_secondary_section ? "with-secondary-section-hidden" : ""
         }`}
         style={
-          content.background
+          background
             ? {
-                background: content.background,
+                [isPinnableSites ? "--pinnable-sites-bkg" : "background"]:
+                  background,
                 "--mr-secondary-background-position-y":
                   content.split_narrow_bkg_position,
               }
@@ -632,10 +686,13 @@ export class ProtonScreen extends React.PureComponent {
           <div className="sr-only image-alt" role="img" />
         </Localized>
         {content.hero_image ? (
-          <HeroImage url={content.hero_image.url} />
+          <HeroImage url={heroImageUrl} />
         ) : (
           this.renderHeroText(content.hero_text)
         )}
+        {this.hasAnimatedContent(content)
+          ? this.renderAnimationPlayPauseButton()
+          : null}
       </div>
     );
   }
@@ -893,8 +950,8 @@ export class ProtonScreen extends React.PureComponent {
             className={`main-content ${hideStepsIndicator ? "no-steps" : ""}`}
             style={{
               background:
-                content.background && isCenterPosition
-                  ? content.background
+                isCenterPosition && this.getEffectiveBackground(content)
+                  ? this.getEffectiveBackground(content)
                   : null,
               width:
                 content.width && content.position !== "split"
@@ -908,6 +965,9 @@ export class ProtonScreen extends React.PureComponent {
                 : null,
             }}
           >
+            {isCenterPosition && this.hasAnimatedContent(content)
+              ? this.renderAnimationPlayPauseButton()
+              : null}
             {content.logo && !content.fullscreen
               ? this.renderPicture(content.logo)
               : null}

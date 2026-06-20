@@ -16,7 +16,6 @@ import mozilla.components.concept.engine.translate.TranslationError
 import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -27,6 +26,7 @@ import org.mozilla.geckoview.TranslationsController.TranslationsException
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import org.mozilla.geckoview.TranslationsController.RuntimeTranslation.LanguageModel as GeckoViewLanguageModel
 import org.mozilla.geckoview.TranslationsController.RuntimeTranslation.TranslationSupport as GeckoViewTranslationSupport
 
@@ -131,7 +131,7 @@ class GeckoTranslationUtilsTest {
             mappingResult.awaitAndProcess(
                 onSuccess = { languageList ->
                     onSuccessCalled = true
-                    assertNotNull(languageList!!)
+                    assertNotNull(languageList)
                     assertEquals(3, languageList.size)
                     assertEquals("en", languageList[0].language?.code)
                     assertEquals("de", languageList[1].language?.code)
@@ -212,7 +212,7 @@ class GeckoTranslationUtilsTest {
             onSuccess = { translationSupport ->
                 onSuccessCalled = true
 
-                assertNotNull(translationSupport!!)
+                assertNotNull(translationSupport)
 
                 assertEquals(2, translationSupport.fromLanguages?.size)
                 assertEquals("en", translationSupport.fromLanguages?.get(0)?.code)
@@ -244,7 +244,7 @@ class GeckoTranslationUtilsTest {
         mappingResult.awaitAndProcess(
             onSuccess = { translationSupport ->
                 onSuccessCalled = true
-                assertNotNull(translationSupport!!)
+                assertNotNull(translationSupport)
                 assertTrue(translationSupport.fromLanguages?.isEmpty() == true)
                 assertTrue(translationSupport.toLanguages?.isEmpty() == true)
             },
@@ -414,7 +414,7 @@ class GeckoTranslationUtilsTest {
             onSuccess = { settingMap ->
                 onSuccessCalled = true
                 assertNotNull(settingMap)
-                assertEquals(2, settingMap!!.size)
+                assertEquals(2, settingMap.size)
                 assertEquals(LanguageSetting.ALWAYS, settingMap["en"])
                 assertEquals(LanguageSetting.NEVER, settingMap["es"])
             },

@@ -6,8 +6,16 @@
 #include "HttpLog.h"
 
 #include "HappyEyeballsTransaction.h"
-#include "nsHttpHandler.h"
+
+#include "ConnectionHandle.h"
+#include "HttpConnectionBase.h"
+#include "Http2Session.h"
+#include "Http3Session.h"
+#include "nsHttpConnection.h"
 #include "nsHttpTransaction.h"
+#include "nsITLSSocketControl.h"
+#include "nsITransportSecurityInfo.h"
+#include "nsQueryObject.h"
 
 // Log on level :5, instead of default :4.
 #undef LOG
@@ -17,269 +25,297 @@
 
 namespace mozilla::net {
 
-NS_IMPL_ISUPPORTS(HappyEyeballsTransaction, nsISupportsWeakReference)
+HappyEyeballsTransaction::HappyEyeballsTransaction(
+    nsHttpConnectionInfo* aConnInfo, nsIInterfaceRequestor* aCallbacks,
+    uint32_t aCaps, uint64_t aBrowserId, StatusForwarder&& aStatusForwarder,
+    ClientAuthForwarder&& aClientAuthRequestedForwarder,
+    ClientAuthForwarder&& aClientAuthSelectedForwarder,
+    ZeroRttHandle* aZeroRttHandle)
+    : SpeculativeTransaction(aConnInfo, aCallbacks, aCaps,
+                             /* aCallback */ nullptr,
+                             /* reportActivity */ false),
+      mStatusForwarder(std::move(aStatusForwarder)),
+      mClientAuthRequestedForwarder(std::move(aClientAuthRequestedForwarder)),
+      mClientAuthSelectedForwarder(std::move(aClientAuthSelectedForwarder)),
+      mZeroRttHandle(aZeroRttHandle),
+      mBrowserId(aBrowserId) {
+  LOG1(("HappyEyeballsTransaction ctor %p handle=%p", this,
+        mZeroRttHandle.get()));
+}
 
-HappyEyeballsTransaction::HappyEyeballsTransaction(nsHttpTransaction* aTrans)
-    : mTransaction(aTrans) {
-  MOZ_ASSERT(mTransaction);
-  LOG(("HappyEyeballsTransaction ctor %p trans=%p", this, mTransaction.get()));
+void HappyEyeballsTransaction::OnClientAuthCertificateRequested() {
+  LOG(("HappyEyeballsTransaction::OnClientAuthCertificateRequested %p", this));
+  if (mClientAuthRequestedForwarder) {
+    mClientAuthRequestedForwarder();
+  }
+}
+
+void HappyEyeballsTransaction::OnClientAuthCertificateSelected() {
+  LOG(("HappyEyeballsTransaction::OnClientAuthCertificateSelected %p", this));
+  if (mClientAuthSelectedForwarder) {
+    mClientAuthSelectedForwarder();
+  }
 }
 
 HappyEyeballsTransaction::~HappyEyeballsTransaction() {
   LOG(("HappyEyeballsTransaction dtor %p", this));
 }
 
-void HappyEyeballsTransaction::SetConnection(nsAHttpConnection* conn) {
-  if (mTransaction) {
-    mTransaction->SetConnection(conn);
+void HappyEyeballsTransaction::Adopt(nsHttpTransaction* aRealTxn) {
+  MOZ_ASSERT(aRealTxn, "Adopt with null real transaction");
+  LOG(("HappyEyeballsTransaction::Adopt %p realTxn=%p entered0RTT=%d", this,
+       aRealTxn, Entered0RTT()));
+  Transition(State::Adopted, aRealTxn);
+}
+
+void HappyEyeballsTransaction::OnTransportStatus(nsITransport* aTransport,
+                                                 nsresult aStatus,
+                                                 int64_t aProgress) {
+  // Let NullHttpTransaction collect the TCP/TLS timings into mTimings.
+  NullHttpTransaction::OnTransportStatus(aTransport, aStatus, aProgress);
+
+  // Forward to the owning HappyEyeballsConnectionAttempt for dedup +
+  // propagation to the real transaction.
+  if (mStatusForwarder) {
+    mStatusForwarder(aTransport, aStatus, aProgress);
   }
-}
-
-nsAHttpConnection* HappyEyeballsTransaction::Connection() {
-  return mTransaction ? mTransaction->Connection() : nullptr;
-}
-
-void HappyEyeballsTransaction::GetSecurityCallbacks(
-    nsIInterfaceRequestor** cb) {
-  if (mTransaction) {
-    mTransaction->GetSecurityCallbacks(cb);
-  } else {
-    *cb = nullptr;
-  }
-}
-
-void HappyEyeballsTransaction::OnTransportStatus(nsITransport* transport,
-                                                 nsresult status,
-                                                 int64_t progress) {
-  if (mTransaction) {
-    mTransaction->OnTransportStatus(transport, status, progress);
-  }
-}
-
-bool HappyEyeballsTransaction::IsDone() {
-  return mTransaction ? mTransaction->IsDone() : true;
-}
-
-nsresult HappyEyeballsTransaction::Status() {
-  return mTransaction ? mTransaction->Status() : NS_ERROR_ABORT;
-}
-
-uint32_t HappyEyeballsTransaction::Caps() {
-  return mTransaction ? mTransaction->Caps() : 0;
-}
-
-void HappyEyeballsTransaction::MaybeInvokeConnectedCallback(nsresult aStatus) {
-  if (mConnectedCallbackInvoked || !mConnectedCallback) {
-    return;
-  }
-  if (NS_FAILED(aStatus) || (mTransaction && mTransaction->Connected())) {
-    LOG(
-        ("HappyEyeballsTransaction::MaybeInvokeConnectedCallback %p "
-         "status=%x",
-         this, static_cast<uint32_t>(aStatus)));
-    mConnectedCallbackInvoked = true;
-    auto cb = std::move(mConnectedCallback);
-    cb(aStatus);
-  }
-}
-
-nsresult HappyEyeballsTransaction::ReadSegments(nsAHttpSegmentReader* reader,
-                                                uint32_t count,
-                                                uint32_t* countRead) {
-  if (!mTransaction) {
-    return NS_BASE_STREAM_CLOSED;
-  }
-  nsresult rv = mTransaction->ReadSegments(reader, count, countRead);
-  LOG(("HappyEyeballsTransaction::ReadSegments %p rv=%x connected=%d", this,
-       static_cast<uint32_t>(rv),
-       mTransaction ? mTransaction->Connected() : 0));
-  MaybeInvokeConnectedCallback(NS_OK);
-  return rv;
-}
-
-nsresult HappyEyeballsTransaction::Finish0RTT(bool aRestart,
-                                              bool aAlpnChanged) {
-  LOG(("HappyEyeballsTransaction::Finish0RTT %p restart=%d alpnChanged=%d",
-       this, aRestart, aAlpnChanged));
-  if (!mTransaction) {
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-  nsresult rv = mTransaction->Finish0RTT(aRestart, aAlpnChanged);
-  if (!aRestart) {
-    MaybeInvokeConnectedCallback(NS_OK);
-  }
-  return rv;
-}
-
-nsresult HappyEyeballsTransaction::WriteSegments(nsAHttpSegmentWriter* writer,
-                                                 uint32_t count,
-                                                 uint32_t* countWritten) {
-  if (!mTransaction) {
-    return NS_BASE_STREAM_CLOSED;
-  }
-  return mTransaction->WriteSegments(writer, count, countWritten);
-}
-
-void HappyEyeballsTransaction::Close(nsresult reason) {
-  LOG(
-      ("HappyEyeballsTransaction::Close %p reason=%x trans=%p cancelled=%d "
-       "mConnectedCallbackInvoked=%d mConnectedCallback=%d",
-       this, static_cast<uint32_t>(reason), mTransaction.get(), mCancelled,
-       mConnectedCallbackInvoked, !!mConnectedCallback));
-
-  RefPtr<nsHttpTransaction> trans = mTransaction;
-  mTransaction = nullptr;
-
-  if (!trans) {
-    return;
-  }
-
-  nsresult closeReason = mCancelled ? mCancelReason : reason;
-
-  trans->SetHappyEyeballsProxy(nullptr);
-
-  if (NS_SUCCEEDED(reason) || mConnectedCallbackInvoked ||
-      reason == NS_ERROR_LOCAL_NETWORK_ACCESS_DENIED || mCancelled) {
-    trans->Close(closeReason);
-  } else {
-    // The TLS handshake failed before the connected callback was invoked.
-    // Cancel any pending token bucket entry so the raw ATokenBucketEvent*
-    // pointer in EventTokenBucket::mEvents doesn't dangle after we drop
-    // our reference to the inner transaction.
-    trans->CancelPacing(closeReason);
-
-    // Clear the inner transaction's connection reference to avoid leaking
-    // the Http3Session.
-    trans->SetConnection(nullptr);
-  }
-
-  // Notify the ConnectionEstablisher about the failure so the HE attempt
-  // can process it. When the proxy is cancelled, this ensures other
-  // transactions that claimed this attempt via FindConnToClaim are
-  // unblocked via ProcessPendingQ.
-  MaybeInvokeConnectedCallback(closeReason);
-}
-
-void HappyEyeballsTransaction::SetConnectedCallback(
-    std::function<void(nsresult)>&& aCallback) {
-  LOG(("HappyEyeballsTransaction::SetConnectedCallback %p hasCallback=%d", this,
-       !!aCallback));
-  mConnectedCallback = std::move(aCallback);
-}
-
-nsHttpConnectionInfo* HappyEyeballsTransaction::ConnectionInfo() {
-  return mTransaction ? mTransaction->ConnectionInfo() : nullptr;
-}
-
-void HappyEyeballsTransaction::SetProxyConnectFailed() {
-  if (mTransaction) {
-    mTransaction->SetProxyConnectFailed();
-  }
-}
-
-nsHttpRequestHead* HappyEyeballsTransaction::RequestHead() {
-  return mTransaction ? mTransaction->RequestHead() : nullptr;
-}
-
-uint32_t HappyEyeballsTransaction::Http1xTransactionCount() {
-  return mTransaction ? mTransaction->Http1xTransactionCount() : 0;
-}
-
-nsresult HappyEyeballsTransaction::TakeSubTransactions(
-    nsTArray<RefPtr<nsAHttpTransaction>>& outTransactions) {
-  return NS_ERROR_NOT_IMPLEMENTED;
-}
-
-void HappyEyeballsTransaction::OnActivated() {
-  LOG(("HappyEyeballsTransaction::OnActivated %p trans=%p", this,
-       mTransaction.get()));
-  if (mTransaction) {
-    mTransaction->OnActivated();
-  }
-}
-
-uint64_t HappyEyeballsTransaction::BrowserId() {
-  return mTransaction ? mTransaction->BrowserId() : 0;
-}
-
-nsIRequestContext* HappyEyeballsTransaction::RequestContext() {
-  return mTransaction ? mTransaction->RequestContext() : nullptr;
 }
 
 bool HappyEyeballsTransaction::Do0RTT(bool aCanSendEarlyData) {
-  return mTransaction ? mTransaction->Do0RTT(aCanSendEarlyData) : false;
+  if (!mZeroRttHandle) {
+    return false;
+  }
+
+  // WebSocket / WebTransport upgrades over HTTP/2 (or HTTP/3) use extended
+  // CONNECT, which can't be issued before the peer's
+  // SETTINGS_ENABLE_CONNECT_PROTOCOL is known — i.e. it can't be sent as TLS
+  // early data — and the 0-RTT adoption path can't graft the real transaction
+  // onto a muxed session as a tunnel. Decline 0-RTT for an upgrade on a
+  // multiplexed racer; the connection still resumes TLS and the upgrade is
+  // dispatched through the tunnel post-handshake. Over HTTP/1 the upgrade is a
+  // plain request, so 0-RTT is safe.
+  if (nsHttpTransaction* real = mZeroRttHandle->RealTxn()) {
+    if (real->IsWebsocketUpgrade() || real->IsForWebTransport()) {
+      nsAHttpConnection* handle = Connection();
+      RefPtr<HttpConnectionBase> base =
+          handle ? handle->HttpConnection() : nullptr;
+      if (base && (base->UsingSpdy() || base->UsingHttp3())) {
+        return false;
+      }
+    }
+  }
+
+  return mZeroRttHandle->Do0RTT(this, aCanSendEarlyData);
 }
 
-void HappyEyeballsTransaction::DisableSpdy() {
-  if (mTransaction) {
-    mTransaction->DisableSpdy();
+nsresult HappyEyeballsTransaction::ReadSegments(nsAHttpSegmentReader* aReader,
+                                                uint32_t aCount,
+                                                uint32_t* aCountRead) {
+  if (Entered0RTT()) {
+    return mZeroRttHandle->ReadSegments(Request0RttStreamOffset(), aReader,
+                                        aCount, aCountRead);
+  }
+
+  // If the connection's TLS handshake failed (see
+  // nsHttpConnection::PostProcessNPNSetup), surface the captured NSS
+  // error here.
+  // We also forward the failed-handshake security info onto the real
+  // transaction here.
+  if (nsAHttpConnection* aHandle = Connection()) {
+    RefPtr<HttpConnectionBase> base = aHandle->HttpConnection();
+    if (RefPtr<nsHttpConnection> conn = do_QueryObject(base)) {
+      if (nsresult tlsErr = conn->HandshakeError(); NS_FAILED(tlsErr)) {
+        nsHttpTransaction* real =
+            mZeroRttHandle ? mZeroRttHandle->RealTxn() : nullptr;
+        nsCOMPtr<nsITLSSocketControl> tlsCtrl;
+        conn->GetTLSSocketControl(getter_AddRefs(tlsCtrl));
+        nsCOMPtr<nsITransportSecurityInfo> secInfo;
+        if (tlsCtrl) {
+          tlsCtrl->GetSecurityInfo(getter_AddRefs(secInfo));
+        }
+        if (real && secInfo) {
+          real->SetSecurityInfo(secInfo);
+        }
+        LOG(
+            ("HappyEyeballsTransaction::ReadSegments %p surfacing handshake "
+             "error rv=%" PRIx32 " real=%p secInfo=%p",
+             this, static_cast<uint32_t>(tlsErr), real, secInfo.get()));
+        *aCountRead = 0;
+        return tlsErr;
+      }
+    }
+  }
+
+  return SpeculativeTransaction::ReadSegments(aReader, aCount, aCountRead);
+}
+
+nsresult HappyEyeballsTransaction::WriteSegments(nsAHttpSegmentWriter* aWriter,
+                                                 uint32_t aCount,
+                                                 uint32_t* aCountWritten) {
+  // OnSocketReadable calls WriteSegments after EnsureNPNComplete returns true,
+  // which can happen after our Finish0RTT already closed the HET (e.g. the
+  // PostProcessNPNSetup path has no early return on Finish0RTT failure).
+  if (mState == State::Closed) {
+    return NS_BASE_STREAM_CLOSED;
+  }
+  MOZ_ASSERT_UNREACHABLE("Should not be called");
+  return NullHttpTransaction::WriteSegments(aWriter, aCount, aCountWritten);
+}
+
+void HappyEyeballsTransaction::Close(nsresult aReason) {
+  LOG(
+      ("HappyEyeballsTransaction::Close %p reason=%x mState=%d adopted=%d "
+       "entered0RTT=%d",
+       this, static_cast<uint32_t>(aReason), static_cast<int>(mState),
+       IsAdopted(), Entered0RTT()));
+  if (mState == State::Closed) {
+    // Idempotent re-Close. SpeculativeTransaction::Close already
+    // nulled mCloseCallback so a second pass is a no-op anyway.
+    return;
+  }
+  // If a racer attempt started 0-RTT while this one did not, convert a
+  // successful Close into a failure so Happy Eyeballs drops this attempt
+  // from the race.
+  if (NS_SUCCEEDED(aReason) && mZeroRttHandle &&
+      mZeroRttHandle->ShouldDisqualify(this)) {
+    LOG(("HappyEyeballsTransaction::Close %p disqualifying non-0-RTT attempt",
+         this));
+    aReason = NS_ERROR_FAILURE;
+  }
+  Transition(State::Closed, /*aRealTxn=*/nullptr, aReason);
+}
+
+void HappyEyeballsTransaction::Transition(State aNext,
+                                          nsHttpTransaction* aRealTxn,
+                                          nsresult aReason) {
+  LOG(("HappyEyeballsTransaction::Transition %p mState=%d aNext=%d", this,
+       static_cast<int>(mState), static_cast<int>(aNext)));
+  switch (aNext) {
+    case State::Racing:
+      MOZ_ASSERT_UNREACHABLE(
+          "Racing is the constructed state; cannot transition into it");
+      break;
+
+    case State::Adopted: {
+      MOZ_ASSERT(mState == State::Racing, "Racing -> Adopted only");
+      MOZ_ASSERT(aRealTxn, "Adopted entry requires real txn");
+      mState = State::Adopted;
+      mRealTxn = aRealTxn;
+
+      // Hand the real txn the same conn HT is on and then call the
+      // carrier's SwapTransaction so the carrier drives the real txn
+      // directly (hash entry / stream.mTransaction for H2/H3, conn's
+      // mTransaction for H1). Without the swap HT would linger on the
+      // carrier past shutdown — HT keeps mZeroRttHandle alive, which
+      // keeps the weak ref to HE alive, which kept the H3
+      // QuicSocketControl alive in the leak we hit earlier.
+      //
+      // H1-specific: HT->Connection() is still the establisher's
+      // ConnectionHandle — FinishInternal will Reset() it shortly
+      // after this returns — so we mint a fresh ConnectionHandle
+      // wrapping the live nsHttpConnection for the real txn. H2/H3
+      // don't need that: AddStream(HT) already replaced HT's handle
+      // with the session itself, and sessions aren't Reset() by the
+      // establisher.
+      nsAHttpConnection* ourHandle = Connection();
+      MOZ_ASSERT(ourHandle);
+
+      RefPtr<HttpConnectionBase> conn = ourHandle->HttpConnection();
+      if (conn && conn->UsingHttp3()) {
+        mRealTxn->SetConnection(ourHandle);
+        if (RefPtr<Http3Session> h3 = do_QueryObject(ourHandle)) {
+          h3->SwapTransaction(this, mRealTxn);
+        }
+      } else if (conn && conn->UsingSpdy()) {
+        mRealTxn->SetConnection(ourHandle);
+        if (RefPtr<Http2Session> h2 = do_QueryObject(ourHandle)) {
+          h2->SwapTransaction(this, mRealTxn);
+        }
+      } else if (conn) {
+        RefPtr<ConnectionHandle> fresh = new ConnectionHandle(conn);
+        mRealTxn->SetConnection(fresh);
+        if (RefPtr<nsHttpConnection> h1 = do_QueryObject(conn)) {
+          h1->SwapTransaction(this, mRealTxn);
+        }
+      }
+
+      SetConnection(nullptr);
+      // The HET no longer participates in 0-RTT coordination after adoption.
+      // Break the RefPtr cycle between ZeroRttHandle::mWinner (RefPtr<HET>)
+      // and HET::mZeroRttHandle (RefPtr<ZeroRttHandle>): Cleanup() drops
+      // mWinner; clearing mZeroRttHandle here drops the HET's ref back to the
+      // handle.
+      mZeroRttHandle = nullptr;
+      break;
+    }
+
+    case State::Closed:
+      MOZ_ASSERT(mState == State::Racing || mState == State::Adopted,
+                 "Closed entry from Racing or Adopted only");
+      mState = State::Closed;
+      SpeculativeTransaction::Close(aReason);
+      break;
   }
 }
 
-void HappyEyeballsTransaction::DisableHttp2ForProxy() {
-  if (mTransaction) {
-    mTransaction->DisableHttp2ForProxy();
+nsHttpTransaction* HappyEyeballsTransaction::QueryHttpTransaction() {
+  return mRealTxn;
+}
+
+bool HappyEyeballsTransaction::AllowedToConnectToIpAddressSpace(
+    nsILoadInfo::IPAddressSpace aTargetIpAddressSpace) {
+  // Resolve the real transaction this race is running on behalf of.
+  // Post-Adopt we already have it; pre-Adopt go through the shared
+  // ZeroRttHandle, which keeps a weak ref to the owning HET and the
+  // txn currently claimed onto it.
+  nsHttpTransaction* real = mRealTxn;
+  if (!real && mZeroRttHandle) {
+    real = mZeroRttHandle->RealTxn();
+  }
+  if (!real) {
+    // No real txn has been claimed onto this race yet (pure
+    // speculative). Allow — the deferred check will re-run when the
+    // real txn is eventually dispatched.
+    return true;
+  }
+  return real->AllowedToConnectToIpAddressSpace(aTargetIpAddressSpace);
+}
+
+nsHttpRequestHead* HappyEyeballsTransaction::RequestHead() {
+  if (mZeroRttHandle) {
+    if (nsHttpTransaction* real = mZeroRttHandle->RealTxn()) {
+      return real->RequestHead();
+    }
+  }
+  return SpeculativeTransaction::RequestHead();
+}
+
+void HappyEyeballsTransaction::MaybeRemoveSSLTokens() {
+  nsAHttpConnection* handle = Connection();
+  if (!handle) {
+    return;
+  }
+  RefPtr<HttpConnectionBase> base = handle->HttpConnection();
+  RefPtr<nsHttpConnection> conn = do_QueryObject(base);
+  if (!conn) {
+    return;
+  }
+  nsCOMPtr<nsITLSSocketControl> tlsCtrl;
+  conn->GetTLSSocketControl(getter_AddRefs(tlsCtrl));
+  nsCOMPtr<nsITransportSecurityInfo> secInfo;
+  if (tlsCtrl) {
+    tlsCtrl->GetSecurityInfo(getter_AddRefs(secInfo));
+  }
+  if (mZeroRttHandle) {
+    if (nsHttpTransaction* realTxn = mZeroRttHandle->RealTxn()) {
+      realTxn->RemoveSSLTokens(secInfo);
+    }
   }
 }
 
-void HappyEyeballsTransaction::DisableHttp3(bool aAllowRetryHTTPSRR) {
-  if (mTransaction) {
-    mTransaction->DisableHttp3(aAllowRetryHTTPSRR);
-  }
-}
-
-void HappyEyeballsTransaction::MakeNonSticky() {
-  if (mTransaction) {
-    mTransaction->MakeNonSticky();
-  }
-}
-
-void HappyEyeballsTransaction::MakeRestartable() {
-  if (mTransaction) {
-    mTransaction->MakeRestartable();
-  }
-}
-
-void HappyEyeballsTransaction::ReuseConnectionOnRestartOK(bool reuseOk) {
-  if (mTransaction) {
-    static_cast<nsAHttpTransaction*>(mTransaction.get())
-        ->ReuseConnectionOnRestartOK(reuseOk);
-  }
-}
-
-void HappyEyeballsTransaction::SetIsHttp2Websocket(bool h2ws) {
-  if (mTransaction) {
-    mTransaction->SetIsHttp2Websocket(h2ws);
-  }
-}
-
-bool HappyEyeballsTransaction::IsHttp2Websocket() {
-  return mTransaction ? mTransaction->IsHttp2Websocket() : false;
-}
-
-void HappyEyeballsTransaction::SetTRRInfo(nsIRequest::TRRMode aMode,
-                                          TRRSkippedReason aSkipReason) {
-  if (mTransaction) {
-    mTransaction->SetTRRInfo(aMode, aSkipReason);
-  }
-}
-
-void HappyEyeballsTransaction::DoNotRemoveAltSvc() {
-  if (mTransaction) {
-    mTransaction->DoNotRemoveAltSvc();
-  }
-}
-
-void HappyEyeballsTransaction::DoNotResetIPFamilyPreference() {
-  if (mTransaction) {
-    mTransaction->DoNotResetIPFamilyPreference();
-  }
-}
-
-void HappyEyeballsTransaction::OnProxyConnectComplete(int32_t aResponseCode) {
-  if (mTransaction) {
-    mTransaction->OnProxyConnectComplete(aResponseCode);
-  }
+nsresult HappyEyeballsTransaction::FetchHTTPSRR() {
+  MOZ_ASSERT_UNREACHABLE("Should not be called");
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 nsresult HappyEyeballsTransaction::OnHTTPSRRAvailable(
@@ -287,36 +323,6 @@ nsresult HappyEyeballsTransaction::OnHTTPSRRAvailable(
     nsISVCBRecord* aHighestPriorityRecord, const nsACString& aCname) {
   MOZ_ASSERT_UNREACHABLE("Should not be called");
   return NS_ERROR_NOT_IMPLEMENTED;
-}
-
-bool HappyEyeballsTransaction::IsForWebTransport() {
-  return mTransaction ? mTransaction->IsForWebTransport() : false;
-}
-
-bool HappyEyeballsTransaction::IsResettingForTunnelConn() {
-  return mTransaction ? mTransaction->IsResettingForTunnelConn() : false;
-}
-
-void HappyEyeballsTransaction::SetResettingForTunnelConn(bool aValue) {
-  if (mTransaction) {
-    mTransaction->SetResettingForTunnelConn(aValue);
-  }
-}
-
-bool HappyEyeballsTransaction::AllowedToConnectToIpAddressSpace(
-    nsILoadInfo::IPAddressSpace aTargetIpAddressSpace) {
-  MOZ_ASSERT_UNREACHABLE("Should not be called");
-  return false;
-}
-
-void HappyEyeballsTransaction::Detach() {
-  LOG(("HappyEyeballsTransaction::Detach %p trans=%p", this,
-       mTransaction.get()));
-  if (mTransaction) {
-    mTransaction->SetHappyEyeballsProxy(nullptr);
-  }
-  mTransaction = nullptr;
-  mConnectedCallback = nullptr;
 }
 
 }  // namespace mozilla::net

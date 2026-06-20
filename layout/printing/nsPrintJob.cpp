@@ -84,6 +84,7 @@ static const char sPrintSettingsServiceContractID[] =
 #include "nsRange.h"
 
 #if defined(ACCESSIBILITY) && defined(MOZ_ENABLE_SKIA_PDF)
+#  include "mozilla/a11y/DocManager.h"
 #  include "mozilla/a11y/PdfStructTreeBuilder.h"
 #endif
 
@@ -414,7 +415,7 @@ nsresult nsPrintJob::DoCommonPrint(bool aIsPrintPreview,
 
   nsCOMPtr<nsIDeviceContextSpec> devspec;
   if (XRE_IsContentProcess()) {
-    devspec = new nsDeviceContextSpecProxy(mRemotePrintJob);
+    devspec = MakeAndAddRef<nsDeviceContextSpecProxy>(mRemotePrintJob);
   } else {
     devspec = do_CreateInstance("@mozilla.org/gfx/devicecontextspec;1", &rv);
     NS_ENSURE_SUCCESS(rv, rv);
@@ -899,14 +900,12 @@ nsresult nsPrintJob::SetupToPrintContent() {
   if (mIsDoingPrinting) {
 #if defined(ACCESSIBILITY) && defined(MOZ_ENABLE_SKIA_PDF)
     if (!mIsCreatingPrintPreview) {
-      if (nsAccessibilityService* serv = GetAccService()) {
-        serv->NotifyOfPrintDocument(mPrintObject->mDocument);
-        // XXX Out-of-process iframes inside a parent process document won't be
-        // accessible. We need to wait for the iframe accessibility trees to
-        // arrive asynchronously using
-        // a11y::PdfStructTreeBuilder::GetReadyPromise, but there's no clear
-        // place to do that right now when printing in-process.
-      }
+      a11y::DocManager::NotifyOfPrintDocument(mPrintObject->mDocument);
+      // XXX Out-of-process iframes inside a parent process document won't be
+      // accessible. We need to wait for the iframe accessibility trees to
+      // arrive asynchronously using
+      // a11y::PdfStructTreeBuilder::GetReadyPromise, but there's no clear
+      // place to do that right now when printing in-process.
     }
 #endif
     rv = printData->mPrintDC->BeginDocument(
@@ -2026,7 +2025,8 @@ class nsPrintCompletionEvent : public Runnable {
 //-----------------------------------------------------------
 void nsPrintJob::FirePrintCompletionEvent() {
   MOZ_ASSERT(NS_IsMainThread());
-  nsCOMPtr<nsIRunnable> event = new nsPrintCompletionEvent(mDocViewerPrint);
+  nsCOMPtr<nsIRunnable> event =
+      MakeAndAddRef<nsPrintCompletionEvent>(mDocViewerPrint);
   nsCOMPtr<nsIDocumentViewer> viewer = do_QueryInterface(mDocViewerPrint);
   NS_ENSURE_TRUE_VOID(viewer);
   nsCOMPtr<Document> doc = viewer->GetDocument();

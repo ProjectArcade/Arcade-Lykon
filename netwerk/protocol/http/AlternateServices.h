@@ -117,7 +117,7 @@ class AltSvcMapping {
   virtual ~AltSvcMapping() = default;
   void SyncString(const nsCString& str);
   nsCOMPtr<nsIDataStorage> mStorage;
-  int32_t mStorageEpoch;
+  int32_t mStorageEpoch = 0;
   void Serialize(nsCString& out);
 
   nsCString mHashKey;

@@ -138,7 +138,7 @@ typedef struct {
   size_t quantum_max;        // Max quantum-spaced allocation size.
   size_t quantum_wide;       // Allocation quantum (QuantuWide).
   size_t quantum_wide_max;   // Max quantum-wide-spaced allocation size.
-  size_t unused;             // Unused field.
+  size_t subpage_max;        // Max subpage allocation size.
   size_t large_max;          // Max sub-chunksize allocation size.
   size_t chunksize;          // Size of each virtual memory mapping.
   size_t page_size;          // Size of pages in mozjemalloc internal
@@ -165,6 +165,7 @@ typedef struct {
                           // operations.  Which internal operations (eg in place
                           // or move, or different size classes) require
                           // different internal operations is unspecified.
+  size_t arena_run_header;
 } jemalloc_stats_t;
 
 typedef struct {

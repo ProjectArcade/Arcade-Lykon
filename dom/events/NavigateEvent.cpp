@@ -388,7 +388,7 @@ void NavigateEvent::PotentiallyResetFocus() {
   }
 
   // Step 7
-  Document* document = window->GetExtantDoc();
+  RefPtr<Document> document = window->GetExtantDoc();
 
   // If we don't have a document here, there's not much we can do.
   if (NS_WARN_IF(!document)) {
@@ -415,8 +415,10 @@ void NavigateEvent::PotentiallyResetFocus() {
   // Step 11, step 12
   FocusOptions options;
   options.mPreventScroll = true;
-  focusTarget = nsFocusManager::GetTheFocusableArea(
-      focusTarget, nsFocusManager::ProgrammaticFocusFlags(options));
+  if (focusTarget) {
+    focusTarget = nsFocusManager::GetTheFocusableArea(
+        focusTarget, nsFocusManager::ProgrammaticFocusFlags(options));
+  }
 
   if (focusTarget) {
     LOG_FMT("Reset focus to {}", *focusTarget->AsNode());
@@ -432,6 +434,8 @@ void NavigateEvent::PotentiallyResetFocus() {
         focusManager->ClearFocus(focusedWindow);
       }
     }
+    // Step 12
+    document->SetFocusNavigationStartingPoint(nullptr);
   }
 }
 

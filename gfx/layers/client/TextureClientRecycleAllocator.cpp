@@ -118,7 +118,7 @@ already_AddRefed<TextureClient> YCbCrTextureClientAllocationHelper::Allocate(
       aKnowsCompositor, mData.mPictureRect, mYSize, mData.mYStride, mCbCrSize,
       mData.mCbCrStride, mData.mStereoMode, mData.mColorDepth,
       mData.mYUVColorSpace, mData.mColorRange, mData.mTransferFunction,
-      mData.mChromaSubsampling, mTextureFlags);
+      mData.mChromaSubsampling, mTextureFlags, mData.mHDRMetadata);
 }
 
 TextureClientRecycleAllocator::TextureClientRecycleAllocator(
@@ -169,8 +169,8 @@ TextureClientRecycleAllocator::CreateOrRecycle(
       if (!textureHolder->GetTextureClient()->GetAllocator()->IPCOpen() ||
           !aHelper.IsCompatible(textureHolder->GetTextureClient())) {
         // Release TextureClient.
-        RefPtr<Runnable> task =
-            new TextureClientReleaseTask(textureHolder->GetTextureClient());
+        RefPtr task = MakeRefPtr<TextureClientReleaseTask>(
+            textureHolder->GetTextureClient());
         textureHolder->ClearTextureClient();
         textureHolder = nullptr;
         mKnowsCompositor->GetTextureForwarder()->GetThread()->Dispatch(

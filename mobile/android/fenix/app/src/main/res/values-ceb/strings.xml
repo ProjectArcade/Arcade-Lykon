@@ -128,12 +128,6 @@
   <!-- Browser menu button to open the current page in an external app -->
   <string name="browser_menu_open_app_link">i-Open sa app</string>
   <!--
-    Browser Toolbar
-
-    Content description for the Home screen button on the browser toolbar
-  -->
-  <string name="browser_toolbar_home">Home screen</string>
-  <!--
     Locale Settings Fragment
 
     Content description for tick mark on selected language
@@ -143,8 +137,6 @@
   <string name="default_locale_text">Sunda ang device language</string>
   <!-- Placeholder text shown in the search bar before a user enters text -->
   <string name="locale_search_hint">Search language</string>
-  <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
-  <string name="search_shortcuts_engine_settings">Mga setting sa search engine</string>
   <!--
     Search Fragment
 

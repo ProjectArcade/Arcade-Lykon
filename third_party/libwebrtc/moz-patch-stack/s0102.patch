@@ -1,23 +1,23 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Tue, 15 Oct 2024 16:46:00 -0500
-Subject: Bug 1924098 - (fix-e432503389) upstream changed signature of
- LibvpxVp9Encoder::InitAndSetControlSettings
+Date: Mon, 13 Jan 2025 08:14:00 -0600
+Subject: Bug 1942428 - (fix-69cc695699) uncomment an arg that upstream thinks
+ is unused
 
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/fadad7695efe0d9cc6b999a613b9e1f536e660bd
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/73f9e0e64eb65e9f2579b0f3eb34b88e2b5e5d74
 ---
- modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc | 2 +-
+ modules/rtp_rtcp/source/rtcp_sender.cc | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc b/modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc
-index 05fa3d875f..9c7d7cfb97 100644
---- a/modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc
-+++ b/modules/video_coding/codecs/vp9/libvpx_vp9_encoder.cc
-@@ -1347,7 +1347,7 @@ int LibvpxVp9Encoder::UpdateCodecFrameSize(
-   // bugs in trying to do it the "right" way, we basically re-do
-   // the initialization.
-   vpx_codec_destroy(encoder_); // clean up old state
--  int result = InitAndSetControlSettings(&codec_);
-+  int result = InitAndSetControlSettings();
-   if (result == WEBRTC_VIDEO_CODEC_OK) {
-     // TODO: Mozilla rates have become much more complicated, we need to store
-     // more state or find another way of doing this.
+diff --git a/modules/rtp_rtcp/source/rtcp_sender.cc b/modules/rtp_rtcp/source/rtcp_sender.cc
+index ef8c5f76dd..2bc24bc8bf 100644
+--- a/modules/rtp_rtcp/source/rtcp_sender.cc
++++ b/modules/rtp_rtcp/source/rtcp_sender.cc
+@@ -200,7 +200,7 @@ bool RTCPSender::Sending() const {
+   return sending_;
+ }
+ 
+-void RTCPSender::SetSendingStatus(const FeedbackState& /* feedback_state */,
++void RTCPSender::SetSendingStatus(const FeedbackState& feedback_state,
+                                   bool sending) {
+   bool sendRTCPBye = false;
+   {

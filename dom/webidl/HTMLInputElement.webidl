@@ -59,7 +59,7 @@ interface HTMLInputElement : HTMLElement {
            attribute boolean formNoValidate;
   [CEReactions, Pure, SetterThrows]
            attribute DOMString formTarget;
-  [CEReactions, Pure, SetterThrows]
+  [CEReactions, SetterThrows]
            attribute unsigned long height;
   [Pure]
            attribute boolean indeterminate;
@@ -215,7 +215,7 @@ interface mixin MozEditableElement {
   // Returns an nsIEditor instance which is associated with the element.
   // If the element can be associated with an editor but not yet created,
   // this creates new one automatically.
-  [Pure, ChromeOnly, BinaryName="editorForBindings"]
+  [ChromeOnly, BinaryName="editorForBindings"]
   readonly attribute nsIEditor? editor;
 
   // Returns true if an nsIEditor instance has already been associated with
@@ -256,6 +256,8 @@ partial interface HTMLInputElement {
 dictionary DateTimeValue {
   long hour;
   long minute;
+  long second;
+  long millisecond;
   long year;
   long month;
   long day;

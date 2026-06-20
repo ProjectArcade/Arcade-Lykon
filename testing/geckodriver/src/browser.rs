@@ -37,7 +37,7 @@ impl Browser {
     pub(crate) fn close(self, wait_for_shutdown: bool) -> WebDriverResult<()> {
         match self {
             Browser::Local(x) => x.close(wait_for_shutdown),
-            Browser::Remote(x) => x.close(),
+            Browser::Remote(x) => x.close(wait_for_shutdown),
             Browser::Existing(_) => Ok(()),
         }
     }
@@ -319,7 +319,42 @@ impl RemoteBrowser {
         })
     }
 
-    fn close(&self) -> WebDriverResult<()> {
+    fn close(&self, wait_for_shutdown: bool) -> WebDriverResult<()> {
+        if wait_for_shutdown {
+            // TODO(https://bugzil.la/1443922):
+            // Use toolkit.asyncshutdown.crash_timeout pref
+            let timeout = time::Duration::from_secs(70);
+            let poll_interval = time::Duration::from_millis(100);
+            let start = time::Instant::now();
+
+            debug!(
+                "Waiting {}s for Android process {} (package {}) to exit",
+                timeout.as_secs(),
+                self.pid,
+                &self.handler.process.package
+            );
+
+            loop {
+                let (_, status) = self.check_status();
+                if matches!(status, BrowserStatus::Exited(_)) {
+                    debug!(
+                        "Android package {} has exited",
+                        &self.handler.process.package
+                    );
+                    break;
+                }
+
+                if start.elapsed() >= timeout {
+                    warn!(
+                        "Timed out waiting for Android package {} to exit",
+                        &self.handler.process.package
+                    );
+                    break;
+                }
+
+                std::thread::sleep(poll_interval);
+            }
+        }
         self.handler.force_stop()?;
         Ok(())
     }

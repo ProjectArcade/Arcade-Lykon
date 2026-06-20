@@ -987,9 +987,17 @@
               "type": "string",
               "description": "URL for image to use with the content."
             },
+            "rtlImageURL": {
+              "type": "string",
+              "description": "URL for RTL images that have directionally dependent assets and cannot be flipped using 'directionalImage'."
+            },
             "imageWidth": {
               "type": "number",
               "description": "The image width in pixels. Default is 120px."
+            },
+            "directionalImage": {
+              "type": "boolean",
+              "description": "If true, the illustration has a left/right orientation and should be horizontally mirrored in RTL contexts. Defaults to false."
             },
             "logoURL": {
               "type": "string",
@@ -1017,16 +1025,26 @@
             },
             "layout": {
               "type": "string",
-              "description": "The layout of the message content and illustration. Row displays the image inline to the right of the text, column displays the image above the text. Simple layout only displays primary text and primary button on one row.",
+              "description": "The layout of the message content and illustration. Row displays the image inline to the right of the text, column displays the image above the text. Simple layout only displays primary text and primary button on one row. Split displays the illustration in one column and a stacked content column, use 'imagePosition' to swap which side the illustration sits on.",
               "enum": [
                 "row",
                 "column",
-                "simple"
+                "simple",
+                "split"
+              ]
+            },
+            "imagePosition": {
+              "type": "string",
+              "description": "Position of the illustration. For split layout, 'start' or 'end' selects which inline side the illustration sits on (defaults to 'end'). For both split and column layout, 'bottom' renders the illustration at the bottom of the card.",
+              "enum": [
+                "start",
+                "end",
+                "bottom"
               ]
             },
             "allowWhenSignedIn": {
               "type": "boolean",
-              "description": "If true, the message will be shown even when the user is signed in. For 'fxa_cta' messages. Defaults to false."
+              "description": "If true, the message will be shown even when the user is signed in. For 'fxa_cta' messages. Defaults to 'false'."
             }
           }
         },
@@ -1062,35 +1080,6 @@
             "hideDefault": {
               "type": "boolean",
               "description": "Should we hide the default promo after the experiment promo is dismissed."
-            },
-            "infoEnabled": {
-              "type": "boolean",
-              "description": "Should we show the info section."
-            },
-            "infoIcon": {
-              "type": "string",
-              "description": "Icon shown in the left side of the info section. Default is the private browsing icon."
-            },
-            "infoTitle": {
-              "type": "string",
-              "description": "Is the title in the info section enabled."
-            },
-            "infoTitleEnabled": {
-              "type": "boolean",
-              "description": "Is the title in the info section enabled."
-            },
-            "infoBody": {
-              "type": "string",
-              "description": "Text content in the info section."
-            },
-            "infoLinkText": {
-              "type": "string",
-              "description": "Text for the link in the info section."
-            },
-            "infoLinkUrl": {
-              "type": "string",
-              "description": "URL for the info section link.",
-              "format": "moz-url-format"
             },
             "promoEnabled": {
               "type": "boolean",
@@ -1193,38 +1182,6 @@
                   "promoButton"
                 ]
               }
-            },
-            {
-              "if": {
-                "properties": {
-                  "infoEnabled": {
-                    "const": true
-                  }
-                },
-                "required": [
-                  "infoEnabled"
-                ]
-              },
-              "then": {
-                "required": [
-                  "infoLinkText"
-                ],
-                "if": {
-                  "properties": {
-                    "infoTitleEnabled": {
-                      "const": true
-                    }
-                  },
-                  "required": [
-                    "infoTitleEnabled"
-                  ]
-                },
-                "then": {
-                  "required": [
-                    "infoTitle"
-                  ]
-                }
-              }
             }
           ]
         },
@@ -1272,6 +1229,119 @@
       "required": [
         "targeting"
       ]
+    },
+    "SmartWindowNewtabPromo": {
+      "$schema": "https://json-schema.org/draft/2019-09/schema",
+      "$id": "file:///SmartWindowNewtabPromo.schema.json",
+      "title": "SmartWindowNewtabPromo",
+      "description": "A template for promo messages that appear on the Smart Window new tab page.",
+      "allOf": [
+        {
+          "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/Message"
+        }
+      ],
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "The visual style of the promo (passed through to moz-promo)."
+            },
+            "heading": {
+              "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/localizableText",
+              "description": "The heading text of the promo."
+            },
+            "message": {
+              "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/localizableText",
+              "description": "The body text of the promo."
+            },
+            "imageSrc": {
+              "type": "string",
+              "description": "URL of the image to display."
+            },
+            "imageAlignment": {
+              "type": "string",
+              "description": "Alignment of the image within the promo."
+            },
+            "imageWidth": {
+              "type": "string",
+              "description": "Width preset for the image."
+            },
+            "imageDisplay": {
+              "type": "string",
+              "description": "Display style for the image."
+            },
+            "primary_button": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/localizableText",
+                  "description": "The label for the primary action button."
+                },
+                "action": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "Action dispatched by the button."
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true,
+                  "description": "The action to take upon clicking the primary button."
+                }
+              },
+              "required": [
+                "label",
+                "action"
+              ]
+            },
+            "additional_button": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/localizableText",
+                  "description": "The label for the additional action button."
+                },
+                "action": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "description": "Action dispatched by the button."
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "additionalProperties": true,
+                  "description": "The action to take upon clicking the additional button."
+                }
+              },
+              "required": [
+                "label",
+                "action"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
+        "template": {
+          "type": "string",
+          "const": "smart_window_newtab_promo"
+        }
+      },
+      "additionalProperties": true
     },
     "Spotlight": {
       "$schema": "https://json-schema.org/draft/2019-09/schema",
@@ -1647,6 +1717,7 @@
             "menu_message",
             "pb_newtab",
             "newtab_message",
+            "smart_window_newtab_promo",
             "spotlight",
             "feature_callout",
             "toast_notification",
@@ -1909,6 +1980,25 @@
           },
           "then": {
             "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/NewtabMessage"
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "template": {
+                "type": "string",
+                "enum": [
+                  "smart_window_newtab_promo"
+                ]
+              }
+            },
+            "required": [
+              "template"
+            ]
+          },
+          "then": {
+            "$ref": "chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json#/$defs/SmartWindowNewtabPromo"
           }
         },
         {

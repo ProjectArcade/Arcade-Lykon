@@ -38,6 +38,7 @@ after_includes = """
 #pragma push_macro("TRANSPARENT")
 #undef TRANSPARENT
 """
+usize_is_size_t = true
 
 [parse]
 parse_deps = true
@@ -103,6 +104,7 @@ include = [
   "AnimationRangeStart",
   "AnimationIterationCount",
   "AnimationDirection",
+  "BackgroundClip",
   "AnimationFillMode",
   "AnimationPlayState",
   "AnimationComposition",
@@ -219,6 +221,8 @@ include = [
   "BorderImageRepeatKeyword",
   "BorderSpacing",
   "BorderRadius",
+  "CornerShape",
+  "CornerShapeRect",
   "ColorScheme",
   "ColumnCount",
   "CssRuleRef",
@@ -358,6 +362,7 @@ include = [
   "QueryFontMetricsFlags",
   "AllowAnchorPosResolutionInCalcPercentage",
   "ListStyleType",
+  "LinkParameters",
 ]
 item_types = [
   "enums",
@@ -450,31 +455,19 @@ renaming_overrides_prefixing = true
   void ScaleLengthsBy(float);
 """
 
-"LengthPercentageUnion" = """
-  using Self = StyleLengthPercentageUnion;
+"LengthPercentage" = """
+  using Self = StyleLengthPercentage;
 
-  // TODO(emilio): cbindgen should be able to generate these in the body of the
-  // union, but it seems it's only implemented for structs, not unions.
-  static const uint8_t TAG_CALC = StyleLengthPercentageUnion_TAG_CALC;
-  static const uint8_t TAG_LENGTH = StyleLengthPercentageUnion_TAG_LENGTH;
-  static const uint8_t TAG_PERCENTAGE = StyleLengthPercentageUnion_TAG_PERCENTAGE;
-  static const uint8_t TAG_MASK = StyleLengthPercentageUnion_TAG_MASK;
-
- private:
-  uint8_t Tag() const {
-    return tag.tag & TAG_MASK;
-  }
-
- public:
-  // We need to do all this manually because cbingen can't reason about unions.
-  inline StyleLengthPercentageUnion();
-  inline StyleLengthPercentageUnion(const Self&);
-  inline ~StyleLengthPercentageUnion();
+  // We need to do all this manually because cbindgen can't reason about unions.
+  inline StyleLengthPercentage();
+  inline StyleLengthPercentage(const Self&);
+  inline ~StyleLengthPercentage();
   inline Self& operator=(const Self&);
 
   inline bool operator==(const Self& aOther) const;
   inline bool operator!=(const Self& aOther) const;
 
+  inline bool IsLengthOrPercentage() const;
   inline bool IsLength() const;
   inline bool IsPercentage() const;
   inline bool IsCalc() const;
@@ -666,6 +659,8 @@ renaming_overrides_prefixing = true
 
   bool MaybeTransparent() const;
 
+  bool DependsOnCurrentColor() const;
+
   /**
    * Compute the final color, taking into account the foreground color.
    **/
@@ -706,6 +701,47 @@ renaming_overrides_prefixing = true
    * if required.
    */
   nscolor ToColor() const;
+"""
+
+"ColorFunction" = """
+  bool DependsOnCurrentColor() const;
+"""
+
+"GenericColorMix" = """
+  bool DependsOnCurrentColor() const;
+"""
+
+"OwnedArray" = """
+  static_assert(N > 0);
+
+  StyleOwnedArray() = delete;
+
+  inline StyleOwnedArray& operator=(const StyleOwnedArray&);
+  inline StyleOwnedArray& operator=(StyleOwnedArray&&) = delete;
+
+  inline StyleOwnedArray(const StyleOwnedArray&);
+  inline StyleOwnedArray(StyleOwnedArray&&) = delete;
+  template <typename... Args>
+    requires (sizeof...(Args) == N)
+  inline explicit StyleOwnedArray(Args&&... aArgs);
+
+  inline ~StyleOwnedArray();
+
+  Span<const T> AsSpan() const {
+    return {ptr, N};
+  }
+
+  static constexpr size_t Length() {
+    return N;
+  }
+
+  bool operator==(const StyleOwnedArray& other) const {
+    return AsSpan() == other.AsSpan();
+  }
+
+  bool operator!=(const StyleOwnedArray& other) const {
+    return !(*this == other);
+  }
 """
 
 "OwnedSlice" = """
@@ -1151,7 +1187,7 @@ renaming_overrides_prefixing = true
 
 "ComputedFontStyleDescriptor" = """
   inline static StyleComputedFontStyleDescriptor Normal() {
-    return StyleComputedFontStyleDescriptor::Oblique(0, 0);
+    return StyleComputedFontStyleDescriptor::Oblique({0}, {0});
   }
 """
 
@@ -1289,6 +1325,40 @@ renaming_overrides_prefixing = true
   {}
   inline bool IsEmpty() const;
   inline Span<const mozilla::StyleAtom> AsSpan() const;
+"""
+
+"Optional" = """
+  explicit operator bool() const { return IsSome(); }
+
+  const T& operator*() const { return AsSome(); }
+"""
+
+"NumericType" = """
+  static_assert(static_cast<size_t>(StyleNumericBaseType::Percent) + 1 ==
+                StyleNUMERIC_BASE_TYPE_COUNT);
+
+  inline StyleNumericType();
+
+ private:
+  inline static StyleNumericType Empty();
+
+  // Keep in sync with NumericType::with_base_type() in Stylo.
+  // This is a manual C++ duplicate to avoid FFI calls.
+  inline static StyleNumericType WithBaseType(StyleNumericBaseType aBaseType);
+
+ public:
+  inline static StyleNumericType Number();
+  inline static StyleNumericType Percent();
+  inline static StyleNumericType Length();
+  inline static StyleNumericType Angle();
+  inline static StyleNumericType Time();
+  inline static StyleNumericType Frequency();
+  inline static StyleNumericType Resolution();
+  inline static StyleNumericType Flex();
+
+  inline int32_t Exponent(StyleNumericBaseType aBaseType) const;
+
+  inline bool operator==(const StyleNumericType& aOther) const;
 """
 
 "PropertyTypedValueList" = """

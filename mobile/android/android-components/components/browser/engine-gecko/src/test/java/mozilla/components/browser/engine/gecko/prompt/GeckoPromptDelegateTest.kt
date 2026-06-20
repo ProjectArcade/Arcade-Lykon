@@ -31,7 +31,6 @@ import mozilla.components.support.test.whenever
 import mozilla.components.test.ReflectionUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -62,6 +61,7 @@ import java.util.Calendar
 import java.util.Calendar.YEAR
 import java.util.Date
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 typealias GeckoChoice = GeckoSession.PromptDelegate.ChoicePrompt.Choice
 typealias GECKO_AUTH_LEVEL = GeckoSession.PromptDelegate.AuthPrompt.AuthOptions.Level
@@ -319,11 +319,10 @@ class GeckoPromptDelegateTest {
 
         promptDelegate.onDateTimePrompt(mock(), geckoPrompt)
 
-        assertNotNull(timeSelectionRequest)
-        with(timeSelectionRequest!!) {
-            assertEquals(initialDate, "2019-11-29".toDate("yyyy-MM-dd"))
-            assertEquals(minimumDate, "2019-11-28".toDate("yyyy-MM-dd"))
-            assertEquals(maximumDate, "2019-11-30".toDate("yyyy-MM-dd"))
+        assertNotNull(timeSelectionRequest) {
+            assertEquals(it.initialDate, "2019-11-29".toDate("yyyy-MM-dd"))
+            assertEquals(it.minimumDate, "2019-11-28".toDate("yyyy-MM-dd"))
+            assertEquals(it.maximumDate, "2019-11-30".toDate("yyyy-MM-dd"))
         }
         val selectedDate = "2019-11-28".toDate("yyyy-MM-dd")
         timeSelectionRequest.onConfirm(selectedDate)
@@ -387,11 +386,10 @@ class GeckoPromptDelegateTest {
         )
         promptDelegate.onDateTimePrompt(mock(), geckoPrompt)
 
-        assertNotNull(timeSelectionRequest)
-        with(timeSelectionRequest!!) {
-            assertEquals(initialDate, "2019-11".toDate("yyyy-MM"))
-            assertEquals(minimumDate, "2019-11".toDate("yyyy-MM"))
-            assertEquals(maximumDate, "2019-11".toDate("yyyy-MM"))
+        assertNotNull(timeSelectionRequest) {
+            assertEquals(it.initialDate, "2019-11".toDate("yyyy-MM"))
+            assertEquals(it.minimumDate, "2019-11".toDate("yyyy-MM"))
+            assertEquals(it.maximumDate, "2019-11".toDate("yyyy-MM"))
         }
         val selectedDate = "2019-11".toDate("yyyy-MM")
         timeSelectionRequest.onConfirm(selectedDate)
@@ -453,11 +451,10 @@ class GeckoPromptDelegateTest {
         )
         promptDelegate.onDateTimePrompt(mock(), geckoPrompt)
 
-        assertNotNull(timeSelectionRequest)
-        with(timeSelectionRequest!!) {
-            assertEquals(initialDate, "2018-W18".toDate("yyyy-'W'ww"))
-            assertEquals(minimumDate, "2018-W18".toDate("yyyy-'W'ww"))
-            assertEquals(maximumDate, "2018-W26".toDate("yyyy-'W'ww"))
+        assertNotNull(timeSelectionRequest) {
+            assertEquals(it.initialDate, "2018-W18".toDate("yyyy-'W'ww"))
+            assertEquals(it.minimumDate, "2018-W18".toDate("yyyy-'W'ww"))
+            assertEquals(it.maximumDate, "2018-W26".toDate("yyyy-'W'ww"))
         }
         val selectedDate = "2018-W26".toDate("yyyy-'W'ww")
         timeSelectionRequest.onConfirm(selectedDate)
@@ -519,11 +516,10 @@ class GeckoPromptDelegateTest {
         )
         promptDelegate.onDateTimePrompt(mock(), geckoPrompt)
 
-        assertNotNull(timeSelectionRequest)
-        with(timeSelectionRequest!!) {
-            assertEquals(initialDate, "17:00".toDate("HH:mm"))
-            assertEquals(minimumDate, "9:00".toDate("HH:mm"))
-            assertEquals(maximumDate, "18:00".toDate("HH:mm"))
+        assertNotNull(timeSelectionRequest) {
+            assertEquals(it.initialDate, "17:00".toDate("HH:mm"))
+            assertEquals(it.minimumDate, "9:00".toDate("HH:mm"))
+            assertEquals(it.maximumDate, "18:00".toDate("HH:mm"))
         }
         val selectedDate = "17:00".toDate("HH:mm")
         timeSelectionRequest.onConfirm(selectedDate)
@@ -566,7 +562,7 @@ class GeckoPromptDelegateTest {
 
         var selectedTime = "17:00"
         assertNotNull(timeSelectionRequest)
-        (timeSelectionRequest as PromptRequest.TimeSelection).onConfirm(selectedTime.toDate("HH:mm"))
+        timeSelectionRequest.onConfirm(selectedTime.toDate("HH:mm"))
         verify(minutesGeckoPrompt).confirm(confirmCaptor.capture())
         assertEquals(selectedTime, confirmCaptor.value)
 
@@ -608,8 +604,8 @@ class GeckoPromptDelegateTest {
         promptDelegate.onDateTimePrompt(mock(), geckoPrompt)
 
         assertNotNull(timeSelectionRequest)
-        assertEquals(PromptRequest.TimeSelection.Type.TIME, timeSelectionRequest?.type)
-        assertNull(timeSelectionRequest?.stepValue)
+        assertEquals(PromptRequest.TimeSelection.Type.TIME, timeSelectionRequest.type)
+        assertNull(timeSelectionRequest.stepValue)
     }
 
     @Test
@@ -664,11 +660,10 @@ class GeckoPromptDelegateTest {
         )
         promptDelegate.onDateTimePrompt(mock(), geckoPrompt)
 
-        assertNotNull(timeSelectionRequest)
-        with(timeSelectionRequest!!) {
-            assertEquals(initialDate, "2018-06-12T19:30".toDate("yyyy-MM-dd'T'HH:mm"))
-            assertEquals(minimumDate, "2018-06-07T00:00".toDate("yyyy-MM-dd'T'HH:mm"))
-            assertEquals(maximumDate, "2018-06-14T00:00".toDate("yyyy-MM-dd'T'HH:mm"))
+        assertNotNull(timeSelectionRequest) {
+            assertEquals(it.initialDate, "2018-06-12T19:30".toDate("yyyy-MM-dd'T'HH:mm"))
+            assertEquals(it.minimumDate, "2018-06-07T00:00".toDate("yyyy-MM-dd'T'HH:mm"))
+            assertEquals(it.maximumDate, "2018-06-14T00:00".toDate("yyyy-MM-dd'T'HH:mm"))
         }
         val selectedDate = "2018-06-12T19:30".toDate("yyyy-MM-dd'T'HH:mm")
         timeSelectionRequest.onConfirm(selectedDate)
@@ -2228,6 +2223,61 @@ class GeckoPromptDelegateTest {
         shadowOf(getMainLooper()).idle()
         assertTrue(onNegativeButtonWasCalled)
         whenever(geckoPrompt.isComplete).thenReturn(true)
+    }
+
+    @Test
+    fun `onWebAuthnRelatedOriginPrompt must provide a WebAuthnRelatedOriginPrompt PromptRequest`() {
+        val mockSession = GeckoEngineSession(runtime)
+        var request: PromptRequest.WebAuthnRelatedOriginPrompt? = null
+        var onConfirmWasCalled = false
+        var onDismissWasCalled = false
+
+        mockSession.register(
+            object : EngineSession.Observer {
+                override fun onPromptRequest(promptRequest: PromptRequest) {
+                    request = promptRequest as PromptRequest.WebAuthnRelatedOriginPrompt
+                }
+            },
+        )
+
+        val promptDelegate = GeckoPromptDelegate(mockSession)
+
+        var geckoPrompt = geckoWebAuthnRelatedOriginPrompt()
+        var geckoResult = promptDelegate.onWebAuthnRelatedOriginPrompt(mock(), geckoPrompt)
+        geckoResult!!.accept {
+            onConfirmWasCalled = true
+        }
+
+        assertEquals("example.com", request!!.origin)
+        assertEquals("rp.example.com", request.rpId)
+        assertTrue(request.isCreate)
+
+        request.onConfirm()
+        shadowOf(getMainLooper()).idle()
+        assertTrue(onConfirmWasCalled)
+        whenever(geckoPrompt.isComplete).thenReturn(true)
+
+        // Calling onDismiss
+        geckoPrompt = geckoWebAuthnRelatedOriginPrompt()
+        geckoResult = promptDelegate.onWebAuthnRelatedOriginPrompt(mock(), geckoPrompt)
+        geckoResult!!.accept {
+            onDismissWasCalled = true
+        }
+        request.onDismiss()
+        shadowOf(getMainLooper()).idle()
+        assertTrue(onDismissWasCalled)
+    }
+
+    private fun geckoWebAuthnRelatedOriginPrompt(
+        origin: String = "example.com",
+        rpId: String = "rp.example.com",
+        isCreate: Boolean = true,
+    ): GeckoSession.PromptDelegate.WebAuthnRelatedOriginPrompt {
+        val prompt: GeckoSession.PromptDelegate.WebAuthnRelatedOriginPrompt = mock()
+        ReflectionUtils.setField(prompt, "origin", origin)
+        ReflectionUtils.setField(prompt, "rpId", rpId)
+        ReflectionUtils.setField(prompt, "isCreate", isCreate)
+        return prompt
     }
 
     private fun geckoChoicePrompt(

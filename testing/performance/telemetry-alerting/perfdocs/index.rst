@@ -6,7 +6,7 @@ Telemetry Probe Alerting and Monitoring
     :depth: 3
 
 .. note::
-  Telemetry Alerting was recently released in an **open beta** state, and we are actively looking for feedback and criticism of the system. If you hit any issues, have suggestions, or need to report something, please feel free to file bugs in the `Testing :: Performance component on Bugzilla <https://bugzilla.mozilla.org/enter_bug.cgi?product=Testing&component=Performance&status_whiteboard=[fxp]>`_. You can find links to `additional help`_ below.
+  Telemetry Alerting was recently (April 2026) released in an **open beta** state, and we are actively looking for feedback and criticism of the system. If you hit any issues, have suggestions, or need to report something, please feel free to file bugs in the `Testing :: Performance component on Bugzilla <https://bugzilla.mozilla.org/enter_bug.cgi?product=Testing&component=Performance&status_whiteboard=[fxp]>`_. You can find links to `additional help`_ below.
 
 This document provides information regarding telemetry alerting, and monitoring. The change detection aspect of the project exists in `mozdetect <https://github.com/gmierz/mozdetect>`_, and the alerting/monitoring aspect exists within `Treeherder <https://github.com/mozilla/treeherder/blob/b04b64185e189a2d9e4c088b4be98d898c658e00/treeherder/perf/auto_perf_sheriffing/sherlock.py>`_. Note that the alerting/monitoring may move out of Treeherder in the future.
 

@@ -10,6 +10,8 @@ use crate::derives::*;
 use crate::error_reporting::ContextualParseError;
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};
+use crate::values::computed::font::FontStyleFixedPoint;
+use crate::values::computed::FontWeight;
 use crate::values::generics::font::FontStyle as GenericFontStyle;
 use crate::values::specified::{url::SpecifiedUrl, Angle};
 use cssparser::{Parser, RuleBodyParser, SourceLocation};
@@ -225,7 +227,7 @@ impl FontFaceRule {
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum FontFaceSourceListComponent {
-    Url(*const crate::gecko::url::CssUrl),
+    Url(*const crate::url::CssUrl),
     Local(*mut crate::gecko_bindings::structs::nsAtom),
     FormatHintKeyword(FontFaceSourceFormatKeyword),
     FormatHintString {
@@ -339,7 +341,7 @@ impl_range!(FontWeightRange, AbsoluteFontWeight);
 /// specified::Number.
 #[repr(C)]
 #[allow(missing_docs)]
-pub struct ComputedFontWeightRange(f32, f32);
+pub struct ComputedFontWeightRange(FontWeight, FontWeight);
 
 #[inline]
 fn sort_range<T: PartialOrd>(a: T, b: T) -> (T, T) {
@@ -351,10 +353,10 @@ fn sort_range<T: PartialOrd>(a: T, b: T) -> (T, T) {
 }
 
 impl FontWeightRange {
-    /// Returns a computed font-stretch range.
-    pub fn compute(&self) -> ComputedFontWeightRange {
-        let (min, max) = sort_range(self.0.compute().value(), self.1.compute().value());
-        ComputedFontWeightRange(min, max)
+    /// Returns a computed font-weight range, or None if either bound is an unresolvable calc.
+    pub fn compute(&self) -> Option<ComputedFontWeightRange> {
+        let (min, max) = sort_range(self.0.compute()?, self.1.compute()?);
+        Some(ComputedFontWeightRange(min, max))
     }
 }
 
@@ -372,18 +374,21 @@ impl_range!(FontStretchRange, SpecifiedFontStretch);
 pub struct ComputedFontStretchRange(FontStretch, FontStretch);
 
 impl FontStretchRange {
-    /// Returns a computed font-stretch range.
-    pub fn compute(&self) -> ComputedFontStretchRange {
-        fn compute_stretch(s: &SpecifiedFontStretch) -> FontStretch {
+    /// Returns a computed font-stretch range, or None if any value contains a calc
+    /// expression that cannot be resolved at parse time.
+    pub fn compute(&self) -> Option<ComputedFontStretchRange> {
+        fn compute_stretch(s: &SpecifiedFontStretch) -> Option<FontStretch> {
             match *s {
-                SpecifiedFontStretch::Keyword(ref kw) => kw.compute(),
-                SpecifiedFontStretch::Stretch(ref p) => FontStretch::from_percentage(p.0.get()),
+                SpecifiedFontStretch::Keyword(ref kw) => Some(kw.compute()),
+                SpecifiedFontStretch::Stretch(ref p) => {
+                    Some(FontStretch::from_percentage(p.compute()?.0))
+                },
                 SpecifiedFontStretch::System(..) => unreachable!(),
             }
         }
 
-        let (min, max) = sort_range(compute_stretch(&self.0), compute_stretch(&self.1));
-        ComputedFontStretchRange(min, max)
+        let (min, max) = sort_range(compute_stretch(&self.0)?, compute_stretch(&self.1)?);
+        Some(ComputedFontStretchRange(min, max))
     }
 }
 
@@ -397,13 +402,13 @@ pub enum FontStyle {
     Oblique(Angle, Angle),
 }
 
-/// The computed representation of the above, with angles in degrees, so that
-/// Gecko can read them easily.
+/// The computed representation of the above, with angles in degrees stored as
+/// signed 8.8 fixed-point values, so that Gecko can read them easily.
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum ComputedFontStyleDescriptor {
     Italic,
-    Oblique(f32, f32),
+    Oblique(FontStyleFixedPoint, FontStyleFixedPoint),
 }
 
 impl Parse for FontStyle {
@@ -464,15 +469,17 @@ impl ToCss for FontStyle {
 
 impl FontStyle {
     /// Returns a computed font-style descriptor.
-    pub fn compute(&self) -> ComputedFontStyleDescriptor {
+    pub fn compute(&self) -> Option<ComputedFontStyleDescriptor> {
         match *self {
-            FontStyle::Italic => ComputedFontStyleDescriptor::Italic,
+            FontStyle::Italic => Some(ComputedFontStyleDescriptor::Italic),
             FontStyle::Oblique(ref first, ref second) => {
-                let (min, max) = sort_range(
-                    SpecifiedFontStyle::compute_angle_degrees(first),
-                    SpecifiedFontStyle::compute_angle_degrees(second),
-                );
-                ComputedFontStyleDescriptor::Oblique(min, max)
+                let first = SpecifiedFontStyle::compute_angle_degrees(first)?;
+                let second = SpecifiedFontStyle::compute_angle_degrees(second)?;
+                let (min, max) = sort_range(first, second);
+                Some(ComputedFontStyleDescriptor::Oblique(
+                    FontStyleFixedPoint::from_float(min),
+                    FontStyleFixedPoint::from_float(max),
+                ))
             },
         }
     }
@@ -503,7 +510,6 @@ pub fn parse_font_face_block(
     }
     rule
 }
-
 
 impl Parse for Source {
     fn parse<'i, 't>(

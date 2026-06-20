@@ -87,7 +87,7 @@ JsepSessionImpl::JsepSessionImpl(const JsepSessionImpl& aOrig)
                                     ? aOrig.mPendingRemoteDescription->Clone()
                                     : nullptr),
       mSdpHelper(&mLastError),
-      mParser(new HybridSdpParser()) {
+      mParser(MakeUnique<HybridSdpParser>()) {
   for (const auto& codec : aOrig.mSupportedCodecs) {
     mSupportedCodecs.emplace_back(codec->Clone());
   }
@@ -312,19 +312,19 @@ nsresult JsepSessionImpl::CreateOfferMsection(const JsepOfferOptions& options,
   if (mSdpHelper.HasRtcp(msection->GetProtocol())) {
     // Set RTCP-MUX.
     msection->GetAttributeList().SetAttribute(
-        new SdpFlagAttribute(SdpAttribute::kRtcpMuxAttribute));
+        MakeUnique<SdpFlagAttribute>(SdpAttribute::kRtcpMuxAttribute));
     // Set RTCP-RSIZE
     if (msection->GetMediaType() == SdpMediaSection::MediaType::kVideo &&
         Preferences::GetBool("media.navigator.video.offer_rtcp_rsize", false)) {
       msection->GetAttributeList().SetAttribute(
-          new SdpFlagAttribute(SdpAttribute::kRtcpRsizeAttribute));
+          MakeUnique<SdpFlagAttribute>(SdpAttribute::kRtcpRsizeAttribute));
     }
   }
 
   if (msection->GetMediaType() != SdpMediaSection::MediaType::kApplication) {
     // Ditto for extmap-allow-mixed
     msection->GetAttributeList().SetAttribute(
-        new SdpFlagAttribute(SdpAttribute::kExtmapAllowMixedAttribute));
+        MakeUnique<SdpFlagAttribute>(SdpAttribute::kExtmapAllowMixedAttribute));
   }
 
   nsresult rv = AddTransportAttributes(msection, SdpSetupAttribute::kActpass);
@@ -345,7 +345,7 @@ nsresult JsepSessionImpl::CreateOfferMsection(const JsepOfferOptions& options,
   }
 
   msection->GetAttributeList().SetAttribute(
-      new SdpStringAttribute(SdpAttribute::kMidAttribute, mid));
+      MakeUnique<SdpStringAttribute>(SdpAttribute::kMidAttribute, mid));
 
   return NS_OK;
 }
@@ -383,7 +383,7 @@ void JsepSessionImpl::SetupBundle(Sdp* sdp) const {
 
       if (useBundleOnly) {
         attrs.SetAttribute(
-            new SdpFlagAttribute(SdpAttribute::kBundleOnlyAttribute));
+            MakeUnique<SdpFlagAttribute>(SdpAttribute::kBundleOnlyAttribute));
         // Set port to 0 for sections with bundle-only attribute. (mjf)
         sdp->GetMediaSection(i).SetPort(0);
       }
@@ -393,9 +393,9 @@ void JsepSessionImpl::SetupBundle(Sdp* sdp) const {
   }
 
   if (!mids.empty()) {
-    UniquePtr<SdpGroupAttributeList> groupAttr(new SdpGroupAttributeList);
+    auto groupAttr = MakeUnique<SdpGroupAttributeList>();
     groupAttr->PushEntry(SdpGroupAttributeList::kBundle, mids);
-    sdp->GetAttributeList().SetAttribute(groupAttr.release());
+    sdp->GetAttributeList().SetAttribute(std::move(groupAttr));
   }
 }
 
@@ -466,9 +466,9 @@ void JsepSessionImpl::AddExtmap(SdpMediaSection* msection) {
   auto extensions = GetRtpExtensions(*msection);
 
   if (!extensions.empty()) {
-    SdpExtmapAttributeList* extmap = new SdpExtmapAttributeList;
+    auto extmap = MakeUnique<SdpExtmapAttributeList>();
     extmap->mExtmaps = std::move(extensions);
-    msection->GetAttributeList().SetAttribute(extmap);
+    msection->GetAttributeList().SetAttribute(std::move(extmap));
   }
 }
 
@@ -584,15 +584,15 @@ JsepSession::Result JsepSessionImpl::CreateAnswer(
   const Sdp& offer = *mPendingRemoteDescription;
 
   // Copy the bundle groups into our answer
-  UniquePtr<SdpGroupAttributeList> groupAttr(new SdpGroupAttributeList);
+  auto groupAttr = MakeUnique<SdpGroupAttributeList>();
   mSdpHelper.GetBundleGroups(offer, &groupAttr->mGroups);
-  sdp->GetAttributeList().SetAttribute(groupAttr.release());
+  sdp->GetAttributeList().SetAttribute(std::move(groupAttr));
 
   // Copy EXTMAP-ALLOW-MIXED from the offer to the answer
   if (offer.GetAttributeList().HasAttribute(
           SdpAttribute::kExtmapAllowMixedAttribute)) {
     sdp->GetAttributeList().SetAttribute(
-        new SdpFlagAttribute(SdpAttribute::kExtmapAllowMixedAttribute));
+        MakeUnique<SdpFlagAttribute>(SdpAttribute::kExtmapAllowMixedAttribute));
   } else {
     sdp->GetAttributeList().RemoveAttribute(
         SdpAttribute::kExtmapAllowMixedAttribute);
@@ -615,7 +615,7 @@ JsepSession::Result JsepSessionImpl::CreateAnswer(
   // Ensure that each bundle-group starts with a mid that has a transport, in
   // case we've disabled what the offerer wanted to use. If the group doesn't
   // contain anything that has a transport, remove it.
-  groupAttr.reset(new SdpGroupAttributeList);
+  groupAttr = MakeUnique<SdpGroupAttributeList>();
   std::vector<SdpGroupAttributeList::Group> bundleGroups;
   mSdpHelper.GetBundleGroups(*sdp, &bundleGroups);
   for (auto& group : bundleGroups) {
@@ -631,7 +631,7 @@ JsepSession::Result JsepSessionImpl::CreateAnswer(
       }
     }
   }
-  sdp->GetAttributeList().SetAttribute(groupAttr.release());
+  sdp->GetAttributeList().SetAttribute(std::move(groupAttr));
 
   if (mCurrentLocalDescription) {
     // per discussion with bwc, 3rd parm here should be offer, not *sdp. (mjf)
@@ -668,7 +668,7 @@ nsresult JsepSessionImpl::CreateAnswerMsection(
 
   MOZ_ASSERT(transceiver.IsAssociated());
   if (msection.GetAttributeList().GetMid().empty()) {
-    msection.GetAttributeList().SetAttribute(new SdpStringAttribute(
+    msection.GetAttributeList().SetAttribute(MakeUnique<SdpStringAttribute>(
         SdpAttribute::kMidAttribute, transceiver.GetMid()));
   }
 
@@ -1286,7 +1286,7 @@ nsresult JsepSessionImpl::MakeNegotiatedTransceiver(
   }
 
   if (answer.GetAttributeList().HasAttribute(SdpAttribute::kExtmapAttribute)) {
-    const auto extmaps = answer.GetAttributeList().GetExtmap().mExtmaps;
+    const auto& extmaps = answer.GetAttributeList().GetExtmap().mExtmaps;
     for (const auto& negotiatedExtension : extmaps) {
       if (negotiatedExtension.entry == 0) {
         MOZ_ASSERT(false, "This should have been caught sooner");
@@ -1444,12 +1444,13 @@ nsresult JsepSessionImpl::AddTransportAttributes(
   }
 
   SdpAttributeList& attrList = msection->GetAttributeList();
+  attrList.SetAttribute(MakeUnique<SdpStringAttribute>(
+      SdpAttribute::kIceUfragAttribute, mIceUfrag));
   attrList.SetAttribute(
-      new SdpStringAttribute(SdpAttribute::kIceUfragAttribute, mIceUfrag));
-  attrList.SetAttribute(
-      new SdpStringAttribute(SdpAttribute::kIcePwdAttribute, mIcePwd));
+      MakeUnique<SdpStringAttribute>(SdpAttribute::kIcePwdAttribute, mIcePwd));
 
-  msection->GetAttributeList().SetAttribute(new SdpSetupAttribute(dtlsRole));
+  msection->GetAttributeList().SetAttribute(
+      MakeUnique<SdpSetupAttribute>(dtlsRole));
 
   return NS_OK;
 }
@@ -1615,7 +1616,7 @@ Maybe<JsepTransceiver> JsepSessionImpl::GetTransceiverForLocal(size_t level) {
       // Attempt to recycle. If this fails, the old transceiver stays put.
       transceiver->Disassociate();
       Maybe<JsepTransceiver> newTransceiver =
-          FindUnassociatedTransceiver(transceiver->GetMediaType(), false);
+          FindUnassociatedRtpTransceiver(transceiver->GetMediaType(), false);
       if (newTransceiver) {
         newTransceiver->SetLevel(level);
         transceiver->ClearLevel();
@@ -1661,14 +1662,31 @@ Maybe<JsepTransceiver> JsepSessionImpl::GetTransceiverForRemote(
     if (!transceiver->CanRecycleMyMsection()) {
       return transceiver;
     }
+    // Recycle
     transceiver->Disassociate();
     transceiver->ClearLevel();
     transceiver->mSendTrack.ClearRids();
     SetTransceiver(*transceiver);
+    // Shouldn't be strictly necessary to unset this, but it's clearer this way
+    transceiver = Nothing();
   }
 
   // No transceiver for |level|
-  transceiver = FindUnassociatedTransceiver(msection.GetMediaType(), true);
+  if (msection.GetMediaType() == SdpMediaSection::kApplication) {
+    // Other side has done something weird like rejecting the datachannel
+    // m-section. Try to recover.
+    for (auto& tx : mTransceivers) {
+      if (tx.GetMediaType() == SdpMediaSection::kApplication) {
+        tx.RestartDatachannelTransceiver();
+        transceiver = Some(tx);
+        break;
+      }
+    }
+  } else if (msection.IsReceiving()) {
+    transceiver = FindUnassociatedRtpTransceiver(msection.GetMediaType(), true);
+  }
+
+  // We found a transceiver to associate
   if (transceiver) {
     transceiver->SetLevel(level);
     SetTransceiver(*transceiver);
@@ -1751,15 +1769,15 @@ nsresult JsepSessionImpl::UpdateTransceiversFromRemoteDescription(
   return NS_OK;
 }
 
-Maybe<JsepTransceiver> JsepSessionImpl::FindUnassociatedTransceiver(
+Maybe<JsepTransceiver> JsepSessionImpl::FindUnassociatedRtpTransceiver(
     SdpMediaSection::MediaType type, bool magic) {
+  if (type == SdpMediaSection::kApplication) {
+    MOZ_ASSERT(false);
+    return Nothing();
+  }
+
   // Look through transceivers that are not mapped to an m-section
   for (auto& transceiver : mTransceivers) {
-    if (type == SdpMediaSection::kApplication &&
-        type == transceiver.GetMediaType()) {
-      transceiver.RestartDatachannelTransceiver();
-      return Some(transceiver);
-    }
     if (transceiver.IsFreeToUse() &&
         (!magic || transceiver.HasAddTrackMagic()) &&
         (transceiver.GetMediaType() == type)) {
@@ -2191,11 +2209,12 @@ nsresult JsepSessionImpl::CreateGenericSDP(UniquePtr<Sdp>* sdpp) {
   for (auto& dtlsFingerprint : mDtlsFingerprints) {
     fpl->PushEntry(dtlsFingerprint.mAlgorithm, dtlsFingerprint.mValue);
   }
-  sdp->GetAttributeList().SetAttribute(fpl.release());
+  sdp->GetAttributeList().SetAttribute(std::move(fpl));
 
-  auto* iceOpts = new SdpOptionsAttribute(SdpAttribute::kIceOptionsAttribute);
+  auto iceOpts =
+      MakeUnique<SdpOptionsAttribute>(SdpAttribute::kIceOptionsAttribute);
   iceOpts->PushEntry("trickle");
-  sdp->GetAttributeList().SetAttribute(iceOpts);
+  sdp->GetAttributeList().SetAttribute(std::move(iceOpts));
 
   // This assumes content doesn't add a bunch of msid attributes with a
   // different semantic in mind.
@@ -2394,7 +2413,7 @@ nsresult JsepSessionImpl::UpdateDefaultCandidate(
 
       auto& msection = sdp->GetMediaSection(level);
 
-      // Do not add default candidate to a bundle-only m-section, sinice that
+      // Do not add default candidate to a bundle-only m-section, since that
       // might confuse endpoints that do not support bundle-only.
       if (!msection.GetAttributeList().HasAttribute(
               SdpAttribute::kBundleOnlyAttribute)) {

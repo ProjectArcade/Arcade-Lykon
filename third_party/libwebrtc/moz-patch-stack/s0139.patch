@@ -1,28 +1,22 @@
-From: Landry Breuil <landry@openbsd.org>
-Date: Wed, 15 Apr 2026 13:31:00 +0000
-Subject: Bug 2030612 - define AOM_EFLAG_FREEZE_INTERNAL_STATE if not defined
- r=mjf
+From: Byron Campen <docfaraday@gmail.com>
+Date: Tue, 26 May 2026 18:03:00 -0500
+Subject: Bug 2040478 - (fix-834ea60925) Add missing std namespace r?mjf
 
-fixes build with system-av1/aom after bug 2029247
-
-Differential Revision: https://phabricator.services.mozilla.com/D293051
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/70d2379819582d44092dee15e1e45ddbc9cd3f22
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/89a59f60370f6df6f89b2d03eb7c8d4be7aac1c7
 ---
- modules/video_coding/codecs/av1/libaom_av1_encoder.cc | 4 ++++
- 1 file changed, 4 insertions(+)
+ rtc_base/ssl_stream_adapter.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/modules/video_coding/codecs/av1/libaom_av1_encoder.cc b/modules/video_coding/codecs/av1/libaom_av1_encoder.cc
-index 7607daf886..ffc336b083 100644
---- a/modules/video_coding/codecs/av1/libaom_av1_encoder.cc
-+++ b/modules/video_coding/codecs/av1/libaom_av1_encoder.cc
-@@ -67,6 +67,10 @@
- #define AOM_EFLAG_CALCULATE_PSNR (1 << 3)
- #endif
+diff --git a/rtc_base/ssl_stream_adapter.h b/rtc_base/ssl_stream_adapter.h
+index 00fd5f2da9..22a854e3d3 100644
+--- a/rtc_base/ssl_stream_adapter.h
++++ b/rtc_base/ssl_stream_adapter.h
+@@ -129,7 +129,7 @@ class SSLStreamAdapter : public StreamInterface {
+   static std::unique_ptr<SSLStreamAdapter> Create(
+       std::unique_ptr<StreamInterface> stream,
+       absl::AnyInvocable<void(SSLHandshakeError)> handshake_error,
+-      nullptr_t /*field_trials*/) {
++      std::nullptr_t /*field_trials*/) {
+     return Create(std::move(stream), std::move(handshake_error));
+   }
  
-+#ifndef AOM_EFLAG_FREEZE_INTERNAL_STATE
-+#define AOM_EFLAG_FREEZE_INTERNAL_STATE (1 << 2)
-+#endif
-+
- #if defined(WEBRTC_ENCODER_PSNR_STATS)
- constexpr bool kEnablePsnrStats = true;
- #else

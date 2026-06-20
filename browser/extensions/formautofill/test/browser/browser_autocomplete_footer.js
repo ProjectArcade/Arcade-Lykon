@@ -123,10 +123,10 @@ add_task(async function test_click_on_footer() {
         true
       );
       // Make sure dropdown is visible before continuing mouse synthesizing.
-      await BrowserTestUtils.waitForCondition(() =>
+      await TestUtils.waitForCondition(() =>
         BrowserTestUtils.isVisible(optionButton)
       );
-      await EventUtils.synthesizeMouseAtCenter(optionButton, {});
+      EventUtils.synthesizeMouseAtCenter(optionButton, {});
       info(`expecting tab: about:preferences#privacy opened`);
       const prefTab = await prefTabPromise;
       info(`expecting tab: about:preferences#privacy removed`);

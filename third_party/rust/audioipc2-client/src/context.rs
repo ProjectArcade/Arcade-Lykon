@@ -185,7 +185,7 @@ impl ContextOps for ClientContext {
 
         // Don't let errors bubble from here.  Later calls against this context
         // will return errors the caller expects to handle.
-        let _ = send_recv!(rpc, ClientConnect(std::process::id()) => ClientConnected);
+        let _ = send_recv!(rpc, ClientConnect => ClientConnected);
 
         let backend_id = send_recv!(rpc, ContextGetBackendId => ContextBackendId())
             .unwrap_or_else(|_| "(remote error)".to_string());
@@ -297,7 +297,7 @@ impl ContextOps for ClientContext {
         let input_stream_params = input_stream_params.map(messages::StreamParams::from);
         let output_stream_params = output_stream_params.map(messages::StreamParams::from);
 
-        let init_params = messages::StreamInitParams {
+        let params = messages::StreamCreateParams {
             stream_name,
             input_device: input_device as usize,
             input_stream_params,
@@ -305,7 +305,7 @@ impl ContextOps for ClientContext {
             output_stream_params,
             latency_frames,
         };
-        stream::init(self, init_params, data_callback, state_callback, user_ptr)
+        stream::init(self, params, data_callback, state_callback, user_ptr)
     }
 
     fn register_device_collection_changed(

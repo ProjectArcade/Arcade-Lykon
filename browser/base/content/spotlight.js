@@ -7,7 +7,6 @@ const { document: gDoc, XPCOMUtils } = browser.documentGlobal;
 
 ChromeUtils.defineESModuleGetters(this, {
   AboutWelcomeParent: "resource:///actors/AboutWelcomeParent.sys.mjs",
-  E10SUtils: "resource://gre/modules/E10SUtils.sys.mjs",
 });
 
 const CONFIG = window.arguments[0];
@@ -40,10 +39,28 @@ function renderMultistage(ready) {
   window.AWGetSelectedTheme = receive("GET_SELECTED_THEME");
   window.AWGetInstalledAddons = receive("GET_INSTALLED_ADDONS");
   window.AWSelectTheme = data => receive("SELECT_THEME")(data?.toUpperCase());
-  // Do not send telemetry if message (e.g. spotlight in PBM) config sets metrics as 'block'.
-  if (CONFIG?.metrics !== "block") {
-    window.AWSendEventTelemetry = receive("TELEMETRY_EVENT");
-  }
+  // Allow disabling telemetry with `metrics: 'block'`
+  const telemetryMessageHandler = receive("TELEMETRY_EVENT");
+  window.AWSendEventTelemetry = data => {
+    if (CONFIG?.metrics === "block") {
+      return null;
+    }
+    if (CONFIG?.write_in_microsurvey) {
+      if (!data.event_context) {
+        data.event_context = {};
+      }
+      data.event_context.write_in_microsurvey = true;
+      if (
+        CONFIG?.feedbackData &&
+        data.event === "CLICK_BUTTON" &&
+        data.event_context.source === "primary_button"
+      ) {
+        data.event_context.smart_window_user_feedback_data =
+          CONFIG.feedbackData;
+      }
+    }
+    return telemetryMessageHandler(data);
+  };
   window.AWSendToDeviceEmailsSupported = receive(
     "SEND_TO_DEVICE_EMAILS_SUPPORTED"
   );
@@ -56,22 +73,8 @@ function renderMultistage(ready) {
   window.AWWaitForNimbus = receive("WAIT_FOR_NIMBUS");
   window.AWEvaluateScreenTargeting = receive("EVALUATE_SCREEN_TARGETING");
   window.AWEvaluateAttributeTargeting = receive("EVALUATE_ATTRIBUTE_TARGETING");
-  window.AWPredictRemoteType = ({ browserEl, url }) => {
-    const originAttributes = E10SUtils.predictOriginAttributes({
-      browser: browserEl,
-    });
-    const loadContext = window.docShell.QueryInterface(Ci.nsILoadContext);
-    const useRemoteTabs = loadContext.useRemoteTabs;
-    const useRemoteSubframes = loadContext.useRemoteSubframes;
-
-    return E10SUtils.getRemoteTypeForURI(
-      url,
-      useRemoteTabs,
-      useRemoteSubframes,
-      E10SUtils.DEFAULT_REMOTE_TYPE,
-      null,
-      originAttributes
-    );
+  window.AWPredictRemoteType = ({ url }) => {
+    return ChromeUtils.predictRemoteTypeForURI(url, { window });
   };
 
   // Update styling to be compatible with about:welcome.

@@ -27,6 +27,7 @@ class ExtensionDns;
 class ExtensionMockAPI;
 class ExtensionPort;
 class ExtensionProxy;
+class ExtensionPublicSuffix;
 class ExtensionRuntime;
 class ExtensionScripting;
 class ExtensionTest;
@@ -111,6 +112,7 @@ class ExtensionBrowser final : public nsISupports, public nsWrapperCache {
   ExtensionDns* GetExtensionDns();
   ExtensionMockAPI* GetExtensionMockAPI();
   ExtensionProxy* GetExtensionProxy();
+  ExtensionPublicSuffix* GetExtensionPublicSuffix();
   ExtensionRuntime* GetExtensionRuntime();
   ExtensionScripting* GetExtensionScripting();
   ExtensionTest* GetExtensionTest();
@@ -123,7 +125,7 @@ class ExtensionBrowser final : public nsISupports, public nsWrapperCache {
 
   nsCOMPtr<nsIGlobalObject> mGlobal;
   JS::Heap<JS::Value> mLastError;
-  bool mCheckedLastError;
+  bool mCheckedLastError = false;
   nsTHashMap<nsStringHashKey, WeakPtr<ExtensionPort>> mPortsLookup;
   // `[APINamespace].[APIName]` => int64 (listeners count)
   ExtensionEventWakeupMap mExpectedEventWakeupMap;
@@ -141,6 +143,7 @@ class ExtensionBrowser final : public nsISupports, public nsWrapperCache {
   RefPtr<ExtensionDns> mExtensionDns;
   RefPtr<ExtensionMockAPI> mExtensionMockAPI;
   RefPtr<ExtensionProxy> mExtensionProxy;
+  RefPtr<ExtensionPublicSuffix> mExtensionPublicSuffix;
   RefPtr<ExtensionRuntime> mExtensionRuntime;
   RefPtr<ExtensionScripting> mExtensionScripting;
   RefPtr<ExtensionTest> mExtensionTest;

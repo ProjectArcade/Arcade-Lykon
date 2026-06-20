@@ -107,8 +107,10 @@
           tabindex="0"
           id="tabGroupEditor_shareTabGroup"
           class="subviewbutton"
+          badged="true"
           data-l10n-id="tab-group-editor-action-share-tab-group"
           hidden="">
+          <html:moz-badge type="new" move-after-stack="true"></html:moz-badge>
         </toolbarbutton>
         <toolbarseparator class="tab-group-edit-mode-only" />
         <toolbarbutton
@@ -511,6 +513,7 @@
 
       this.#commandButtons.shareTabGroup.addEventListener("command", () => {
         ContentSharingUtils.handleShareTabGroup(this.activeGroup);
+        this.close();
       });
 
       this.panel.addEventListener("popupshown", this);
@@ -740,7 +743,9 @@
         label.htmlFor = input.id;
         label.style.setProperty(
           "--tabgroup-swatch-color",
-          `var(--tab-group-color-${colorCode})`
+          Services.prefs.getBoolPref("browser.nova.enabled")
+            ? `var(--tab-group-${colorCode})`
+            : `var(--tab-group-color-${colorCode})`
         );
         label.style.setProperty(
           "--tabgroup-swatch-color-invert",
@@ -1053,6 +1058,12 @@
         window.removeEventListener("TabOpen", onTabOpened);
       };
       window.addEventListener("TabOpen", onTabOpened);
+      // The tab group menu can be invoked on a window that isn't the OS-level
+      // frontmost window (most reproducibly on macOS in a multi-monitor
+      // setup). Raise the window so the new tab's focusUrlBar request can
+      // actually land OS keyboard focus on the address bar. Bug 2039674
+      // tracks routing this through URILoadingHelper instead.
+      window.focus();
       gBrowser.addAdjacentNewTab(lastTab);
     }
 

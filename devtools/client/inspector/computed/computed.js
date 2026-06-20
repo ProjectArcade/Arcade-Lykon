@@ -1464,7 +1464,7 @@ class PropertyView {
       valueDiv.appendChild(
         this.#parseValue(
           selector.selectorInfo.value,
-          selector.selectorInfo.rule.href
+          selector.selectorInfo.rule.href || selector.selectorInfo.rule.nodeHref
         )
       );
 
@@ -1782,7 +1782,7 @@ class SelectorView {
 
     const { sheet, line, column } = this.#generatedLocation;
     if (ToolDefinitions.styleEditor.isToolSupported(inspector.toolbox)) {
-      inspector.toolbox.viewSourceInStyleEditorByResource(sheet, line, column);
+      inspector.toolbox.viewStyleSourceByResource(sheet, line, column);
     }
   }
 

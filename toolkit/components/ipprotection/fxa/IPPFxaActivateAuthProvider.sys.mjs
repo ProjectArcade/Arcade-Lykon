@@ -2,67 +2,80 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { IPPFxaAuthProviderSingleton } from "moz-src:///toolkit/components/ipprotection/fxa/IPPFxaAuthProvider.sys.mjs";
+import { IPPFxaBaseAuthProvider } from "moz-src:///toolkit/components/ipprotection/fxa/IPPFxaBaseAuthProvider.sys.mjs";
+
+const lazy = {};
+
+ChromeUtils.defineESModuleGetters(lazy, {
+  IPProtectionService:
+    "moz-src:///toolkit/components/ipprotection/IPProtectionService.sys.mjs",
+});
 
 /**
  * FxA implementation of IPPAuthProvider that uses the direct token activation
  * flow by calling Guardian's POST /api/v1/fpn/activate endpoint with the FxA
  * Bearer token.
  */
-class IPPFxaActivateAuthProviderSingleton extends IPPFxaAuthProviderSingleton {
-  /**
-   * @param {object} [signInWatcher] - Custom sign-in watcher. Defaults to IPPSignInWatcher.
-   */
-  constructor(signInWatcher = null) {
-    super(
-      signInWatcher,
-      IPPFxaActivateAuthProviderSingleton.#defaultEnrollAndEntitle
-    );
+class IPPFxaActivateAuthProviderSingleton extends IPPFxaBaseAuthProvider {
+  #isEnrolling = false;
+
+  get helpers() {
+    return [this, this.signInWatcher];
   }
 
-  /**
-   * Enrolls and entitles the user by presenting the FxA Bearer token directly
-   * to Guardian's activate endpoint, without an OAuth redirect flow.
-   *
-   * @param {import("moz-src:///toolkit/components/ipprotection/fxa/GuardianClient.sys.mjs").GuardianClient} guardian
-   * @param {Function} getToken
-   * @param {AbortSignal} [abortSignal=null]
-   * @returns {Promise<{isEnrolledAndEntitled: boolean, entitlement?: object, error?: string}>}
-   */
-  static async #defaultEnrollAndEntitle(
-    guardian,
-    getToken,
-    abortSignal = null
-  ) {
-    try {
-      using tokenHandle = await getToken(abortSignal);
-      const { ok, entitlement, error } = await guardian.activate(
-        tokenHandle,
-        abortSignal
+  async updateEntitlement() {
+    const { entitlement, error } = await this.getEntitlement();
+    if (!error) {
+      this._setEntitlement(entitlement ?? null);
+    }
+    lazy.IPProtectionService.updateState();
+  }
+
+  get isReady() {
+    return this.signInWatcher.isSignedIn && !!this.entitlement;
+  }
+
+  get isEnrolling() {
+    return this.#isEnrolling;
+  }
+
+  async aboutToStart() {
+    return null;
+  }
+
+  async checkForUpgrade() {
+    using tokenHandle = await this.getToken();
+    const { entitlement } = await this.guardian.fetchUserInfo(tokenHandle);
+    if (entitlement) {
+      this._setEntitlement(entitlement);
+      lazy.IPProtectionService.updateState();
+      this.dispatchEvent(
+        new CustomEvent("IPPAuthProvider:StateChanged", {
+          bubbles: true,
+          composed: true,
+        })
       );
-      if (!ok) {
-        return { isEnrolledAndEntitled: false, error };
-      }
-      return { isEnrolledAndEntitled: true, entitlement };
-    } catch (error) {
-      return { isEnrolledAndEntitled: false, error: error?.message };
     }
   }
 
-  /**
-   * @returns {Promise<{entitlement?: object, error?: string}>}
-   */
-  async getEntitlement() {
+  async enroll() {
+    this.#isEnrolling = true;
+    this.dispatchEvent(new CustomEvent("IPPAuthProvider:StateChanged"));
     try {
       using tokenHandle = await this.getToken();
-      const { status, entitlement, error } =
-        await this.guardian.fetchUserInfo(tokenHandle);
-      if (error || !entitlement || status != 200) {
-        return { error: error || `Status: ${status}` };
+      const { ok, entitlement, error } =
+        await this.guardian.activate(tokenHandle);
+      if (!ok) {
+        return { isEnrolledAndEntitled: false, error };
       }
-      return { entitlement };
+      this._setEntitlement(entitlement ?? null);
+      return { isEnrolledAndEntitled: true, error: null };
     } catch (error) {
-      return { error: error.message };
+      return { isEnrolledAndEntitled: false, error: error?.message ?? null };
+    } finally {
+      this.#isEnrolling = false;
+      lazy.IPProtectionService.updateState();
+      this.dispatchEvent(new CustomEvent("IPPAuthProvider:StateChanged"));
     }
   }
 }

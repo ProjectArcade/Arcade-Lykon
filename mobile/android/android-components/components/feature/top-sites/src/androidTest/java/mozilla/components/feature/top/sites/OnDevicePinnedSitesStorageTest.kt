@@ -15,13 +15,13 @@ import mozilla.components.feature.top.sites.db.Migrations
 import mozilla.components.feature.top.sites.db.TopSiteDatabase
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 private const val MIGRATION_TEST_DB = "migration-test"
 

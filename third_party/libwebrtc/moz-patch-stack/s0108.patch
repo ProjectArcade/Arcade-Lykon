@@ -1,49 +1,32 @@
-From: Andreas Pehrson <apehrson@mozilla.com>
-Date: Tue, 28 Jan 2025 21:45:00 +0000
-Subject: Bug 1938047 - Hook up VideoStreamFactory with EncoderInfo like the
- libwebrtc factory. r=webrtc-reviewers,dbaker
+From: Michael Froman <mfroman@mozilla.com>
+Date: Thu, 10 Jul 2025 20:03:00 +0000
+Subject: Bug 1975060 - improve build file generation regarding x11 usage.
+ r=dbaker
 
-This is necessary for the factory to factor in the encoder's resolution
-alignment requirements when calculating stream resolutions.
+Upstream will be removing use_x11. We override the use_x11 settings
+from within gn_processor.py anyway, so we can remove our hack in
+third_party/libwebrtc/webrtc.gni, and then make gn_processor.py modify
+ozone_platform_x11 rather than use_x11.
 
-Differential Revision: https://phabricator.services.mozilla.com/D235702
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/8b5653392e88ccd0c2b0675c761bb22733364225
+Note: these changes produce identical moz.build files for libwebrtc
+and abseil-cpp.
+
+Differential Revision: https://phabricator.services.mozilla.com/D255713
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/c8cf67108972d5caefbfbb66146e26e5358493c2
 ---
- video/config/video_encoder_config.h | 4 ++++
- video/video_stream_encoder.cc       | 1 +
- 2 files changed, 5 insertions(+)
+ webrtc.gni | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/video/config/video_encoder_config.h b/video/config/video_encoder_config.h
-index cbb3bf1ce9..06dcbf8a6d 100644
---- a/video/config/video_encoder_config.h
-+++ b/video/config/video_encoder_config.h
-@@ -26,6 +26,7 @@
- #include "api/video_codecs/sdp_video_format.h"
- #include "api/video_codecs/spatial_layer.h"
- #include "api/video_codecs/video_codec.h"
-+#include "api/video_codecs/video_encoder.h"
+diff --git a/webrtc.gni b/webrtc.gni
+index f6a4f3e66c..e027bda1de 100644
+--- a/webrtc.gni
++++ b/webrtc.gni
+@@ -128,7 +128,7 @@ declare_args() {
+   rtc_build_tools = false
  
- namespace webrtc {
+   # Set this to false to skip building code that requires X11.
+-  rtc_use_x11 = use_x11
++  rtc_use_x11 = ozone_platform_x11
  
-@@ -158,6 +159,9 @@ class VideoEncoderConfig {
-         int frame_height,
-         const VideoEncoderConfig& encoder_config) = 0;
- 
-+    // Mozilla: Patching in necessary info our custom VideoStreamFactory will need to know.
-+    virtual void SetEncoderInfo(const VideoEncoder::EncoderInfo& info) {}
-+
-    protected:
-     ~VideoStreamFactoryInterface() override {}
-   };
-diff --git a/video/video_stream_encoder.cc b/video/video_stream_encoder.cc
-index 3b5df4e521..f5770ca3c2 100644
---- a/video/video_stream_encoder.cc
-+++ b/video/video_stream_encoder.cc
-@@ -1109,6 +1109,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
-   std::vector<VideoStream> streams;
-   if (encoder_config_.video_stream_factory) {
-     // Note: only tests set their own EncoderStreamFactory...
-+    encoder_config_.video_stream_factory->SetEncoderInfo(encoder_->GetEncoderInfo());
-     streams = encoder_config_.video_stream_factory->CreateEncoderStreams(
-         env_.field_trials(), last_frame_info_->width, last_frame_info_->height,
-         encoder_config_);
+   # Set this to use PipeWire on the Wayland display server.
+   # By default it's only enabled on desktop Linux (excludes ChromeOS) and

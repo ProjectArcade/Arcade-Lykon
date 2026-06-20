@@ -201,8 +201,7 @@ class nsSocketTransportService final : public nsPISocketTransportService,
 
   class SocketContext {
    public:
-    SocketContext(PRFileDesc* aFD,
-                  already_AddRefed<nsASocketHandler>&& aHandler,
+    SocketContext(PRFileDesc* aFD, already_AddRefed<nsASocketHandler> aHandler,
                   PRIntervalTime aPollStartEpoch)
         : mFD(aFD), mHandler(aHandler), mPollStartEpoch(aPollStartEpoch) {}
     SocketContext(PRFileDesc* aFD, nsASocketHandler* aHandler,
@@ -292,7 +291,7 @@ class nsSocketTransportService final : public nsPISocketTransportService,
   // Number of keepalive probes to send.
   int32_t mKeepaliveProbeCount{kDefaultTCPKeepCount};
   // True if TCP keepalive is enabled globally.
-  bool mKeepaliveEnabledPref{false};
+  Atomic<bool, Relaxed> mKeepaliveEnabledPref{false};
   // Timeout of pollable event signalling.
   TimeDuration mPollableEventTimeout MOZ_GUARDED_BY(mLock);
 

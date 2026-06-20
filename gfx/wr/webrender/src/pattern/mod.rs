@@ -6,13 +6,16 @@ pub mod gradient;
 pub mod box_shadow;
 pub mod repeat;
 pub mod image;
+pub mod cutout;
+pub mod yuv;
+pub mod backdrop;
 
-use api::units::{LayoutVector2D, LayoutPoint};
-use api::{ColorF, units::DeviceRect};
+use api::units::*;
+use api::ColorF;
 
 use crate::frame_builder::FrameBuilderConfig;
 use crate::render_task_graph::RenderTaskId;
-use crate::renderer::GpuBufferBuilder;
+use crate::renderer::{BlendMode, GpuBufferBuilder};
 use crate::spatial_tree::SpatialTree;
 use crate::transform::TransformPalette;
 
@@ -27,15 +30,46 @@ pub enum PatternKind {
 
     Mask = 3,
     BoxShadow = 4,
+    // Variants of ColorOrTexture that use a non-default sampler type
+    // (samplerExternalOES / __samplerExternal2DY2YEXT / sampler2DRect). The
+    // quad shader is compiled in matching per-kind variants; see
+    // ps_quad_textured.glsl.
+    TextureExternal = 5,
+    TextureExternalBT709 = 6,
+    TextureRect = 7,
+    // Samples up to three planes (sColor0/1/2) and converts from YUV to RGB.
+    // Like ColorOrTexture, the YUV pattern comes in sampler-type-specific
+    // variants so that the planes are sampled with the matching sColor
+    // declaration; see ps_quad_yuv.glsl. `Yuv` is the default (TEXTURE_2D).
+    Yuv = 8,
+    YuvTextureExternal = 9,
+    YuvTextureExternalBT709 = 10,
+    YuvTextureRect = 11,
+    // Samples a captured backdrop texture using a (bilerp) 4-corner uv quad.
+    Backdrop = 12,
     // When adding patterns, don't forget to update the NUM_PATTERNS constant.
 }
 
-pub const NUM_PATTERNS: u32 = 5;
+pub const NUM_PATTERNS: u32 = 13;
 
 impl PatternKind {
     pub fn from_u32(val: u32) -> Self {
         assert!(val < NUM_PATTERNS);
         unsafe { std::mem::transmute(val) }
+    }
+
+    pub fn num_src_textures(&self) -> usize {
+        match self {
+            PatternKind::Gradient
+            | PatternKind::Mask
+            => 0,
+            PatternKind::Yuv
+            | PatternKind::YuvTextureExternal
+            | PatternKind::YuvTextureExternalBT709
+            | PatternKind::YuvTextureRect
+            => 3,
+            _ => 1,
+        }
     }
 }
 
@@ -57,13 +91,17 @@ impl Default for PatternShaderInput {
 #[cfg_attr(feature = "replay", derive(Deserialize))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PatternTextureInput {
-    pub task_id: RenderTaskId,
+    /// The render tasks providing the source texture(s) sampled by the pattern.
+    ///
+    /// Most patterns only sample from a single texture (slot 0). Multi-plane
+    /// patterns such as YUV use the additional slots (bound to sColor1/sColor2).
+    pub task_ids: [RenderTaskId; 3],
 }
 
 impl Default for PatternTextureInput {
     fn default() -> Self {
         PatternTextureInput {
-            task_id: RenderTaskId::INVALID,
+            task_ids: [RenderTaskId::INVALID; 3],
         }
     }
 }
@@ -71,8 +109,19 @@ impl Default for PatternTextureInput {
 impl PatternTextureInput {
     pub fn new(task_id: RenderTaskId) -> Self {
         PatternTextureInput {
-            task_id,
+            task_ids: [task_id, RenderTaskId::INVALID, RenderTaskId::INVALID],
         }
+    }
+
+    pub fn yuv(task_ids: [RenderTaskId; 3]) -> Self {
+        PatternTextureInput {
+            task_ids,
+        }
+    }
+
+    /// The primary (plane 0) source texture.
+    pub fn task_id(&self) -> RenderTaskId {
+        self.task_ids[0]
     }
 }
 
@@ -106,6 +155,7 @@ pub struct Pattern {
     pub texture_input: PatternTextureInput,
     pub base_color: ColorF,
     pub is_opaque: bool,
+    pub blend_mode: BlendMode,
 }
 
 impl Pattern {
@@ -119,6 +169,7 @@ impl Pattern {
             texture_input: PatternTextureInput::default(),
             base_color: color,
             is_opaque: color.a >= 1.0,
+            blend_mode: BlendMode::PremultipliedAlpha,
         }
     }
 
@@ -132,15 +183,28 @@ impl Pattern {
             texture_input: PatternTextureInput::new(src_task),
             base_color: ColorF::WHITE,
             is_opaque,
+            blend_mode: BlendMode::PremultipliedAlpha,
         }
     }
 
+    pub fn with_blend_mode(mut self, blend_mode: BlendMode) -> Self {
+        self.blend_mode = blend_mode;
+
+        self
+    }
+
+    pub fn with_base_color(mut self, color: ColorF) -> Self {
+        self.base_color = color;
+
+        self
+    }
+
     pub fn as_render_task(&self) -> Option<RenderTaskId> {
-        if self.kind != PatternKind::ColorOrTexture || self.texture_input.task_id == RenderTaskId::INVALID {
+        if self.kind != PatternKind::ColorOrTexture || self.texture_input.task_id() == RenderTaskId::INVALID {
             return None;
         }
 
-        Some(self.texture_input.task_id)
+        Some(self.texture_input.task_id())
     }
 }
 

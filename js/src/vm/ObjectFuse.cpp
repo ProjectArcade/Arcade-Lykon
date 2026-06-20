@@ -88,7 +88,10 @@ bool ObjectFuse::markPropertyConstant(PropertyInfo prop) {
   return true;
 }
 
-bool ObjectFuse::tryOptimizeConstantProperty(PropertyInfo prop) {
+bool ObjectFuse::tryOptimizeConstantProperty(PropertyKey key,
+                                             PropertyInfo prop) {
+  MOZ_RELEASE_ASSERT(ObjectFuse::tracksPropertyKey(key));
+
   if (MOZ_UNLIKELY(!generation_.isValid())) {
     return false;
   }
@@ -162,16 +165,6 @@ void ObjectFuse::handleTeleportingShadowedProperty(JSContext* cx,
 void ObjectFuse::handleTeleportingProtoMutation(JSContext* cx) {
   bumpGeneration();
   invalidateAllDependentIonScripts(cx, "proto mutation");
-}
-
-void ObjectFuse::handleObjectSwap(JSContext* cx) {
-  bumpGeneration();
-
-  // Reset state for all properties.
-  propertyStateLength_ = 0;
-  propertyStateBits_.reset();
-
-  invalidateAllDependentIonScripts(cx, "object swap");
 }
 
 void ObjectFuse::handleShadowedGlobalProperty(JSContext* cx,

@@ -11,6 +11,10 @@ import {
 
 const gFadingWindows = new WeakSet();
 
+/**
+ * @typedef {import("../components/ai-window/ai-window.mjs").SmartbarInputState} SmartbarInputState
+ */
+
 export const AIWindowUI = {
   BOX_ID: "ai-window-box",
   SPLITTER_ID: "ai-window-splitter",
@@ -203,6 +207,23 @@ export const AIWindowUI = {
     return null;
   },
 
+  async focusSidebar(win, aiBrowser = null) {
+    aiBrowser ??= win.document.getElementById(this.BROWSER_ID);
+    if (!aiBrowser || !this.isSidebarOpen(win)) {
+      return false;
+    }
+
+    aiBrowser.focus();
+
+    const aiWindowElement = await this.getAiWindowElement(win, aiBrowser);
+    if (!aiWindowElement || !this.isSidebarOpen(win)) {
+      return false;
+    }
+
+    aiWindowElement.focusSmartbar?.();
+    return true;
+  },
+
   /**
    * Close the AI Window sidebar.
    *
@@ -270,6 +291,8 @@ export const AIWindowUI = {
       })
     );
 
+    this.focusSidebar(win);
+
     return true;
   },
 
@@ -299,7 +322,6 @@ export const AIWindowUI = {
     if (!askBtn) {
       return;
     }
-    askBtn.checked = sidebarIsOpen;
     askBtn.setAttribute("aria-expanded", String(sidebarIsOpen));
   },
 
@@ -334,19 +356,26 @@ export const AIWindowUI = {
         await AIWindow.chatStore.findConversationById(conversationId);
     }
 
-    this.openSidebar(win, conversation);
+    await this.openSidebar(win, conversation);
 
     const nodes = this._getSidebarElements(win);
-    return nodes ? nodes.chromeDoc.getElementById(this.BROWSER_ID) : null;
+    if (!nodes) {
+      return null;
+    }
+    const aiBrowser = nodes.chromeDoc.getElementById(this.BROWSER_ID);
+    await this.focusSidebar(win, aiBrowser);
+    return aiBrowser;
   },
 
   /**
-   * Updates the sidebar input with the specified value.
+   * Updates the sidebar input with the specified state.
    *
    * @param {Window} win
-   * @param {string} value The new input value
+   * @param {SmartbarInputState} state
+   *   The structured input state to restore: plain text plus the list of
+   *   inline mention chips with their text-character offsets.
    */
-  updateSidebarInput(win, value) {
+  updateSidebarInput(win, state) {
     if (!this.isSidebarOpen(win)) {
       return;
     }
@@ -356,7 +385,27 @@ export const AIWindowUI = {
       return;
     }
 
-    aiWindowEl.updateInput(value);
+    aiWindowEl.updateInput(state);
+  },
+
+  /**
+   * Restores the per-tab model selection on the sidebar ai-window. A null
+   * modelChoiceId falls back to the global default model.
+   *
+   * @param {Window} win
+   * @param {?string} modelChoiceId
+   */
+  updateSidebarModel(win, modelChoiceId) {
+    if (!this.isSidebarOpen(win)) {
+      return;
+    }
+
+    const aiWindowEl = this._getSidebarAiWindow(win);
+    if (!aiWindowEl?.restoreModelChoiceOverride) {
+      return;
+    }
+
+    aiWindowEl.restoreModelChoiceOverride(modelChoiceId);
   },
 
   /**

@@ -9,7 +9,7 @@
   :root {
     @media not (prefers-contrast) {
       @media (prefers-color-scheme: light) {
-        --toolbar-bgcolor: var(--color-white);
+        --toolbar-background-color: var(--color-white);
       }
     }
   }
@@ -23,8 +23,8 @@
   }
 
   &[lwtheme] {
-    --toolbar-bgcolor: var(--color-white-alpha-40);
-    --toolbar-color: var(--lwt-text-color, inherit);
+    --toolbar-background-color: var(--color-white-alpha-40);
+    --toolbar-text-color: var(--lwt-text-color, inherit);
 
     --toolbarbutton-icon-fill-attention: light-dark(var(--color-blue-60), var(--color-cyan-30));
     --toolbarbutton-icon-fill-attention-text-light: var(--color-gray-20);
@@ -34,9 +34,9 @@
       var(--toolbarbutton-icon-fill-attention-text-dark)
     );
 
-    --toolbox-bgcolor: var(--lwt-accent-color);
-    --toolbox-bgcolor-inactive: var(--lwt-accent-color-inactive, var(--lwt-accent-color));
-    --toolbox-textcolor: var(--lwt-text-color, currentColor);
-    --toolbox-textcolor-inactive: var(--lwt-text-color, currentColor);
+    --toolbox-background-color: var(--lwt-accent-color);
+    --toolbox-background-color-inactive: var(--lwt-accent-color-inactive, var(--lwt-accent-color));
+    --toolbox-text-color: var(--lwt-text-color, currentColor);
+    --toolbox-text-color-inactive: var(--lwt-text-color, currentColor);
   }
 }

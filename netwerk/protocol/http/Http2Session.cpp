@@ -643,6 +643,28 @@ void Http2Session::CreateStream(nsAHttpTransaction* aHttpTransaction,
   }
 }
 
+void Http2Session::SwapTransaction(nsAHttpTransaction* aOld,
+                                   nsAHttpTransaction* aNew) {
+  MOZ_ASSERT(OnSocketThread(), "not on socket thread");
+  MOZ_ASSERT(aOld && aNew);
+  RefPtr<Http2StreamBase> stream = mStreamTransactionHash.Get(aOld);
+  if (!stream) {
+    LOG3(("Http2Session::SwapTransaction %p aOld=%p not in hash", this, aOld));
+    return;
+  }
+  Http2Stream* http2Stream = stream->GetHttp2Stream();
+  if (!http2Stream) {
+    LOG3(("Http2Session::SwapTransaction %p aOld=%p not a plain Http2Stream",
+          this, aOld));
+    return;
+  }
+  LOG3(("Http2Session::SwapTransaction %p aOld=%p -> aNew=%p stream=%p", this,
+        aOld, aNew, stream.get()));
+  http2Stream->SetTransaction(aNew);
+  mStreamTransactionHash.Remove(aOld);
+  mStreamTransactionHash.InsertOrUpdate(aNew, std::move(stream));
+}
+
 Result<already_AddRefed<nsHttpConnection>, nsresult>
 Http2Session::CreateTunnelStream(nsAHttpTransaction* aHttpTransaction,
                                  nsIInterfaceRequestor* aCallbacks,
@@ -1319,9 +1341,11 @@ bool Http2Session::VerifyStream(Http2StreamBase* aStream,
 }
 
 // static
-Http2StreamTunnel* Http2Session::CreateTunnelStreamFromConnInfo(
-    Http2Session* session, uint64_t bcId, nsHttpConnectionInfo* info,
-    ExtendedCONNECTType aType) {
+already_AddRefed<Http2StreamTunnel>
+Http2Session::CreateTunnelStreamFromConnInfo(Http2Session* session,
+                                             uint64_t bcId,
+                                             nsHttpConnectionInfo* info,
+                                             ExtendedCONNECTType aType) {
   MOZ_ASSERT(info);
   MOZ_ASSERT(session);
 
@@ -1339,7 +1363,7 @@ Http2StreamTunnel* Http2Session::CreateTunnelStreamFromConnInfo(
     settings.mInitialMaxStreamDataBidi =
         session->mInitialWebTransportMaxStreamDataBidi;
     settings.mInitialMaxData = session->mInitialWebTransportMaxData;
-    return new Http2WebTransportSession(
+    return MakeAndAddRef<Http2WebTransportSession>(
         session, nsISupportsPriority::PRIORITY_NORMAL, bcId, info, settings);
   }
 
@@ -1347,15 +1371,15 @@ Http2StreamTunnel* Http2Session::CreateTunnelStreamFromConnInfo(
     LOG(("Http2Session creating Http2StreamWebSocket"));
     MOZ_ASSERT(session->GetExtendedCONNECTSupport() ==
                ExtendedCONNECTSupport::SUPPORTED);
-    return new Http2StreamWebSocket(
+    return MakeAndAddRef<Http2StreamWebSocket>(
         session, nsISupportsPriority::PRIORITY_NORMAL, bcId, info);
   }
 
   MOZ_ASSERT(info->UsingHttpProxy() && info->UsingConnect());
   MOZ_ASSERT(aType == ExtendedCONNECTType::Proxy);
   LOG(("Http2Session creating Http2StreamTunnel"));
-  return new Http2StreamTunnel(session, nsISupportsPriority::PRIORITY_NORMAL,
-                               bcId, info);
+  return MakeAndAddRef<Http2StreamTunnel>(
+      session, nsISupportsPriority::PRIORITY_NORMAL, bcId, info);
 }
 
 void Http2Session::CleanupStream(Http2StreamBase* aStream, nsresult aResult,

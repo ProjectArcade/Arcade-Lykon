@@ -41,6 +41,8 @@ NS_INTERFACE_MAP_BEGIN(nsJARURI)
   NS_INTERFACE_MAP_ENTRY(nsISerializable)
   NS_IMPL_QUERY_CLASSINFO(nsJARURI)
   NS_INTERFACE_MAP_ENTRY(nsINestedURI)
+  NS_INTERFACE_MAP_ENTRY(nsIIPCSerializableURI)
+  NS_INTERFACE_MAP_ENTRY(nsIURIWithSizeOf)
   NS_INTERFACE_MAP_ENTRY_CONCRETE(nsJARURI)
 NS_INTERFACE_MAP_END
 
@@ -137,6 +139,12 @@ nsJARURI::GetSpec(nsACString& aSpec) {
   nsAutoCString entrySpec;
   mJAREntry->GetSpec(entrySpec);
   return FormatSpec(entrySpec, aSpec);
+}
+
+uint32_t nsJARURI::SpecHash() {
+  nsAutoCString spec;
+  (void)GetSpec(spec);
+  return CachedSpecHash(spec);
 }
 
 NS_IMETHODIMP
@@ -637,7 +645,7 @@ nsJARURI::GetRelativeSpec(nsIURI* uriToCompare, nsACString& relativeSpec) {
 
   if (!StringBeginsWith(relativeEntrySpec, NS_BOGUS_ENTRY_SCHEME)) {
     // An actual relative spec!
-    relativeSpec = relativeEntrySpec;
+    relativeSpec = std::move(relativeEntrySpec);
   }
   return rv;
 }

@@ -14,6 +14,10 @@
 
 #include "SerialLogging.h"
 #include "mozilla/AsyncPlatformPipes.h"
+#include "mozilla/Maybe.h"
+#include "mozilla/Result.h"
+#include "mozilla/ResultVariant.h"
+#include "mozilla/SyncRunnable.h"
 #include "nsDirectoryServiceDefs.h"
 #include "nsIFile.h"
 #include "nsString.h"
@@ -56,19 +60,53 @@ constexpr int kWriteTimeoutMs = 5000;
 constexpr size_t kDeviceNameBufferSize = 256;
 #endif
 
-// Returns true if aDevpath refers to a real serial device by attempting
-// to open it and issuing a TIOCMGET ioctl. This filters out phantom ttyS*
-// entries and non-serial tty devices.
-static bool IsRealSerialPort(const char* aDevpath) {
+// Returns Ok if aDevpath refers to a real serial device by attempting
+// to open it and issuing a TIOCMGET ioctl, and errno otherwise.
+// This filters out phantom ttyS* entries and non-serial tty devices.
+static Result<Ok, int> IsRealSerialPort(const char* aDevpath) {
   int fd = open(aDevpath, O_RDWR | O_NONBLOCK | O_NOCTTY);
   if (fd < 0) {
-    return false;
+    int openErrno = errno;
+    MOZ_LOG(gWebSerialLog, LogLevel::Debug,
+            ("IsRealSerialPort: open(%s, O_RDWR|O_NONBLOCK|O_NOCTTY) failed: "
+             "errno=%d (%s)",
+             aDevpath, openErrno, strerror(openErrno)));
+    return Err(openErrno);
   }
   int status;
   bool isReal = ioctl(fd, TIOCMGET, &status) == 0;
+  // Capture errno before close(), which may overwrite it.
+  int ioctlErrno = errno;
   close(fd);
-  return isReal;
+  if (isReal) {
+    MOZ_LOG(gWebSerialLog, LogLevel::Debug,
+            ("IsRealSerialPort: %s accepted (TIOCMGET status=0x%x)", aDevpath,
+             status));
+    return Ok();
+  }
+  MOZ_LOG(gWebSerialLog, LogLevel::Debug,
+          ("IsRealSerialPort: TIOCMGET on %s failed: errno=%d (%s)", aDevpath,
+           ioctlErrno, strerror(ioctlErrno)));
+  return Err(ioctlErrno);
 }
+
+#ifdef XP_MACOSX
+// macOS exposes built-in serial ports used for WiFi debugging and kernel
+// debugging via IOKit. They are not useful targets for WebSerial, so
+// hide them from enumeration. Bluetooth ports are intentionally not filtered.
+static bool IsMacOSSystemSerialPort(const char* aDevicePath) {
+  static constexpr const char* kSystemPortPaths[] = {
+      "/dev/tty.wlan-debug",
+      "/dev/tty.debug-console",
+  };
+  for (const char* p : kSystemPortPaths) {
+    if (strcmp(aDevicePath, p) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+#endif
 
 PosixSerialPlatformService::PosixSerialPlatformService()
 #ifdef XP_LINUX
@@ -98,13 +136,61 @@ void PosixSerialPlatformService::Shutdown() {
   MOZ_LOG(gWebSerialLog, LogLevel::Info,
           ("PosixSerialPlatformService[%p]::Shutdown (closing %u open ports)",
            this, mOpenPorts.Count()));
-  StopMonitoring();
-  mOpenPorts.Clear();
+
   SerialPlatformService::Shutdown();
+
+#ifdef XP_LINUX
+  if (mMonitorSourceID) {
+    g_source_remove(mMonitorSourceID);
+    mMonitorSourceID = 0;
+  }
+#elif defined(XP_MACOSX)
+  if (mAddedIterator) {
+    IOObjectRelease(mAddedIterator);
+    mAddedIterator = 0;
+  }
+
+  if (mRemovedIterator) {
+    IOObjectRelease(mRemovedIterator);
+    mRemovedIterator = 0;
+  }
+
+  if (mNotificationPort) {
+    CFRunLoopSourceRef runLoopSource =
+        IONotificationPortGetRunLoopSource(mNotificationPort);
+    if (runLoopSource) {
+      CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource,
+                            kCFRunLoopDefaultMode);
+      MOZ_LOG(gWebSerialLog, LogLevel::Debug,
+              ("PosixSerialPlatformService[%p]::Shutdown removed run "
+               "loop source from main run loop",
+               this));
+    }
+    IONotificationPortDestroy(mNotificationPort);
+    mNotificationPort = nullptr;
+  }
+#endif
+
+  RefPtr<PosixSerialPlatformService> self = this;
+  SyncRunnable::DispatchToThread(
+      IOThread(), NS_NewRunnableFunction(
+                      "PosixSerialPlatformService::Shutdown:IOCleanup", [self] {
+                        self->mOpenPorts.Clear();
+#ifdef XP_LINUX
+                        if (self->mMonitor && self->mUdevLib) {
+                          self->mUdevLib->udev_monitor_unref(self->mMonitor);
+                          self->mMonitor = nullptr;
+                        }
+                        self->mUdevLib = nullptr;
+#endif
+                      }));
+
+  MOZ_LOG(gWebSerialLog, LogLevel::Info,
+          ("PosixSerialPlatformService[%p]::Shutdown complete", this));
 }
 
 nsresult PosixSerialPlatformService::EnumeratePortsImpl(
-    SerialPortList& aPorts) {
+    SerialPortList& aPorts, bool* aLikelyAccessDenied) {
   aPorts.Clear();
 
   MOZ_LOG(
@@ -155,6 +241,17 @@ nsresult PosixSerialPlatformService::EnumeratePortsImpl(
   IOObjectRelease(serialPortIterator);
 
 #elif defined(XP_LINUX)
+  // Tracks whether every device we failed to access during udev enumeration
+  // failed with EACCES. Combined with an empty port list below, this signals
+  // the user likely lacks permission to access serial ports (e.g. is not in
+  // the 'dialout' group, or a Snap/Flatpak sandbox blocks access).
+  enum ErrorKind : uint8_t {
+    eNone = 0,
+    eAccessDenied = 1 << 0,
+    eOther = 1 << 1
+  };
+  ErrorKind errors = ErrorKind::eNone;
+
   // Use an IIFE to avoid excessive nesting
   [&]() {
     if (!mUdevLib) {
@@ -223,7 +320,21 @@ nsresult PosixSerialPlatformService::EnumeratePortsImpl(
         continue;
       }
 
-      if (!IsRealSerialPort(devnode)) {
+      auto isReal = IsRealSerialPort(devnode);
+      if (isReal.isErr()) {
+        int err = isReal.unwrapErr();
+        // ENOTTY means this device is a kind of tty device
+        // that doesn't support serial operations at all
+        // (like /dev/ptmx), so skip over it for this calculation.
+        if (err != ENOTTY) {
+          errors = static_cast<ErrorKind>(
+              errors |
+              ((err == EACCES) ? ErrorKind::eAccessDenied : ErrorKind::eOther));
+        }
+        MOZ_LOG(gWebSerialLog, LogLevel::Verbose,
+                ("PosixSerialPlatformService[%p]::EnumeratePorts "
+                 "rejecting device devnode=%s, errors=%d",
+                 this, devnode, static_cast<int>(errors)));
         MOZ_LOG(gWebSerialLog, LogLevel::Debug,
                 ("PosixSerialPlatformService[%p]::EnumeratePorts "
                  "rejecting device devnode=%s (not a real serial port)",
@@ -268,7 +379,7 @@ nsresult PosixSerialPlatformService::EnumeratePortsImpl(
         continue;
       }
 
-      if (!IsRealSerialPort(devpath.get())) {
+      if (IsRealSerialPort(devpath.get()).isErr()) {
         continue;
       }
 
@@ -298,6 +409,15 @@ nsresult PosixSerialPlatformService::EnumeratePortsImpl(
       }
       aPorts.AppendElement(info);
     }
+  }
+
+  // Only flag a likely permission problem when we found no ports at all and
+  // every udev access failure was EACCES. If any port enumerated, the user
+  // clearly has access, so unrelated EACCES errors (e.g. on /dev/tty0) are
+  // ignored.
+  if (aLikelyAccessDenied) {
+    *aLikelyAccessDenied =
+        aPorts.IsEmpty() && (errors == ErrorKind::eAccessDenied);
   }
 #endif
 
@@ -451,7 +571,7 @@ nsresult PosixSerialPlatformService::ConfigurePort(
   tty.c_oflag &= ~OPOST;
   tty.c_iflag &= ~(IGNBRK | BRKINT | ISTRIP | INLCR | IGNCR | ICRNL | IXON |
                    IXOFF | IXANY);
-  tty.c_iflag |= PARMRK;
+  tty.c_iflag &= ~PARMRK;
 
   // VMIN=1: the terminal driver requires at least 1 byte before completing
   // a read.  VMIN=0 also works on Linux, because O_NONBLOCK takes precedence
@@ -566,7 +686,7 @@ nsresult PosixSerialPlatformService::OpenImpl(
 
   // Validate portId is a serial device path. This prevents a compromised
   // content process from using a crafted portId to open arbitrary files.
-  if (!IsRealSerialPort(NS_ConvertUTF16toUTF8(aPortId).get())) {
+  if (IsRealSerialPort(NS_ConvertUTF16toUTF8(aPortId).get()).isErr()) {
     MOZ_LOG(gWebSerialLog, LogLevel::Error,
             ("PosixSerialPlatformService[%p]::Open rejected invalid portId "
              "'%s': not a serial device path",
@@ -1080,41 +1200,6 @@ nsresult PosixSerialPlatformService::InitializeMacOS() {
 }
 #endif
 
-void PosixSerialPlatformService::StopMonitoring() {
-#ifdef XP_LINUX
-  ShutdownUdev();
-#elif defined(XP_MACOSX)
-  if (mAddedIterator) {
-    IOObjectRelease(mAddedIterator);
-    mAddedIterator = 0;
-  }
-
-  if (mRemovedIterator) {
-    IOObjectRelease(mRemovedIterator);
-    mRemovedIterator = 0;
-  }
-
-  if (mNotificationPort) {
-    CFRunLoopSourceRef runLoopSource =
-        IONotificationPortGetRunLoopSource(mNotificationPort);
-    if (runLoopSource) {
-      CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource,
-                            kCFRunLoopDefaultMode);
-      MOZ_LOG(gWebSerialLog, LogLevel::Debug,
-              ("PosixSerialPlatformService[%p]::StopMonitoring removed run "
-               "loop source from main run loop",
-               this));
-    }
-    IONotificationPortDestroy(mNotificationPort);
-    mNotificationPort = nullptr;
-  }
-
-  MOZ_LOG(gWebSerialLog, LogLevel::Info,
-          ("PosixSerialPlatformService[%p]::StopMonitoring monitoring stopped",
-           this));
-#endif
-}
-
 #ifdef XP_LINUX
 nsresult PosixSerialPlatformService::InitializeUdev() {
   mUdevLib = MakeUnique<udev_lib>();
@@ -1190,25 +1275,6 @@ nsresult PosixSerialPlatformService::InitializeUdev() {
            "initialized",
            this));
   return NS_OK;
-}
-
-void PosixSerialPlatformService::ShutdownUdev() {
-  if (mMonitorSourceID) {
-    g_source_remove(mMonitorSourceID);
-    mMonitorSourceID = 0;
-  }
-
-  if (mMonitor && mUdevLib) {
-    mUdevLib->udev_monitor_unref(mMonitor);
-    mMonitor = nullptr;
-  }
-
-  mUdevLib = nullptr;
-
-  MOZ_LOG(gWebSerialLog, LogLevel::Info,
-          ("PosixSerialPlatformService[%p]::ShutdownUdev udev monitoring "
-           "shutdown",
-           this));
 }
 
 gboolean PosixSerialPlatformService::OnUdevMonitor(GIOChannel* source,
@@ -1353,6 +1419,14 @@ bool PosixSerialPlatformService::ExtractDeviceInfo(
   char devicePath[PATH_MAX];
   if (!CFStringGetCString((CFStringRef)pathRef, devicePath, sizeof(devicePath),
                           kCFStringEncodingUTF8)) {
+    return false;
+  }
+
+  if (IsMacOSSystemSerialPort(devicePath)) {
+    MOZ_LOG(gWebSerialLog, LogLevel::Debug,
+            ("PosixSerialPlatformService[%p]::ExtractDeviceInfo filtering "
+             "macOS system port: %s",
+             this, devicePath));
     return false;
   }
 
@@ -1510,5 +1584,10 @@ void PosixSerialPlatformService::OnDeviceRemoved(io_iterator_t iterator,
            this, deviceCount, aSkipNotify));
 }
 #endif
+
+already_AddRefed<SerialPlatformService>
+SerialPlatformService::GetInstanceImpl() {
+  return MakeAndAddRef<PosixSerialPlatformService>();
+}
 
 }  // namespace mozilla::dom

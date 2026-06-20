@@ -17,6 +17,7 @@
 #include "gc/GC.h"
 #include "gc/PublicIterators.h"
 #include "jit/IonCompileTask.h"
+#include "jit/JitOptions.h"  // js::fuzzingSafe
 #include "jit/JitRuntime.h"
 #include "jit/Simulator.h"
 #include "js/AllocationLogging.h"  // JS_COUNT_CTOR, JS_COUNT_DTOR
@@ -231,6 +232,9 @@ void JSRuntime::destroyRuntime() {
     CancelOffThreadDelazify(this);
     CancelOffThreadCompressions(this);
 
+    /* Wait for GC tasks to finish, including background allocation. */
+    gc.waitForBackgroundTasks();
+
     /*
      * Flag us as being destroyed. This allows the GC to free things like
      * interned atoms and Ion trampolines.
@@ -370,6 +374,11 @@ void JSRuntime::addSizeOfIncludingThis(mozilla::MallocSizeOf mallocSizeOf,
 
   rtSizes->wasmRuntime +=
       wasmInstances.lock()->sizeOfExcludingThis(mallocSizeOf);
+
+#ifdef ENABLE_WASM_JSPI
+  rtSizes->wasmContStacks +=
+      mainContextFromAnyThread()->wasm().contStacks().sizeOfNonHeap();
+#endif
 }
 
 static bool InvokeInterruptCallbacks(JSContext* cx) {
@@ -416,8 +425,10 @@ static bool HandleInterrupt(JSContext* cx, bool invokeCallback,
 
   if (!InvokeInterruptCallbacks(cx)) {
     // Debugger treats invoking the interrupt callback as a "step", so
-    // invoke the onStep handler.
-    if (cx->realm()->isDebuggee()) {
+    // invoke the onStep handler. Skip this in --fuzzing-safe mode because
+    // fuzzer-generated onStep handlers can mutate state that native/builtin
+    // code (e.g. TypedArrayJoinKernel) assumes is stable.
+    if (cx->realm()->isDebuggee() && !fuzzingSafe) {
       ScriptFrameIter iter(cx);
       if (!iter.done() && cx->compartment() == iter.compartment() &&
           DebugAPI::stepModeEnabled(iter.script())) {

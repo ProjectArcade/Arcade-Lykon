@@ -377,8 +377,8 @@ add_task(async function test_serverToProxyInfo_isolation_key_uniqueness() {
   );
 });
 
-add_task(async function test_uninitialize_clears_proxyInfo() {
-  const authToken = "Bearer test-token";
+add_task(async function test_suspend_clears_proxyInfo() {
+  const pass = new ProxyPass(createProxyPassToken());
 
   const server = new Server({
     hostname: "test.example.com",
@@ -394,7 +394,7 @@ add_task(async function test_uninitialize_clears_proxyInfo() {
   });
 
   const filter = new IPPChannelFilter();
-  filter.initialize(authToken, server);
+  filter.initialize(pass, server);
 
   Assert.notEqual(
     filter.proxyInfo,
@@ -402,93 +402,97 @@ add_task(async function test_uninitialize_clears_proxyInfo() {
     "proxyInfo should be set after initialize"
   );
 
-  filter.uninitialize();
+  filter.suspend();
 
   Assert.equal(
     filter.proxyInfo,
     null,
-    "proxyInfo should be null after uninitialize"
+    "proxyInfo should be null after suspend"
   );
-});
-
-add_task(async function test_replaceAuthToken_preserves_connect_protocol() {
-  const authToken = "Bearer original-token";
-  const newToken = "Bearer new-token";
-
-  const server = new Server({
-    hostname: "connect.example.com",
-    port: 443,
-    protocols: [
-      {
-        name: "connect",
-        host: "connect.example.com",
-        port: 443,
-        scheme: "https",
-      },
-    ],
-  });
-
-  const filter = new IPPChannelFilter();
-  filter.initialize(authToken, server);
-
-  Assert.equal(filter.proxyInfo.type, "https", "Should start as https");
-  const originalIsolationKey = filter.proxyInfo.connectionIsolationKey;
-
-  filter.replaceAuthToken(newToken);
-
-  Assert.equal(
-    filter.proxyInfo.type,
-    "https",
-    "Should remain https after token replacement"
-  );
-  Assert.notEqual(
-    filter.proxyInfo.connectionIsolationKey,
-    originalIsolationKey,
-    "Isolation key should change after token replacement"
-  );
-});
-
-add_task(async function test_replaceAuthToken_preserves_masque_protocol() {
-  const authToken = "Bearer original-token";
-  const newToken = "Bearer new-token";
-
-  const server = new Server({
-    hostname: "masque.example.com",
-    port: 443,
-    protocols: [
-      {
-        name: "masque",
-        host: "masque.example.com",
-        port: 443,
-        templateString: "proxy/{target_host}/{target_port}/",
-      },
-    ],
-  });
-
-  const filter = new IPPChannelFilter();
-  filter.initialize(authToken, server);
-
-  Assert.equal(filter.proxyInfo.type, "masque", "Should start as masque");
-
-  filter.replaceAuthToken(newToken);
-
-  Assert.equal(
-    filter.proxyInfo.type,
-    "masque",
-    "Should remain masque after token replacement"
-  );
-  Assert.equal(
-    filter.proxyInfo.host,
-    "masque.example.com",
-    "Host should be preserved"
-  );
-  Assert.equal(filter.proxyInfo.port, 443, "Port should be preserved");
 });
 
 add_task(
-  async function test_replaceAuthToken_preserves_masque_with_connect_fallback() {
-    const authToken = "Bearer original-token";
-    const newToken = "Bearer new-token";
+  async function test_replaceAuthTokenAndResume_preserves_connect_protocol() {
+    const pass = new ProxyPass(createProxyPassToken());
+    const newPass = new ProxyPass(createProxyPassToken());
+
+    const server = new Server({
+      hostname: "connect.example.com",
+      port: 443,
+      protocols: [
+        {
+          name: "connect",
+          host: "connect.example.com",
+          port: 443,
+          scheme: "https",
+        },
+      ],
+    });
+
+    const filter = new IPPChannelFilter();
+    filter.initialize(pass, server);
+
+    Assert.equal(filter.proxyInfo.type, "https", "Should start as https");
+    const originalIsolationKey = filter.proxyInfo.connectionIsolationKey;
+
+    filter.replaceAuthTokenAndResume(newPass);
+
+    Assert.equal(
+      filter.proxyInfo.type,
+      "https",
+      "Should remain https after token replacement"
+    );
+    Assert.notEqual(
+      filter.proxyInfo.connectionIsolationKey,
+      originalIsolationKey,
+      "Isolation key should change after token replacement"
+    );
+  }
+);
+
+add_task(
+  async function test_replaceAuthTokenAndResume_preserves_masque_protocol() {
+    const pass = new ProxyPass(createProxyPassToken());
+    const newPass = new ProxyPass(createProxyPassToken());
+
+    const server = new Server({
+      hostname: "masque.example.com",
+      port: 443,
+      protocols: [
+        {
+          name: "masque",
+          host: "masque.example.com",
+          port: 443,
+          templateString: "proxy/{target_host}/{target_port}/",
+        },
+      ],
+    });
+
+    const filter = new IPPChannelFilter();
+    filter.initialize(pass, server);
+
+    Assert.equal(filter.proxyInfo.type, "masque", "Should start as masque");
+
+    filter.replaceAuthTokenAndResume(newPass);
+
+    Assert.equal(
+      filter.proxyInfo.type,
+      "masque",
+      "Should remain masque after token replacement"
+    );
+    Assert.equal(
+      filter.proxyInfo.host,
+      "masque.example.com",
+      "Host should be preserved"
+    );
+    Assert.equal(filter.proxyInfo.port, 443, "Port should be preserved");
+  }
+);
+
+add_task(
+  async function test_replaceAuthTokenAndResume_preserves_masque_with_connect_fallback() {
+    const pass = new ProxyPass(createProxyPassToken());
+    const newPass = new ProxyPass(createProxyPassToken());
 
     const server = new Server({
       hostname: "multi.example.com",
@@ -510,7 +514,7 @@ add_task(
     });
 
     const filter = new IPPChannelFilter();
-    filter.initialize(authToken, server);
+    filter.initialize(pass, server);
 
     Assert.equal(filter.proxyInfo.type, "masque", "Primary should be masque");
     Assert.equal(
@@ -519,7 +523,7 @@ add_task(
       "Fallback should be https"
     );
 
-    filter.replaceAuthToken(newToken);
+    filter.replaceAuthTokenAndResume(newPass);
 
     Assert.equal(
       filter.proxyInfo.type,
@@ -553,6 +557,212 @@ add_task(
     );
   }
 );
+
+add_task(async function test_suspend_clears_proxyInfo() {
+  const server = new Server({
+    hostname: "test.example.com",
+    port: 443,
+    protocols: [
+      {
+        name: "connect",
+        host: "test.example.com",
+        port: 443,
+        scheme: "https",
+      },
+    ],
+  });
+
+  const filter = new IPPChannelFilter();
+  filter.initialize(new ProxyPass(createProxyPassToken()), server);
+
+  Assert.notEqual(
+    filter.proxyInfo,
+    null,
+    "proxyInfo should be set after initialize"
+  );
+
+  filter.suspend();
+
+  Assert.equal(
+    filter.proxyInfo,
+    null,
+    "proxyInfo should be null after suspend"
+  );
+});
+
+add_task(async function test_replaceAuthTokenAndResume_after_suspend() {
+  const server = new Server({
+    hostname: "test.example.com",
+    port: 443,
+    protocols: [
+      {
+        name: "connect",
+        host: "test.example.com",
+        port: 443,
+        scheme: "https",
+      },
+    ],
+  });
+
+  const filter = new IPPChannelFilter();
+  filter.initialize(new ProxyPass(createProxyPassToken()), server);
+
+  const isolationKeyBefore = filter.proxyInfo.connectionIsolationKey;
+
+  filter.suspend();
+  Assert.equal(
+    filter.proxyInfo,
+    null,
+    "proxyInfo should be null after suspend"
+  );
+
+  filter.replaceAuthTokenAndResume(new ProxyPass(createProxyPassToken()));
+
+  Assert.notEqual(
+    filter.proxyInfo,
+    null,
+    "proxyInfo should be set after resume"
+  );
+  Assert.equal(filter.proxyInfo.type, "https", "Protocol should be preserved");
+  Assert.notEqual(
+    filter.proxyInfo.connectionIsolationKey,
+    isolationKeyBefore,
+    "Isolation key should change after token replacement"
+  );
+});
+
+add_task(async function test_suspend_queues_channels_until_resume() {
+  const INCLUSION_PREF = "browser.ipProtection.inclusion.match_patterns";
+  Services.prefs.setStringPref(
+    INCLUSION_PREF,
+    JSON.stringify(["*://example.com/*"])
+  );
+
+  const server = new Server({
+    hostname: "test.example.com",
+    port: 443,
+    protocols: [
+      {
+        name: "connect",
+        host: "test.example.com",
+        port: 443,
+        scheme: "https",
+      },
+    ],
+  });
+
+  const filter = new IPPChannelFilter();
+  filter.initialize(new ProxyPass(createProxyPassToken()), server);
+  filter.suspend();
+
+  Assert.equal(filter.hasPendingChannels, false, "No pending channels yet");
+
+  // isDocument:true bypasses the system-channel guard in shouldProxy when
+  // proxyInfo is null; the inclusion pattern ensures shouldInclude returns true
+  // without needing a fully-formed nsIChannel for shouldExclude.
+  const fakeChannel = {
+    isDocument: true,
+    URI: Services.io.newURI("https://example.com/test"),
+    loadInfo: { triggeringPrincipal: { isSystemPrincipal: true } },
+  };
+  let resolvedProxyInfo;
+  const fakeProxyFilter = {
+    onProxyFilterResult(info) {
+      resolvedProxyInfo = info;
+    },
+  };
+  filter.applyFilter(fakeChannel, null, fakeProxyFilter);
+
+  Assert.equal(
+    filter.hasPendingChannels,
+    true,
+    "Channel should be queued while suspended"
+  );
+  Assert.equal(
+    resolvedProxyInfo,
+    undefined,
+    "Channel should not be resolved yet"
+  );
+
+  filter.replaceAuthTokenAndResume(new ProxyPass(createProxyPassToken()));
+
+  Assert.equal(
+    filter.hasPendingChannels,
+    false,
+    "Pending channels should be flushed after resume"
+  );
+  Assert.notEqual(
+    resolvedProxyInfo,
+    null,
+    "Channel should be resolved after resume"
+  );
+  Assert.equal(
+    resolvedProxyInfo.type,
+    "https",
+    "Resolved proxy should use the new token's proxy info"
+  );
+
+  Services.prefs.clearUserPref(INCLUSION_PREF);
+});
+
+add_task(async function test_resume_restores_same_connection() {
+  const server = new Server({
+    hostname: "test.example.com",
+    port: 443,
+    protocols: [
+      { name: "connect", host: "test.example.com", port: 443, scheme: "https" },
+    ],
+  });
+
+  const filter = new IPPChannelFilter();
+  filter.initialize(new ProxyPass(createProxyPassToken()), server);
+
+  const isolationKeyBefore = filter.isolationKey;
+
+  filter.suspend();
+  Assert.equal(filter.proxyInfo, null, "suspend() clears proxyInfo");
+
+  filter.resume();
+
+  Assert.notEqual(filter.proxyInfo, null, "resume() restores proxyInfo");
+  Assert.equal(
+    filter.isolationKey,
+    isolationKeyBefore,
+    "resume() rebuilds the connection with the same isolation key"
+  );
+});
+
+add_task(async function test_canResume_reflects_pass_state() {
+  const server = new Server({
+    hostname: "test.example.com",
+    port: 443,
+    protocols: [
+      { name: "connect", host: "test.example.com", port: 443, scheme: "https" },
+    ],
+  });
+
+  const validFilter = new IPPChannelFilter();
+  validFilter.initialize(new ProxyPass(createProxyPassToken()), server);
+  Assert.ok(validFilter.canResume, "A fresh valid pass can be resumed");
+
+  const expiredFilter = new IPPChannelFilter();
+  expiredFilter.initialize(
+    new ProxyPass(createExpiredProxyPassToken()),
+    server
+  );
+  Assert.ok(!expiredFilter.canResume, "An expired pass cannot be resumed");
+
+  const now = Temporal.Now.instant();
+  const soonToExpire = new ProxyPass(
+    createProxyPassToken(now, now.add({ seconds: 30 }))
+  );
+  const rotatingFilter = new IPPChannelFilter();
+  rotatingFilter.initialize(soonToExpire, server);
+  Assert.ok(
+    !rotatingFilter.canResume,
+    "A pass within its rotation window cannot be resumed"
+  );
+});
 
 add_task(async function test_local_connections() {
   const makePrincipal = url =>
@@ -739,9 +949,20 @@ add_task(async function test_shouldExclude_ipp_exception() {
     loadUsingSystemPrincipal: true,
     triggeringPrincipal: excludedPrincipal,
   });
+  downloadChannel.loadInfo.isUserTriggeredSave = true;
   Assert.ok(
     filter.shouldExclude(downloadChannel),
-    "System-principal channel with excluded triggeringPrincipal should be excluded"
+    "Download with excluded triggeringPrincipal should be excluded"
+  );
+
+  const nonDownloadChannel = NetUtil.newChannel({
+    uri: "http://cdn.example.com/file.bin",
+    loadUsingSystemPrincipal: true,
+    triggeringPrincipal: excludedPrincipal,
+  });
+  Assert.ok(
+    !filter.shouldExclude(nonDownloadChannel),
+    "Non-download channel with excluded triggeringPrincipal should not be excluded"
   );
 
   // After removing the exclusion, the channel should no longer be excluded.
@@ -815,5 +1036,27 @@ add_task(async function test_shouldProxy() {
   Assert.ok(
     !IPPChannelFilter.create().shouldProxy(makeChannel("http://example.com/")),
     "System-principal channel should not be proxied before the proxy is initialized"
+  );
+});
+
+add_task(async function test_shouldExclude_trr_service_channel() {
+  const filter = IPPChannelFilter.create();
+  filter.proxyInfo = {};
+
+  const makeChannel = uri =>
+    NetUtil.newChannel({ uri, loadUsingSystemPrincipal: true });
+
+  const plain = makeChannel("https://doh.example.com/dns-query");
+  Assert.ok(
+    !filter.shouldExclude(plain),
+    "A regular HTTPS channel should not be excluded by the TRR rule"
+  );
+
+  const trrChannel = makeChannel("https://doh.example.com/dns-query");
+  trrChannel.QueryInterface(Ci.nsIHttpChannelInternal).isTRRServiceChannel =
+    true;
+  Assert.ok(
+    filter.shouldExclude(trrChannel),
+    "A channel marked as TRR service channel should be excluded"
   );
 });

@@ -23,8 +23,9 @@ namespace mozilla::media {
 static StaticAutoPtr<MCSInfo> sInstance;
 static StaticMutex sMutex;
 
-#define CODEC_SUPPORT_LOG(msg, ...) \
-  MOZ_LOG(sPDMLog, LogLevel::Debug, ("MediaCodecsSupport, " msg, ##__VA_ARGS__))
+#define CODEC_SUPPORT_LOG(msg, ...)                                 \
+  MOZ_LOG_FMT(sPDMLog, LogLevel::Debug, "MediaCodecsSupport, " msg, \
+              ##__VA_ARGS__)
 
 /* static */
 MediaCodecsSupported MCSInfo::GetSupportFromFactory(
@@ -100,6 +101,9 @@ MediaCodecsSupported MCSInfo::GetDecodeMediaCodecsSupported(
     support += supportInfo.hwDecodeSupport;
   }
   if (aSupportSet.contains(DecodeSupport::UnsureDueToLackOfExtension)) {
+    // Every codec reaching this arm must declare a real lack-of-extension
+    // entry in GetAllCodecDefinitions.
+    MOZ_ASSERT(supportInfo.lackOfHWExtenstion != MediaCodecsSupport::SENTINEL);
     support += supportInfo.lackOfHWExtenstion;
   }
   return support;
@@ -116,6 +120,9 @@ MediaCodecsSupported MCSInfo::GetEncodeMediaCodecsSupported(
     support += supportInfo.hwEncodeSupport;
   }
   if (aSupportSet.contains(EncodeSupport::UnsureDueToLackOfExtension)) {
+    // Every codec reaching this arm must declare a real lack-of-extension
+    // entry in GetAllCodecDefinitions.
+    MOZ_ASSERT(supportInfo.lackOfHWExtenstion != MediaCodecsSupport::SENTINEL);
     support += supportInfo.lackOfHWExtenstion;
   }
   return support;
@@ -160,7 +167,7 @@ void MCSInfo::GetMediaCodecsSupportedString(
       break;
     }
     if (!instance->mHashTableCodec->Get(it.codec, &supportInfo)) {
-      CODEC_SUPPORT_LOG("Can't find codec for MediaCodecsSupported enum: %d",
+      CODEC_SUPPORT_LOG("Can't find codec for MediaCodecsSupported enum: {}",
                         static_cast<int>(it.codec));
       continue;
     }
@@ -239,7 +246,7 @@ CodecDefinition MCSInfo::GetCodecDefinition(const MediaCodec& aCodec) {
   if (!instance) {
     CODEC_SUPPORT_LOG("Can't get codec definition without a MCSInfo instance!");
   } else if (!instance->mHashTableCodec->Get(aCodec, &info)) {
-    CODEC_SUPPORT_LOG("Could not find codec definition for codec enum: %d!",
+    CODEC_SUPPORT_LOG("Could not find codec definition for codec enum: {}!",
                       static_cast<int>(aCodec));
   }
   return info;
@@ -332,7 +339,7 @@ MediaCodec MCSInfo::GetMediaCodecFromMimeType(const nsACString& aMimeType) {
     return MediaCodec::MP3;
   }
 
-  CODEC_SUPPORT_LOG("No specific codec enum for MIME type string: %s",
+  CODEC_SUPPORT_LOG("No specific codec enum for MIME type string: {}",
                     nsCString(aMimeType).get());
   return MediaCodec::SENTINEL;
 }
@@ -359,7 +366,7 @@ std::array<CodecDefinition, 13> MCSInfo::GetAllCodecDefinitions() {
        MEDIA_CODEC_DEF_ENTRY(VP9, "video/vp9"),
        MEDIA_CODEC_DEF_ENTRY(VP8, "video/vp8"),
        MEDIA_CODEC_DEF_ENTRY_LACKOFEXT(AV1, "video/av1"),
-       MEDIA_CODEC_DEF_ENTRY(HEVC, "video/hevc"),
+       MEDIA_CODEC_DEF_ENTRY_LACKOFEXT(HEVC, "video/hevc"),
        MEDIA_CODEC_DEF_ENTRY(AAC, "audio/mp4a-latm"),
        MEDIA_CODEC_DEF_ENTRY(MP3, "audio/mpeg"),
        MEDIA_CODEC_DEF_ENTRY(Opus, "audio/opus"),

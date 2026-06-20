@@ -195,7 +195,8 @@ class imgFrame {
     RefPtr<gfxDrawable> mDrawable;
     SurfaceFormat mFormat;
     SurfaceWithFormat() : mFormat(SurfaceFormat::UNKNOWN) {}
-    SurfaceWithFormat(gfxDrawable* aDrawable, SurfaceFormat aFormat)
+    SurfaceWithFormat(already_AddRefed<gfxDrawable> aDrawable,
+                      SurfaceFormat aFormat)
         : mDrawable(aDrawable), mFormat(aFormat) {}
     SurfaceWithFormat(SurfaceWithFormat&& aOther)
         : mDrawable(std::move(aOther.mDrawable)), mFormat(aOther.mFormat) {}

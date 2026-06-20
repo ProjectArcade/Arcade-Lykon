@@ -1944,6 +1944,8 @@ class AsyncPanZoomController {
  private:
   // The timestamp of the latest touch start event.
   TimeStamp mTouchStartTime;
+  // The start time of the latest autoscroll animation.
+  TimeStamp mAutoscrollStartTime;
   // Used for interpolating touch events that cross the touch-start
   // tolerance threshold.
   struct TouchSample {
@@ -1999,20 +2001,18 @@ class AsyncPanZoomController {
   // If moving |aStartPosition| by |aDelta| should trigger scroll snapping,
   // adjust |aDelta| to reflect the snapping (that is, make it a delta that will
   // take us to the desired snap point). The delta is interpreted as being
-  // relative to |aStartPosition|, and if a target snap point is found,
-  // |aStartPosition| is also updated, to the value of the snap point.
-  // |aUnit| affects the snapping behaviour (see ScrollSnapUtils::
-  // GetSnapPointForDestination).
+  // relative to |aStartPosition|. |aUnit| affects the snapping behaviour
+  // (see ScrollSnapUtils:: GetSnapPointForDestination).
   // Returns true iff. a target snap point was found.
   Maybe<CSSSnapDestination> MaybeAdjustDeltaForScrollSnapping(
       ScrollUnit aUnit, ScrollSnapFlags aSnapFlags, ParentLayerPoint& aDelta,
-      CSSPoint& aStartPosition);
+      const CSSPoint& aStartPosition);
 
   // A wrapper function of MaybeAdjustDeltaForScrollSnapping for
   // ScrollWheelInput.
   Maybe<CSSSnapDestination> MaybeAdjustDeltaForScrollSnappingOnWheelInput(
       const ScrollWheelInput& aEvent, ParentLayerPoint& aDelta,
-      CSSPoint& aStartPosition);
+      const CSSPoint& aStartPosition);
 
   Maybe<CSSSnapDestination> MaybeAdjustDestinationForScrollSnapping(
       const KeyboardInput& aEvent, CSSPoint& aDestination,

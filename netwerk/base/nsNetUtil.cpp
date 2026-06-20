@@ -17,6 +17,7 @@
 #include "mozilla/MathAlgorithms.h"
 #include "mozilla/Monitor.h"
 #include "mozilla/StaticPrefs_browser.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_extensions.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/StaticPrefs_privacy.h"
@@ -78,6 +79,7 @@
 #include "mozilla/dom/nsMixedContentBlocker.h"
 #include "mozilla/dom/BlobURLProtocolHandler.h"
 #include "mozilla/net/HttpBaseChannel.h"
+#include "nsHttpChannel.h"
 #include "nsIScriptError.h"
 #include "nsISiteSecurityService.h"
 #include "nsHttpHandler.h"
@@ -285,6 +287,13 @@ nsresult NS_NewChannelInternal(
   // loadinfo attached.
   NS_ENSURE_ARG_POINTER(outChannel);
 
+  if (aLoadInfo &&
+      aLoadInfo->InternalContentPolicyType() ==
+          nsIContentPolicy::TYPE_INTERNAL_FORCE_ALLOWED_DTD &&
+      !mozilla::StaticPrefs::dom_fetch_allow_force_allowed_dtd()) {
+    return NS_ERROR_CONTENT_BLOCKED;
+  }
+
   nsCOMPtr<nsIIOService> grip;
   nsresult rv = net_EnsureIOService(&aIoService, grip);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -450,6 +459,11 @@ nsresult NS_NewChannelInternal(
     nsIIOService* aIoService /* = nullptr */,
     uint32_t aSandboxFlags /* = 0 */) {
   NS_ENSURE_ARG_POINTER(outChannel);
+
+  if (aContentPolicyType == nsIContentPolicy::TYPE_INTERNAL_FORCE_ALLOWED_DTD &&
+      !mozilla::StaticPrefs::dom_fetch_allow_force_allowed_dtd()) {
+    return NS_ERROR_CONTENT_BLOCKED;
+  }
 
   nsCOMPtr<nsIIOService> grip;
   nsresult rv = net_EnsureIOService(&aIoService, grip);
@@ -3339,6 +3353,15 @@ bool NS_ShouldClassifyChannel(nsIChannel* aChannel, ClassifyType aType) {
     }
   }
 
+  // Skip auth redirect channels for ETP
+  if (aType == ClassifyType::ETP) {
+    RefPtr<mozilla::net::nsHttpChannel> concreteHttpChannel =
+        do_QueryObject(aChannel);
+    if (concreteHttpChannel && concreteHttpChannel->IsAuthRedirectedChannel()) {
+      return false;
+    }
+  }
+
   nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
   ExtContentPolicyType type = loadInfo->GetExternalContentPolicyType();
 
@@ -3866,7 +3889,7 @@ static constexpr nsAttrValue::EnumTableEntry kAsAttributeTable[] = {
     {"script", DESTINATION_SCRIPT}, {"style", DESTINATION_STYLE},
     {"track", DESTINATION_TRACK},   {"video", DESTINATION_VIDEO},
     {"fetch", DESTINATION_FETCH},   {"json", DESTINATION_JSON},
-};
+    {"text", DESTINATION_TEXT}};
 
 void ParseAsValue(const nsAString& aValue, nsAttrValue& aResult) {
   DebugOnly<bool> success =
@@ -3900,6 +3923,8 @@ nsContentPolicyType AsValueToContentPolicy(const nsAttrValue& aValue) {
       return nsIContentPolicy::TYPE_INTERNAL_FETCH_PRELOAD;
     case DESTINATION_JSON:
       return nsIContentPolicy::TYPE_JSON;
+    case DESTINATION_TEXT:
+      return nsIContentPolicy::TYPE_TEXT;
   }
   return nsIContentPolicy::TYPE_INVALID;
 }
@@ -3919,7 +3944,8 @@ bool IsScriptLikeOrInvalid(const nsAString& aAs) {
       aAs.LowerCaseEqualsASCII("report") || aAs.LowerCaseEqualsASCII("style") ||
       aAs.LowerCaseEqualsASCII("track") || aAs.LowerCaseEqualsASCII("video") ||
       aAs.LowerCaseEqualsASCII("webidentity") ||
-      aAs.LowerCaseEqualsASCII("xslt") || aAs.LowerCaseEqualsASCII("json"));
+      aAs.LowerCaseEqualsASCII("xslt") || aAs.LowerCaseEqualsASCII("json") ||
+      aAs.LowerCaseEqualsASCII("text"));
 }
 
 bool CheckPreloadAttrs(const nsAttrValue& aAs, const nsAString& aType,
@@ -3943,7 +3969,8 @@ bool CheckPreloadAttrs(const nsAttrValue& aAs, const nsAString& aType,
     return true;
   }
 
-  if (policyType == nsIContentPolicy::TYPE_INTERNAL_FETCH_PRELOAD) {
+  if (policyType == nsIContentPolicy::TYPE_INTERNAL_FETCH_PRELOAD ||
+      policyType == nsIContentPolicy::TYPE_TEXT) {
     return true;
   }
 

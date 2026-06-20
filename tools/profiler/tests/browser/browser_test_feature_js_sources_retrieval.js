@@ -6,10 +6,7 @@
  * Test that JS sources are collected and included in profile additional information.
  */
 add_task(async function test_js_sources_in_profile_additional_info() {
-  Assert.ok(
-    !Services.profiler.IsActive(),
-    "The profiler is not currently active"
-  );
+  await ProfilerTestUtils.assertProfilerInactive();
 
   const url = BASE_URL + "simple.html";
   await BrowserTestUtils.withNewTab(url, async contentBrowser => {
@@ -58,14 +55,15 @@ add_task(async function test_js_sources_in_profile_additional_info() {
 
     // Check the sources to verify they contain actual source text
     for (const sourceId in sources) {
-      const sourceText = sources[sourceId];
+      const sourceInfo = sources[sourceId];
       Assert.ok(
         typeof sourceId === "string" && !!sourceId.length,
         "sourceId should be a non-empty string"
       );
       Assert.ok(
-        typeof sourceText === "string" && !!sourceText.length,
-        `Source ${sourceId} should be a non-empty string`
+        typeof sourceInfo?.sourceText === "string" &&
+          !!sourceInfo.sourceText.length,
+        `Source ${sourceId} should have non-empty sourceText`
       );
     }
   });
@@ -75,10 +73,7 @@ add_task(async function test_js_sources_in_profile_additional_info() {
  * Test that different types of JS sources are handled correctly.
  */
 add_task(async function test_js_sources_different_types() {
-  Assert.ok(
-    !Services.profiler.IsActive(),
-    "The profiler is not currently active"
-  );
+  await ProfilerTestUtils.assertProfilerInactive();
 
   const url = BASE_URL + "simple.html";
   await BrowserTestUtils.withNewTab(url, async contentBrowser => {
@@ -119,7 +114,7 @@ add_task(async function test_js_sources_different_types() {
     let inlineSourceLength = 0;
 
     for (const sourceId in sources) {
-      const sourceText = sources[sourceId];
+      const sourceText = sources[sourceId]?.sourceText;
       if (typeof sourceText === "string" && sourceText.length) {
         // Check if we found our test functions
         if (
@@ -152,10 +147,7 @@ add_task(async function test_js_sources_different_types() {
  * Test that external JS files are properly collected in JS sources.
  */
 add_task(async function test_js_sources_external_scripts() {
-  Assert.ok(
-    !Services.profiler.IsActive(),
-    "The profiler is not currently active"
-  );
+  await ProfilerTestUtils.assertProfilerInactive();
 
   const url = BASE_URL + "page_with_external_js.html";
   await BrowserTestUtils.withNewTab(url, async contentBrowser => {
@@ -190,7 +182,7 @@ add_task(async function test_js_sources_external_scripts() {
     let externalScriptSource = null;
 
     for (const sourceId in sources) {
-      const sourceText = sources[sourceId];
+      const sourceText = sources[sourceId]?.sourceText;
       if (typeof sourceText === "string" && sourceText.length) {
         // Check for external script content
         if (
@@ -244,10 +236,7 @@ add_task(async function test_js_sources_external_scripts() {
  * enabled, all sources have unavailable data and should not appear in jsSources.
  */
 add_task(async function test_js_sources_unavailable_are_omitted() {
-  Assert.ok(
-    !Services.profiler.IsActive(),
-    "The profiler is not currently active"
-  );
+  await ProfilerTestUtils.assertProfilerInactive();
 
   const url = BASE_URL + "simple.html";
   await BrowserTestUtils.withNewTab(url, async contentBrowser => {

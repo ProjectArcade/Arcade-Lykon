@@ -127,7 +127,6 @@ class IDBFactory final : public GlobalTeardownObserver, public nsWrapperCache {
   // IDB operations in other window.
   void UpdateActiveDatabaseCount(int32_t aDelta);
 
-  // BindingUtils.h's FindAssociatedGlobalForNative needs this.
   nsIGlobalObject* GetParentObject() const { return GetRelevantGlobal(); }
 
   BrowserChild* GetBrowserChild() const { return mBrowserChild; }
@@ -175,7 +174,7 @@ class IDBFactory final : public GlobalTeardownObserver, public nsWrapperCache {
       const IDBOpenDBOptions& aOptions, SystemCallerGuarantee,
       ErrorResult& aRv);
 
-  NS_DECL_CYCLE_COLLECTING_ISUPPORTS
+  NS_DECL_CYCLE_COLLECTING_ISUPPORTS_FINAL
   NS_DECL_CYCLE_COLLECTION_SCRIPT_HOLDER_CLASS(IDBFactory)
 
   // nsWrapperCache

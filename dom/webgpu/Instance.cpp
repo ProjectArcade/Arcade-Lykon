@@ -31,7 +31,7 @@ GPU_IMPL_CYCLE_COLLECTION(WGSLLanguageFeatures, mParent)
 
 GPU_IMPL_CYCLE_COLLECTION(Instance, mGlobal, mWgslLanguageFeatures)
 
-/* static */ bool Instance::PrefEnabled(JSContext* aCx, JSObject* aObj) {
+/* static */ bool Instance::PrefEnabled() {
   if (!StaticPrefs::dom_webgpu_enabled()) {
     return false;
   }
@@ -129,6 +129,10 @@ already_AddRefed<dom::Promise> Instance::RequestAdapter(
   rejectIf(!StaticPrefs::dom_webgpu_enabled(),
            "WebGPU is disabled because the `dom.webgpu.enabled` pref. is set "
            "to `false`.");
+#ifndef HAVE_64BIT_BUILD
+  rejectIf(true, "WebGPU is only available on 64-bit architectures.");
+#endif
+
 #ifdef WIN32
 #  ifndef MOZ_DXCOMPILER
   rejectIf(true,

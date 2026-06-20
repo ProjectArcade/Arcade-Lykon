@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 use dump::client::CollectionDownloader;
-use remote_settings::{RemoteSettingsConfig2, RemoteSettingsServer, RemoteSettingsService};
+use remote_settings::{RemoteSettingsConfig, RemoteSettingsServer, RemoteSettingsService};
 
 const DEFAULT_LOG_FILTER: &str = "remote_settings=info";
 const DEFAULT_LOG_FILTER_VERBOSE: &str = "remote_settings=trace";
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     } else {
         DEFAULT_LOG_FILTER
     });
-    nss::ensure_initialized();
+    nss_as::ensure_initialized();
     viaduct_hyper::viaduct_init_backend_hyper()?;
     let service = build_service(&cli)?;
     match cli.command {
@@ -108,7 +108,7 @@ fn main() -> Result<()> {
 }
 
 fn build_service(cli: &Cli) -> Result<RemoteSettingsService> {
-    let config = RemoteSettingsConfig2 {
+    let config = RemoteSettingsConfig {
         server: cli.server.as_ref().map(|s| match s {
             RemoteSettingsServerArg::Dev => RemoteSettingsServer::Dev,
             RemoteSettingsServerArg::Stage => RemoteSettingsServer::Stage,

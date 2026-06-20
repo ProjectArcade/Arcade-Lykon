@@ -11,33 +11,192 @@
 
 #include "nsDragService.h"
 #include "nsGtkUtils.h"
+#include "nsIAppWindow.h"
+#include "nsAppShell.h"
 #include "nsIClipboard.h"
+#include "nsIDocShell.h"
+#include "nsISessionStoreFunctions.h"
+#include "nsPIDOMWindow.h"
 #include "nsMenuPopupFrame.h"
 #include "WaylandVsyncSource.h"
 #include "WidgetUtilsGtk.h"
 #include "mozilla/gfx/Logging.h"
 #include "mozilla/layers/WebRenderLayerManager.h"
 #include "mozilla/PresShell.h"
+#include "mozilla/Preferences.h"
 #include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/VsyncDispatcher.h"
 #include "nsGtkKeyUtils.h"
+#include "nsWaylandDisplay.h"
+#include "nsIUUIDGenerator.h"
 
 using namespace mozilla;
 using namespace mozilla::gfx;
 using namespace mozilla::layers;
 using namespace mozilla::widget;
 
-static void GetLayoutPopupWidgetChain(
-    nsTArray<nsIWidget*>* aLayoutWidgetHierarchy) {
-  nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
-  pm->GetSubmenuWidgetChain(aLayoutWidgetHierarchy);
-  aLayoutWidgetHierarchy->Reverse();
+/*
+  Window restore session uses GetWorkspaceID()/MoveToWorkspace() differently
+  on Wayland.
+
+  MoveToWorkspace() is normally called when a window is visible/rendered and
+  widget code moves the window to a particular workspace. That approach doesn't
+  work on Wayland where an application can't position itself.
+
+  On Wayland we need to place the window before it's shown, so we use this
+  path instead:
+
+  1) In ConfigureToplevelWindowNative() we register an "xdg-toplevel-realized"
+     GTK signal handler to get notified when the xdg_toplevel window is created.
+  2) Block NativeShow() while mWaitingToSessionRestore is set. We can't show
+     the toplevel window until we have a window restore ID provided by a
+     MoveToWorkspace() call.
+  3) In MoveToWorkspace(), save the session ID and show the window. That fires
+     the "xdg-toplevel-realized" signal which gives us the xdg_toplevel and we
+     restore window state according to the session ID.
+
+  Likewise we use GetWorkspaceID() to create/save the xdg_toplevel session
+  for later restore.
+*/
+
+bool GenerateWorkspaceID(nsAString& aName) {
+  nsresult rv;
+  nsCOMPtr<nsIUUIDGenerator> uuidGenerator =
+      do_GetService("@mozilla.org/uuid-generator;1", &rv);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return false;
+  }
+
+  nsID id;
+  rv = uuidGenerator->GenerateUUIDInPlace(&id);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return false;
+  }
+
+  char chars[NSID_LENGTH];
+  id.ToProvidedString(chars);
+
+  // NSID_LENGTH counts the null terminator.
+  aName.AssignASCII(chars, NSID_LENGTH - 1);
+  return true;
+}
+
+static struct xdg_toplevel* GetXdgToplevelFromGdkWindow(GdkWindow* aWindow) {
+  static auto sGdkWaylandWindowGetXdgToplevel =
+      (struct xdg_toplevel * (*)(GdkWindow*))
+          dlsym(RTLD_DEFAULT, "gdk_wayland_window_get_xdg_toplevel");
+  if (!sGdkWaylandWindowGetXdgToplevel) {
+    return nullptr;
+  }
+  return sGdkWaylandWindowGetXdgToplevel(aWindow);
+}
+
+// aRestoreWindow = true means we're loading mSessionRestoreToken
+// from already saved toplevel window state.
+// aRestoreWindow = false means we're creating a new restore session.
+bool nsWindowWayland::CreateRestoreSession(bool aRestoreWindow) {
+  MOZ_DIAGNOSTIC_ASSERT(!mSessionRestoreToken);
+  GdkWindow* window = GetToplevelGdkWindow();
+  if (!window) {
+    LOG("nsWindowWayland::CreateRestoreSession(): failed to get GdkWindow, "
+        "quit.");
+    return false;
+  }
+  struct xdg_toplevel* toplevel = GetXdgToplevelFromGdkWindow(window);
+  if (!toplevel) {
+    LOG("nsWindowWayland::CreateRestoreSession(): failed to get xdg-toplevel, "
+        "quit.");
+    return false;
+  }
+  auto* session = WaylandDisplayGet()->GetSession();
+  if (!session) {
+    LOG("nsWindowWayland::CreateRestoreSession(): failed to get restore "
+        "session, quit.");
+    return false;
+  }
+
+  NS_ConvertUTF16toUTF8 id(mSessionID);
+  if (aRestoreWindow) {
+    mSessionRestoreToken =
+        xdg_session_v1_restore_toplevel(session, toplevel, id.get());
+  } else {
+    mSessionRestoreToken =
+        xdg_session_v1_add_toplevel(session, toplevel, id.get());
+  }
+
+  LOG("nsWindowWayland::CreateRestoreSession() ID %s restore %d token %p",
+      id.get(), aRestoreWindow, mSessionRestoreToken);
+  return !!mSessionRestoreToken;
+}
+
+void nsWindowWayland::GetWorkspaceID(nsAString& workspaceID) {
+  if (mSessionID.IsEmpty() && !GenerateWorkspaceID(mSessionID)) {
+    return;
+  }
+  workspaceID.Assign(mSessionID);
+
+  LOG("nsWindowWayland::GetWorkspaceID() ID %s token %p",
+      NS_ConvertUTF16toUTF8(mSessionID).get(), mSessionRestoreToken);
+
+  if (mSessionRestoreToken) {
+    return;
+  }
+
+  CreateRestoreSession(/* aRestoreWindow */ false);
+}
+
+#ifdef MOZ_LOGGING
+static void SessionRestoredHandler(void* aData,
+                                   xdg_toplevel_session_v1* aToplevelSession) {
+  LOGW("nsWindowWayland restored [%p]", aData);
+}
+
+static const xdg_toplevel_session_v1_listener sSessionListener = {
+    SessionRestoredHandler,
+};
+#endif
+
+void nsWindowWayland::RestoreXdgToplevel() {
+  LOG("nsWindowWayland::RestoreXdgToplevel() ID %s GdkWindow [%p]",
+      NS_ConvertUTF16toUTF8(mSessionID).get(), GetToplevelGdkWindow());
+  if (CreateRestoreSession(/* aRestoreWindow */ true)) {
+#ifdef MOZ_LOGGING
+    if (LOG_ENABLED()) {
+      xdg_toplevel_session_v1_add_listener(mSessionRestoreToken,
+                                           &sSessionListener, this);
+    }
+#endif
+  }
+}
+
+void nsWindowWayland::MoveToWorkspace(const nsAString& workspaceIDStr) {
+  mSessionID.Assign(workspaceIDStr);
+  LOG("nsWindowWayland::MoveToWorkspace() session ID %s "
+      "mWaitingToSessionRestore %d mNeedsShow %d",
+      NS_ConvertUTF16toUTF8(mSessionID).get(), mWaitingToSessionRestore,
+      mNeedsShow);
+  if (!mWaitingToSessionRestore) {
+    return;
+  }
+  mWaitingToSessionRestore = false;
+  if (mNeedsShow) {
+    NativeShow(/* show */ true);
+  }
 }
 
 // This is an ugly workaround for
 // https://bugzilla.mozilla.org/show_bug.cgi?id=1622107
 // We try to detect when Wayland compositor / gtk fails to deliver
 // info about finished D&D operations and cancel it on our own.
+//
+// The sequence is:
+// 1) D&D is started on both Wayland & Firefox side
+// 2) D&D is finished on Wayland side, Wayland doesn't deliver drag finish to
+//    Firefox, Firefox D&D is still active.
+// 4) Firefox UI is blocked by the D&D from 1)
+// 5) We use mouse button to get mouse clicks and cancel the Firefox D&D
+//    session.
+//
 void nsWindowWayland::WaylandDragWorkaround(GdkEventButton* aEvent) {
   // We track only left button state as Firefox performs D&D on left
   // button only.
@@ -160,25 +319,46 @@ void nsWindowWayland::DisableVSyncSource() {
   }
 }
 
+nsresult nsWindowWayland::SynthesizeNativeMouseMove(
+    LayoutDeviceIntPoint aPoint, nsISynthesizedEventCallback* aCallback) {
+  if (IsNativePointerLocked()) {
+    AutoSynthesizedEventCallbackNotifier notifier(aCallback);
+    mNativeLockedPoint = aPoint - WidgetToScreenOffset();
+
+    WidgetMouseEvent event(true, eMouseMove, this, WidgetMouseEvent::eReal);
+    event.mRefPoint = mNativeLockedPoint;
+    event.AssignEventTime(GetWidgetEventTime(0));
+    event.mMovement = Some(LayoutDeviceIntPoint(0, 0));
+    DispatchInputEvent(&event);
+
+    return NS_OK;
+  }
+
+  return nsWindow::SynthesizeNativeMouseMove(aPoint, aCallback);
+}
+
 static void relative_pointer_handle_relative_motion(
     void* data, struct zwp_relative_pointer_v1* pointer, uint32_t time_hi,
     uint32_t time_lo, wl_fixed_t dx_w, wl_fixed_t dy_w, wl_fixed_t dx_unaccel_w,
     wl_fixed_t dy_unaccel_w) {
   RefPtr<nsWindowWayland> window(reinterpret_cast<nsWindowWayland*>(data));
-
-  WidgetMouseEvent event(true, eMouseMove, window, WidgetMouseEvent::eReal);
-
   double scale = window->FractionalScaleFactor();
-  event.mRefPoint = window->GetNativePointerLockCenter();
-  event.mRefPoint.x += int(wl_fixed_to_double(dx_w) * scale);
-  event.mRefPoint.y += int(wl_fixed_to_double(dy_w) * scale);
-
   LOGW(
       "[%p] relative_pointer_handle_relative_motion center dx = %f, "
       "dy = %f scale %f",
       data, wl_fixed_to_double(dx_w), wl_fixed_to_double(dy_w), scale);
 
+  int32_t movementX = int32_t(wl_fixed_to_double(dx_w) * scale);
+  int32_t movementY = int32_t(wl_fixed_to_double(dy_w) * scale);
+  if (movementX == 0 && movementY == 0) {
+    // Ignore event with zero movement.
+    return;
+  }
+
+  WidgetMouseEvent event(true, eMouseMove, window, WidgetMouseEvent::eReal);
+  event.mRefPoint = window->GetNativeLockedPoint();
   event.AssignEventTime(window->GetWidgetEventTime(time_lo));
+  event.mMovement = Some(LayoutDeviceIntPoint(movementX, movementY));
   window->DispatchInputEvent(&event);
 }
 
@@ -187,7 +367,8 @@ static const struct zwp_relative_pointer_v1_listener relative_pointer_listener =
         relative_pointer_handle_relative_motion,
 };
 
-void nsWindowWayland::LockNativePointer() {
+void nsWindowWayland::LockNativePointer(
+    NativePointerLockMode aNativePointerLockMode) {
   if (!GdkIsWaylandDisplay()) {
     return;
   }
@@ -258,6 +439,7 @@ void nsWindowWayland::LockNativePointer() {
 }
 
 void nsWindowWayland::UnlockNativePointer() {
+  mNativeLockedPoint = LayoutDeviceIntPoint(0, 0);
   if (mRelativePointer) {
     zwp_relative_pointer_v1_destroy(mRelativePointer);
     mRelativePointer = nullptr;
@@ -786,6 +968,13 @@ void nsWindowWayland::WaylandPopupMoveImpl() {
                        mPopupMoveToRectParams.mAnchorRectType,
                        mPopupMoveToRectParams.mPopupAnchorType,
                        mPopupMoveToRectParams.mHints, offset.x, offset.y);
+}
+
+static void GetLayoutPopupWidgetChain(
+    nsTArray<nsIWidget*>* aLayoutWidgetHierarchy) {
+  nsXULPopupManager* pm = nsXULPopupManager::GetInstance();
+  pm->GetSubmenuWidgetChain(aLayoutWidgetHierarchy);
+  aLayoutWidgetHierarchy->Reverse();
 }
 
 // Wayland keeps strong popup window hierarchy. We need to track active
@@ -1910,6 +2099,8 @@ bool nsWindowWayland::PIPResize(GdkWindowEdge aEdge) {
 }
 
 void nsWindowWayland::CreateNative() {
+  LOG("nsWindowWayland::CreateNative()");
+
   // Ensure that KeymapWrapper is created on Wayland as we need it for
   // keyboard focus tracking.
   KeymapWrapper::EnsureInstance();
@@ -1934,9 +2125,60 @@ void nsWindowWayland::CreateNative() {
     // We'll handle it manually in OnMap().
     gdk_wayland_window_set_use_custom_surface(GetToplevelGdkWindow());
   }
+
+  mWaitingToSessionRestore =
+      IsTopLevelWidget() &&
+      nsAppShell::UpdateAndGetSessionState() == eSessionRestoring;
+
+  LOGVERBOSE("  mWaitingToSessionRestore %d", mWaitingToSessionRestore);
+}
+
+void nsWindowWayland::ConfigureToplevelWindowNative() {
+  LOG("nsWindowWayland::ConfigureToplevelWindow() register callback for "
+      "toplevel GdkWindow [%p]",
+      GetToplevelGdkWindow());
+  if (!mWaitingToSessionRestore) {
+    return;
+  }
+  auto* window = GetToplevelGdkWindow();
+  if (!window) {
+    LOG("  quit, missing toplevel GdkWindow!");
+    return;
+  }
+  if (!g_signal_lookup("xdg-toplevel-realized", G_OBJECT_TYPE(window))) {
+    LOG("  quit, missing gtk3 support!");
+    return;
+  }
+  if (g_signal_handler_is_connected(window, mXdgToplevelRealizedID)) {
+    return;
+  }
+  mXdgToplevelRealizedID = g_signal_connect(
+      window, "xdg-toplevel-realized",
+      G_CALLBACK(+[](GtkWidget* widget) -> gboolean {
+        LOGW("nsWindowWayland::ConfigureToplevelWindow() callback");
+        RefPtr<nsWindowWayland> window =
+            static_cast<nsWindowWayland*>(nsWindow::FromGtkWidget(widget));
+        if (!window) {
+          return FALSE;
+        }
+
+        g_signal_handler_disconnect(window->GetToplevelGdkWindow(),
+                                    window->mXdgToplevelRealizedID);
+        window->mXdgToplevelRealizedID = 0;
+
+        window->RestoreXdgToplevel();
+        return FALSE;
+      }),
+      nullptr);
 }
 
 void nsWindowWayland::DestroyNative() {
+  LOG("nsWindowWayland::DestroyNative()");
+  if (mXdgToplevelRealizedID) {
+    g_signal_handler_disconnect(GetToplevelGdkWindow(), mXdgToplevelRealizedID);
+    mXdgToplevelRealizedID = 0;
+  }
+  MozClearPointer(mSessionRestoreToken, xdg_toplevel_session_v1_destroy);
   ClearPipResources();
 
   // Shut down our local vsync source
@@ -1953,6 +2195,16 @@ void nsWindowWayland::NativeShow(bool aAction) {
   if (aAction) {
     // unset our flag now that our window has been shown
     mNeedsShow = true;
+
+    if (mWaitingToSessionRestore) {
+      LOG("nsWindowWayland::NativeShow() waiting to session restore, quit.");
+      if (nsAppShell::UpdateAndGetSessionState() == eSessionRestoring) {
+        return;
+      }
+      mWaitingToSessionRestore = false;
+      NS_WARNING("Wayland session restore failed!");
+    }
+
     auto removeShow = MakeScopeExit([&] { mNeedsShow = false; });
 
     LOG("nsWindowWayland::NativeShow show\n");
@@ -1973,9 +2225,6 @@ void nsWindowWayland::NativeShow(bool aAction) {
       if (mPopupClosed) {
         return;
       }
-    }
-
-    if (IsWaylandPopup()) {
       ShowWaylandPopupWindow();
     } else {
       ShowWaylandToplevelWindow();

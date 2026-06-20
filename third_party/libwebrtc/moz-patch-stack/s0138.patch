@@ -1,33 +1,33 @@
-From: Michael Froman <mfroman@mozilla.com>
-Date: Wed, 8 Apr 2026 10:58:00 -0500
-Subject: Bug 2030139 - (fix-bb3693c382) fix linux builds for constexpr
- containing std::string
+From: Byron Campen <docfaraday@gmail.com>
+Date: Tue, 26 May 2026 14:02:00 -0500
+Subject: Bug 2040478 - (fix-d1ae1e9ad4) Explicitly convert these to a
+ std::string r?mjf
 
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/cab51cf0d4e9e67e9f5b053128d05e859d47b7c2
+Our toolchain does not yet support implicit conversion from string_view to string
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/1eae5aad7a7622115d156dea2dc974416046cd42
 ---
- modules/portal/pipewire_utils.cc | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ call/payload_type_picker.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/modules/portal/pipewire_utils.cc b/modules/portal/pipewire_utils.cc
-index 850726cc58..7008696b7d 100644
---- a/modules/portal/pipewire_utils.cc
-+++ b/modules/portal/pipewire_utils.cc
-@@ -28,9 +28,18 @@
- 
- namespace webrtc {
- 
-+#if defined(__GNUC__) && defined(WEBRTC_MOZILLA_BUILD)
-+// Mozilla linux builds are using -std=gnu++20, which doesn't approve
-+// of using std::string in a constexpr.  PipewireVersion now contains
-+// std::string as of libwebrtc commit d167fe9296.
-+static const PipeWireVersion kReentrantDeinitMinVersion = {.major = 0,
-+                                                           .minor = 3,
-+                                                           .micro = 49};
-+#else
- constexpr PipeWireVersion kReentrantDeinitMinVersion = {.major = 0,
-                                                         .minor = 3,
-                                                         .micro = 49};
-+#endif
- 
- PipeWireVersion PipeWireVersion::Parse(const std::string_view& version) {
-   std::vector<std::string_view> parsed_version = split(version, '.');
+diff --git a/call/payload_type_picker.cc b/call/payload_type_picker.cc
+index 45105a1054..d12c3b34e2 100644
+--- a/call/payload_type_picker.cc
++++ b/call/payload_type_picker.cc
+@@ -370,7 +370,7 @@ void PayloadTypeRecorder::Rollback() {
+ RTCError RtpHeaderExtensionRecorder::AddMapping(RtpHeaderExtensionId id,
+                                                 absl::string_view uri,
+                                                 bool encrypt) {
+-  auto it = uri_to_id_.find(std::pair{uri, encrypt});
++  auto it = uri_to_id_.find(std::pair{std::string(uri), encrypt});
+   if (it != uri_to_id_.end()) {
+     if (it->second != id) {
+       RTC_HISTOGRAM_BOOLEAN(
+@@ -393,7 +393,7 @@ RTCError RtpHeaderExtensionRecorder::AddMapping(RtpHeaderExtensionId id,
+ RTCErrorOr<RtpHeaderExtensionId> RtpHeaderExtensionRecorder::LookupId(
+     absl::string_view uri,
+     bool encrypt) const {
+-  auto it = uri_to_id_.find(std::pair{uri, encrypt});
++  auto it = uri_to_id_.find(std::pair{std::string(uri), encrypt});
+   if (it == uri_to_id_.end()) {
+     return RTCError(RTCErrorType::INVALID_PARAMETER,
+                     "No ID found for extension");

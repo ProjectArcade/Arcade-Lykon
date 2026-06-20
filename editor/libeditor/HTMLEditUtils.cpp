@@ -419,7 +419,7 @@ static bool IsHTMLBlockElementByDefault(const nsIContent& aContent) {
   }
   if (aContent.IsHTMLElement(nsGkAtoms::br)) {  // shortcut for TextEditor
     MOZ_ASSERT(!nsHTMLElement::IsBlock(
-        nsHTMLTags::CaseSensitiveAtomTagToId(nsGkAtoms::br)));
+        aContent.NodeInfo()->HTMLTag().valueOr(eHTMLTag_userdefined)));
     return false;
   }
   // We want to treat these as block nodes even though nsHTMLElement says
@@ -432,7 +432,7 @@ static bool IsHTMLBlockElementByDefault(const nsIContent& aContent) {
   }
 
   return nsHTMLElement::IsBlock(
-      nsHTMLTags::CaseSensitiveAtomTagToId(aContent.NodeInfo()->NameAtom()));
+      aContent.NodeInfo()->HTMLTag().valueOr(eHTMLTag_userdefined));
 }
 
 bool HTMLEditUtils::IsBlockElement(const nsIContent& aContent,
@@ -2920,6 +2920,7 @@ static const ElementInfo kElements[eHTMLTag_userdefined] = {
     ELEM(search, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
     ELEM(section, true, true, GROUP_BLOCK, GROUP_FLOW_ELEMENT),
     ELEM(select, true, false, GROUP_FORMCONTROL, GROUP_SELECT_CONTENT),
+    ELEM(selectedcontent, true, false, GROUP_NONE, GROUP_INLINE_ELEMENT),
     ELEM(small, true, true, GROUP_FONTSTYLE, GROUP_INLINE_ELEMENT),
     ELEM(slot, true, false, GROUP_NONE, GROUP_FLOW_ELEMENT),
     ELEM(source, false, false, GROUP_PICTURE_CONTENT, GROUP_NONE),

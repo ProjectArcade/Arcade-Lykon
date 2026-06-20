@@ -1,37 +1,25 @@
-From: Nico Grunbaum <na-g@nostrum.com>
-Date: Thu, 23 May 2024 17:28:00 +0000
-Subject: Bug 1897459 - P2 - for BSD reference null socket server
- instead;r=mjf,webrtc-reviewers
+From: Dan Baker <dbaker@mozilla.com>
+Date: Tue, 27 Aug 2024 14:09:00 -0600
+Subject: Bug 1912989 - (fix-2360208f7d) Removed build command causing failure.
+ - moz.build file updates
 
-Differential Revision: https://phabricator.services.mozilla.com/D211095
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/0993ae41fb7db1624dedc5cf2278cd5a505f18f5
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/fd4bc7427678a45283f0f56418ee2c70fac711e6
 ---
- rtc_base/internal/default_socket_server.cc | 9 +++++++++
- 1 file changed, 9 insertions(+)
+ .gn | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
-diff --git a/rtc_base/internal/default_socket_server.cc b/rtc_base/internal/default_socket_server.cc
-index d49c2bba32..521f21f538 100644
---- a/rtc_base/internal/default_socket_server.cc
-+++ b/rtc_base/internal/default_socket_server.cc
-@@ -13,12 +13,21 @@
- #include <memory>
+diff --git a/.gn b/.gn
+index 675807743a..82164c084e 100644
+--- a/.gn
++++ b/.gn
+@@ -38,7 +38,9 @@ no_check_targets = [
+ exec_script_allowlist = build_dotfile_settings.exec_script_allowlist +
+                         [ "//build_overrides/build.gni" ]
  
- #include "rtc_base/socket_server.h"
-+
-+#if defined(WEBRTC_BSD)
-+#include "rtc_base/null_socket_server.h"
-+#else
- #include "rtc_base/physical_socket_server.h"
-+#endif
+-export_compile_commands = [ "*" ]
++# Normally, we'd use 'if (!build_with_mozilla)', but that flag isn't
++# available yet.
++#export_compile_commands = [ "*" ]
  
- namespace webrtc {
- 
- std::unique_ptr<SocketServer> CreateDefaultSocketServer() {
-+#if defined(WEBRTC_BSD)
-+  return std::unique_ptr<SocketServer>(new NullSocketServer);
-+#else
-   return std::unique_ptr<SocketServer>(new PhysicalSocketServer);
-+#endif
- }
- 
- }  // namespace webrtc
+ default_args = {
+   # Webrtc does not support component builds because we are not using the

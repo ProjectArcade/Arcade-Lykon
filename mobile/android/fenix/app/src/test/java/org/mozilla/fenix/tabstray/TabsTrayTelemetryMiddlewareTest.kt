@@ -7,8 +7,6 @@ package org.mozilla.fenix.tabstray
 import io.mockk.mockk
 import junit.framework.TestCase
 import mozilla.components.support.test.robolectric.testContext
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
@@ -23,14 +21,18 @@ import org.mozilla.fenix.tabstray.data.TabGroupTheme
 import org.mozilla.fenix.tabstray.data.TabStorageUpdate
 import org.mozilla.fenix.tabstray.data.TabsTrayItem
 import org.mozilla.fenix.tabstray.data.createTab
+import org.mozilla.fenix.tabstray.data.createTabGroup
 import org.mozilla.fenix.tabstray.navigation.TabManagerNavDestination
 import org.mozilla.fenix.tabstray.redux.action.TabGroupAction
 import org.mozilla.fenix.tabstray.redux.action.TabSearchAction
 import org.mozilla.fenix.tabstray.redux.action.TabsTrayAction
+import org.mozilla.fenix.tabstray.redux.state.Page
 import org.mozilla.fenix.tabstray.redux.state.TabGroupFormState
 import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
 import org.mozilla.fenix.tabstray.redux.store.TabsTrayStore
 import org.robolectric.RobolectricTestRunner
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 @RunWith(RobolectricTestRunner::class) // for gleanTestRule
 class TabsTrayTelemetryMiddlewareTest {
@@ -122,6 +124,15 @@ class TabsTrayTelemetryMiddlewareTest {
         store.dispatch(TabsTrayAction.ShareAllPrivateTabs)
 
         assertNotNull(TabsTray.shareAllTabs.testGetValue())
+    }
+
+    @Test
+    fun `WHEN the select all normal tabs button is clicked THEN the metric is reported`() {
+        assertNull(TabsTray.selectAllNormalTabs.testGetValue())
+
+        store.dispatch(TabsTrayAction.SelectAllNormalTabs)
+
+        assertNotNull(TabsTray.selectAllNormalTabs.testGetValue())
     }
 
     @Test
@@ -311,6 +322,21 @@ class TabsTrayTelemetryMiddlewareTest {
         assertNotNull(TabsTray.tabGroupDeleted.testGetValue())
     }
 
+    @Test
+    fun `WHEN closing the last tab and deleting the group is confirmed THEN the deletion metric is reported`() {
+        assertNull(TabsTray.tabGroupDeleted.testGetValue())
+
+        val mockGroup = TabsTrayItem.TabGroup(
+            id = "test group",
+            title = "Test",
+            theme = TabGroupTheme.default,
+            tabs = mutableListOf(),
+        )
+        store.dispatch(TabGroupAction.CloseTabAndDeleteGroupConfirmed(mockGroup))
+
+        assertNotNull(TabsTray.tabGroupDeleted.testGetValue())
+    }
+
     /**
      * [TabsTray.tabAddedToGroup] coverage
      */
@@ -341,7 +367,7 @@ class TabsTrayTelemetryMiddlewareTest {
             ),
         )
 
-        store.dispatch(TabGroupAction.TabsAddedToGroup("id"))
+        store.dispatch(TabGroupAction.SelectedTabsAddedToGroup("id"))
 
         assertNotNull(TabsTray.tabAddedToGroup.testGetValue())
         val snapshot = TabsTray.tabAddedToGroup.testGetValue()!!
@@ -353,8 +379,63 @@ class TabsTrayTelemetryMiddlewareTest {
      * [TabsTray.tabGroupOpened] coverage
      */
     @Test
-    fun `GIVEN normal mode WHEN TabGroupClicked is dispatched THEN the tab group opened metric is reported`() {
+    fun `GIVEN tab groups page WHEN TabGroupClicked is dispatched THEN the tab group opened metric is reported with group_screen source`() {
         assertNull(TabsTray.tabGroupOpened.testGetValue())
+
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                selectedPage = Page.TabGroups,
+            ),
+        )
+
+        val tabGroup = TabsTrayItem.TabGroup(
+            id = "test group",
+            title = "Test",
+            theme = TabGroupTheme.default,
+            tabs = mutableListOf(),
+        )
+        store.dispatch(TabGroupAction.TabGroupClicked(tabGroup))
+
+        assertNotNull(TabsTray.tabGroupOpened.testGetValue())
+        val snapshot = TabsTray.tabGroupOpened.testGetValue()!!
+
+        assertEquals(1, snapshot.size)
+        assertEquals("group_screen", snapshot.single().extra?.getValue("source"))
+    }
+
+    @Test
+    fun `GIVEN normal tabs page WHEN TabGroupClicked is dispatched THEN the tab group opened metric is reported with tab_screen source`() {
+        assertNull(TabsTray.tabGroupOpened.testGetValue())
+
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                selectedPage = Page.NormalTabs,
+            ),
+        )
+
+        val tabGroup = TabsTrayItem.TabGroup(
+            id = "test group",
+            title = "Test",
+            theme = TabGroupTheme.default,
+            tabs = mutableListOf(),
+        )
+        store.dispatch(TabGroupAction.TabGroupClicked(tabGroup))
+
+        assertNotNull(TabsTray.tabGroupOpened.testGetValue())
+        val snapshot = TabsTray.tabGroupOpened.testGetValue()!!
+
+        assertEquals(1, snapshot.size)
+        assertEquals("tab_screen", snapshot.single().extra?.getValue("source"))
+    }
+
+    /**
+     * [TabsTray.tabGroupClosed] coverage
+     */
+    @Test
+    fun `WHEN a tab group is closed THEN the tab group closed metric is reported`() {
+        assertNull(TabsTray.tabGroupClosed.testGetValue())
 
         val mockGroup = TabsTrayItem.TabGroup(
             id = "test group",
@@ -362,9 +443,9 @@ class TabsTrayTelemetryMiddlewareTest {
             theme = TabGroupTheme.default,
             tabs = mutableListOf(),
         )
-        store.dispatch(TabGroupAction.TabGroupClicked(mockGroup))
+        store.dispatch(TabGroupAction.CloseTabGroupClicked(mockGroup))
 
-        assertNotNull(TabsTray.tabGroupOpened.testGetValue())
+        assertNotNull(TabsTray.tabGroupClosed.testGetValue())
     }
 
     /**
@@ -377,5 +458,329 @@ class TabsTrayTelemetryMiddlewareTest {
         store.dispatch(TabGroupAction.AddToNewTabGroup)
 
         assertEquals(1, Metrics.tabGroupCreationMode["menu"].testGetValue())
+    }
+
+    @Test
+    fun `GIVEN a target tab WHEN DragAndDropCompleted is dispatched THEN the drag_and_drop metric is reported`() {
+        assertNull(Metrics.tabGroupCreationMode["drag_and_drop"].testGetValue())
+
+        val mockTargetTab = createTab(url = "www.example.com").copy(id = "target_id")
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                normalTabsState = TabsTrayState.NormalTabsState(
+                    items = listOf(mockTargetTab),
+                ),
+            ),
+        )
+
+        store.dispatch(TabGroupAction.DragAndDropCompleted(sourceId = "source_id", destinationId = "target_id"))
+
+        assertEquals(1, Metrics.tabGroupCreationMode["drag_and_drop"].testGetValue())
+    }
+
+    /**
+     * [TabsTray.tabGroupScreenOpened] coverage
+     */
+    @Test
+    fun `WHEN the Tab Groups page is selected THEN the group screen show metric is reported`() {
+        assertNull(TabsTray.tabGroupScreenOpened.testGetValue())
+
+        store.dispatch(
+            TabsTrayAction.PageSelected(Page.TabGroups),
+        )
+
+        assertNotNull(TabsTray.tabGroupScreenOpened.testGetValue())
+    }
+
+    /**
+     * [TabsTray.tabGroupCreateCancel] coverage
+     */
+    @Test
+    fun `GIVEN AddToTabGroup destination WHEN NavigateBackInvoked is dispatched THEN the cancel metric is reported`() {
+        assertNull(TabsTray.tabGroupCreateCancel.testGetValue())
+
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                backStack = listOf(TabManagerNavDestination.AddToTabGroup),
+            ),
+        )
+
+        store.dispatch(TabsTrayAction.NavigateBackInvoked)
+
+        assertNotNull(TabsTray.tabGroupCreateCancel.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN a tab WHEN TabDragStart is dispatched THEN the longpress drag metric is reported with item_type tab`() {
+        assertNull(TabsTray.tabLongPressDrag.testGetValue())
+
+        val mockTab = createTab(url = "www.example.com").copy(id = "123")
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                normalTabsState = TabsTrayState.NormalTabsState(
+                    items = listOf(mockTab),
+                ),
+            ),
+        )
+
+        store.dispatch(TabsTrayAction.TabDragStart(sourceId = "123", preserveSelectMode = false))
+
+        val snapshot = TabsTray.tabLongPressDrag.testGetValue()!!
+        assertEquals(1, snapshot.size)
+        assertEquals(
+            TabsTrayTelemetryMiddleware.TabItemType.TAB.telemetryId,
+            snapshot.single().extra?.getValue("item_type"),
+        )
+    }
+
+    @Test
+    fun `GIVEN a tab group WHEN TabDragStart is dispatched THEN the longpress drag metric is reported with item_type tab_group`() {
+        assertNull(TabsTray.tabLongPressDrag.testGetValue())
+
+        val mockGroup = TabsTrayItem.TabGroup(
+            id = "123",
+            title = "Test",
+            theme = TabGroupTheme.default,
+            tabs = mutableListOf(),
+        )
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                normalTabsState = TabsTrayState.NormalTabsState(
+                    items = listOf(mockGroup),
+                ),
+            ),
+        )
+
+        store.dispatch(TabsTrayAction.TabDragStart(sourceId = "123", preserveSelectMode = false))
+
+        val snapshot = TabsTray.tabLongPressDrag.testGetValue()!!
+        assertEquals(1, snapshot.size)
+        assertEquals(
+            TabsTrayTelemetryMiddleware.TabItemType.TAB_GROUP.telemetryId,
+            snapshot.single().extra?.getValue("item_type"),
+        )
+    }
+
+    @Test
+    fun `GIVEN an unknown source id WHEN TabDragStart is dispatched THEN the longpress drag metric is reported with item_type unknown`() {
+        assertNull(TabsTray.tabLongPressDrag.testGetValue())
+
+        store.dispatch(TabsTrayAction.TabDragStart(sourceId = "123", preserveSelectMode = false))
+
+        val snapshot = TabsTray.tabLongPressDrag.testGetValue()!!
+        assertEquals(1, snapshot.size)
+        assertEquals(
+            TabsTrayTelemetryMiddleware.TabItemType.UNKNOWN.telemetryId,
+            snapshot.single().extra?.getValue("item_type"),
+        )
+    }
+
+    /**
+     * [TabsTray.tabLongPressDragRearrangedPosition] coverage
+     */
+    @Test
+    fun `GIVEN a tab WHEN ReorderTabsTrayItem is dispatched THEN the longpress drag rearranged metric is reported`() {
+        assertNull(TabsTray.tabLongPressDragRearrangedPosition.testGetValue())
+
+        val mockTab = createTab(url = "www.example.com").copy(id = "123")
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                normalTabsState = TabsTrayState.NormalTabsState(
+                    items = listOf(mockTab),
+                ),
+            ),
+        )
+
+        store.dispatch(
+            TabsTrayAction.ReorderTabsTrayItem(
+                sourceId = "123",
+                destinationId = "321",
+                placeAfter = true,
+            ),
+        )
+
+        assertNotNull(TabsTray.tabLongPressDragRearrangedPosition.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN a tab group WHEN ReorderTabsTrayItem is dispatched THEN the longpress drag rearranged metric is NOT reported`() {
+        assertNull(TabsTray.tabLongPressDragRearrangedPosition.testGetValue())
+
+        val mockGroup = TabsTrayItem.TabGroup(
+            id = "123",
+            title = "Test",
+            theme = TabGroupTheme.default,
+            tabs = mutableListOf(),
+        )
+        store = TabsTrayStore(
+            middlewares = listOf(tabsTrayTelemetryMiddleware),
+            initialState = TabsTrayState(
+                normalTabsState = TabsTrayState.NormalTabsState(
+                    items = listOf(mockGroup),
+                ),
+            ),
+        )
+
+        store.dispatch(
+            TabsTrayAction.ReorderTabsTrayItem(
+                sourceId = "123",
+                destinationId = "321",
+                placeAfter = true,
+            ),
+        )
+
+        assertNull(TabsTray.tabLongPressDragRearrangedPosition.testGetValue())
+    }
+
+    //region TabItemLongClicked
+
+    @Test
+    fun `GIVEN normal mode, WHEN TabItemLongClicked invoked with TabGroup, THEN long press recorded`() {
+        val tabGroup = createTabGroup(title = "TestGroup", tabs = mutableListOf(createTab(url = "example.com")))
+
+        val store = setupStore(items = listOf(tabGroup), mode = TabsTrayState.Mode.Normal)
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tabGroup))
+
+        assertEquals(expected = 1, actual = TabsTray.tabLongPress.testGetValue()?.size)
+    }
+
+    @Test
+    fun `GIVEN normal mode, WHEN TabItemLongClicked invoked with TabGroup, THEN enter select mode telemetry is recorded`() {
+        val tabGroup = createTabGroup(title = "TestGroup", tabs = mutableListOf(createTab(url = "example.com")))
+
+        val store = setupStore(items = listOf(tabGroup), mode = TabsTrayState.Mode.Normal)
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tabGroup))
+
+        assertNotNull(TabsTray.enterMultiselectMode.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN normal mode, WHEN TabItemLongClicked invoked with normal tab, THEN long press recorded`() {
+        val tab = createTab(url = "mozilla.org", title = "TestTab", private = false)
+
+        val store = setupStore(items = listOf(tab), mode = TabsTrayState.Mode.Normal)
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tab))
+
+        assertEquals(expected = 1, actual = TabsTray.tabLongPress.testGetValue()?.size)
+    }
+
+    @Test
+    fun `GIVEN normal mode, WHEN TabItemLongClicked invoked with normal tab, THEN enter select mode telemetry is recorded`() {
+        val tab = createTab(url = "mozilla.org", title = "TestTab", private = false)
+
+        val store = setupStore(items = listOf(tab), mode = TabsTrayState.Mode.Normal)
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tab))
+
+        assertNotNull(TabsTray.enterMultiselectMode.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN normal mode, WHEN TabItemLongClicked invoked with private tab, THEN long press is recorded`() {
+        val tab = createTab(url = "mozilla.org", title = "TestTab", private = true)
+
+        val store = setupStore(items = listOf(tab), mode = TabsTrayState.Mode.Normal)
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tab))
+
+        assertNotNull(TabsTray.tabLongPress.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN normal mode, WHEN TabItemLongClicked invoked with private tab, THEN enter select mode telemetry is not recorded`() {
+        val tab = createTab(url = "mozilla.org", title = "TestTab", private = true)
+
+        val store = setupStore(items = listOf(tab), mode = TabsTrayState.Mode.Normal)
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tab))
+
+        assertNull(TabsTray.enterMultiselectMode.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN select mode with selected tabs, WHEN TabItemLongClicked invoked with TabGroup, THEN long press is recorded`() {
+        val tabGroup = createTabGroup(title = "TestGroup", tabs = mutableListOf(createTab(url = "example.com")))
+        val tab = createTab(title = "Test Tab", url = "mozilla.org")
+
+        val store = setupStore(
+            items = listOf(tabGroup, tab),
+            mode = TabsTrayState.Mode.Select(selectedTabs = setOf(tab)),
+        )
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tabGroup))
+
+        assertNotNull(TabsTray.tabLongPress.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN select mode with selected tabs, WHEN TabItemLongClicked invoked with TabGroup, THEN enter select mode telemetry is not recorded`() {
+        val tabGroup = createTabGroup(title = "TestGroup", tabs = mutableListOf(createTab(url = "example.com")))
+        val tab = createTab(title = "Test Tab", url = "mozilla.org")
+
+        val store = setupStore(
+            items = listOf(tabGroup),
+            mode = TabsTrayState.Mode.Select(selectedTabs = setOf(tab)),
+        )
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tabGroup))
+
+        assertNull(TabsTray.enterMultiselectMode.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN select mode with selected tabs, WHEN TabItemLongClicked invoked with tab, THEN long press is recorded`() {
+        val tabGroup = createTabGroup(title = "TestGroup", tabs = mutableListOf(createTab(url = "example.com")))
+        val tab = createTab(title = "Test Tab", url = "mozilla.org")
+
+        val store = setupStore(
+            items = listOf(tabGroup, tab),
+            mode = TabsTrayState.Mode.Select(selectedTabs = setOf(tab)),
+        )
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tab))
+
+        assertNotNull(TabsTray.tabLongPress.testGetValue())
+    }
+
+    @Test
+    fun `GIVEN select mode with selected tabs, WHEN TabItemLongClicked invoked with tab, THEN enter select mode telemetry is not recorded`() {
+        val tabGroup = createTabGroup(title = "TestGroup", tabs = mutableListOf(createTab(url = "example.com")))
+        val tab = createTab(title = "Test Tab", url = "mozilla.org")
+
+        val store = setupStore(
+            items = listOf(tabGroup),
+            mode = TabsTrayState.Mode.Select(selectedTabs = setOf(tab)),
+        )
+
+        store.dispatch(TabsTrayAction.TabItemLongClicked(tab))
+
+        assertNull(TabsTray.enterMultiselectMode.testGetValue())
+    }
+    //endregion
+
+    private fun setupStore(
+        items: List<TabsTrayItem>,
+        mode: TabsTrayState.Mode = TabsTrayState.Mode.Normal,
+    ): TabsTrayStore {
+        return TabsTrayStore(
+            middlewares = listOf(
+                TabsTrayTelemetryMiddleware(nimbusEventStore = FakeNimbusEventStore()),
+            ),
+            initialState = TabsTrayState(
+                mode = mode,
+                selectedPage = Page.NormalTabs,
+                normalTabsState = TabsTrayState.NormalTabsState(
+                    items = items,
+                ),
+            ),
+        )
     }
 }

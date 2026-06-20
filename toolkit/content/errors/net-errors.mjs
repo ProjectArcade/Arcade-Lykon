@@ -342,7 +342,7 @@ export const NET_ERRORS = [
     category: "net",
     bodyTitleL10nId: "neterror-dns-not-found-title",
     introContent: {
-      dataL10nId: "fp-neterror-offline-intro",
+      dataL10nId: "fp-neterror-offline-intro-2",
       dataL10nArgs: { hostname: null },
     },
     descriptionParts: DESCRIPTION_PARTS_MAP.dnsNotFoundDescription,
@@ -352,7 +352,11 @@ export const NET_ERRORS = [
     },
     customNetError: {
       titleL10nId: "neterror-dns-not-found-title",
-      whatCanYouDoL10nId: "fp-neterror-offline-what-can-you-do-body",
+      whatCanYouDoItems: [
+        "neterror-http-empty-response",
+        "neterror-dns-not-found-hint-check-network-2",
+        "neterror-dns-not-found-hint-firewall-2",
+      ],
       learnMoreL10nId: "neterror-learn-more-link",
       learnMoreSupportPage: "server-not-found-connection-problem",
     },
@@ -750,11 +754,6 @@ export const NET_ERRORS = [
     descriptionParts: [
       { tag: "li", dataL10nId: "neterror-nss-failure-not-verified" },
       { tag: "li", dataL10nId: "neterror-nss-failure-contact-website" },
-      {
-        tag: "li",
-        dataL10nId: "neterror-nss-failure-error-code",
-        dataL10nArgs: { errorCodeString: null },
-      },
     ],
     buttons: {
       showTryAgain: false,

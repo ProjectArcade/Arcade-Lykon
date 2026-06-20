@@ -146,7 +146,7 @@ export class BasePopup {
         panel.removeEventListener("popuppositioned", this, { capture: true });
       }
       if (panel && panel.id !== REMOTE_PANEL_ID) {
-        panel.style.removeProperty("--panel-background");
+        panel.style.removeProperty("--panel-background-color");
         panel.style.removeProperty("--panel-border-color");
         panel.removeAttribute("remote");
       }
@@ -461,7 +461,7 @@ export class BasePopup {
       background = "#fff";
     }
     if (this.panel.id != "widget-overflow") {
-      this.panel.style.setProperty("--panel-background", background);
+      this.panel.style.setProperty("--panel-background-color", background);
     }
     if (background == "#fff") {
       // Set a usable default color that work with the default background-color.

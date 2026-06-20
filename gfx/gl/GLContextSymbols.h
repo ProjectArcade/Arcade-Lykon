@@ -94,7 +94,7 @@ struct GLContextSymbols final {
   void(GLAPIENTRY* fTexParameteri)(GLenum, GLenum, GLint);
   void(GLAPIENTRY* fTexParameteriv)(GLenum, GLenum, const GLint*);
   void(GLAPIENTRY* fTexParameterf)(GLenum, GLenum, GLfloat);
-  GLubyte*(GLAPIENTRY* fGetString)(GLenum);
+  const GLubyte*(GLAPIENTRY* fGetString)(GLenum);
   void(GLAPIENTRY* fGetTexImage)(GLenum, GLint, GLenum, GLenum, GLvoid*);
   void(GLAPIENTRY* fGetTexLevelParameteriv)(GLenum, GLint, GLenum, GLint*);
   void(GLAPIENTRY* fGetTexParameterfv)(GLenum, GLenum, GLfloat*);

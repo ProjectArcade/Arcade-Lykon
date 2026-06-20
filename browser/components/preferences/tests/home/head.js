@@ -9,7 +9,7 @@ Services.scriptloader.loadSubScript(
 async function openHomePreferences() {
   await openPreferencesViaOpenPreferencesAPI("home", { leaveOpen: true });
   let doc = gBrowser.contentDocument;
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => doc.querySelector('setting-group[groupid="home"]'),
     "Wait for the Firefox Home setting group to render"
   );
@@ -39,7 +39,7 @@ async function openCustomHomepageSubpage() {
   });
   let doc = gBrowser.contentDocument;
 
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => doc.querySelector("#setting-control-customHomepageAddUrlInput"),
     "Wait for custom homepage subpage to fully render"
   );
@@ -84,3 +84,49 @@ async function waitForToggleState(toggle, expectedValue) {
  * @param {boolean} expectedValue - The expected checked state.
  * @returns {Promise} Promise that resolves when the checkbox reaches the expected state.
  */
+
+/**
+ * Clicks a moz-box-link in a Firefox Home setting; asserts the resulting
+ * openTrustedLinkIn call and that no extra tab opened.
+ *
+ * @param {object} params
+ * @param {string} params.settingId - e.g. "manageTopics".
+ * @param {string} params.expectedUrl - URL the handler should open.
+ * @param {string} params.expectedWhere - "tab" or "window".
+ */
+async function assertHomeSettingLinkOpens({
+  settingId,
+  expectedUrl,
+  expectedWhere,
+}) {
+  let { win, tab } = await openHomePreferences();
+
+  let calls = [];
+  let originalOpenTrustedLinkIn = win.openTrustedLinkIn;
+  win.openTrustedLinkIn = (url, where) => {
+    calls.push({ url, where });
+  };
+  let tabsBefore = gBrowser.tabs.length;
+
+  try {
+    let control = await settingControlRenders(settingId, win);
+    ok(BrowserTestUtils.isVisible(control), `${settingId} control is visible`);
+
+    let link = control.querySelector("moz-box-link");
+    ok(link, `${settingId} renders a moz-box-link`);
+
+    synthesizeClick(link);
+
+    is(calls.length, 1, "openTrustedLinkIn called exactly once");
+    is(calls[0].url, expectedUrl, `Opens ${expectedUrl}`);
+    is(calls[0].where, expectedWhere, `Opens in ${expectedWhere}`);
+    is(
+      gBrowser.tabs.length,
+      tabsBefore,
+      "Default new-tab navigation was suppressed (no extra tab opened)"
+    );
+  } finally {
+    win.openTrustedLinkIn = originalOpenTrustedLinkIn;
+    BrowserTestUtils.removeTab(tab);
+  }
+}

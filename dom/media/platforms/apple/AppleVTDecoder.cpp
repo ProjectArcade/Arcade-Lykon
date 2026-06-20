@@ -14,6 +14,7 @@
 #include "CallbackThreadRegistry.h"
 #include "H264.h"
 #include "H265.h"
+#include "HDRUtils.h"
 #include "MP4Decoder.h"
 #include "MacIOSurfaceImage.h"
 #include "MediaData.h"
@@ -52,6 +53,7 @@ AppleVTDecoder::AppleVTDecoder(const VideoInfo& aConfig,
                             : gfx::TransferFunction::BT709),
       mColorRange(aConfig.mColorRange),
       mColorDepth(aConfig.mColorDepth),
+      mHDRMetadata(aConfig.mHDRMetadata),
       mStreamType(AppleVTDecoder::GetStreamType(aConfig.mMimeType)),
       mTaskQueue(TaskQueue::Create(
           GetMediaThreadPool(MediaThreadType::PLATFORM_DECODER),
@@ -199,7 +201,7 @@ void AppleVTDecoder::ProcessDecode(MediaRawData* aSample) {
       kCFAllocatorDefault,  // Struct allocator.
       const_cast<uint8_t*>(aSample->Data()), aSample->Size(),
       kCFAllocatorNull,  // Block allocator.
-      NULL,              // Block source.
+      nullptr,           // Block source.
       0,                 // Data offset.
       aSample->Size(), false, block.Receive());
   if (rv != noErr) {
@@ -213,8 +215,9 @@ void AppleVTDecoder::ProcessDecode(MediaRawData* aSample) {
   }
 
   CMSampleTimingInfo timestamp = TimingInfoFromSample(aSample);
-  rv = CMSampleBufferCreate(kCFAllocatorDefault, block, true, 0, 0, mFormat, 1,
-                            1, &timestamp, 0, NULL, sample.Receive());
+  rv = CMSampleBufferCreate(kCFAllocatorDefault, block, true, nullptr, nullptr,
+                            mFormat, 1, 1, &timestamp, 0, nullptr,
+                            sample.Receive());
   if (rv != noErr) {
     NS_ERROR("Couldn't create CMSampleBuffer");
     MonitorAutoLock mon(mMonitor);
@@ -417,6 +420,8 @@ void AppleVTDecoder::OutputFrame(CVPixelBufferRef aImage,
   // Bounds.
   VideoInfo info;
   info.mDisplay = gfx::IntSize(mDisplayWidth, mDisplayHeight);
+  info.mTransferFunction = Some(mTransferFunction);
+  info.mHDRMetadata = mHDRMetadata;
 
   if (useNullSample) {
     data = new NullData(aFrameRef.byte_offset, aFrameRef.composition_timestamp,
@@ -515,31 +520,39 @@ void AppleVTDecoder::OutputFrame(CVPixelBufferRef aImage,
         gfxMacUtils::CFStringForTransferFunction(mTransferFunction),
         kCVAttachmentMode_ShouldPropagate);
 
+    if (mHDRMetadata && mHDRMetadata->mSmpte2086) {
+      nsTArray<uint8_t> buf;
+      if (EncodeSmpte2086Payload(*mHDRMetadata->mSmpte2086, buf)) {
+        AutoCFTypeRef<CFDataRef> data(
+            CFDataCreate(kCFAllocatorDefault, buf.Elements(), buf.Length()));
+        if (data) {
+          CVBufferSetAttachment(aImage,
+                                kCVImageBufferMasteringDisplayColorVolumeKey,
+                                data, kCVAttachmentMode_ShouldPropagate);
+        }
+      }
+    }
+    if (mHDRMetadata && mHDRMetadata->mContentLightLevel) {
+      nsTArray<uint8_t> buf;
+      if (EncodeContentLightLevelPayload(*mHDRMetadata->mContentLightLevel,
+                                         buf)) {
+        AutoCFTypeRef<CFDataRef> data(
+            CFDataCreate(kCFAllocatorDefault, buf.Elements(), buf.Length()));
+        if (data) {
+          CVBufferSetAttachment(aImage, kCVImageBufferContentLightLevelInfoKey,
+                                data, kCVAttachmentMode_ShouldPropagate);
+        }
+      }
+    }
+
     CFTypeRefPtr<IOSurfaceRef> surface =
         CFTypeRefPtr<IOSurfaceRef>::WrapUnderGetRule(
             CVPixelBufferGetIOSurface(aImage));
     MOZ_ASSERT(surface, "Decoder didn't return an IOSurface backed buffer");
 
-    // Assume the image has alpha, unless we can conclude otherwise.
-    bool hasAlpha = true;
-    CGImageRef cgImage;
-    if (VTCreateCGImageFromCVPixelBuffer(aImage, NULL, &cgImage) == noErr) {
-      // We can get alpha info from this pixel buffer.
-      auto alphaInfo = CGImageGetAlphaInfo(cgImage);
-      switch (alphaInfo) {
-        case kCGImageAlphaNone:
-        case kCGImageAlphaNoneSkipFirst:
-        case kCGImageAlphaNoneSkipLast:
-          hasAlpha = false;
-          break;
-        default:
-          break;
-      }
-    }
-    CGImageRelease(cgImage);
-
-    RefPtr<MacIOSurface> macSurface = new MacIOSurface(
-        std::move(surface), hasAlpha, mColorSpace, mTransferFunction);
+    RefPtr<MacIOSurface> macSurface =
+        new MacIOSurface(std::move(surface), mColorSpace, mTransferFunction,
+                         MacIOSurface::AllowAlpha::Yes);
     macSurface->SetYUVColorSpace(mColorSpace);
     macSurface->mColorPrimaries = mColorPrimaries;
 

@@ -269,11 +269,11 @@ RefPtr<TextureHost> TextureHostWrapperD3D11::CreateFromBufferTexture(
   auto descD3D10 = SurfaceDescriptorD3D10(
       nullptr, Some(id),
       /* arrayIndex */ 0, outputFormat, size, colorSpace, colorRange,
-      transferFunction, /* hasKeyedMutex */ false,
+      transferFunction, /* hdrMetadata */ Nothing(),
+      /* hasKeyedMutex */ false,
       /* fencesHolderId */ Nothing());
 
-  RefPtr<DXGITextureHostD3D11> textureHostD3D11 =
-      new DXGITextureHostD3D11(flags, descD3D10);
+  RefPtr textureHostD3D11 = MakeRefPtr<DXGITextureHostD3D11>(flags, descD3D10);
 
   RefPtr<TextureHostWrapperD3D11> textureHostWrapper =
       new TextureHostWrapperD3D11(flags, aAllocator, id, textureHostD3D11,

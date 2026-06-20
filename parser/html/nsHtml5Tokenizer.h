@@ -34,6 +34,7 @@
 #include "jArray.h"
 #include "nsAHtml5TreeBuilderState.h"
 #include "nsAtom.h"
+#include "nsGkAtoms.h"
 #include "nsHtml5ArrayCopy.h"
 #include "nsHtml5AtomTable.h"
 #include "nsHtml5DocumentMode.h"
@@ -367,19 +368,20 @@ class nsHtml5Tokenizer {
 
  protected:
   inline nsHtml5String strBufToString() {
+    nsHtml5String str = nsHtml5Portability::newStringFromBuffer(
+        strBuf, 0, strBufLen, tokenHandler, nullptr);
+    clearStrBufAfterUse();
+    return str;
+  }
+
+  inline nsHtml5String strBufToAttributeValueString() {
     nsHtml5String digitAtom = TryAtomizeForSingleDigit();
     if (digitAtom) {
       return digitAtom;
     }
-    bool maybeAtomize = false;
-    if (!newAttributesEachTime) {
-      if (attributeName == nsHtml5AttributeName::ATTR_CLASS ||
-          attributeName == nsHtml5AttributeName::ATTR_TYPE) {
-        maybeAtomize = true;
-      }
-    }
     nsHtml5String str = nsHtml5Portability::newStringFromBuffer(
-        strBuf, 0, strBufLen, tokenHandler, maybeAtomize);
+        strBuf, 0, strBufLen, tokenHandler,
+        attributeName->isUseAtom() ? interner : nullptr);
     clearStrBufAfterUse();
     return str;
   }

@@ -17,7 +17,6 @@ import mozilla.components.concept.awesomebar.optimizedsuggestions.SportSuggestio
 import mozilla.components.feature.search.SearchUseCases.SearchUseCase
 import mozilla.components.support.test.mock
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -27,6 +26,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 private const val ARTIFICIAL_DELAY = 350L
 

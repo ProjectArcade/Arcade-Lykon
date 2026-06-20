@@ -6,6 +6,7 @@
 #define mozilla_layout_ScrollSnap_h_
 
 #include "mozilla/Maybe.h"
+#include "mozilla/ScrollSnapInfo.h"
 #include "mozilla/ScrollSnapTargetId.h"
 #include "mozilla/ScrollTypes.h"
 

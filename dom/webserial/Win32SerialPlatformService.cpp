@@ -182,7 +182,7 @@ nsresult EnumeratePortsWin32(SerialPortList& aPorts) {
 }  // namespace
 
 nsresult Win32SerialPlatformService::EnumeratePortsImpl(
-    SerialPortList& aPorts) {
+    SerialPortList& aPorts, bool* aLikelyAccessDenied) {
   return EnumeratePortsWin32(aPorts);
 }
 
@@ -881,6 +881,11 @@ void Win32SerialPlatformService::CheckForDeviceChanges() {
   }
 
   *cachedPortList = std::move(newPortList);
+}
+
+already_AddRefed<SerialPlatformService>
+SerialPlatformService::GetInstanceImpl() {
+  return MakeAndAddRef<Win32SerialPlatformService>();
 }
 
 }  // namespace mozilla::dom

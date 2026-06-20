@@ -171,7 +171,7 @@ nsresult GeckoViewContentChannelChild::OpenContentStream(
 mozilla::ipc::IPCResult GeckoViewContentChannelChild::RecvOnStartRequest(
     const nsresult& aChannelStatus, const nsACString& aContentType,
     const nsACString& aEntityID, mozilla::NotNull<nsIURI*> aURI) {
-  mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
+  mEventQ->RunOrEnqueue(MakeUnique<NeckoTargetChannelFunctionEvent>(
       this, [self = UnsafePtr<GeckoViewContentChannelChild>(this),
              aChannelStatus, aContentType = nsCString(aContentType),
              aEntityID = nsCString(aEntityID), aURI = RefPtr{aURI.get()}]() {
@@ -199,7 +199,8 @@ void GeckoViewContentChannelChild::DoOnStartRequest(
   }
 
   AutoEventEnqueuer ensureSerialDispatch(mEventQ);
-  rv = mListener->OnStartRequest(reinterpret_cast<nsBaseChannel*>(this));
+  nsCOMPtr<nsIStreamListener> listener = mListener;
+  rv = listener->OnStartRequest(reinterpret_cast<nsBaseChannel*>(this));
   if (MOZ_UNLIKELY(NS_FAILED(rv))) {
     Cancel(rv);
   }
@@ -208,7 +209,7 @@ void GeckoViewContentChannelChild::DoOnStartRequest(
 mozilla::ipc::IPCResult GeckoViewContentChannelChild::RecvOnDataAvailable(
     const nsresult& aChannelStatus, const nsACString& aData,
     const uint64_t& aOffset) {
-  mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
+  mEventQ->RunOrEnqueue(MakeUnique<NeckoTargetChannelFunctionEvent>(
       this, [self = UnsafePtr<GeckoViewContentChannelChild>(this),
              aChannelStatus, aData = nsCString(aData), aOffset]() {
         self->DoOnDataAvailable(aChannelStatus, aData, aOffset);
@@ -228,8 +229,9 @@ void GeckoViewContentChannelChild::DoOnDataAvailable(
   }
 
   AutoEventEnqueuer ensureSerialDispatch(mEventQ);
-  rv = mListener->OnDataAvailable(reinterpret_cast<nsBaseChannel*>(this),
-                                  stringStream, aOffset, aData.Length());
+  nsCOMPtr<nsIStreamListener> listener = mListener;
+  rv = listener->OnDataAvailable(reinterpret_cast<nsBaseChannel*>(this),
+                                 stringStream, aOffset, aData.Length());
   stringStream->Close();
   if (MOZ_UNLIKELY(NS_FAILED(rv))) {
     Cancel(rv);
@@ -238,7 +240,7 @@ void GeckoViewContentChannelChild::DoOnDataAvailable(
 
 mozilla::ipc::IPCResult GeckoViewContentChannelChild::RecvOnStopRequest(
     const nsresult& aChannelStatus) {
-  mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
+  mEventQ->RunOrEnqueue(MakeUnique<NeckoTargetChannelFunctionEvent>(
       this, [self = UnsafePtr<GeckoViewContentChannelChild>(this),
              aChannelStatus]() { self->DoOnStopRequest(aChannelStatus); }));
   return IPC_OK();
@@ -252,8 +254,9 @@ void GeckoViewContentChannelChild::DoOnStopRequest(
 
   {
     AutoEventEnqueuer ensureSerialDispatch(mEventQ);
-    mListener->OnStopRequest(reinterpret_cast<nsBaseChannel*>(this),
-                             aChannelStatus);
+    nsCOMPtr<nsIStreamListener> listener = mListener;
+    listener->OnStopRequest(reinterpret_cast<nsBaseChannel*>(this),
+                            aChannelStatus);
     mListener = nullptr;
 
     if (mLoadGroup) {
@@ -266,7 +269,7 @@ void GeckoViewContentChannelChild::DoOnStopRequest(
 
 mozilla::ipc::IPCResult GeckoViewContentChannelChild::RecvOnAsyncOpenFailed(
     const nsresult& aChannelStatus) {
-  mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
+  mEventQ->RunOrEnqueue(MakeUnique<NeckoTargetChannelFunctionEvent>(
       this, [self = UnsafePtr<GeckoViewContentChannelChild>(this),
              aChannelStatus]() { self->DoOnAsyncOpenFailed(aChannelStatus); }));
   return IPC_OK();
@@ -280,10 +283,10 @@ void GeckoViewContentChannelChild::DoOnAsyncOpenFailed(
     mLoadGroup->RemoveRequest(this, nullptr, aChannelStatus);
   }
 
-  if (mListener) {
-    mListener->OnStartRequest(reinterpret_cast<nsBaseChannel*>(this));
-    mListener->OnStopRequest(reinterpret_cast<nsBaseChannel*>(this),
-                             aChannelStatus);
+  if (nsCOMPtr<nsIStreamListener> listener = mListener) {
+    listener->OnStartRequest(reinterpret_cast<nsBaseChannel*>(this));
+    listener->OnStopRequest(reinterpret_cast<nsBaseChannel*>(this),
+                            aChannelStatus);
   }
 
   mListener = nullptr;
@@ -294,7 +297,7 @@ void GeckoViewContentChannelChild::DoOnAsyncOpenFailed(
 }
 
 mozilla::ipc::IPCResult GeckoViewContentChannelChild::RecvDeleteSelf() {
-  mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
+  mEventQ->RunOrEnqueue(MakeUnique<NeckoTargetChannelFunctionEvent>(
       this, [self = UnsafePtr<GeckoViewContentChannelChild>(this)]() {
         self->DoDeleteSelf();
       }));

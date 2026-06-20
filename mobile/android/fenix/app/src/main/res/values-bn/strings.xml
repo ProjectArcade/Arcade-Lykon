@@ -6,7 +6,7 @@
   file, You can obtain one at http://mozilla.org/MPL/2.0/.
 -->
 
-<resources xmlns:tools="http://schemas.android.com/tools" xmlns:moz="http://mozac.org/tools">
+<resources xmlns:tools="http://schemas.android.com/tools">
   <!-- App name for private browsing mode. %s is the name of the app (for example "Firefox"). -->
   <string name="app_name_private_5">ব্যক্তিগত %s</string>
   <!-- App name for private browsing mode. %s is the name of the app (for example "Firefox"). -->
@@ -96,12 +96,6 @@
   <!-- Browser menu button to open the current page in an external app -->
   <string name="browser_menu_open_app_link">অ্যাপে খুলুন</string>
   <!--
-    Browser Toolbar
-
-    Content description for the Home screen button on the browser toolbar
-  -->
-  <string name="browser_toolbar_home">হোম স্ক্রিন</string>
-  <!--
     Locale Settings Fragment
 
     Content description for tick mark on selected language
@@ -111,8 +105,6 @@
   <string name="default_locale_text">ডিভাইসের ভাষা অনুসরণ করুন</string>
   <!-- Placeholder text shown in the search bar before a user enters text -->
   <string name="locale_search_hint">ভাষা অনুসন্ধান করুন</string>
-  <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
-  <string name="search_shortcuts_engine_settings">সার্চ ইঞ্জিন সেটিংস</string>
   <!--
     Search Fragment
 
@@ -421,8 +413,6 @@
   <string name="edit_bookmark_snackbar_action">EDIT</string>
   <!-- Bookmark overflow menu edit button -->
   <string name="bookmark_menu_edit_button">সম্পাদনা</string>
-  <!-- Bookmark overflow menu copy button -->
-  <string name="bookmark_menu_copy_button" tools:ignore="UnusedResources" moz:removedIn="150">অনুলিপি</string>
   <!-- Bookmark overflow menu share button -->
   <string name="bookmark_menu_share_button">শেয়ার</string>
   <!-- Bookmark overflow menu open in new tab button -->
@@ -442,10 +432,6 @@
   <string name="edit_bookmark_folder_fragment_title">ফোল্ডার সম্পাদনা করুন</string>
   <!-- Bookmark URL editing field label -->
   <string name="bookmark_url_label">URL</string>
-  <!-- Bookmark FOLDER editing field label -->
-  <string name="bookmark_folder_label">FOLDER</string>
-  <!-- Bookmark NAME editing field label -->
-  <string name="bookmark_name_label">NAME</string>
   <!-- Bookmark select folder screen title -->
   <string name="bookmark_select_folder_fragment_label">ফোল্ডার নির্বাচন করুন</string>
   <!-- Bookmark editing error missing or improper URL -->
@@ -455,8 +441,6 @@
     %1$s is the host part of the URL of the bookmark deleted, if any
   -->
   <string name="bookmark_deletion_snackbar_message">%1$s মুছে ফেলা হয়েছে</string>
-  <!-- Bookmark undo button for deletion snackbar action -->
-  <string name="bookmark_undo_deletion" tools:ignore="UnusedResources" moz:removedIn="150">UNDO</string>
   <!--
     Site Permissions
 
@@ -604,8 +588,6 @@
     Text shown in snackbar when user closes a tab
   -->
   <string name="snackbar_tab_closed">ট্যাব বন্ধ করা হয়েছে</string>
-  <!-- Text shown in snackbar when user closes all tabs -->
-  <string name="snackbar_tabs_closed">ট্যাব বন্ধ করা হয়েছে</string>
   <!-- Text shown in snackbar when user closes a private tab -->
   <string name="snackbar_private_tab_closed">ব্যক্তিগত ট্যাব বন্ধ হয়েছে</string>
   <!-- Text shown in snackbar to undo deleting a tab, top site or collection -->

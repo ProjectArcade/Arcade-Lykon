@@ -8,7 +8,7 @@ use base64::prelude::*;
 use neqo_bin::server::{HttpServer, Runner};
 use neqo_common::Bytes;
 use neqo_common::{event::Provider, qdebug, qerror, qinfo, qtrace, Datagram, Header};
-use neqo_crypto::{generate_ech_keys, init_db, AllowZeroRtt, AntiReplay};
+use nss_rs::{generate_ech_keys, init_db, AllowZeroRtt, AntiReplay};
 use neqo_http3::{
     ConnectUdpRequest, ConnectUdpServerEvent, Error, Http3OrWebTransportStream, Http3Parameters,
     Http3Server, Http3ServerEvent, SessionAcceptAction, StreamId, WebTransportRequest,
@@ -39,9 +39,10 @@ use cfg_if::cfg_if;
 cfg_if! {
     if #[cfg(not(target_os = "android"))] {
         use std::sync::mpsc::{channel, Receiver, TryRecvError};
-        use hyper::body::HttpBody;
+        use http_body_util::{BodyExt, Full};
         use hyper::header::{HeaderName, HeaderValue};
-        use hyper::{Body, Client, Method, Request};
+        use hyper::Method;
+        use hyper_util::client::legacy::Client;
     }
 }
 
@@ -72,6 +73,11 @@ struct Http3TestServer {
     connections_to_close: HashMap<Instant, Vec<ConnectionRef>>,
     sessions_to_close: HashMap<Instant, Vec<WebTransportRequest>>,
     sessions_to_create_stream: Vec<(WebTransportRequest, StreamType, Option<Vec<u8>>)>,
+    // Server-initiated bidi WebTransport sessions for which we create a stream
+    // and then, in a later flight, send STOP_SENDING(0x100). Regression test for
+    // bug 2043946.
+    sessions_to_create_bidi_and_stop_sending: Vec<WebTransportRequest>,
+    streams_to_stop_sending: HashMap<Instant, Vec<Http3OrWebTransportStream>>,
     webtransport_bidi_stream: HashSet<Http3OrWebTransportStream>,
     wt_unidi_conn_to_stream: HashMap<ConnectionRef, Http3OrWebTransportStream>,
     wt_unidi_echo_back: HashMap<Http3OrWebTransportStream, Http3OrWebTransportStream>,
@@ -96,6 +102,8 @@ impl Http3TestServer {
             connections_to_close: HashMap::new(),
             sessions_to_close: HashMap::new(),
             sessions_to_create_stream: Vec::new(),
+            sessions_to_create_bidi_and_stop_sending: Vec::new(),
+            streams_to_stop_sending: HashMap::new(),
             webtransport_bidi_stream: HashSet::new(),
             wt_unidi_conn_to_stream: HashMap::new(),
             wt_unidi_echo_back: HashMap::new(),
@@ -168,29 +176,58 @@ impl Http3TestServer {
     }
 
     fn maybe_create_wt_stream(&mut self, now: Instant) {
-        if self.sessions_to_create_stream.is_empty() {
+        while let Some(tuple) = self.sessions_to_create_stream.pop() {
+            let session = tuple.0;
+            let wt_server_stream = session.create_stream(tuple.1).unwrap();
+            if tuple.1 == StreamType::UniDi {
+                if let Some(data) = tuple.2 {
+                    self.new_response(wt_server_stream, data, now);
+                } else {
+                    self.wt_unidi_conn_to_stream
+                        .insert(wt_server_stream.conn.clone(), wt_server_stream);
+                }
+            } else {
+                if let Some(data) = tuple.2 {
+                    self.new_response(wt_server_stream, data, now);
+                } else {
+                    self.webtransport_bidi_stream.insert(wt_server_stream);
+                }
+            }
+        }
+    }
+
+    // Regression test for bug 2043946: open a server-initiated bidi WebTransport
+    // stream, send a byte so the client registers it in mStreamIdHash, then
+    // schedule a STOP_SENDING(0x100) for a later flight.
+    fn maybe_create_wt_stream_and_stop_sending(&mut self, now: Instant) {
+        if self.sessions_to_create_bidi_and_stop_sending.is_empty() {
             return;
         }
-        let tuple = self.sessions_to_create_stream.pop().unwrap();
-        let session = tuple.0;
-        let wt_server_stream = session.create_stream(tuple.1).unwrap();
-        if tuple.1 == StreamType::UniDi {
-            if let Some(data) = tuple.2 {
-                self.new_response(wt_server_stream, data, now);
-            } else {
-                // relaying Http3ServerEvent::Data to uni streams
-                // slows down netwerk/test/unit/test_webtransport_simple.js
-                // to the point of failure. Only do so when necessary.
-                self.wt_unidi_conn_to_stream
-                    .insert(wt_server_stream.conn.clone(), wt_server_stream);
-            }
-        } else {
-            if let Some(data) = tuple.2 {
-                self.new_response(wt_server_stream, data, now);
-            } else {
-                self.webtransport_bidi_stream.insert(wt_server_stream);
+        let session = self
+            .sessions_to_create_bidi_and_stop_sending
+            .pop()
+            .unwrap();
+        let wt_server_stream = session.create_stream(StreamType::BiDi).unwrap();
+        let _ = wt_server_stream.send_data(b"h", now);
+        // The STOP_SENDING must arrive after the client has processed the
+        // NewStream event, so defer it to a separate flight.
+        let expires = now + Duration::from_millis(200);
+        self.streams_to_stop_sending
+            .entry(expires)
+            .or_insert_with(Vec::new)
+            .push(wt_server_stream);
+    }
+
+    fn maybe_stop_sending(&mut self, now: Instant) {
+        for (expires, streams) in self.streams_to_stop_sending.iter_mut() {
+            if *expires <= now {
+                for s in streams.iter_mut() {
+                    let _ = s.stream_stop_sending(Error::HttpNone.code());
+                }
             }
         }
+        self.streams_to_stop_sending
+            .retain(|expires, _| *expires > now);
     }
 }
 
@@ -217,7 +254,10 @@ impl HttpServer for Http3TestServer {
             self.stuck_0rtt_activated = true;
         }
 
-        let output = if self.sessions_to_close.is_empty() && self.connections_to_close.is_empty() {
+        let output = if self.sessions_to_close.is_empty()
+            && self.connections_to_close.is_empty()
+            && self.streams_to_stop_sending.is_empty()
+        {
             output
         } else {
             // In case there are pending sessions to close, use a shorter
@@ -238,6 +278,8 @@ impl HttpServer for Http3TestServer {
         self.maybe_close_connection();
         self.maybe_close_session(now);
         self.maybe_create_wt_stream(now);
+        self.maybe_create_wt_stream_and_stop_sending(now);
+        self.maybe_stop_sending(now);
 
         while let Some(event) = self.server.next_event() {
             qtrace!("Event: {:?}", event);
@@ -652,6 +694,33 @@ impl HttpServer for Http3TestServer {
                                     StreamType::UniDi,
                                     Some(Vec::from("qwerty")),
                                 ));
+                            } else if path.starts_with(b"/create_unidi_streams/") {
+                                let count: usize = std::str::from_utf8(&path[22..])
+                                    .unwrap()
+                                    .parse()
+                                    .unwrap();
+                                session.response(&SessionAcceptAction::Accept, now).unwrap();
+                                for i in 0..count {
+                                    self.sessions_to_create_stream.push((
+                                        session.clone(),
+                                        StreamType::UniDi,
+                                        Some(format!("stream{i}").into_bytes()),
+                                    ));
+                                }
+                            } else if path.starts_with(b"/create_bidi_streams/") {
+                                let count: usize = std::str::from_utf8(&path[21..])
+                                    .unwrap()
+                                    .parse()
+                                    .unwrap();
+                                self.webtransport_bidi_stream.clear();
+                                session.response(&SessionAcceptAction::Accept, now).unwrap();
+                                for i in 0..count {
+                                    self.sessions_to_create_stream.push((
+                                        session.clone(),
+                                        StreamType::BiDi,
+                                        Some(format!("stream{i}").into_bytes()),
+                                    ));
+                                }
                             } else if path == b"/create_bidi_stream" {
                                 session.response(&SessionAcceptAction::Accept, now).unwrap();
                                 self.sessions_to_create_stream.push((
@@ -676,6 +745,10 @@ impl HttpServer for Http3TestServer {
                                     StreamType::BiDi,
                                     Some(data),
                                 ));
+                            } else if path == b"/create_bidi_stream_and_stop_sending" {
+                                session.response(&SessionAcceptAction::Accept, now).unwrap();
+                                self.sessions_to_create_bidi_and_stop_sending
+                                    .push(session);
                             } else {
                                 session.response(&SessionAcceptAction::Accept, now).unwrap();
                             }
@@ -858,12 +931,12 @@ impl Http3ReverseProxyServer {
 
     #[cfg(not(target_os = "android"))]
     async fn fetch_url(
-        request: Request<Body>,
+        request: http::Request<Full<hyper::body::Bytes>>,
         out_header: &mut Vec<Header>,
         out_body: &mut Vec<u8>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = Client::new();
-        let mut resp = client.request(request).await?;
+        let client = Client::builder(hyper_util::rt::TokioExecutor::new()).build_http();
+        let resp = client.request(request).await?;
         out_header.push(Header::new(":status", resp.status().as_str()));
         for (key, value) in resp.headers() {
             out_header.push(Header::new(
@@ -875,12 +948,15 @@ impl Http3ReverseProxyServer {
             ));
         }
 
-        while let Some(chunk) = resp.body_mut().data().await {
-            match chunk {
-                Ok(data) => {
-                    out_body.append(&mut data.to_vec());
+        let mut body = resp.into_body();
+        while let Some(frame) = body.frame().await {
+            match frame {
+                Ok(frame) => {
+                    if let Ok(data) = frame.into_data() {
+                        out_body.extend_from_slice(&data);
+                    }
                 }
-                _ => {}
+                Err(_) => break,
             }
         }
 
@@ -894,7 +970,7 @@ impl Http3ReverseProxyServer {
         request_headers: &Vec<Header>,
         request_body: Vec<u8>,
     ) {
-        let mut request: Request<Body> = Request::default();
+        let mut request: http::Request<Full<hyper::body::Bytes>> = http::Request::new(Full::new(hyper::body::Bytes::new()));
         let mut path = String::new();
         for hdr in request_headers.iter() {
             match hdr.name() {
@@ -920,7 +996,7 @@ impl Http3ReverseProxyServer {
                 }
             }
         }
-        *request.body_mut() = Body::from(request_body);
+        *request.body_mut() = Full::new(hyper::body::Bytes::from(request_body));
         *request.uri_mut() =
             match format!("http://127.0.0.1:{}{}", self.server_port.to_string(), path).parse() {
                 Ok(uri) => uri,
@@ -1765,7 +1841,11 @@ async fn main() -> Result<(), io::Error> {
 #[no_mangle]
 extern "C" fn __tsan_default_suppressions() -> *const std::os::raw::c_char {
     // https://github.com/rust-lang/rust/issues/128769
-    "race:tokio::runtime::io::registration_set::RegistrationSet::allocate\0".as_ptr() as *const _
+    concat!(
+        "race:<tokio::runtime::io::registration_set::RegistrationSet>::allocate\n",
+        "race:tokio::runtime::io::registration_set::RegistrationSet::allocate\0",
+    )
+    .as_ptr() as *const _
 }
 
 // Work around until we can use raw-dylibs.

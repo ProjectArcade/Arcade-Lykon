@@ -4,7 +4,10 @@ add_setup(async () => {
   await SpecialPowers.pushPrefEnv({
     set: [
       ["dom.fullscreen.keyboard_lock.enabled", true],
-      ["dom.fullscreen.keyboard_lock.long_press_interval", 0],
+      [
+        "dom.fullscreen.keyboard_lock.long_press_interval",
+        KEYBOARD_LOCK_LONGPRESS_TIME,
+      ],
     ],
   });
 });
@@ -40,13 +43,8 @@ add_task(async function test_escape_doesnt_exit_keyboardlock() {
       false,
       () => !document.fullscreenElement
     );
-    // Synthesize a long-press of the Escape key by repeating 2 keydown events.
-    // This works as the long_press_interval is set to 0 on setup.
-    EventUtils.synthesizeKey(
-      "KEY_Escape",
-      { repeat: 2 },
-      browser.documentGlobal
-    );
+    await synthesizeLongPressEsc(browser);
+
     await fullScreenExited;
     isStillFullscreen = await SpecialPowers.spawn(browser, [], async () => {
       return content.document.fullscreenElement != null;

@@ -501,6 +501,11 @@ class Accessible {
    */
   virtual void DOMNodeClass(nsString& aClass) const = 0;
 
+  /**
+   * Return the Heading Level this accessible represents.
+   */
+  virtual int32_t HeadingLevel() const = 0;
+
   //////////////////////////////////////////////////////////////////////////////
   // ActionAccessible
 
@@ -882,6 +887,10 @@ class Accessible {
    */
   mozilla::a11y::role ARIATransformRole(mozilla::a11y::role aRole) const;
 
+  AccGenericType GenericTypes() const {
+    return static_cast<AccGenericType>(mGenericTypes);
+  }
+
  private:
   static const uint8_t kTypeBits = 6;
   static const uint8_t kGenericTypesBits = 18;
@@ -900,7 +909,7 @@ class Accessible {
       std::initializer_list<nsStaticAtom*> aRolesToSkip) const;
 
  protected:
-  uint32_t mType : kTypeBits;
+  AccType mType : kTypeBits;
   uint32_t mGenericTypes : kGenericTypesBits;
   uint8_t mRoleMapEntryIndex;
 

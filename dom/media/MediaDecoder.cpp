@@ -25,6 +25,7 @@
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/dom/DOMTypes.h"
+#include "mozilla/gfx/gfxVars.h"
 #include "mozilla/glean/DomMediaMetrics.h"
 #include "mozilla/glean/DomMediaPlatformsWmfMetrics.h"
 #include "nsComponentManagerUtils.h"
@@ -103,7 +104,7 @@ constexpr TimeUnit MediaDecoder::DEFAULT_NEXT_FRAME_AVAILABLE_BUFFERED;
 void MediaDecoder::InitStatics() {
   MOZ_ASSERT(NS_IsMainThread());
   // Eagerly init gMediaDecoderLog to work around bug 1415441.
-  MOZ_LOG(gMediaDecoderLog, LogLevel::Info, ("MediaDecoder::InitStatics"));
+  MOZ_LOG_FMT(gMediaDecoderLog, LogLevel::Info, "MediaDecoder::InitStatics");
 
   if (XRE_IsParentProcess()) {
     // Lock Utility process preferences so that people cannot opt-out of
@@ -358,16 +359,22 @@ void MediaDecoder::OnPlaybackEvent(const MediaPlaybackEvent& aEvent) {
     case MediaPlaybackEvent::VideoOnlySeekCompleted:
       GetOwner()->QueueEvent(u"mozvideoonlyseekcompleted"_ns);
       break;
-    case MediaPlaybackEvent::PlaybackRateFallback:
-      nsContentUtils::ReportToConsoleNonLocalized(
-          u"Failed to initialize the audio time stretcher. Audio will play at "
-          u"normal speed."_ns,
-          nsIScriptError::warningFlag, "Media"_ns, GetOwner()->GetDocument());
+#ifdef MOZ_WMF_CDM
+    case MediaPlaybackEvent::FrameServerMode:
+      mIsFrameServerMode = true;
+      UpdateReadyState();
       break;
+#endif
     default:
       break;
   }
 }
+
+#ifdef MOZ_WMF_CDM
+bool MediaDecoder::IsUsingWMFClearKey() const {
+  return mIsFrameServerMode && StaticPrefs::media_eme_wmf_clearkey_enabled();
+}
+#endif
 
 bool MediaDecoder::IsVideoDecodingSuspended() const {
   return mIsVideoDecodingSuspended;
@@ -437,6 +444,16 @@ bool MediaDecoder::SwitchStateMachine(const MediaResult& aError) {
         DetermineResolutionForTelemetry(*mInfo, resolution);
         extraData.resolution = Some(resolution);
       }
+    }
+    // These gfxVars are populated once in the parent process before any content
+    // process starts and are not modified afterwards; copy the values out
+    // rather than holding a reference into the gfxVars singleton.
+    const nsCString adapterVendorID = gfx::gfxVars::AdapterVendorID();
+    if (!adapterVendorID.IsEmpty()) {
+      extraData.adapterVendorId = Some(adapterVendorID);
+      extraData.adapterDeviceId = Some(gfx::gfxVars::AdapterDeviceID());
+      extraData.adapterDriverVersion =
+          Some(gfx::gfxVars::AdapterDriverVersion());
     }
     glean::mfcdm::error.Record(Some(extraData));
     if (MOZ_LOG_TEST(gMediaDecoderLog, LogLevel::Debug)) {
@@ -878,6 +895,7 @@ void MediaDecoder::DecodeError(const MediaResult& aError) {
   MOZ_DIAGNOSTIC_ASSERT(!IsShutdown());
   LOG("DecodeError, type=%s, error=%s", ContainerType().OriginalString().get(),
       aError.ErrorName().get());
+  mTelemetryProbesReporter->OnDecodeError(aError);
   GetOwner()->DecodeError(aError);
 }
 
@@ -1263,9 +1281,9 @@ namespace {
 // Returns zero, either as a TimeUnit or as a double.
 template <typename T>
 constexpr T Zero() {
-  if constexpr (std::is_same<T, double>::value) {
+  if constexpr (std::is_same_v<T, double>) {
     return 0.0;
-  } else if constexpr (std::is_same<T, TimeUnit>::value) {
+  } else if constexpr (std::is_same_v<T, TimeUnit>) {
     return TimeUnit::Zero();
   }
   MOZ_RELEASE_ASSERT(false);
@@ -1274,9 +1292,9 @@ constexpr T Zero() {
 // Returns Infinity either as a TimeUnit or as a double.
 template <typename T>
 constexpr T Infinity() {
-  if constexpr (std::is_same<T, double>::value) {
+  if constexpr (std::is_same_v<T, double>) {
     return std::numeric_limits<double>::infinity();
-  } else if constexpr (std::is_same<T, TimeUnit>::value) {
+  } else if constexpr (std::is_same_v<T, TimeUnit>) {
     return TimeUnit::FromInfinity();
   }
   MOZ_RELEASE_ASSERT(false);
@@ -1307,7 +1325,7 @@ IntervalType MediaDecoder::GetSeekableImpl() {
   // avoid rounding the value differently. When dealing with TimeUnit, it's
   // returned directly.
   typename IntervalType::InnerType duration;
-  if constexpr (std::is_same<typename IntervalType::InnerType, double>::value) {
+  if constexpr (std::is_same_v<typename IntervalType::InnerType, double>) {
     duration = GetDuration();
   } else {
     duration = mDuration.as<TimeUnit>();
@@ -1391,13 +1409,14 @@ void MediaDecoder::SetStreamName(const nsAutoString& aStreamName) {
   mStreamName = aStreamName;
 }
 
-void MediaDecoder::ConnectMirrors(MediaDecoderStateMachineBase* aObject) {
+void MediaDecoder::ConnectMirrors() {
   MOZ_ASSERT(NS_IsMainThread());
-  MOZ_ASSERT(aObject);
-  mStateMachineDuration.Connect(aObject->CanonicalDuration());
-  mBuffered.Connect(aObject->CanonicalBuffered());
-  mCurrentPosition.Connect(aObject->CanonicalCurrentPosition());
-  mIsAudioDataAudible.Connect(aObject->CanonicalIsAudioDataAudible());
+  MOZ_ASSERT(mDecoderStateMachine);
+  mStateMachineDuration.Connect(mDecoderStateMachine->CanonicalDuration());
+  mBuffered.Connect(mDecoderStateMachine->CanonicalBuffered());
+  mCurrentPosition.Connect(mDecoderStateMachine->CanonicalCurrentPosition());
+  mIsAudioDataAudible.Connect(
+      mDecoderStateMachine->CanonicalIsAudioDataAudible());
 }
 
 void MediaDecoder::DisconnectMirrors() {
@@ -1409,13 +1428,14 @@ void MediaDecoder::DisconnectMirrors() {
 }
 
 void MediaDecoder::SetStateMachine(
-    MediaDecoderStateMachineBase* aStateMachine) {
+    already_AddRefed<MediaDecoderStateMachineBase> aStateMachine) {
   MOZ_ASSERT(NS_IsMainThread());
-  MOZ_ASSERT_IF(aStateMachine, !mDecoderStateMachine);
-  if (aStateMachine) {
-    mDecoderStateMachine = aStateMachine;
+  RefPtr<MediaDecoderStateMachineBase> stateMachine = aStateMachine;
+  MOZ_ASSERT_IF(stateMachine, !mDecoderStateMachine);
+  if (stateMachine) {
+    mDecoderStateMachine = std::move(stateMachine);
     LOG("set state machine %p", mDecoderStateMachine.get());
-    ConnectMirrors(aStateMachine);
+    ConnectMirrors();
     UpdateVideoDecodeMode();
   } else if (mDecoderStateMachine) {
     LOG("null out state machine %p", mDecoderStateMachine.get());

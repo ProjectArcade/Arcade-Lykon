@@ -75,9 +75,7 @@ export const MultiStageAboutWelcome = props => {
         .AWGetUnhandledCampaignAction?.()
         .then(action => {
           if (typeof action === "string") {
-            MultiStageUtils.handleCampaignAction(action, props.message_id, {
-              writeInMicrosurvey: props.writeInMicrosurvey,
-            });
+            MultiStageUtils.handleCampaignAction(action, props.message_id);
           }
         })
         .catch(error => {
@@ -98,8 +96,18 @@ export const MultiStageAboutWelcome = props => {
             screen_index: order,
             screen_id: screen.id,
             screen_initials: screenInitials,
-            writeInMicrosurvey: props.writeInMicrosurvey,
           });
+
+          // Impression actions should be fired before recording the
+          // impression, so the check that ensures that actions run only once
+          // has an accurate count of how many impressions have actually occured
+          if (screen.content?.impression_action) {
+            MultiStageUtils.handleImpressionAction(
+              screen.content.impression_action,
+              messageId,
+              screen.id
+            );
+          }
 
           window.AWAddScreenImpression?.(screen);
         }
@@ -221,6 +229,17 @@ export const MultiStageAboutWelcome = props => {
   // Save textarea inputs for each screen as an object keyed by screen id. It's
   // structured like this: { screenId: { textareaId: { value, isValid } } }
   const [textInputs, setTextInputs] = useState({});
+
+  // Whether animated backgrounds/illustrations are paused for this session.
+  // Defaults to paused when the user has prefers-reduced-motion: reduce set,
+  // so we never autoplay motion for those users. The toggle stays consistent
+  // among screens once the user interacts with it.
+  const [animationsPaused, setAnimationsPaused] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false
+  );
+  const toggleAnimationsPaused = () => setAnimationsPaused(prev => !prev);
 
   // Get the active theme so the rendering code can make it selected
   // by default.
@@ -355,7 +374,6 @@ export const MultiStageAboutWelcome = props => {
               autoAdvance={currentScreen.auto_advance}
               advanceOnExperimentLoad={currentScreen.advance_on_experiment_load}
               messageId={`${props.message_id}_${order}_${currentScreen.id}`}
-              writeInMicrosurvey={props.writeInMicrosurvey}
               UTMTerm={props.utm_term}
               flowParams={flowParams}
               activeTheme={activeTheme}
@@ -389,6 +407,8 @@ export const MultiStageAboutWelcome = props => {
               addonIconURL={props.addonIconURL}
               themeScreenshots={props.themeScreenshots}
               isRtamo={currentScreen.content.isRtamo}
+              animationsPaused={animationsPaused}
+              toggleAnimationsPaused={toggleAnimationsPaused}
             />
           ) : null;
         })}
@@ -642,17 +662,13 @@ export class WelcomeScreen extends React.PureComponent {
   }
 
   logTelemetry({ value, event, source, props }) {
-    MultiStageUtils.sendActionTelemetry(props.messageId, source, event.name, {
-      writeInMicrosurvey: props.writeInMicrosurvey,
-    });
+    MultiStageUtils.sendActionTelemetry(props.messageId, source, event.name);
 
     // Send additional telemetry if a messaging surface like feature callout is
     // dismissed via the dismiss button. Other causes of dismissal will be
     // handled separately by the messaging surface's own code.
     if (value === "dismiss_button" && !event.name) {
-      MultiStageUtils.sendDismissTelemetry(props.messageId, source, {
-        writeInMicrosurvey: props.writeInMicrosurvey,
-      });
+      MultiStageUtils.sendDismissTelemetry(props.messageId, source);
     }
   }
 
@@ -666,8 +682,7 @@ export class WelcomeScreen extends React.PureComponent {
       MultiStageUtils.sendActionTelemetry(
         props.messageId,
         "migrate_close",
-        "CLICK_BUTTON",
-        { writeInMicrosurvey: props.writeInMicrosurvey }
+        "CLICK_BUTTON"
       );
     }
   }
@@ -743,9 +758,11 @@ export class WelcomeScreen extends React.PureComponent {
     let action =
       providedAction || this.resolveActionFromContent(value, event, props);
 
+    let actionResult;
+
     if (!action) {
       console.error("Failed to resolve action");
-      return;
+      return actionResult;
     }
 
     // Send telemetry before waiting on actions
@@ -760,8 +777,6 @@ export class WelcomeScreen extends React.PureComponent {
     if (action.collectTextInput && Object.values(props.textInputs).length) {
       this.setTextInputActions(action);
     }
-
-    let actionResult;
     if (["OPEN_URL", "SHOW_FIREFOX_ACCOUNTS"].includes(action.type)) {
       this.handleOpenURL(action, props.flowParams, props.UTMTerm);
     } else if (action.type === "INSTALL_ADDON_FROM_URL") {
@@ -779,8 +794,7 @@ export class WelcomeScreen extends React.PureComponent {
         MultiStageUtils.sendActionTelemetry(
           props.messageId,
           actionResult ? "sign_in" : "sign_in_cancel",
-          "FXA_SIGNIN_FLOW",
-          { writeInMicrosurvey: props.writeInMicrosurvey }
+          "FXA_SIGNIN_FLOW"
         );
       }
       // Wait until migration closes to complete the action
@@ -834,6 +848,8 @@ export class WelcomeScreen extends React.PureComponent {
     if (shouldDoBehavior(action.dismiss)) {
       window.AWFinish();
     }
+
+    return actionResult;
   }
 
   setMultiSelectActions(action) {
@@ -906,8 +922,7 @@ export class WelcomeScreen extends React.PureComponent {
       MultiStageUtils.sendActionTelemetry(
         props.messageId,
         value.flat(),
-        "SELECT_CHECKBOX",
-        { writeInMicrosurvey: props.writeInMicrosurvey }
+        "SELECT_CHECKBOX"
       );
     }
   }
@@ -961,10 +976,7 @@ export class WelcomeScreen extends React.PureComponent {
           props.messageId,
           inputId,
           "TEXT_INPUT",
-          {
-            value: truncateToByteSize(inputData.value, 8192),
-            writeInMicrosurvey: props.writeInMicrosurvey,
-          }
+          { value: truncateToByteSize(inputData.value, 8192) }
         );
       }
     };
@@ -1007,7 +1019,6 @@ export class WelcomeScreen extends React.PureComponent {
         langPackInstallPhase={this.props.langPackInstallPhase}
         handleAction={this.handleAction}
         messageId={this.props.messageId}
-        writeInMicrosurvey={this.props.writeInMicrosurvey}
         isFirstScreen={this.props.isFirstScreen}
         isLastScreen={this.props.isLastScreen}
         isSingleScreen={this.props.isSingleScreen}
@@ -1026,6 +1037,8 @@ export class WelcomeScreen extends React.PureComponent {
         addonIconURL={this.props.addonIconURL}
         themeScreenshots={this.props.themeScreenshots}
         isRtamo={this.props.content.isRtamo}
+        animationsPaused={this.props.animationsPaused}
+        toggleAnimationsPaused={this.props.toggleAnimationsPaused}
       />
     );
   }

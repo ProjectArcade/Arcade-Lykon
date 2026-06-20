@@ -226,6 +226,10 @@ class AudioContext final : public DOMEventTargetHelper,
   // calling from inner window, so we won't need to return promise for caller.
   void SuspendFromChrome();
   void ResumeFromChrome();
+
+  // Suspend from media-control infrastructure (e.g. audio focus loss). Fires
+  // a statechange event so the page can observe and call resume().
+  void SuspendByMediaControl();
   // Called on completion of offline rendering:
   void OfflineClose();
 
@@ -345,7 +349,7 @@ class AudioContext final : public DOMEventTargetHelper,
     return mWorkletParamDescriptors.Lookup(aName).DataPtrOrNull();
   }
 
-  void Dispatch(already_AddRefed<nsIRunnable>&& aRunnable);
+  void Dispatch(already_AddRefed<nsIRunnable> aRunnable);
 
  private:
   void DisconnectFromWindow();

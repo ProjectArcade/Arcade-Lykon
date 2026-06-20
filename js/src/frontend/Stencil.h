@@ -554,9 +554,7 @@ class StencilModuleRequest {
       Vector<StencilModuleImportAttribute, 0, js::SystemAllocPolicy>;
   ImportAttributeVector attributes;
 
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
   js::ImportPhase phase = ImportPhase::Evaluation;
-#endif
 
   // For XDR only.
   StencilModuleRequest() = default;
@@ -568,12 +566,8 @@ class StencilModuleRequest {
 
   StencilModuleRequest(const StencilModuleRequest& other)
       : specifier(other.specifier),
-        firstUnsupportedAttributeKey(other.firstUnsupportedAttributeKey)
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
-        ,
-        phase(other.phase)
-#endif
-  {
+        firstUnsupportedAttributeKey(other.firstUnsupportedAttributeKey),
+        phase(other.phase) {
     AutoEnterOOMUnsafeRegion oomUnsafe;
     if (!attributes.appendAll(other.attributes)) {
       oomUnsafe.crash("StencilModuleRequest::StencilModuleRequest");
@@ -583,21 +577,14 @@ class StencilModuleRequest {
   StencilModuleRequest(StencilModuleRequest&& other) noexcept
       : specifier(other.specifier),
         firstUnsupportedAttributeKey(other.firstUnsupportedAttributeKey),
-        attributes(std::move(other.attributes))
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
-        ,
-        phase(other.phase)
-#endif
-  {
-  }
+        attributes(std::move(other.attributes)),
+        phase(other.phase) {}
 
   StencilModuleRequest& operator=(StencilModuleRequest&& other) noexcept {
     specifier = other.specifier;
     firstUnsupportedAttributeKey = other.firstUnsupportedAttributeKey;
     attributes = std::move(other.attributes);
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
     phase = other.phase;
-#endif
     return *this;
   }
 
@@ -605,11 +592,7 @@ class StencilModuleRequest {
     size_t attrLen = attributes.length();
     if (specifier != other.specifier ||
         firstUnsupportedAttributeKey != other.firstUnsupportedAttributeKey ||
-        attrLen != other.attributes.length()
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
-        || phase != other.phase
-#endif
-    ) {
+        attrLen != other.attributes.length() || phase != other.phase) {
       return false;
     }
 
@@ -641,9 +624,7 @@ struct StencilModuleRequestHasher {
     }
     hash = mozilla::AddToHash(hash,
                               TaggedParserAtomIndexHasher::hash(l.specifier));
-#ifdef ENABLE_SOURCE_PHASE_IMPORTS
     hash = mozilla::AddToHash(hash, l.phase);
-#endif
     return hash;
   }
 
@@ -689,12 +670,16 @@ class StencilModuleEntry {
  public:
   // clang-format off
   //
-  //               | RequestedModule | ImportEntry | ImportNamespaceEntry | ExportAs | ExportFrom | ExportNamespaceFrom | ExportBatchFrom |
-  //               |----------------------------------------------------------------------------------------------------------------------|
-  // moduleRequest | required        | required    | required             | null     | required   | required            | required        |
-  // localName     | null            | required    | required             | required | null       | null                | null            |
-  // importName    | null            | required    | null                 | null     | required   | null                | null            |
-  // exportName    | null            | null        | null                 | required | required   | required            | null            |
+  // (+/- = required/null, ns = *namespace*, abd = *all-but-default*,
+  //  src = *source*)
+  //
+  //                     | moduleRequest | localName | importName | exportName |
+  //                     |---------------|-----------|------------|------------|
+  // RequestedModule     | +             | -         | -          | -          |
+  // ImportEntry         | +             | +         | +/ns/src   | -          |
+  // ExportAs            | -             | +         | -          | +          |
+  // ExportFrom          | +             | -         | +/ns       | +          |
+  // ExportBatchFrom     | +             | -         | abd        | -          |
   //
   // clang-format on
   MaybeModuleRequestIndex moduleRequest;
@@ -722,12 +707,8 @@ class StencilModuleEntry {
   StencilModuleEntry() = default;
 
   StencilModuleEntry(const StencilModuleEntry& other)
-      : moduleRequest(other.moduleRequest),
-        localName(other.localName),
-        importName(other.importName),
-        exportName(other.exportName),
-        lineno(other.lineno),
-        column(other.column) {}
+
+      = default;
 
   StencilModuleEntry(StencilModuleEntry&& other) noexcept
       : moduleRequest(other.moduleRequest),
@@ -737,15 +718,7 @@ class StencilModuleEntry {
         lineno(other.lineno),
         column(other.column) {}
 
-  StencilModuleEntry& operator=(StencilModuleEntry& other) {
-    moduleRequest = other.moduleRequest;
-    localName = other.localName;
-    importName = other.importName;
-    exportName = other.exportName;
-    lineno = other.lineno;
-    column = other.column;
-    return *this;
-  }
+  StencilModuleEntry& operator=(StencilModuleEntry& other) = default;
 
   StencilModuleEntry& operator=(StencilModuleEntry&& other) noexcept {
     moduleRequest = other.moduleRequest;
@@ -780,17 +753,6 @@ class StencilModuleEntry {
     return entry;
   }
 
-  static StencilModuleEntry importNamespaceEntry(
-      MaybeModuleRequestIndex moduleRequest, TaggedParserAtomIndex localName,
-      uint32_t lineno, JS::ColumnNumberOneOrigin column) {
-    MOZ_ASSERT(moduleRequest.isSome());
-    MOZ_ASSERT(localName);
-    StencilModuleEntry entry(lineno, column);
-    entry.moduleRequest = moduleRequest;
-    entry.localName = localName;
-    return entry;
-  }
-
   static StencilModuleEntry exportAsEntry(TaggedParserAtomIndex localName,
                                           TaggedParserAtomIndex exportName,
                                           uint32_t lineno,
@@ -815,23 +777,14 @@ class StencilModuleEntry {
     return entry;
   }
 
-  static StencilModuleEntry exportNamespaceFromEntry(
-      MaybeModuleRequestIndex moduleRequest, TaggedParserAtomIndex exportName,
-      uint32_t lineno, JS::ColumnNumberOneOrigin column) {
-    MOZ_ASSERT(moduleRequest.isSome());
-    MOZ_ASSERT(exportName);
-    StencilModuleEntry entry(lineno, column);
-    entry.moduleRequest = MaybeModuleRequestIndex(moduleRequest);
-    entry.exportName = exportName;
-    return entry;
-  }
-
   static StencilModuleEntry exportBatchFromEntry(
       MaybeModuleRequestIndex moduleRequest, uint32_t lineno,
       JS::ColumnNumberOneOrigin column) {
     MOZ_ASSERT(moduleRequest.isSome());
     StencilModuleEntry entry(lineno, column);
     entry.moduleRequest = MaybeModuleRequestIndex(moduleRequest);
+    entry.importName =
+        TaggedParserAtomIndex::WellKnown::star_all_but_default_star_();
     return entry;
   }
 };

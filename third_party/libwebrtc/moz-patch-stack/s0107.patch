@@ -1,40 +1,24 @@
-From: Andreas Pehrson <apehrson@mozilla.com>
-Date: Tue, 28 Jan 2025 21:45:00 +0000
-Subject: Bug 1938047 - Link adapted_video_track_source.cc and generate webrtc
- moz.build files. r=ng,webrtc-reviewers
+From: Michael Froman <mfroman@mozilla.com>
+Date: Tue, 13 May 2025 22:39:00 +0000
+Subject: Bug 1966238 - (fix-bf85c38fb3) fix build for our added 'pid' field in
+ DesktopCapturer::Source r?pehrsons!
 
-Differential Revision: https://phabricator.services.mozilla.com/D234863
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/b6dd815fc9d2df718a1b48b96f58f99c0cfb7e19
+Differential Revision: https://phabricator.services.mozilla.com/D249164
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/b6b37905a574e7706d98eb683e6800c9525815e7
 ---
- media/BUILD.gn | 11 -----------
- 1 file changed, 11 deletions(-)
+ modules/desktop_capture/mac/screen_capturer_sck.mm | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/media/BUILD.gn b/media/BUILD.gn
-index 7cddb06ba4..3728ef79cf 100644
---- a/media/BUILD.gn
-+++ b/media/BUILD.gn
-@@ -54,11 +54,6 @@ rtc_library("rtc_media_base") {
-     "base/video_broadcaster.h",  # Used downstream
-     "base/video_common.h",  # Used downstream
-   ]
--  if (build_with_mozilla) {
--    sources -= [
--      "base/adapted_video_track_source.h",
--    ]
--  }
-   deps = [
-     ":adapted_video_track_source",
-     ":codec",
-@@ -137,12 +132,6 @@ rtc_library("adapted_video_track_source") {
-     "base/adapted_video_track_source.cc",
-     "base/adapted_video_track_source.h",
-   ]
--  if (build_with_mozilla) {
--    sources -= [
--      "base/adapted_video_track_source.cc",
--      "base/adapted_video_track_source.h",
--    ]
--  }
-   deps = [
-     ":video_adapter",
-     ":video_broadcaster",
+diff --git a/modules/desktop_capture/mac/screen_capturer_sck.mm b/modules/desktop_capture/mac/screen_capturer_sck.mm
+index 6a31c6a56f..0691aba3e4 100644
+--- a/modules/desktop_capture/mac/screen_capturer_sck.mm
++++ b/modules/desktop_capture/mac/screen_capturer_sck.mm
+@@ -442,7 +442,7 @@ bool ScreenCapturerSck::GetSourceList(SourceList* sources) {
+   sources->clear();
+   EnsurePickerHandle();
+   if (picker_handle_) {
+-    sources->push_back({picker_handle_->Source(), std::string()});
++    sources->push_back({picker_handle_->Source(), 0, std::string()});
+   }
+   return true;
+ }

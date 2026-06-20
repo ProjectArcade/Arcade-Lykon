@@ -6,7 +6,7 @@
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { Region } from "resource://gre/modules/Region.sys.mjs";
 import {
-  RemoteSettingsConfig2,
+  RemoteSettingsConfig,
   RemoteSettingsContext,
   RemoteSettingsServer,
   RemoteSettingsService,
@@ -35,7 +35,7 @@ class _SharedRemoteSettingsService {
       "remote-settings"
     );
 
-    this.#config = new RemoteSettingsConfig2({
+    this.#config = new RemoteSettingsConfig({
       server: this.#makeServer(Utils.SERVER_URL),
       bucketName: Utils.actualBucketName("main"),
       appContext: new RemoteSettingsContext({
@@ -160,7 +160,7 @@ class _SharedRemoteSettingsService {
     //
     // * In contrast, `RemoteSettingsService::update_config` returns the error
     //   when it parses a cannot-be-a-base `config.server.url`.
-    return !Utils.shouldSkipRemoteActivityDueToTests || url != Utils.SERVER_URL
+    return !Utils.shouldSkipRemoteActivity || url != Utils.SERVER_URL
       ? new RemoteSettingsServer.Custom({ url })
       : null;
   }

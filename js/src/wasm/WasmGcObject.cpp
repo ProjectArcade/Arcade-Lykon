@@ -268,10 +268,17 @@ void WasmArrayObject::obj_trace(JSTracer* trc, JSObject* object) {
   WasmArrayObject& arrayObj = object->as<WasmArrayObject>();
   uint8_t* data = arrayObj.data_;
 
+  // data_ may be null if the array was only partially initialized due to OOM
+  // during createArrayOOL.
+  if (!data) {
+    MOZ_ASSERT(arrayObj.numElements_ == 0);
+    return;
+  }
+
   if (!arrayObj.isDataInline()) {
     OOLDataHeader* oolHeader = oolDataHeaderFromDataPointer(arrayObj.data_);
     OOLDataHeader* prior = oolHeader;
-    TraceBufferEdge(trc, &arrayObj, &oolHeader, "WasmArrayObject storage");
+    TraceBufferEdge(trc, &oolHeader, "WasmArrayObject storage");
     if (oolHeader != prior) {
       arrayObj.data_ = oolDataHeaderToDataPointer(oolHeader);
     }
@@ -401,16 +408,8 @@ void WasmArrayObject::fillVal(const Val& val, uint32_t itemIndex,
 }
 
 static const JSClassOps WasmArrayObjectClassOps = {
-    nullptr, /* addProperty */
-    nullptr, /* delProperty */
-    nullptr, /* enumerate   */
-    WasmGcObject::obj_newEnumerate,
-    nullptr, /* resolve     */
-    nullptr, /* mayResolve  */
-    nullptr, /* finalize    */
-    nullptr, /* call        */
-    nullptr, /* construct   */
-    WasmArrayObject::obj_trace,
+    .newEnumerate = WasmGcObject::obj_newEnumerate,
+    .trace = WasmArrayObject::obj_trace,
 };
 static const ClassExtension WasmArrayObjectClassExt = {
     WasmArrayObject::obj_moved, /* objectMovedOp */
@@ -485,8 +484,7 @@ void WasmStructObject::obj_trace(JSTracer* trc, JSObject* object) {
     // *addressOfOOLPtr may be null if the struct was only partially initialized
     // due to OOM during createStructOOL.
     if (MOZ_LIKELY(*addressOfOOLPtr)) {
-      TraceBufferEdge(trc, &structObj, addressOfOOLPtr,
-                      "WasmStructObject outline data");
+      TraceBufferEdge(trc, addressOfOOLPtr, "WasmStructObject outline data");
       uint8_t* oolBase = *addressOfOOLPtr;
       for (uint32_t offset : structType.outlineTraceOffsets_) {
         AnyRef* fieldPtr = reinterpret_cast<AnyRef*>(oolBase + offset);
@@ -579,16 +577,8 @@ void WasmStructObject::storeVal(const Val& val, uint32_t fieldIndex) {
 }
 
 static const JSClassOps WasmStructObjectOutlineClassOps = {
-    nullptr, /* addProperty */
-    nullptr, /* delProperty */
-    nullptr, /* enumerate   */
-    WasmGcObject::obj_newEnumerate,
-    nullptr, /* resolve     */
-    nullptr, /* mayResolve  */
-    nullptr, /* finalize    */
-    nullptr, /* call        */
-    nullptr, /* construct   */
-    WasmStructObject::obj_trace,
+    .newEnumerate = WasmGcObject::obj_newEnumerate,
+    .trace = WasmStructObject::obj_trace,
 };
 static const ClassExtension WasmStructObjectOutlineClassExt = {
     WasmStructObject::obj_moved, /* objectMovedOp */
@@ -606,16 +596,8 @@ const JSClass WasmStructObject::classOutline_ = {
 // finalizer. This class should otherwise be identical to the class for
 // structs with outline data.
 static const JSClassOps WasmStructObjectInlineClassOps = {
-    nullptr, /* addProperty */
-    nullptr, /* delProperty */
-    nullptr, /* enumerate   */
-    WasmGcObject::obj_newEnumerate,
-    nullptr, /* resolve     */
-    nullptr, /* mayResolve  */
-    nullptr, /* finalize    */
-    nullptr, /* call        */
-    nullptr, /* construct   */
-    WasmStructObject::obj_trace,
+    .newEnumerate = WasmGcObject::obj_newEnumerate,
+    .trace = WasmStructObject::obj_trace,
 };
 static const ClassExtension WasmStructObjectInlineClassExt = {
     nullptr, /* objectMovedOp */

@@ -33,14 +33,9 @@
 #    include "mozilla/widget/AndroidCompositorWidget.h"
 #  endif
 
-#  define GLES2_LIB "libGLESv2.so"
-#  define GLES2_LIB2 "libGLESv2.so.2"
-
 #elif defined(XP_WIN)
 #  include "mozilla/widget/WinCompositorWidget.h"
 #  include "nsIFile.h"
-
-#  define GLES2_LIB "libGLESv2.dll"
 
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN 1
@@ -191,7 +186,7 @@ static EGLSurface CreateSurfaceFromNativeWindow(
   newSurface = egl.mLib->fCreateWindowSurface(display, config, nativeWindow, 0);
   ANativeWindow_release(nativeWindow);
 #else
-  newSurface = egl.fCreateWindowSurface(config, window, 0);
+  newSurface = egl.fCreateWindowSurface(config, window, nullptr);
 #endif
   if (!newSurface) {
     const auto err = egl.mLib->fGetError();
@@ -547,21 +542,17 @@ void GLContextEGL::SetDamage(const nsIntRegion& aDamageRegion) {
 
 void GLContextEGL::GetWSIInfo(nsCString* const out) const {
   out->AppendLiteral("EGL_VENDOR: ");
-  out->Append(
-      (const char*)mEgl->mLib->fQueryString(mEgl->mDisplay, LOCAL_EGL_VENDOR));
+  out->Append(mEgl->mLib->fQueryString(mEgl->mDisplay, LOCAL_EGL_VENDOR));
 
   out->AppendLiteral("\nEGL_VERSION: ");
-  out->Append(
-      (const char*)mEgl->mLib->fQueryString(mEgl->mDisplay, LOCAL_EGL_VERSION));
+  out->Append(mEgl->mLib->fQueryString(mEgl->mDisplay, LOCAL_EGL_VERSION));
 
   out->AppendLiteral("\nEGL_EXTENSIONS: ");
-  out->Append((const char*)mEgl->mLib->fQueryString(mEgl->mDisplay,
-                                                    LOCAL_EGL_EXTENSIONS));
+  out->Append(mEgl->mLib->fQueryString(mEgl->mDisplay, LOCAL_EGL_EXTENSIONS));
 
 #ifndef ANDROID  // This query will crash some old android.
   out->AppendLiteral("\nEGL_EXTENSIONS(nullptr): ");
-  out->Append(
-      (const char*)mEgl->mLib->fQueryString(nullptr, LOCAL_EGL_EXTENSIONS));
+  out->Append(mEgl->mLib->fQueryString(nullptr, LOCAL_EGL_EXTENSIONS));
 #endif
 }
 
@@ -826,7 +817,7 @@ EGLSurface GLContextEGL::CreateWaylandOffscreenSurface(
   if (!eglwindow) return nullptr;
 
   const auto surface = egl.fCreateWindowSurface(
-      config, reinterpret_cast<EGLNativeWindowType>(eglwindow), 0);
+      config, reinterpret_cast<EGLNativeWindowType>(eglwindow), nullptr);
   if (surface) {
     MOZ_DIAGNOSTIC_ASSERT(!sWaylandOffscreenGLSurfaces.Contains(surface));
     sWaylandOffscreenGLSurfaces.LookupOrInsert(

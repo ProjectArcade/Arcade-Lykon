@@ -108,6 +108,7 @@ class StubPropertyProvider final : public gfxTextRun::PropertyProvider {
     NS_ERROR("This shouldn't be called because we never enable hyphens");
     return gfx::ShapedTextFlags();
   }
+  nscoord LetterSpacing() const override { return 0; }
 };
 
 }  // namespace
@@ -164,8 +165,8 @@ void nsFontMetrics::Destroy() { mPresContext = nullptr; }
 #define ROUND_TO_TWIPS(x) (nscoord) floor(((x) * mP2A) + 0.5)
 #define CEIL_TO_TWIPS(x) (nscoord) ceil((x) * mP2A)
 
-static nscoord GetBaseline(const nsFontMetrics* aFontMetrics,
-                           gfxFont::Baseline aBaseline) {
+static gfxFloat GetBaseline(const nsFontMetrics* aFontMetrics,
+                            gfxFont::Baseline aBaseline) {
   RefPtr<gfxFont> font =
       aFontMetrics->GetThebesFontGroup()->GetFirstValidFont();
   return font->GetBaseline(aBaseline, aFontMetrics->Orientation());

@@ -11,6 +11,7 @@
 #include "mozilla/ToString.h"
 #include "nsGlobalWindowInner.h"
 #include "nsIDocShell.h"
+#include "nsPIDOMWindowInlines.h"
 #include "nsPresContext.h"
 #include "nsRefreshDriver.h"
 
@@ -111,12 +112,7 @@ CSSSize VisualViewport::VisualViewportSize() const {
   // Fetch the pres shell after the layout flush, as it might have destroyed it.
   if (PresShell* presShell = GetPresShell()) {
     if (presShell->IsVisualViewportSizeSet()) {
-      DynamicToolbarState state = presShell->GetDynamicToolbarState();
-      size = CSSRect::FromAppUnits(
-          (state == DynamicToolbarState::InTransition ||
-           state == DynamicToolbarState::Collapsed)
-              ? presShell->GetVisualViewportSizeUpdatedByDynamicToolbar()
-              : presShell->GetVisualViewportSize());
+      size = CSSRect::FromAppUnits(presShell->GetVisualViewportSize());
     } else {
       ScrollContainerFrame* sf = presShell->GetRootScrollContainerFrame();
       if (sf) {

@@ -1,104 +1,55 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Tue, 1 Oct 2024 21:05:00 +0000
-Subject: Bug 1921706 - use relative paths on deps in a few places to avoid
- future issues. r=ng,webrtc-reviewers DONTBUILD
+Date: Thu, 10 Oct 2024 13:42:00 +0000
+Subject: Bug 1921707 - add filtering for new build directory location in
+ third_party/libwebrtc/webrtc.gni r=ng,webrtc-reviewers
 
-Note: this produces no changes in the generated moz.build files.
-
-Differential Revision: https://phabricator.services.mozilla.com/D224070
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/bbec1b95ddb5e00967a0fb002f54f8f24336b904
+Differential Revision: https://phabricator.services.mozilla.com/D224545
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/f18c05287ce831369f44715a4174facff4f12652
 ---
- modules/audio_coding/BUILD.gn  |  2 +-
- modules/portal/BUILD.gn        |  8 ++++----
- modules/video_capture/BUILD.gn |  2 +-
- sdk/BUILD.gn                   | 14 ++++++++++++++
- test/BUILD.gn                  |  6 ++++++
- 5 files changed, 26 insertions(+), 6 deletions(-)
+ webrtc.gni | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
 
-diff --git a/modules/audio_coding/BUILD.gn b/modules/audio_coding/BUILD.gn
-index 3c45508693..48878feefb 100644
---- a/modules/audio_coding/BUILD.gn
-+++ b/modules/audio_coding/BUILD.gn
-@@ -338,7 +338,7 @@ rtc_library("webrtc_opus_wrapper") {
-     deps += [ rtc_opus_dir ]
-     public_configs = [ "//third_party/opus:opus_config" ]
-   } else if (build_with_mozilla) {
--    public_configs = [ "//third_party/opus:opus_config" ]
-+    public_configs = [ "../../third_party/opus:opus_config" ]
-   }
- }
- 
-diff --git a/modules/portal/BUILD.gn b/modules/portal/BUILD.gn
-index e8367393a3..a693604389 100644
---- a/modules/portal/BUILD.gn
-+++ b/modules/portal/BUILD.gn
-@@ -139,10 +139,10 @@ if (!build_with_mozilla) {
-       deps -= [ ":pipewire_stubs" ]
-       defines -= [ "WEBRTC_DLOPEN_PIPEWIRE" ]
-       public_deps = [
--        "//third_party/pipewire",
--        "//third_party/drm",
--        "//third_party/gbm",
--        "//third_party/libepoxy"
-+        "../../third_party/pipewire",
-+        "../../third_party/drm",
-+        "../../third_party/gbm",
-+        "../../third_party/libepoxy"
-       ]
-     }
-   }
-diff --git a/modules/video_capture/BUILD.gn b/modules/video_capture/BUILD.gn
-index 6feba4a247..8f9c8bb2c9 100644
---- a/modules/video_capture/BUILD.gn
-+++ b/modules/video_capture/BUILD.gn
-@@ -118,7 +118,7 @@ if (!build_with_chromium || is_linux || is_chromeos) {
-         ]
-         if (build_with_mozilla) {
-           configs -= [ "../portal:pipewire_base" ]
--          public_deps = [ "//third_party/pipewire" ]
-+          public_deps = [ "../../third_party/pipewire" ]
-         }
+diff --git a/webrtc.gni b/webrtc.gni
+index 8b43c67c88..7416d4b176 100644
+--- a/webrtc.gni
++++ b/webrtc.gni
+@@ -536,7 +536,7 @@ template("rtc_test") {
+       min_sdk_version = 23
+       target_sdk_version = 24
+       deps += [
+-        "//build/android/gtest_apk:native_test_instrumentation_test_runner_java",
++        "//chromium/build/android/gtest_apk:native_test_instrumentation_test_runner_java",
+         webrtc_root + "sdk/android:native_test_jni_onload",
+         webrtc_root + "sdk/android:base_java",
+         webrtc_root + "test:native_test_java",
+@@ -997,11 +997,21 @@ template("rtc_library") {
+       modified_deps = []
+       foreach (dep, deps) {
+         newdep = string_replace(dep, "//third_party/", "//libwebrtc/third_party/")
++        newdep = string_replace(newdep, "//build", "//chromium/build")
+         modified_deps += [ newdep ]
        }
+       deps = []
+       deps = modified_deps
      }
-diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index 119af02e14..264d00b23c 100644
---- a/sdk/BUILD.gn
-+++ b/sdk/BUILD.gn
-@@ -616,6 +616,20 @@ if (is_ios || is_mac) {
-         "CoreGraphics.framework",
-         "CoreVideo.framework",
-       ]
-+      if (build_with_mozilla) {
-+        deps -= [
-+          "//api/video:video_frame",
-+          "//api/video:video_rtp_headers",
-+          "//common_video",
-+          "//rtc_base:checks",
-+        ]
-+        deps += [
-+          "../api/video:video_frame",
-+          "../api/video:video_rtp_headers",
-+          "../common_video",
-+          "../rtc_base:checks",
-+        ]
++    if (build_with_mozilla && defined(data_deps)) {
++      modified_deps = []
++      foreach (dep, data_deps) {
++        newdep = string_replace(dep, "//build/", "//chromium/build/")
++        modified_deps += [ newdep ]
 +      }
-     }
- 
-     if (!build_with_mozilla) {
-diff --git a/test/BUILD.gn b/test/BUILD.gn
-index 3ca79980ca..1c66e67dfe 100644
---- a/test/BUILD.gn
-+++ b/test/BUILD.gn
-@@ -479,6 +479,12 @@ rtc_source_set("test_support") {
-     "//testing/gmock",
-     "//testing/gtest",
-   ]
-+  if (build_with_mozilla) {
-+    all_dependent_configs -= [
-+      "//third_party/googletest:gmock_config",
-+      "//third_party/googletest:gtest_config",
-+    ]
-+  }
++      data_deps = []
++      data_deps = modified_deps
++    }
+   }
  }
  
- rtc_library("fixed_fps_video_frame_writer_adapter") {
+@@ -1039,7 +1049,7 @@ template("rtc_executable") {
+     if (is_win) {
+       deps += [
+         # Give executables the default manifest on Windows (a no-op elsewhere).
+-        "//build/win:default_exe_manifest",
++        "//chromium/build/win:default_exe_manifest",
+       ]
+     }
+ 

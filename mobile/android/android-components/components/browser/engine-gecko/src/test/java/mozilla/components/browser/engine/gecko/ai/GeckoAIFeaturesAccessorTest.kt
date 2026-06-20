@@ -6,7 +6,6 @@ package mozilla.components.browser.engine.gecko.ai
 
 import mozilla.components.concept.engine.ai.AIFeaturesError
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -17,6 +16,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowLooper
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(RobolectricTestRunner::class)
 class GeckoAIFeaturesAccessorTest {

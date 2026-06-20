@@ -11,6 +11,7 @@
 #endif
 #include <cmath>
 #include <cstring>
+#include <cstdint>
 #include "mozilla/Assertions.h"
 #include "FdPrintf.h"
 
@@ -221,7 +222,7 @@ void FdPrintf(platform_handle_t aFd, const char* aFormat, ...) {
 }
 
 void FdPuts(platform_handle_t aFd, const char* aBuf, size_t aSize) {
-  if (aFd == 0) {
+  if (!aFd) {
     return;
   }
 

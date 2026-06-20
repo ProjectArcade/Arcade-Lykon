@@ -4,6 +4,7 @@
 
 package mozilla.components.feature.summarize.content
 
+import kotlinx.coroutines.CancellationException
 import mozilla.components.feature.summarize.ext.shouldUseReaderModeContent
 
 /**
@@ -40,12 +41,13 @@ fun interface ContentProvider {
          * @param pageContentExtractor Extracts the main textual content of the page.
          * @param pageMetadataExtractor Extracts metadata such as the page title and author.
          */
+        @Suppress("TooGenericExceptionCaught")
         fun fromPage(
             pageTitle: String,
             pageContentExtractor: PageContentExtractor,
             pageMetadataExtractor: PageMetadataExtractor,
         ) = ContentProvider {
-            runCatching {
+            try {
                 val metadata = pageMetadataExtractor
                     .getPageMetadata()
                     .getOrDefault(PageMetadata())
@@ -56,7 +58,11 @@ fun interface ContentProvider {
                     ),
                 ).getOrThrow()
 
-                Content(metadata, content)
+                Result.success(Content(metadata, content))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(e)
             }
         }
     }

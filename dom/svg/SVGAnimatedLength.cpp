@@ -15,6 +15,7 @@
 #include "mozilla/GeckoBindings.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/PresShell.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/SMILValue.h"
 #include "mozilla/SVGIntegrationUtils.h"
 #include "mozilla/StaticPresData.h"
@@ -680,7 +681,7 @@ void SVGLengthAndInfo::Interpolate(const SVGLengthAndInfo& aStart,
     endValue = aEnd.ConvertUnits(aStart);
   }
   aResult.mElement = aEnd.mElement;
-  aResult.mValue = startValue + (endValue - startValue) * aUnitDistance;
+  aResult.mValue = std::lerp(startValue, endValue, aUnitDistance);
 }
 
 }  // namespace mozilla

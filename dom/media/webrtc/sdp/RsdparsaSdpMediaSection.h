@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef RUSTSDPMEDIASECTION_H_
-#define RUSTSDPMEDIASECTION_H_
+#ifndef DOM_MEDIA_WEBRTC_SDP_RSDPARSASDPMEDIASECTION_H_
+#define DOM_MEDIA_WEBRTC_SDP_RSDPARSASDPMEDIASECTION_H_
 
 #include "mozilla/UniquePtr.h"
 #include "sdp/RsdparsaSdpAttributeList.h"
@@ -25,7 +25,7 @@ class RsdparsaSdpMediaSection final : public SdpMediaSection {
   MediaType GetMediaType() const override { return mMediaType; }
 
   unsigned int GetPort() const override;
-  void SetPort(unsigned int port) override;
+  void SetPort(const unsigned int port) override;
   unsigned int GetPortCount() const override;
   Protocol GetProtocol() const override;
   const SdpConnection& GetConnection() const override;
@@ -38,11 +38,12 @@ class RsdparsaSdpMediaSection final : public SdpMediaSection {
   SdpDirectionAttribute GetDirectionAttribute() const override;
 
   void AddCodec(const std::string& pt, const std::string& name,
-                uint32_t clockrate, uint16_t channels) override;
+                const uint32_t clockrate, const uint16_t channels) override;
   void ClearCodecs() override;
 
-  void AddDataChannel(const std::string& name, uint16_t port, uint16_t streams,
-                      uint32_t message_size) override;
+  void AddDataChannel(const std::string& name, const uint16_t port,
+                      const uint16_t streams,
+                      const uint32_t message_size) override;
 
   void Serialize(std::ostream&) const override;
 

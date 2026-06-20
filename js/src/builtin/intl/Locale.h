@@ -16,7 +16,7 @@ namespace js::intl {
 class LocaleObject : public NativeObject {
  public:
   static const JSClass class_;
-  static const JSClass& protoClass_;
+  static const JSClass protoClass_;
 
   static constexpr uint32_t LANGUAGE_TAG_SLOT = 0;
   static constexpr uint32_t BASENAME_SLOT = 1;

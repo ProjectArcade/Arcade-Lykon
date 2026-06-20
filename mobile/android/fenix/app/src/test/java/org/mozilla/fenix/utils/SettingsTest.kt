@@ -31,7 +31,6 @@ import org.mozilla.fenix.nimbus.FakeNimbusEventStore
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.nimbus.HomescreenEdgeToEdgeBackground
 import org.mozilla.fenix.settings.PhoneFeature
-import org.mozilla.fenix.settings.ShortcutType
 import org.mozilla.fenix.settings.deletebrowsingdata.DeleteBrowsingDataOnQuitType
 import org.mozilla.fenix.wallpapers.Wallpaper
 import org.robolectric.RobolectricTestRunner
@@ -395,19 +394,6 @@ class SettingsTest {
 
         // Then
         assertFalse(settings.shouldUseTrackingProtection)
-    }
-
-    @Test
-    fun shouldShowCollectionsPlaceholderOnHome() {
-        // When
-        // Then
-        assertTrue(settings.showCollectionsPlaceholderOnHome)
-
-        // When
-        settings.showCollectionsPlaceholderOnHome = false
-
-        // Then
-        assertFalse(settings.showCollectionsPlaceholderOnHome)
     }
 
     @Test
@@ -840,26 +826,12 @@ class SettingsTest {
     }
 
     @Test
-    fun `GIVEN feature is disabled, hasUserBeenOnboarded is true and isLauncherIntent is true THEN shouldShowOnboarding returns false`() {
+    fun `GIVEN feature is disabled, hasUserBeenOnboarded is true THEN shouldShowOnboarding returns false`() {
         val settings = spyk(settings)
 
         val actual = settings.shouldShowOnboarding(
             featureEnabled = false,
             hasUserBeenOnboarded = true,
-            isLauncherIntent = true,
-        )
-
-        assertFalse(actual)
-    }
-
-    @Test
-    fun `GIVEN feature is enabled, hasUserBeenOnboarded is false and isLauncherIntent is false THEN shouldShowOnboarding returns false`() {
-        val settings = spyk(settings)
-
-        val actual = settings.shouldShowOnboarding(
-            featureEnabled = true,
-            hasUserBeenOnboarded = false,
-            isLauncherIntent = false,
         )
 
         assertFalse(actual)
@@ -872,20 +844,18 @@ class SettingsTest {
         val actual = settings.shouldShowOnboarding(
             featureEnabled = true,
             hasUserBeenOnboarded = true,
-            isLauncherIntent = true,
         )
 
         assertFalse(actual)
     }
 
     @Test
-    fun `GIVEN feature is enabled, hasUserBeenOnboarded is false and isLauncherIntent is true THEN shouldShowOnboarding returns true`() {
+    fun `GIVEN feature is enabled, hasUserBeenOnboarded is false THEN shouldShowOnboarding returns true`() {
         val settings = spyk(settings)
 
         val actual = settings.shouldShowOnboarding(
             featureEnabled = true,
             hasUserBeenOnboarded = false,
-            isLauncherIntent = true,
         )
 
         assertTrue(actual)
@@ -899,7 +869,6 @@ class SettingsTest {
         val actual = settings.shouldShowOnboarding(
             featureEnabled = false,
             hasUserBeenOnboarded = true,
-            isLauncherIntent = false,
         )
 
         assertTrue(actual)
@@ -1302,38 +1271,63 @@ class SettingsTest {
     }
 
     @Test
-    fun `GIVEN toolbar customization is disabled WHEN reading toolbarSimpleShortcut THEN NEW_TAB is returned regardless of stored key`() {
-        settings.shouldShowToolbarCustomization = false
-        settings.toolbarSimpleShortcutKey = ShortcutType.SHARE.value
+    fun `WHEN no preference is stored THEN delete download behavior should be ASK_WHEN_DELETING`() {
+        settings.preferences.edit {
+            remove("pref_key_downloads_delete_behavior_v2")
+        }
 
-        val result = settings.toolbarSimpleShortcut
-        assertEquals(ShortcutType.NEW_TAB.value, result)
+        val result = settings.deleteDownloadBehavior
+        assertEquals(Settings.DeleteDownloadBehavior.ASK_WHEN_DELETING, result)
     }
 
     @Test
-    fun `GIVEN toolbar customization is enabled WHEN reading toolbarSimpleShortcut THEN stored key is returned`() {
-        settings.shouldShowToolbarCustomization = true
-        settings.toolbarSimpleShortcutKey = ShortcutType.SHARE.value
+    fun `WHEN old cleanup file preference is DELETE_FROM_DEVICE THEN delete behavior should be ASK_WHEN_DELETING`() {
+        // Bug 2002334 introduced a new key for the download deletion behavior.
+        // We want to make sure that the settings is ASK_WHEN_DELETING after the migration from version using the old preference.
+        settings.preferences.edit {
+            putBoolean("pref_key_downloads_clean_up_files_automatically", true)
+        }
 
-        val result = settings.toolbarSimpleShortcut
-        assertEquals(ShortcutType.SHARE.value, result)
+        val result = settings.deleteDownloadBehavior
+        assertEquals(Settings.DeleteDownloadBehavior.ASK_WHEN_DELETING, result)
     }
 
     @Test
-    fun `GIVEN toolbar customization is disabled WHEN reading toolbarExpandedShortcut THEN BOOKMARK is returned regardless of stored key`() {
-        settings.shouldShowToolbarCustomization = false
-        settings.toolbarExpandedShortcutKey = ShortcutType.NEW_TAB.value
+    fun `WHEN old download delete behavior preference is DELETE_FROM_DEVICE THEN delete behavior should be ASK_WHEN_DELETING`() {
+        // Bug 2041355 rotated the preference key for the deletion behavior. The settings should be ASK_WHEN_DELETING if
+        // the new key doesn't exist in the preference, no matter what was the value stored with the old key
+        settings.preferences.edit {
+            putInt("pref_key_downloads_delete_behavior", Settings.DeleteDownloadBehavior.DELETE_FROM_DEVICE.value)
+            remove("pref_key_downloads_delete_behavior_v2")
+        }
 
-        val result = settings.toolbarExpandedShortcut
-        assertEquals(ShortcutType.BOOKMARK.value, result)
+        val result = settings.deleteDownloadBehavior
+        assertEquals(Settings.DeleteDownloadBehavior.ASK_WHEN_DELETING, result)
     }
 
     @Test
-    fun `GIVEN toolbar customization is enabled WHEN reading toolbarExpandedShortcut THEN stored key is returned`() {
-        settings.shouldShowToolbarCustomization = true
-        settings.toolbarExpandedShortcutKey = ShortcutType.TRANSLATE.value
+    fun `WHEN old download delete behavior preference is REMOVE_FROM_HISTORY THEN delete behavior should be ASK_WHEN_DELETING`() {
+        // Bug 2041355 rotated the preference key for the deletion behavior. The settings should be ASK_WHEN_DELETING if
+        // the new key doesn't exist in the preference, no matter what was the value stored with the old key
+        settings.preferences.edit {
+            putInt("pref_key_downloads_delete_behavior", Settings.DeleteDownloadBehavior.REMOVE_FROM_HISTORY.value)
+            remove("pref_key_downloads_delete_behavior_v2")
+        }
 
-        val result = settings.toolbarExpandedShortcut
-        assertEquals(ShortcutType.TRANSLATE.value, result)
+        val result = settings.deleteDownloadBehavior
+        assertEquals(Settings.DeleteDownloadBehavior.ASK_WHEN_DELETING, result)
+    }
+
+    @Test
+    fun `WHEN download deletion behavior preference is read THEN it should read from the new preference`() {
+        // Bug 2041355 rotated the preference key for the deletion behavior.
+        // We want to make sure we are getting the value from the right preference.
+        settings.preferences.edit {
+            putInt("pref_key_downloads_delete_behavior", Settings.DeleteDownloadBehavior.DELETE_FROM_DEVICE.value)
+            putInt("pref_key_downloads_delete_behavior_v2", Settings.DeleteDownloadBehavior.REMOVE_FROM_HISTORY.value)
+        }
+
+        val result = settings.deleteDownloadBehavior
+        assertEquals(Settings.DeleteDownloadBehavior.REMOVE_FROM_HISTORY, result)
     }
 }

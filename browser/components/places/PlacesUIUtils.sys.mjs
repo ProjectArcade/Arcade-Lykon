@@ -859,7 +859,7 @@ export var PlacesUIUtils = {
     }
     if (lazy.OpenInTabsUtils.confirmOpenInTabs(urlsToOpen.length, window)) {
       if (window.updateTelemetry) {
-        window.updateTelemetry(urlsToOpen);
+        window.updateTelemetry(urlsToOpen, true);
       }
       this.openTabset(urlsToOpen, event, window);
     }
@@ -915,7 +915,7 @@ export var PlacesUIUtils = {
     aNode,
     aWhere,
     aWindow,
-    { aPrivate = false, userContextId = 0 } = {}
+    { aPrivate = false, userContextId = undefined } = {}
   ) {
     if (
       aNode &&
@@ -1407,16 +1407,22 @@ export var PlacesUIUtils = {
   placesContextShowing(event) {
     let menupopup = /** @type {XULPopupElement} */ (event.target);
     if (
-      !["placesContext", "sidebar-history-context-menu"].includes(menupopup.id)
+      ![
+        "placesContext",
+        "sidebar-history-context-menu",
+        "sidebar-synced-tabs-context-menu",
+      ].includes(menupopup.id)
     ) {
       // Ignore any popupshowing events from submenus
       return;
     }
 
-    if (menupopup.id == "sidebar-history-context-menu") {
-      PlacesUIUtils.lastContextMenuTriggerNode =
-        menupopup.triggerNode.triggerNode;
-      return;
+    switch (menupopup.id) {
+      case "sidebar-history-context-menu":
+      case "sidebar-synced-tabs-context-menu":
+        PlacesUIUtils.lastContextMenuTriggerNode =
+          menupopup.triggerNode.triggerNode;
+        return;
     }
 
     PlacesUIUtils.lastContextMenuTriggerNode = menupopup.triggerNode;
@@ -1471,6 +1477,7 @@ export var PlacesUIUtils = {
         "sidebar-history-context-menu",
         "placesContext",
         "sidebar-synced-tabs-context-menu",
+        "sidebar-bookmarks-context-menu",
       ].includes(menupopup.id)
     ) {
       PlacesUIUtils.lastContextMenuTriggerNode = null;
@@ -1610,6 +1617,11 @@ export var PlacesUIUtils = {
     }
   },
 
+  removeImportButton() {
+    lazy.CustomizableUI.removeWidgetFromArea("import-button");
+    Services.prefs.clearUserPref("browser.bookmarks.addedImportButton");
+  },
+
   removeImportButtonWhenImportSucceeds() {
     // If the user (re)moved the button, clear the pref and stop worrying about
     // moving the item.
@@ -1624,8 +1636,7 @@ export var PlacesUIUtils = {
         data == lazy.MigrationUtils.resourceTypes.BOOKMARKS &&
         lazy.MigrationUtils.getImportedCount("bookmarks") > 0
       ) {
-        lazy.CustomizableUI.removeWidgetFromArea("import-button");
-        Services.prefs.clearUserPref("browser.bookmarks.addedImportButton");
+        this.removeImportButton();
         Services.obs.removeObserver(obs, "Migration:ItemAfterMigrate");
         Services.obs.removeObserver(obs, "Migration:ItemError");
       }
@@ -1773,6 +1784,24 @@ export var PlacesUIUtils = {
       } else {
         longTitles.set(titleBeginning, [candidate]);
       }
+    }
+  },
+
+  /**
+   * Event handler for experimental link sharing context menu item.
+   */
+  shareBookmarkFolder() {
+    let view = PlacesUIUtils.getViewForNode(
+      PlacesUIUtils.lastContextMenuTriggerNode
+    );
+    try {
+      lazy.ContentSharingUtils.createShareableLinkFromBookmarkFolders(
+        view.selectedNodes
+          .filter(n => lazy.PlacesUtils.nodeIsFolderOrShortcut(n))
+          .map(n => lazy.PlacesUtils.getConcreteItemGuid(n))
+      );
+    } catch (ex) {
+      console.error("Failed to create shareable link: ", ex);
     }
   },
 };

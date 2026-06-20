@@ -114,7 +114,8 @@ class GetPermissionRunnable final : public WorkerMainThreadRunnable {
 }  // anonymous namespace
 
 NS_IMPL_CYCLE_COLLECTION_INHERITED(NotificationPermissionRequest,
-                                   ContentPermissionRequestBase, mCallback)
+                                   ContentPermissionRequestBase, mCallback,
+                                   mPromise)
 NS_IMPL_ADDREF_INHERITED(NotificationPermissionRequest,
                          ContentPermissionRequestBase)
 NS_IMPL_RELEASE_INHERITED(NotificationPermissionRequest,
@@ -920,7 +921,7 @@ void Notification::Deactivate() {
 }
 
 nsresult Notification::DispatchToMainThread(
-    already_AddRefed<nsIRunnable>&& aRunnable) {
+    already_AddRefed<nsIRunnable> aRunnable) {
   if (WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate()) {
     return workerPrivate->DispatchToMainThread(std::move(aRunnable));
   }

@@ -27,7 +27,7 @@ class HTMLScriptElement final : public nsGenericHTMLElement,
  public:
   using Element::GetCharacterDataBuffer;
 
-  HTMLScriptElement(already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo,
+  HTMLScriptElement(already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo,
                     FromParser aFromParser);
 
   // nsISupports
@@ -54,6 +54,7 @@ class HTMLScriptElement final : public nsGenericHTMLElement,
 
   // nsIContent
   virtual nsresult BindToTree(BindContext&, nsINode& aParent) override;
+  virtual void UnbindFromTree(UnbindContext&) override;
   virtual bool ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,
                               const nsAString& aValue,
                               nsIPrincipal* aMaybeScriptedPrincipal,

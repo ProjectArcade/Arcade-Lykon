@@ -7,7 +7,6 @@ package org.mozilla.fenix.home.toolbar
 import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
-import android.view.Gravity
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Easing
@@ -21,9 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
-import androidx.coordinatorlayout.widget.CoordinatorLayout
-import androidx.core.view.updateLayoutParams
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.navigation.NavController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -31,7 +30,6 @@ import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AwesomeBarAction
 import mozilla.components.browser.state.ext.getUrl
 import mozilla.components.browser.state.selector.findTab
-import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.utils.BackInvokedHandler
 import mozilla.components.compose.browser.toolbar.BrowserToolbar
@@ -43,7 +41,6 @@ import mozilla.components.compose.browser.toolbar.store.ToolbarGravity.Bottom
 import mozilla.components.compose.browser.toolbar.store.ToolbarGravity.Top
 import mozilla.components.compose.browser.toolbar.ui.BrowserToolbarQuery
 import mozilla.components.lib.state.ext.observeAsComposableState
-import mozilla.components.support.ktx.android.view.ImeInsetsSynchronizer
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
@@ -53,8 +50,6 @@ import org.mozilla.fenix.components.appstate.AppAction.SearchAction.SearchStarte
 import org.mozilla.fenix.components.appstate.VoiceSearchAction.VoiceInputRequested
 import org.mozilla.fenix.components.metrics.MetricsUtils
 import org.mozilla.fenix.components.toolbar.ToolbarPosition.BOTTOM
-import org.mozilla.fenix.components.toolbar.ToolbarPosition.TOP
-import org.mozilla.fenix.databinding.FragmentHomeBinding
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.utils.Settings
 import org.mozilla.fenix.wallpapers.Wallpaper
@@ -67,7 +62,6 @@ internal const val EDIT_TOOLBAR_DELAY_AFTER_VOICE_REQUEST = 1_000L
  * A wrapper over the [BrowserToolbar] composable to allow for extra customisation.
  *
  * @param context [Context] used for various system interactions.
- * @param homeBinding [FragmentHomeBinding] which will serve as parent for this composable.
  * @param navController [NavController] to use for navigating to other in-app destinations.
  * @param toolbarStore [BrowserToolbarStore] containing the composable toolbar state.
  * @param appStore [AppStore] to sync from.
@@ -80,12 +74,11 @@ internal const val EDIT_TOOLBAR_DELAY_AFTER_VOICE_REQUEST = 1_000L
  * @param tabStripContent [Composable] as the tab strip content to be displayed together with this toolbar.
  * @param searchSuggestionsContent [Composable] as the search suggestions content to be displayed
  * together with this toolbar.
- * @param navigationBarContent Composable content for the navigation bar.
+ * @param navigationBarContent [Composable] content for the navigation bar.
  */
 @Suppress("LongParameterList")
 internal class HomeToolbarComposable(
     private val context: Context,
-    private val homeBinding: FragmentHomeBinding,
     private val navController: NavController,
     private val toolbarStore: BrowserToolbarStore,
     private val appStore: AppStore,
@@ -110,113 +103,101 @@ internal class HomeToolbarComposable(
         )
     }
 
-    override val layout = ComposeView(context).apply {
-        id = R.id.composable_toolbar
+    @Composable
+    private fun DefaultToolbar() {
+        val isSearching = toolbarStore.observeAsComposableState { it.isEditMode() }.value
+        val queryWasPrefilled = toolbarStore.observeAsComposableState {
+            it.editState.queryWasPrefilled
+        }.value
+        val currentQuery = toolbarStore.observeAsComposableState { it.editState.query.current }.value
+        val currentWallpaperName = appStore.observeAsComposableState { it.wallpaperState.currentWallpaper.name }
+        val isEdgeToEdgeBackgroundEnabled =
+            settings.enableHomepageEdgeToEdgeBackgroundFeature &&
+                currentWallpaperName.value == Wallpaper.EDGE_TO_EDGE
 
-        setContent {
-            val isSearching = toolbarStore.observeAsComposableState { it.isEditMode() }.value
-            val queryWasPrefilled = toolbarStore.observeAsComposableState {
-                it.editState.queryWasPrefilled
-            }.value
-            val currentQuery = toolbarStore.observeAsComposableState { it.editState.query.current }.value
-            val shouldShowTabStrip: Boolean = remember { settings.isTabStripEnabled }
-            val isAddressBarVisible = remember { addressBarVisibility }
+        BackInvokedHandler(isSearching) {
+            val sourceTabId = appStore.state.searchState.sourceTabId
+            if (sourceTabId != null) {
+                navController.navigate(R.id.browserFragment)
+            }
+            appStore.dispatch(SearchEnded)
+            browserStore.dispatch(AwesomeBarAction.EngagementFinished(abandoned = true))
+        }
 
-            val currentWallpaperName = appStore.observeAsComposableState { it.wallpaperState.currentWallpaper.name }
-            val isEdgeToEdgeBackgroundEnabled =
-                settings.enableHomepageEdgeToEdgeBackgroundFeature &&
-                        currentWallpaperName.value == Wallpaper.EDGE_TO_EDGE
+        FirefoxTheme {
+            MaterialTheme(
+                colorScheme = homepageToolbarColors(
+                    isPrivateMode = browsingModeManager.mode == BrowsingMode.Private,
+                    shouldUseEdgeToEdgeColors = isEdgeToEdgeBackgroundEnabled &&
+                        (!isSearching || (currentQuery.isEmpty() && !queryWasPrefilled)),
+                ),
+            ) {
+                ToolbarContent()
+            }
+        }
+    }
 
-            BackInvokedHandler(isSearching) {
-                val sourceTabId = appStore.state.searchState.sourceTabId
-                if (sourceTabId != null) {
-                    navController.navigate(R.id.browserFragment)
-                }
-                appStore.dispatch(SearchEnded)
-                browserStore.dispatch(AwesomeBarAction.EngagementFinished(abandoned = true))
+    @Composable
+    private fun ToolbarContent() {
+        val shouldShowTabStrip: Boolean = remember { settings.isTabStripEnabled }
+        val isAddressBarVisible = remember { addressBarVisibility }
+
+        Column(
+            modifier = Modifier.semantics {
+                testTagsAsResourceId = true
+                testTag = context.resources.getResourceName(R.id.composable_toolbar)
+            },
+        ) {
+            if (shouldShowTabStrip) {
+                tabStripContent()
             }
 
-            FirefoxTheme {
-                MaterialTheme(
-                    colorScheme = homepageToolbarColors(
-                        isPrivateMode = browsingModeManager.mode == BrowsingMode.Private,
-                        shouldUseEdgeToEdgeColors = isEdgeToEdgeBackgroundEnabled &&
-                            (!isSearching || (currentQuery.isEmpty() && !queryWasPrefilled)),
+            if (settings.shouldUseBottomToolbar) {
+                searchSuggestionsContent(Modifier.weight(1f))
+            }
+
+            Box {
+                if (settings.enableHomepageSearchBar) {
+                    BrowserSimpleToolbar(toolbarStore, appStore)
+                }
+
+                this@Column.AnimatedVisibility(
+                    visible = isAddressBarVisible.value || appStore.state.searchState.isSearchActive,
+                    enter = fadeIn(
+                        animationSpec = tween(
+                            durationMillis = 250,
+                            easing = Easing { fraction -> fraction * fraction },
+                        ),
+                    ),
+                    exit = fadeOut(
+                        animationSpec = tween(
+                            durationMillis = 250,
+                            easing = Easing { fraction -> 1f - (1f - fraction) * (1f - fraction) },
+                        ),
                     ),
                 ) {
-                    Column {
-                        if (shouldShowTabStrip) {
-                            tabStripContent()
-                        }
-
-                        if (settings.shouldUseBottomToolbar) {
-                            searchSuggestionsContent(Modifier.weight(1f))
-                        }
-                        Box {
-                            if (settings.enableHomepageSearchBar) {
-                                BrowserSimpleToolbar(toolbarStore, appStore)
-                            }
-                            this@Column.AnimatedVisibility(
-                                visible = isAddressBarVisible.value || appStore.state.searchState.isSearchActive,
-                                enter = fadeIn(
-                                    animationSpec = tween(
-                                        durationMillis = 250,
-                                        easing = Easing { fraction -> fraction * fraction },
-                                    ),
-                                ),
-                                exit = fadeOut(
-                                    animationSpec = tween(
-                                        durationMillis = 250,
-                                        easing = Easing { fraction -> 1f - (1f - fraction) * (1f - fraction) },
-                                    ),
-                                ),
-                            ) {
-                                BrowserToolbar(store = toolbarStore)
-                            }
-                        }
-                        if (settings.toolbarPosition == BOTTOM) {
-                            navigationBarContent?.invoke()
-                        }
-                        if (!settings.shouldUseBottomToolbar) {
-                            searchSuggestionsContent(Modifier.weight(1f))
-                        }
-                    }
+                    BrowserToolbar(store = toolbarStore)
                 }
             }
-        }
-        translationZ = context.resources.getDimension(R.dimen.browser_fragment_above_toolbar_panels_elevation)
-        homeBinding.homeLayout.addView(this)
-    }
 
-    override fun build(browserState: BrowserState, middleSearchEnabled: Boolean) {
-        layout.updateLayoutParams {
-            (this as? CoordinatorLayout.LayoutParams)?.gravity = when (settings.toolbarPosition) {
-                TOP -> Gravity.TOP
-                BOTTOM -> Gravity.BOTTOM
+            if (settings.toolbarPosition == BOTTOM) {
+                navigationBarContent?.invoke()
+            }
+
+            if (!settings.shouldUseBottomToolbar) {
+                searchSuggestionsContent(Modifier.weight(1f))
             }
         }
+    }
 
-        if (settings.shouldUseBottomToolbar) {
-            ImeInsetsSynchronizer.setup(homeBinding.root)
-        }
+    @Composable
+    override fun Content() {
+        DefaultToolbar()
+    }
 
+    override fun build(middleSearchEnabled: Boolean) {
         configureStartingInSearchMode()
         updateAddressBarVisibility(!middleSearchEnabled)
-    }
-
-    override fun updateDividerVisibility(isVisible: Boolean) {
-        // no-op
-        // For the toolbar redesign we will always show the toolbar divider
-    }
-
-    override fun updateButtonVisibility(
-        browserState: BrowserState,
-    ) {
-        // To be added later
-    }
-
-    override fun updateTabCounter(browserState: BrowserState) {
-        // To be added later
     }
 
     override fun updateAddressBarVisibility(isVisible: Boolean) {

@@ -33,10 +33,10 @@ class RareArgumentsData {
   using ConstBitArray = ExternalBitArray<const size_t>;
 
   RareArgumentsData() = default;
-  RareArgumentsData(const RareArgumentsData&) = delete;
-  void operator=(const RareArgumentsData&) = delete;
 
  public:
+  RareArgumentsData(const RareArgumentsData&) = delete;
+  void operator=(const RareArgumentsData&) = delete;
   static RareArgumentsData* create(JSContext* cx, ArgumentsObject* obj);
   static size_t bytesRequired(size_t numActuals);
 
@@ -385,13 +385,13 @@ class ArgumentsObject : public NativeObject {
   const Value& arg(unsigned i) const {
     MOZ_ASSERT(i < data()->numArgs());
     const Value& v = data()->args[i];
-    MOZ_ASSERT(!v.isMagic());
+    MOZ_RELEASE_ASSERT(!v.isMagic());
     return v;
   }
 
   void setArg(unsigned i, const Value& v) {
     MOZ_ASSERT(i < data()->numArgs());
-    MOZ_ASSERT(!data()->args[i].isMagic());
+    MOZ_RELEASE_ASSERT(!data()->args[i].isMagic());
     data()->args.setElement(this, i, v);
   }
 

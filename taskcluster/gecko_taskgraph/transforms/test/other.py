@@ -346,12 +346,12 @@ def setup_browsertime(config, tasks):
                 ],
                 "macosx1400.*": [
                     "browsertime",
-                    "macosx64-aarch64-geckodriver",
+                    "macosx64-geckodriver",
                     "macosx64-aarch64-node",
                 ],
                 "macosx1500.*": [
                     "browsertime",
-                    "macosx64-aarch64-geckodriver",
+                    "macosx64-geckodriver",
                     "macosx64-aarch64-node",
                 ],
                 "windows.*aarch64.*": [
@@ -746,6 +746,33 @@ def apply_raptor_tier_optimization(config, tasks):
 
 
 @transforms.add
+def apply_bug2043540_optimization(config, tasks):
+    """Bug 2043540 - reduce mochitest-browser-chrome cadence on macosx1015-64
+    (Catalina) to relieve the backed-up 10.15 ESR pool.
+
+    Applied as a transform (rather than YAML `optimization:`) because the test
+    schema declares `optimization` and `schedules-component` as mutually
+    exclusive; mochitest-browser-chrome has schedules-component set. The
+    transform runs after schema validation, so setting task["optimization"]
+    here is safe.
+
+    skip-unless-backstop preserves coverage on m-c, beta, release, and ESR
+    branches (params["backstop"] is True for non-integration projects) and
+    only skips on regular autoland pushes (~95% of Catalina mbc cycles).
+    Applied to both opt and debug builds; the standalone debug variants
+    already carry skip-unless-backstop, so re-applying it is idempotent.
+    """
+    for task in tasks:
+        test_platform = task.get("test-platform", "")
+        if (
+            task.get("test-name") == "mochitest-browser-chrome"
+            and "macosx1015-64" in test_platform
+        ):
+            task["optimization"] = {"skip-unless-backstop": None}
+        yield task
+
+
+@transforms.add
 def disable_try_only_platforms(config, tasks):
     """Turns off platforms that should only run on try."""
     try_only_platforms = ()
@@ -1088,21 +1115,26 @@ def add_gecko_profile_symbolication_deps(config, tasks):
         ):
             fetches = task.setdefault("fetches", {})
             fetch_toolchains = fetches.setdefault("toolchain", [])
-            fetch_toolchains.append("symbolicator-cli")
+
+            if "profiler-node-tools" not in fetch_toolchains:
+                fetch_toolchains.append("profiler-node-tools")
 
             test_platform = task["test-platform"]
 
             if "macosx" in test_platform and "aarch64" in test_platform:
-                fetch_toolchains.append("macosx64-aarch64-samply")
+                samply_toolchain = "macosx64-aarch64-samply"
             elif "macosx" in test_platform:
-                fetch_toolchains.append("macosx64-samply")
+                samply_toolchain = "macosx64-samply"
             elif "win" in test_platform:
-                fetch_toolchains.append("win64-samply")
+                samply_toolchain = "win64-samply"
             else:
-                fetch_toolchains.append("linux64-samply")
+                samply_toolchain = "linux64-samply"
+
+            if samply_toolchain not in fetch_toolchains:
+                fetch_toolchains.append(samply_toolchain)
 
             # Add node as a dependency for talos and mochitest tasks if needed.
-            # node is used to run symbolicator-cli, our profile symbolication tool
+            # node is used to run profiler-edit, our profile symbolication tool
             if task["suite"] == "talos" or "mochitest" in task["suite"]:
                 if "macosx" in test_platform and "aarch64" in test_platform:
                     node_toolchain = "macosx64-aarch64-node"

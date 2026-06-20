@@ -138,8 +138,6 @@ trait PrivateMatchMethods: TElement {
                     style_attribute,
                     primary_rules,
                 );
-                // FIXME(emilio): Still a hack!
-                self.unset_dirty_style_attribute();
             }
             return result;
         }
@@ -964,6 +962,40 @@ pub trait MatchMethods: TElement {
         }
     }
 
+    /// Rather than comparing the resolved line-height, which can be expensive to compute
+    /// as it involves locking and font metrics access, we consider that line-height may have
+    /// changed if the font-size or line-height property itself has changed, or if the value
+    /// is 'normal' and one of the properties that affects font selection (family, style,
+    /// weight, stretch) has changed.
+    fn line_height_likely_changed(
+        old_style: Option<&Arc<ComputedValues>>,
+        new_style: &Arc<ComputedValues>,
+    ) -> bool {
+        let old_line_height = old_style.map(|s| s.get_font().clone_line_height());
+        let new_line_height = new_style.get_font().clone_line_height();
+        // Return true if the old value was missing, or if the computed values are different.
+        if old_line_height.is_none_or(|lh| lh != new_line_height) {
+            return true;
+        }
+        // If the value isn't `normal`, it doesn't depend on font metrics: return false.
+        if !new_line_height.is_normal() {
+            return false;
+        }
+        // Check the font-selection properties, which could affect metrics used to resolve
+        // `normal` line-height.
+        macro_rules! font_property_changed {
+            ($getter: ident) => {
+                old_style
+                    .map(|s| s.get_font().$getter())
+                    .is_none_or(|v| v != new_style.get_font().$getter())
+            };
+        }
+        font_property_changed!(clone_font_family)
+            || font_property_changed!(clone_font_style)
+            || font_property_changed!(clone_font_weight)
+            || font_property_changed!(clone_font_stretch)
+    }
+
     /// Updates the styles with the new ones, diffs them, and stores the restyle
     /// damage.
     fn finish_restyle(
@@ -990,27 +1022,16 @@ pub trait MatchMethods: TElement {
             .flags
             .contains(ComputedValueFlags::IS_ROOT_ELEMENT_STYLE);
 
-        let old_style = old_styles.primary.as_ref();
-        let old_font_size = old_style.map(|s| s.get_font().clone_font_size());
         let device = context.shared.stylist.device();
         let new_font_size = new_primary_style.get_font().clone_font_size();
-        // For line-height, we want the fully resolved value, as `normal` also depends on other
-        // font properties.
-        let new_line_height = device
-            .calc_line_height(
-                &new_primary_style.get_font(),
-                new_primary_style.writing_mode,
-                None,
-            )
-            .0;
-        let old_line_height = old_style.map(|s| {
-            device
-                .calc_line_height(&s.get_font(), s.writing_mode, None)
-                .0
-        });
+        let new_container_type = new_primary_style.clone_container_type();
 
-        let font_size_changed = old_font_size != Some(new_font_size);
-        let line_height_changed = old_line_height != Some(new_line_height);
+        let old_style = old_styles.primary.as_ref();
+        let old_font_size = old_style.map(|s| s.get_font().clone_font_size());
+        let font_size_changed = old_font_size.is_none_or(|fs| fs != new_font_size);
+
+        let line_height_likely_changed =
+            font_size_changed || Self::line_height_likely_changed(old_style, new_primary_style);
 
         // Update root font-relative units. If any of these unit values changed
         // since last time, ensure that we recascade the entire tree.
@@ -1022,34 +1043,34 @@ pub trait MatchMethods: TElement {
             if font_size_changed {
                 let size = new_font_size.computed_size();
                 device.set_root_font_size(new_primary_style.effective_zoom.unzoom(size.px()));
-                if device.used_root_font_size() {
-                    child_restyle_hint |= RestyleHint::recascade_subtree();
-                }
             }
 
             // Update root line height for rlh units
-            if line_height_changed {
+            if line_height_likely_changed {
+                let new_line_height = device
+                    .calc_line_height(
+                        &new_primary_style.get_font(),
+                        new_primary_style.writing_mode,
+                        None,
+                    )
+                    .0;
                 device.set_root_line_height(
                     new_primary_style
                         .effective_zoom
                         .unzoom(new_line_height.px()),
                 );
-                if device.used_root_line_height() {
-                    child_restyle_hint |= RestyleHint::recascade_subtree();
-                }
             }
 
             // Update root font metrics for rcap, rch, rex, ric units. Since querying
             // font metrics can be an expensive call, they are only updated if these
             // units are used in the document.
             if device.used_root_font_metrics() && device.update_root_font_metrics() {
-                child_restyle_hint |= RestyleHint::recascade_subtree()
-                    | RestyleHint::RESTYLE_IF_AFFECTED_BY_ANCESTOR_FONT_METRICS;
+                child_restyle_hint |= RestyleHint::RESTYLE_IF_AFFECTED_BY_ANCESTOR_FONT;
             }
         }
 
-        if font_size_changed || line_height_changed {
-            child_restyle_hint |= RestyleHint::RESTYLE_IF_AFFECTED_BY_ANCESTOR_FONT_METRICS;
+        if font_size_changed || line_height_likely_changed {
+            child_restyle_hint |= RestyleHint::RESTYLE_IF_AFFECTED_BY_ANCESTOR_FONT;
         }
 
         if context.shared.stylist.quirks_mode() == QuirksMode::Quirks {
@@ -1082,7 +1103,6 @@ pub trait MatchMethods: TElement {
         };
 
         let old_container_type = old_primary_style.clone_container_type();
-        let new_container_type = new_primary_style.clone_container_type();
         if old_container_type != new_container_type && !new_container_type.is_size_container_type()
         {
             // Stopped being a size container. Re-evaluate container queries and units on all our descendants.

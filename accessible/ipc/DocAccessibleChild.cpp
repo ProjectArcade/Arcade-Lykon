@@ -44,7 +44,7 @@ void DocAccessibleChild::FlattenTree(LocalAccessible* aRoot,
 
 /* static */
 AccessibleData DocAccessibleChild::SerializeAcc(LocalAccessible* aAcc) {
-  uint32_t genericTypes = aAcc->mGenericTypes;
+  AccGenericType genericTypes = aAcc->GenericTypes();
   if (aAcc->ARIAHasNumericValue()) {
     // XXX: We need to do this because this requires a state check.
     genericTypes |= eNumericValue;
@@ -55,19 +55,16 @@ AccessibleData DocAccessibleChild::SerializeAcc(LocalAccessible* aAcc) {
   // push the cache again for moves.
   if (!aAcc->Document()->IsAccessibleBeingMoved(aAcc)) {
     fields = aAcc->BundleFieldsForCache(
-        nsAccessibilityService::GetActiveCacheDomains(),
-        CacheUpdateType::Initial);
+        aAcc->Document()->EffectiveCacheDomains(), CacheUpdateType::Initial);
     if (fields->Count() == 0) {
       fields = nullptr;
     }
   }
 
   return AccessibleData(aAcc->ID(), aAcc->NativeRole(),
-                        aAcc->LocalParent()->ID(),
-                        static_cast<int32_t>(aAcc->IndexInParent()),
-                        static_cast<AccType>(aAcc->mType),
-                        static_cast<AccGenericType>(genericTypes),
-                        aAcc->mRoleMapEntryIndex, fields);
+                        aAcc->LocalParent()->ID(), aAcc->IndexInParent(),
+                        aAcc->mType, genericTypes, aAcc->mRoleMapEntryIndex,
+                        fields);
 }
 
 void DocAccessibleChild::InsertIntoIpcTree(LocalAccessible* aChild,

@@ -8,6 +8,7 @@
   @include widget-base-style;
 
   z-index: 1;
+  height: 100%;
 
   .weather-anchor {
     position: absolute;
@@ -248,9 +249,6 @@
   }
 
   &.medium-widget {
-    grid-column: span 4;
-    grid-row: span 2;
-
     .weather-container {
       align-items: center;
       justify-content: space-between;
@@ -302,9 +300,6 @@
   }
 
   &.large-widget {
-    grid-column: span 4;
-    grid-row: span 4;
-
     .weather-container {
       flex: 1;
       flex-direction: column;

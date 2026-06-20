@@ -84,12 +84,6 @@ OTHER_PRIVACY_PREFS = {
             "Changes cookieBehavior=5 from dynamic partitioning to block-by-default with opt-in.",
         ),
         (
-            "Tracker Cookie Blocking",
-            "network.cookie.cookieBehavior.trackerCookieBlocking",
-            None,
-            "Blocks third-party cookies from domains on the tracking protection list.",
-        ),
-        (
             "Social Tracker Cookie Blocking",
             "privacy.socialtracking.block_cookies.enabled",
             None,
@@ -737,6 +731,11 @@ def generate_markdown(
     lines.extend([
         "",
         "---",
+        "",
+        "```{note}",
+        "An empty **Private** cell means the feature has no separate private browsing pref ",
+        "and inherits the value shown in the corresponding **Normal** cell.",
+        "```",
         "",
         "## Enhanced Tracking Protection (ETP)",
         "",

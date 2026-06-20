@@ -39,6 +39,7 @@ const lazy = XPCOMUtils.declareLazy({
   SearchSuggestionController:
     "moz-src:///toolkit/components/search/SearchSuggestionController.sys.mjs",
   UrlbarPrefs: "moz-src:///browser/components/urlbar/UrlbarPrefs.sys.mjs",
+  UrlbarShared: "chrome://browser/content/urlbar/UrlbarShared.mjs",
   UrlbarProviderInterventions:
     "moz-src:///browser/components/urlbar/UrlbarProviderInterventions.sys.mjs",
   UrlbarProviderOpenTabs:
@@ -47,8 +48,6 @@ const lazy = XPCOMUtils.declareLazy({
     "moz-src:///browser/components/urlbar/UrlbarProviderSearchTips.sys.mjs",
   UrlbarSearchUtils:
     "moz-src:///browser/components/urlbar/UrlbarSearchUtils.sys.mjs",
-  UrlbarTokenizer:
-    "moz-src:///browser/components/urlbar/UrlbarTokenizer.sys.mjs",
   UrlUtils: "resource://gre/modules/UrlUtils.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
@@ -107,6 +106,7 @@ export var UrlbarUtils = {
     REMOTE_SUGGESTION: "remoteSuggestion",
     REMOTE_TAB: "remoteTab",
     RESTRICT_SEARCH_KEYWORD: "restrictSearchKeyword",
+    SEMANTIC_HISTORY: "semanticHistory",
     SUGGESTED_INDEX: "suggestedIndex",
     TAIL_SUGGESTION: "tailSuggestion",
   }),
@@ -273,7 +273,7 @@ export var UrlbarUtils = {
      * @typedef {object} LocalSearchMode
      * @property {Values<typeof this.RESULT_SOURCE>} source
      *   The source which the search mode will search.
-     * @property {Values<typeof lazy.UrlbarTokenizer.RESTRICT>} restrict
+     * @property {Values<typeof lazy.UrlbarShared.RESTRICT_TOKENS>} restrict
      *   The restrict token that is associated with the search (*, %, $ etc).
      * @property {string} icon
      *   The URL of the icon associated with the search mode in preferences.
@@ -289,7 +289,7 @@ export var UrlbarUtils = {
     return /** @type {LocalSearchMode[]} */ ([
       {
         source: this.RESULT_SOURCE.BOOKMARKS,
-        restrict: lazy.UrlbarTokenizer.RESTRICT.BOOKMARK,
+        restrict: lazy.UrlbarShared.RESTRICT_TOKENS.BOOKMARK,
         icon: "chrome://browser/skin/bookmark.svg",
         pref: "shortcuts.bookmarks",
         telemetryLabel: "bookmarks",
@@ -297,7 +297,7 @@ export var UrlbarUtils = {
       },
       {
         source: this.RESULT_SOURCE.TABS,
-        restrict: lazy.UrlbarTokenizer.RESTRICT.OPENPAGE,
+        restrict: lazy.UrlbarShared.RESTRICT_TOKENS.OPENPAGE,
         icon: "chrome://browser/skin/tabs.svg",
         pref: "shortcuts.tabs",
         telemetryLabel: "tabs",
@@ -305,7 +305,7 @@ export var UrlbarUtils = {
       },
       {
         source: this.RESULT_SOURCE.HISTORY,
-        restrict: lazy.UrlbarTokenizer.RESTRICT.HISTORY,
+        restrict: lazy.UrlbarShared.RESTRICT_TOKENS.HISTORY,
         icon: "chrome://browser/skin/history.svg",
         pref: "shortcuts.history",
         telemetryLabel: "history",
@@ -313,7 +313,7 @@ export var UrlbarUtils = {
       },
       {
         source: this.RESULT_SOURCE.ACTIONS,
-        restrict: lazy.UrlbarTokenizer.RESTRICT.ACTION,
+        restrict: lazy.UrlbarShared.RESTRICT_TOKENS.ACTION,
         icon: "chrome://browser/skin/quickactions.svg",
         pref: "shortcuts.actions",
         telemetryLabel: "actions",
@@ -668,6 +668,16 @@ export var UrlbarUtils = {
         return this.RESULT_GROUP.RESTRICT_SEARCH_KEYWORD;
       case this.RESULT_TYPE.AI_CHAT:
         return this.RESULT_GROUP.AI;
+    }
+    // When enabled, semantic history results (both history URLs and
+    // switch-to-tab results) get their own group so they fill only the space
+    // left after, and never evict, the plain (non-semantic) results that would
+    // otherwise share the general group.
+    if (
+      result.providerName == "UrlbarProviderSemanticHistorySearch" &&
+      lazy.UrlbarPrefs.get("suggest.semanticHistory.separateGroup")
+    ) {
+      return this.RESULT_GROUP.SEMANTIC_HISTORY;
     }
     return this.RESULT_GROUP.GENERAL;
   },
@@ -1327,6 +1337,183 @@ export var UrlbarUtils = {
   },
 
   /**
+   * @typedef {object} BackspaceInfo
+   * @property {number?} count
+   *   How many times the origin or URL had its autofill cleared.
+   * @property {number?} blockedAt
+   *   How long ago the origin or URL was blocked from backspacing.
+   */
+
+  /**
+   * LRU map tracking adaptive autofill backspace dismissals through their
+   * lifecycle: pre-block (counting backspaces toward the threshold) and
+   * post-block (timestamp used by re-integration telemetry to measure how
+   * long until the user returned to the same destination).
+   *
+   * Keyed by "<scope>:<host>" where scope is "origin" or "page" and host
+   * has any leading "www." stripped, matching how blockOriginAutofill
+   * applies the underlying SQL block. The two scopes for the same host
+   * live as independent entries.
+   *
+   * Insertion order is maintained as an LRU: entries past
+   * _BACKSPACE_BLOCKS_MAX are evicted. State does not survive
+   * restart.
+   *
+   * Re-integration after restart, or more than _BACKSPACE_BLOCK_MAX_AGE_HOURS
+   * after the block, does not record a sample.
+   *
+   * @type {Map<string, BackspaceInfo>}
+   */
+  _backspaceBlocks: new Map(),
+
+  // Resolves with the most recent recordAutofillBackspace() call's DB write
+  // (if any). Tests can await this to sequence on the block before reading
+  // from the database.
+  _lastRecordAutofillBackspacePromise: Promise.resolve(),
+
+  // Maximum age of a tracked block, in hours.
+  _BACKSPACE_BLOCK_MAX_AGE_HOURS: 24,
+
+  // Maximum number of blocked origins that can be stored at one time.
+  _BACKSPACE_BLOCKS_MAX: 512,
+
+  /**
+   * Computes the map key used to record a backspace block for the given URL.
+   * The key is in the form of the scope (origin or page), followed by colon,
+   * and the URL's host with a leading "www." stripped, mirroring how
+   * blockOriginAutofill applies the underlying block in SQL.
+   *
+   * @param {string} url
+   *   The URL whose key is being computed.
+   * @returns {?string}
+   *   The scope and normalized host key, or null if the URL is unparseable.
+   *
+   * @example
+   * // Returns "origin:example.com"
+   * _backspaceBlockKey("https://www.example.com/");
+   *
+   * @example
+   * // Returns "page:example.com"
+   * _backspaceBlockKey("https://example.com/some/path");
+   */
+  _backspaceBlockKey(url) {
+    let origin = parseOriginParts(url);
+    if (!origin) {
+      return null;
+    }
+    let basehost = origin.host.replace(/^www\./, "");
+    let scope = /** @type {"origin" | "page"} */ (
+      this.isOriginUrl(url) ? "origin" : "page"
+    );
+    return `${scope}:${basehost}`;
+  },
+
+  /**
+   * Records a backspace in the LRU map for the autofill URL. Increments
+   * (or creates) the entry's count and when the count reaches the
+   * `autoFill.backspaceThreshold` pref calls blockAutofill and records the
+   * entry's blockedAt so re-integration telemetry can sample the unblock
+   * delay later.
+   *
+   * @param {string} url
+   *   The autofill result URL whose backspace is being recorded.
+   * @returns {Promise<void>}
+   *   Resolves after the threshold-triggered blockAutofill DB write completes.
+   *   Resolves immediately when the URL is unparseable or the count is still
+   *   below threshold (no DB write in either case). Tests can await this to
+   *   sequence on the block.
+   */
+  async recordAutofillBackspace(url) {
+    let key = this._backspaceBlockKey(url);
+    if (!key) {
+      return;
+    }
+
+    let entry = this._backspaceBlocks.get(key) ?? {
+      count: 0,
+      blockedAt: null,
+    };
+    if (entry.blockedAt) {
+      delete entry.blockedAt;
+    }
+    let newCount = (entry.count ?? 0) + 1;
+
+    if (newCount >= lazy.UrlbarPrefs.get("autoFill.backspaceThreshold")) {
+      delete entry.count;
+      entry.blockedAt = Date.now();
+      await this.blockAutofill(
+        url,
+        Date.now() + lazy.UrlbarPrefs.get("autoFill.backspaceBlockDurationMs")
+      ).catch(console.error);
+    } else {
+      entry.count = newCount;
+    }
+
+    // Remove and reinsert so this entry is treated as most-recent under the
+    // Map's insertion-order semantics, which we rely on below to expire the
+    // least-recently-used entry.
+    this._backspaceBlocks.delete(key);
+    this._backspaceBlocks.set(key, entry);
+
+    // Least recently used are expired.
+    if (this._backspaceBlocks.size > this._BACKSPACE_BLOCKS_MAX) {
+      let oldestKey = this._backspaceBlocks.keys().next().value;
+      this._backspaceBlocks.delete(oldestKey);
+    }
+  },
+
+  /**
+   * Retrieves and deletes the recorded backspace block for the given URL, if
+   * any. Only the timestamp matching the URL's level (origin vs. url) is
+   * returned and removed; any other-level timestamp for the same host is
+   * preserved. If the matching timestamp is older than
+   * BACKSPACE_BLOCK_MAX_AGE_HOURS, this returns null. (The timestamp is
+   * removed either way.)
+   *
+   * @param {string} url
+   *   The URL whose block is being cleared.
+   * @returns {?{blockedAt: number, level: "origin" | "url"}}
+   *   The matching timestamp and level if a fresh block existed,
+   *   null otherwise.
+   */
+  getBackspaceBlock(url) {
+    let key = this._backspaceBlockKey(url);
+    if (!key) {
+      return null;
+    }
+
+    let entry = this._backspaceBlocks.get(key);
+    if (!entry?.blockedAt) {
+      return null;
+    }
+
+    // Consume the timestamp so a later call returns null for this URL.
+    this._backspaceBlocks.delete(key);
+
+    // If the timestamp is too old, don't report it.
+    let ageHours = (Date.now() - entry.blockedAt) / (60 * 60 * 1000);
+    if (ageHours > this._BACKSPACE_BLOCK_MAX_AGE_HOURS) {
+      return null;
+    }
+    /** @type {"origin" | "url"} */
+    let level = this.isOriginUrl(url) ? "origin" : "url";
+    return { blockedAt: entry.blockedAt, level };
+  },
+
+  /**
+   * Clears the in-progress backspace count for the URL's scope.
+   *
+   * @param {string} url
+   *   A URL belonging to the scope being cleared.
+   */
+  clearAutofillBackspaceEntryForUrl(url) {
+    let key = this._backspaceBlockKey(url);
+    if (key) {
+      this._backspaceBlocks.delete(key);
+    }
+  },
+
+  /**
    * Returns whether a URL is an origin URL, i.e. it has no path beyond "/",
    * no query string, and no hash.
    *
@@ -1663,6 +1850,9 @@ export var UrlbarUtils = {
         if (result.providerName == "UrlbarProviderTabToSearch") {
           return "tabtosearch";
         }
+        if (result.providerName == "UrlbarProviderAiChat") {
+          return "ai_search_fallback";
+        }
         if (result.payload.suggestion) {
           let type = result.payload.trending ? "trending" : "searchsuggestion";
           if (result.isRichSuggestion) {
@@ -1721,16 +1911,24 @@ export var UrlbarUtils = {
         }
         return "dynamic";
       case this.RESULT_TYPE.RESTRICT:
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.BOOKMARK) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.BOOKMARK
+        ) {
           return "restrict_keyword_bookmarks";
         }
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.OPENPAGE) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.OPENPAGE
+        ) {
           return "restrict_keyword_tabs";
         }
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.HISTORY) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.HISTORY
+        ) {
           return "restrict_keyword_history";
         }
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.ACTION) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.ACTION
+        ) {
           return "restrict_keyword_actions";
         }
         break;
@@ -1860,7 +2058,10 @@ export var UrlbarUtils = {
       case this.RESULT_GROUP.OMNIBOX: {
         return "addon";
       }
-      case this.RESULT_GROUP.GENERAL: {
+      // Semantic history results have their own group for sorting purposes but
+      // are reported as "general" results, as they were before the group split.
+      case this.RESULT_GROUP.GENERAL:
+      case this.RESULT_GROUP.SEMANTIC_HISTORY: {
         return "general";
       }
       // Group of UrlbarProviderQuickSuggest is GENERAL_PARENT.
@@ -1959,6 +2160,9 @@ export var UrlbarUtils = {
             ? "recent_search"
             : "search_history";
         }
+        if (result.providerName === "UrlbarProviderAiChat") {
+          return "ai_search_fallback";
+        }
         if (result.payload.suggestion) {
           let type = result.payload.trending
             ? "trending_search"
@@ -2022,16 +2226,24 @@ export var UrlbarUtils = {
         }
         return checkForSubType("history", result);
       case this.RESULT_TYPE.RESTRICT:
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.BOOKMARK) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.BOOKMARK
+        ) {
           return "restrict_keyword_bookmarks";
         }
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.OPENPAGE) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.OPENPAGE
+        ) {
           return "restrict_keyword_tabs";
         }
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.HISTORY) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.HISTORY
+        ) {
           return "restrict_keyword_history";
         }
-        if (result.payload.keyword === lazy.UrlbarTokenizer.RESTRICT.ACTION) {
+        if (
+          result.payload.keyword === lazy.UrlbarShared.RESTRICT_TOKENS.ACTION
+        ) {
           return "restrict_keyword_actions";
         }
         break;
@@ -2042,9 +2254,12 @@ export var UrlbarUtils = {
     return "unknown";
   },
 
-  searchEngagementTelemetryAction(result) {
+  searchEngagementTelemetryAction(result, pickedActionKey = null) {
     if (result.providerName != "UrlbarProviderGlobalActions") {
       return result.payload.action?.key ?? "none";
+    }
+    if (pickedActionKey) {
+      return pickedActionKey;
     }
     return result.payload.actionsResults.map(({ key }) => key).join(",");
   },
@@ -2357,9 +2572,9 @@ export var UrlbarUtils = {
    *   The result.
    *
    * @typedef {object} ParseDateResult
-   * @property {typeof Temporal.ZonedDateTime} zonedNow
+   * @property {Temporal.ZonedDateTime} zonedNow
    *   The "now" date as a `ZonedDateTime`.
-   * @property {typeof Temporal.ZonedDateTime} zonedDate
+   * @property {Temporal.ZonedDateTime} zonedDate
    *   The passed-in date as a `ZonedDateTime`.
    * @property {boolean} isFuture
    *   Whether the date is in the future.
@@ -2459,6 +2674,9 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
             type: "string",
           },
         },
+      },
+      bookmarkDateMs: {
+        type: "number",
       },
       frecency: {
         type: "number",
@@ -2573,6 +2791,9 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
     required: ["url"],
     properties: {
       blockL10n: L10N_SCHEMA,
+      bookmarkDateMs: {
+        type: "number",
+      },
       bottomTextL10n: L10N_SCHEMA,
       description: {
         type: "string",
@@ -3217,9 +3438,9 @@ export class UrlbarQueryContext {
     // an origin but we've determined a search is allowed, then allow it.
     if (this.tokens.length == 1) {
       switch (this.tokens[0].type) {
-        case lazy.UrlbarTokenizer.TYPE.POSSIBLE_ORIGIN:
+        case lazy.UrlbarShared.TOKEN_TYPE.POSSIBLE_ORIGIN:
           return false;
-        case lazy.UrlbarTokenizer.TYPE.POSSIBLE_ORIGIN_BUT_SEARCH_ALLOWED:
+        case lazy.UrlbarShared.TOKEN_TYPE.POSSIBLE_ORIGIN_BUT_SEARCH_ALLOWED:
           return true;
       }
     }
@@ -3435,7 +3656,7 @@ export class UrlbarProvider {
    *       The index of the picked result.
    *   {string} selType
    *       The type of the selected result.  See TelemetryEvent.record() in
-   *       UrlbarController.sys.mjs.
+   *       UrlbarParentController.sys.mjs.
    *   {string} provider
    *       The name of the provider that produced the picked result.
    *
@@ -3532,6 +3753,85 @@ export class UrlbarProvider {
   onSelection(_result, _element) {}
 
   /**
+   * @typedef {object} ViewTemplate
+   *   A plain object that describes the DOM subtree for a dynamic result type.
+   *   When a dynamic result is shown in the urlbar view, its type's view template
+   *   is used to construct the part of the view that represents the result.
+   *
+   * @property {ViewTemplateElement[]} children
+   *   The elements that make up the subtree for the dynamic result type.
+   */
+
+  /**
+   * @typedef {object} ViewTemplateElement
+   *   Describes the DOM subtree for the given dynamic result type.
+   *   It should be a tree-like nested structure with each object in the nesting
+   *   representing a DOM element to be created.  This tree-like structure is
+   *   achieved using the `children` property described below.  Each object in
+   *   the structure may include the following properties:
+   *
+   * @property {string} tag
+   *   The tag name of the object.  It is required for all objects in the
+   *   structure except the root object and declares the kind of element that
+   *   will be created for the object: span, div, img, etc.
+   *
+   * @property {string} [name]
+   *   The name of the object. This value is required if you need to update
+   *   the object's DOM element at query time. It's also helpful but not
+   *   required if you need to style the element. When defined, it serves two
+   *   important functions:
+   *   (1) The element created for the object will automatically have a class
+   *       named `urlbarView-dynamic-${dynamicType}-${name}`, where
+   *       `dynamicType` is the name of the dynamic result type.  The element
+   *       will also automatically have an attribute "name" whose value is
+   *       this name.  The class and attribute allow the element to be styled
+   *       in CSS.
+   *   (2) The name is used when updating the view.  See
+   *       UrlbarProvider.getViewUpdate().
+   *   Names must be unique within a view template, but they don't need to be
+   *   globally unique.  i.e., two different view templates can use the same
+   *   names, and other DOM elements can use the same names in their IDs and
+   *   classes.  The name also suffixes the dynamic element's ID: an element
+   *   with name `data` will get the ID `urlbarView-row-{unique number}-data`.
+   *   If there is no name provided for the root element, the root element
+   *   will not get an ID.
+   *
+   * @property {object} [attributes]
+   *   An optional mapping from attribute names to values.  For each
+   *   name-value pair, an attribute is added to the element created for the
+   *   object. The `id` attribute is reserved and cannot be set by the
+   *   provider. Element IDs are passed back to the provider in getViewUpdate
+   *   if they are needed.
+   *
+   * @property {ViewTemplateElement[]} [children]
+   *   An optional list of children.  Each item in the array must be an object
+   *   as described here.  For each item, a child element as described by the
+   *   item is created and added to the element created for the parent object.
+   *
+   * @property {string[]} [classList]
+   *   An optional list of classes.  Each class will be added to the element
+   *   created for the object by calling element.classList.add().
+   *
+   * @property {boolean} [overflowable]
+   *   If true, the element's overflow status will be tracked in order to
+   *   fade it out when needed.
+   */
+
+  /**
+   * This is called only for dynamic result types, when the urlbar view creates
+   * the view of one of the results of the provider.
+   *
+   * @param {UrlbarResult} _result
+   *   The result whose view will be created.
+   * @returns {?ViewTemplate}
+   *   The view template describing the DOM to build for the result,
+   *   or null if the provider doesn't define one.
+   */
+  getViewTemplate(_result) {
+    return null;
+  }
+
+  /**
    * This is called only for dynamic result types, when the urlbar view updates
    * the view of one of the results of the provider.  It should return an object
    * describing the view update that looks like this:
@@ -3562,7 +3862,7 @@ export class UrlbarProvider {
    * The object should contain a property for each element to update in the
    * dynamic result type view.  The names of these properties are the names
    * declared in the view template of the dynamic result type; see
-   * UrlbarView.addDynamicViewTemplate().  The values are similar to the nested
+   * UrlbarProvider.getViewTemplate().  The values are similar to the nested
    * objects specified in the view template but not quite the same; see below.
    * For each property, the element in the view subtree with the specified name
    * is updated according to the object in the property's value.  If an

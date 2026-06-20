@@ -479,7 +479,6 @@ export function getMarionetteCommandsActorProxy(browsingContextFn) {
 export function registerCommandsActor(sessionId) {
   try {
     ChromeUtils.registerWindowActor("MarionetteCommands", {
-      kind: "JSWindowActor",
       parent: {
         esModuleURI:
           "chrome://remote/content/marionette/actors/MarionetteCommandsParent.sys.mjs",
@@ -491,6 +490,7 @@ export function registerCommandsActor(sessionId) {
 
       allFrames: true,
       includeChrome: true,
+      safeForUntrustedWebProcess: true,
     });
   } catch (e) {
     if (e.name === "NotSupportedError") {

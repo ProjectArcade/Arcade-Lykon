@@ -668,7 +668,7 @@ nsUrlClassifierStreamUpdater::OnStartRequest(nsIRequest* request) {
   if (downloadError) {
     LOG(("nsUrlClassifierStreamUpdater::Download error [this=%p]", this));
     mDownloadError = true;
-    mDownloadErrorStatusStr = strStatus;
+    mDownloadErrorStatusStr = std::move(strStatus);
     status = NS_ERROR_ABORT;
   } else if (NS_SUCCEEDED(status)) {
     MOZ_ASSERT(mCurrentRequest->mDownloadErrorCallback);

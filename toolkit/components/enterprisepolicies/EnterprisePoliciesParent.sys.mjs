@@ -57,6 +57,14 @@ ChromeUtils.defineLazyGetter(lazy, "log", () => {
 
 const isXpcshell = Services.env.exists("XPCSHELL_TEST_PROFILE_DIR");
 
+// On Nightly under a test harness, ignore real system/user policies so a
+// developer's local policies.json or registry entries don't leak into tests.
+// Restricted to Nightly so release builds never expose a way to bypass
+// enterprise policies via a test env var.
+function shouldIgnoreLocalPolicies() {
+  return AppConstants.NIGHTLY_BUILD && (Cu.isInAutomation || isXpcshell);
+}
+
 // We're only testing for empty objects, not
 // empty strings or empty arrays.
 function isEmptyObject(obj) {
@@ -136,6 +144,12 @@ EnterprisePoliciesManager.prototype = {
     }
 
     this.status = Ci.nsIEnterprisePolicies.ACTIVE;
+
+    // Make Web Serial support be opt-in for enterprise policies.
+    Services.prefs
+      .getDefaultBranch("")
+      .setBoolPref("dom.webserial.enabled", false);
+
     this._parsedPolicies = {};
     this._activatePolicies(provider.policies);
 
@@ -414,7 +428,34 @@ EnterprisePoliciesManager.prototype = {
   },
 
   setExtensionSettings(extensionSettings) {
-    ExtensionSettings = extensionSettings;
+    // Filter blocked_permissions entries to the same shape Chrome's policy
+    // schema enforces:
+    //   "items": { "pattern": "^[a-z][a-zA-Z0-9._]*$", "type": "string" }
+    // This excludes:
+    //   - "internal:"-prefixed permissions (reserved, must not be controlled
+    //     via enterprise policy)
+    //   - match patterns and "<all_urls>" (host permissions are out of scope
+    //     for blocked_permissions; in Firefox, "<all_urls>" is stored under
+    //     the ExtensionPermissions "permissions" key so an unfiltered entry
+    //     would erroneously affect host permission semantics)
+    // Copies the input rather than mutating the caller's object.
+    // toolkit/components/extensions/test/xpcshell/test_ext_permissions.js
+    // asserts every API permission name matches this regex.
+    const VALID_PERM = /^[a-z][a-zA-Z0-9._]*$/;
+    const sanitized = {};
+    for (const [key, entry] of Object.entries(extensionSettings)) {
+      if (Array.isArray(entry?.blocked_permissions)) {
+        sanitized[key] = {
+          ...entry,
+          blocked_permissions: entry.blocked_permissions.filter(perm =>
+            VALID_PERM.test(perm)
+          ),
+        };
+      } else {
+        sanitized[key] = entry;
+      }
+    }
+    ExtensionSettings = sanitized;
     if (
       "*" in extensionSettings &&
       "install_sources" in extensionSettings["*"]
@@ -426,15 +467,23 @@ EnterprisePoliciesManager.prototype = {
   },
 
   getExtensionSettings(extensionID) {
-    let settings = null;
-    if (ExtensionSettings) {
-      if (extensionID in ExtensionSettings) {
-        settings = ExtensionSettings[extensionID];
-      } else if ("*" in ExtensionSettings) {
-        settings = ExtensionSettings["*"];
-      }
+    if (!ExtensionSettings) {
+      return null;
     }
-    return settings;
+    if (extensionID in ExtensionSettings) {
+      const settings = ExtensionSettings[extensionID];
+      if (
+        settings.installation_mode === "force_installed" &&
+        !("updates_disabled" in settings)
+      ) {
+        return { ...settings, updates_disabled: false };
+      }
+      return settings;
+    }
+    if ("*" in ExtensionSettings) {
+      return ExtensionSettings["*"];
+    }
+    return null;
   },
 
   isAddonRequiredByPolicy(addonID) {
@@ -448,20 +497,35 @@ EnterprisePoliciesManager.prototype = {
     );
   },
 
+  // Note: addon parameter has different types (bug 2033101).
   mayInstallAddon(addon) {
     // See https://dev.chromium.org/administrators/policy-list-3/extension-settings-full
     if (!ExtensionSettings) {
       return true;
     }
+    // blocked_permissions takes precedence over installation_mode. Per Chrome,
+    // any per-id entry shadows "*" entirely; "*" only applies when there is no
+    // per-id entry. Host patterns and optional permissions are out of scope
+    // (host patterns are stripped in setExtensionSettings and optional perms
+    // are gated at permissions.request time).
+    let blockedPerms =
+      (addon.id in ExtensionSettings
+        ? ExtensionSettings[addon.id].blocked_permissions
+        : ExtensionSettings["*"]?.blocked_permissions) ?? [];
+    if (
+      blockedPerms.some(perm =>
+        addon.userPermissions?.permissions?.includes(perm)
+      )
+    ) {
+      return false;
+    }
+    // Match Chrome: any per-id ExtensionSettings entry (even empty) shadows
+    // the "*" defaults entirely.
     if (addon.id in ExtensionSettings) {
-      if ("installation_mode" in ExtensionSettings[addon.id]) {
-        switch (ExtensionSettings[addon.id].installation_mode) {
-          case "blocked":
-            return false;
-          default:
-            return true;
-        }
+      if (ExtensionSettings[addon.id].installation_mode === "blocked") {
+        return false;
       }
+      return true;
     }
     if ("*" in ExtensionSettings) {
       if (
@@ -561,8 +625,10 @@ class JSONPoliciesProvider {
     return this._failed;
   }
 
-  _getConfigurationFile() {
-    let configFile = null;
+  _getLocalConfigurationFile() {
+    if (shouldIgnoreLocalPolicies()) {
+      return null;
+    }
 
     if (AppConstants.platform == "linux" && AppConstants.MOZ_SYSTEM_POLICIES) {
       let systemConfigFile = Services.dirsvc.get("SysConfD", Ci.nsIFile);
@@ -574,6 +640,7 @@ class JSONPoliciesProvider {
     }
 
     try {
+      let configFile;
       let perUserPath = Services.prefs.getBoolPref(PREF_PER_USER_DIR, false);
       if (perUserPath) {
         configFile = Services.dirsvc.get("XREUserRunTimeDir", Ci.nsIFile);
@@ -581,10 +648,16 @@ class JSONPoliciesProvider {
         configFile = Services.dirsvc.get("XREAppDist", Ci.nsIFile);
       }
       configFile.append(POLICIES_FILENAME);
+      return configFile;
     } catch (ex) {
       // Getting the correct directory will fail in xpcshell tests. This should
       // be handled the same way as if the configFile simply does not exist.
+      return null;
     }
+  }
+
+  _getConfigurationFile() {
+    let configFile = this._getLocalConfigurationFile();
 
     let alternatePath = Services.prefs.getStringPref(PREF_ALTERNATE_PATH, "");
 
@@ -689,9 +762,12 @@ class WindowsGPOPoliciesProvider {
     try {
       let regLocation = "SOFTWARE\\Policies";
       if (Cu.isInAutomation || isXpcshell) {
-        try {
-          regLocation = Services.prefs.getStringPref(PREF_ALTERNATE_GPO);
-        } catch (e) {}
+        let altLocation = Services.prefs.getStringPref(PREF_ALTERNATE_GPO, "");
+        if (altLocation) {
+          regLocation = altLocation;
+        } else if (shouldIgnoreLocalPolicies()) {
+          return;
+        }
       }
       wrk.open(root, regLocation, wrk.ACCESS_READ);
       if (wrk.hasChild("Mozilla\\" + Services.appinfo.name)) {

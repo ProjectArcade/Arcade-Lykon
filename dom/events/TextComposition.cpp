@@ -19,6 +19,7 @@
 #include "mozilla/StaticPrefs_intl.h"
 #include "mozilla/TextEvents.h"
 #include "mozilla/dom/BrowserParent.h"
+#include "mozilla/dom/EditContext.h"
 #include "nsContentUtils.h"
 #include "nsIContent.h"
 #include "nsIMutationObserver.h"
@@ -260,6 +261,21 @@ void TextComposition::DispatchEvent(
   }
   RefPtr<nsINode> node = mNode;
   RefPtr<nsPresContext> presContext = mPresContext;
+  if (auto* element = nsGenericHTMLElement::FromNode(node)) {
+    if (RefPtr<dom::EditContext> editContext = element->GetEditContext()) {
+      // Only compositionstart and compositionend are sent to EditContext
+      if (aDispatchEvent->mMessage == eCompositionStart) {
+        editContext->StartComposition(*aDispatchEvent);
+      } else if (aDispatchEvent->mMessage == eCompositionEnd) {
+        editContext->EndComposition(*aDispatchEvent);
+      }
+      // Internally, we want to dispatch this event to the EditContext's
+      // associated element, since that is what the EditorEventListener is
+      // listening to. But according to the spec, composition events should only
+      // be dispatched to the EditContext.
+      aDispatchEvent->mFlags.mOnlySystemGroupDispatch = true;
+    }
+  }
   EventDispatcher::Dispatch(node, presContext, aDispatchEvent, nullptr, aStatus,
                             aCallBack);
 
@@ -671,7 +687,7 @@ void TextComposition::MaybeNotifyIMEOfCompositionEventHandled(
 void TextComposition::DispatchCompositionEventRunnable(
     EventMessage aEventMessage, const nsAString& aData,
     bool aIsSynthesizingCommit) {
-  nsContentUtils::AddScriptRunner(new CompositionEventDispatcher(
+  nsContentUtils::AddScriptRunner(MakeAndAddRef<CompositionEventDispatcher>(
       this, mNode, aEventMessage, aData, aIsSynthesizingCommit));
 }
 

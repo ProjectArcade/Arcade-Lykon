@@ -256,7 +256,7 @@
   <!-- This is displayed when the add-on is not allowed to run in private browsing. -->
   <string name="mozac_feature_addons_not_allowed_in_private_browsing">Niedozwolone w\u00a0oknach prywatnych</string>
   <!-- Indicates the add-on is enabled. -->
-  <string name="mozac_feature_addons_enabled">Włączony</string>
+  <string name="mozac_feature_addons_enabled">Włączone</string>
   <!-- This is displayed in a page where the user can see the installed and recommended(not installed yet) add-ons, this string indicates the installed section. -->
   <string name="mozac_feature_addons_installed_section">Zainstalowane</string>
   <!-- This is displayed in a page where the user can see the installed and recommended(not installed yet) add-ons, this string indicates the recommended section. -->
@@ -355,8 +355,6 @@
   <string name="mozac_extension_install_progress_caption">Pobieranie i\u00a0weryfikowanie rozszerzenia…</string>
   <!-- Error shown when extensions could not be loaded -->
   <string name="mozac_feature_addons_failed_to_load_extensions">Nie można wczytać rozszerzeń. Spróbuj ponownie później.</string>
-  <!-- Error shown when something unexpected happened while trying to get the extension list from the server -->
-  <string name="mozac_feature_addons_failed_to_query_extensions">Pobranie listy rozszerzeń się nie powiodło</string>
   <!-- Error shown when unable to find a translation for an add-on field. %1$s is the locale of the user and %2$s is the default language of the add-on -->
   <string name="mozac_feature_addons_failed_to_translate">Nie odnaleziono tłumaczenia dla używanego języka (%1$s) ani domyślnego języka (%2$s)</string>
   <!-- Text shown after successfully installed an add-on. %1$s is the add-on name. -->

@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 package org.mozilla.fenix.debugsettings.tabs
 
+import android.annotation.SuppressLint
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,18 +30,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.unit.dp
 import androidx.core.text.isDigitsOnly
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.createTab
@@ -51,12 +49,16 @@ import mozilla.components.compose.base.utils.toLocaleString
 import org.mozilla.fenix.R
 import org.mozilla.fenix.debugsettings.ui.DebugDrawer
 import org.mozilla.fenix.tabgroups.fakes.FakeTabGroupRepository
-import org.mozilla.fenix.tabgroups.storage.database.StoredTabGroup
+import org.mozilla.fenix.tabgroups.storage.data.TabGroup
+import org.mozilla.fenix.tabgroups.storage.data.TabGroupData
 import org.mozilla.fenix.tabgroups.storage.repository.TabGroupRepository
 import org.mozilla.fenix.tabstray.data.TabGroupTheme
+import org.mozilla.fenix.tabstray.repository.uistate.DefaultTabManagerUiStateRepository
+import org.mozilla.fenix.tabstray.repository.uistate.data.PersistedUIState
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.PreviewThemeProvider
 import org.mozilla.fenix.theme.Theme
+
 @VisibleForTesting
 private const val MAX_TAB_GROUPS_GENERATED = 100
 
@@ -68,18 +70,27 @@ private val TAB_GROUP_COLORS = TabGroupTheme.entries.map { it.name }
  * @param tabGroupRepository [TabGroupRepository] used to observe and modify tab group data.
  * @param browserStore [BrowserStore] used to fire any tab creation actions.
  */
+@SuppressLint("VisibleForTests")
 @Composable
 fun TabGroupTools(
     tabGroupRepository: TabGroupRepository,
     browserStore: BrowserStore,
 ) {
-    val tabGroups by tabGroupRepository.observeTabGroups().collectAsState(initial = emptyList())
+    val tabGroupData by tabGroupRepository.tabGroupDataFlow.collectAsState(initial = TabGroupData())
 
-    val totalGroupCount = tabGroups.size
-    val closedGroupCount = remember(tabGroups) { tabGroups.count { it.closed } }
+    val totalGroupCount = tabGroupData.tabGroups.size
+    val closedGroupCount = remember(tabGroupData) { tabGroupData.tabGroups.count { it.closed } }
     val openGroupCount = totalGroupCount - closedGroupCount
 
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val tabManagerUiStateRepository = remember {
+        DefaultTabManagerUiStateRepository(
+            context = context,
+            stateFlowScope = coroutineScope,
+        )
+    }
 
     Surface {
         TabGroupToolsContent(
@@ -105,8 +116,20 @@ fun TabGroupTools(
                     autoPopulateTabGroupsUseCase(tabGroupRepository, browserStore)
                 }
             },
+            onResetOnboarding = {
+                coroutineScope.launch {
+                    val currentState = tabManagerUiStateRepository.uiState.value ?: PersistedUIState()
+                    tabManagerUiStateRepository.initializeDataStore(
+                        initialUiState = currentState.copy(
+                            hasUserDismissedTabGroupOnboarding = false,
+                            tabGroupOnboardingImpressionCount = 0,
+                            hasUserEverHadOneTabGroup = false,
+                        ),
+                    )
+                }
+            },
             onRemoveAllGroupsClick = {
-                coroutineScope.launch(Dispatchers.IO) {
+                coroutineScope.launch {
                     tabGroupRepository.deleteAllTabGroupData()
                 }
             },
@@ -114,9 +137,9 @@ fun TabGroupTools(
     }
 }
 
-private fun generateTabGroup(counter: Int, isClosed: Boolean = false): StoredTabGroup {
+private fun generateTabGroup(counter: Int, isClosed: Boolean = false): TabGroup {
     val timestamp = System.currentTimeMillis()
-    return StoredTabGroup(
+    return TabGroup(
         title = "Tab Group $counter",
         theme = TabGroupTheme.entries.random().name,
         closed = isClosed,
@@ -154,19 +177,17 @@ private suspend fun autoPopulateTabGroupsUseCase(
 
         browserStore.dispatch(TabListAction.AddMultipleTabsAction(tabs = groupTabs))
 
-        val newGroup = StoredTabGroup(
+        val newGroup = TabGroup(
             title = title,
             theme = theme,
             closed = false,
             lastModified = System.currentTimeMillis(),
         )
 
-        withContext(Dispatchers.IO) {
-            tabGroupRepository.createTabGroupWithTabs(
-                tabGroup = newGroup,
-                tabIds = groupTabs.map { it.id },
-            )
-        }
+        tabGroupRepository.createTabGroupWithTabs(
+            tabGroup = newGroup,
+            tabIds = groupTabs.map { it.id },
+        )
 
         val ungroupedCountToGenerate = when (index) {
             0 -> 4
@@ -203,16 +224,12 @@ private suspend fun createTabGroupsUseCase(
 
             browserStore.dispatch(TabListAction.AddMultipleTabsAction(tabs = realTabs))
 
-            withContext(Dispatchers.IO) {
-                tabGroupRepository.createTabGroupWithTabs(
-                    tabGroup = newGroup,
-                    tabIds = realTabs.map { it.id },
-                )
-            }
+            tabGroupRepository.createTabGroupWithTabs(
+                tabGroup = newGroup,
+                tabIds = realTabs.map { it.id },
+            )
         } else {
-            withContext(Dispatchers.IO) {
-                tabGroupRepository.addNewTabGroup(tabGroup = newGroup)
-            }
+            tabGroupRepository.addNewTabGroup(tabGroup = newGroup)
         }
     }
 }
@@ -224,14 +241,15 @@ private fun TabGroupToolsContent(
     totalGroupCount: Int,
     onCreateGroupsClick: ((groupQuantity: Int, tabsPerGroup: Int, isClosed: Boolean) -> Unit),
     onAutoPopulateClick: () -> Unit,
+    onResetOnboarding: () -> Unit,
     onRemoveAllGroupsClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(all = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(all = FirefoxTheme.layout.space.static200),
+        verticalArrangement = Arrangement.spacedBy(FirefoxTheme.layout.space.static200),
     ) {
         TabGroupCounter(
             openGroupCount = openGroupCount,
@@ -242,6 +260,7 @@ private fun TabGroupToolsContent(
         TabGroupCreationTool(
             onCreateGroupsClick = onCreateGroupsClick,
             onAutoPopulateClick = onAutoPopulateClick,
+            onResetOnboarding = onResetOnboarding,
             onRemoveAllGroupsClick = onRemoveAllGroupsClick,
         )
     }
@@ -259,20 +278,23 @@ private fun TabGroupCounter(
             style = FirefoxTheme.typography.headline5,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
 
         TabGroupCountRow(
             groupType = stringResource(R.string.debug_drawer_tab_group_tools_count_open),
             count = openGroupCount,
         )
+
         TabGroupCountRow(
             groupType = stringResource(R.string.debug_drawer_tab_group_tools_count_closed),
             count = closedGroupCount,
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
+
         HorizontalDivider()
-        Spacer(modifier = Modifier.height(8.dp))
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
         TabGroupCountRow(
             groupType = stringResource(R.string.debug_drawer_tab_group_tools_count_total),
@@ -286,7 +308,7 @@ private fun TabGroupCountRow(groupType: String, count: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp),
+            .padding(start = FirefoxTheme.layout.space.static200),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
@@ -308,6 +330,7 @@ private const val DEFAULT_QUANTITY = 1
 private fun TabGroupCreationTool(
     onCreateGroupsClick: ((groupQuantity: Int, tabsPerGroup: Int, isClosed: Boolean) -> Unit),
     onAutoPopulateClick: () -> Unit,
+    onResetOnboarding: () -> Unit,
     onRemoveAllGroupsClick: () -> Unit,
 ) {
     var groupQuantityToCreate by rememberSaveable { mutableStateOf(DEFAULT_QUANTITY.toLocaleString()) }
@@ -326,7 +349,7 @@ private fun TabGroupCreationTool(
             text = stringResource(R.string.debug_drawer_tab_group_tools_creation_tool_title),
             style = FirefoxTheme.typography.headline5,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
         TabGroupInputField(
             value = groupQuantityToCreate,
@@ -341,7 +364,7 @@ private fun TabGroupCreationTool(
             keyboardController = keyboardController,
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
         TabGroupInputField(
             value = tabsPerGroup,
@@ -356,7 +379,7 @@ private fun TabGroupCreationTool(
             keyboardController = keyboardController,
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
         TabGroupActionButtons(
             hasAnyError = hasAnyError,
@@ -367,6 +390,7 @@ private fun TabGroupCreationTool(
                 onCreateGroupsClick(groupQuantityToCreate.toInt(), tabsPerGroup.toInt(), true)
             },
             onAutoPopulateClick = onAutoPopulateClick,
+            onResetOnboarding = onResetOnboarding,
             onRemoveAllGroupsClick = onRemoveAllGroupsClick,
         )
     }
@@ -408,6 +432,7 @@ private fun TabGroupActionButtons(
     onAddOpenGroupClick: () -> Unit,
     onAddClosedGroupClick: () -> Unit,
     onAutoPopulateClick: () -> Unit,
+    onResetOnboarding: () -> Unit,
     onRemoveAllGroupsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -418,7 +443,8 @@ private fun TabGroupActionButtons(
             enabled = !hasAnyError,
             onClick = onAddOpenGroupClick,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
         FilledButton(
             text = stringResource(R.string.debug_drawer_tab_group_tools_creation_button_closed),
@@ -426,23 +452,40 @@ private fun TabGroupActionButtons(
             enabled = !hasAnyError,
             onClick = onAddClosedGroupClick,
         )
-        Spacer(modifier = Modifier.height(16.dp))
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
 
         FilledButton(
             text = stringResource(R.string.debug_drawer_tab_group_tools_creation_button_auto_populate),
             modifier = Modifier.fillMaxWidth(),
             onClick = onAutoPopulateClick,
         )
-        Spacer(modifier = Modifier.height(16.dp))
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
 
         HorizontalDivider()
-        Spacer(modifier = Modifier.height(16.dp))
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
 
         FilledButton(
             text = stringResource(R.string.debug_drawer_tab_group_tools_creation_button_remove_all),
             modifier = Modifier.fillMaxWidth(),
             onClick = onRemoveAllGroupsClick,
         )
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
+
+        HorizontalDivider()
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
+
+        FilledButton(
+            text = stringResource(R.string.debug_drawer_tab_group_tools_creation_button_reset_onboarding),
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onResetOnboarding,
+        )
+
+        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
     }
 }
 
@@ -461,26 +504,7 @@ private fun validateTabGroupInput(text: String): Int? {
 private fun TabGroupToolsPreview(
     @PreviewParameter(PreviewThemeProvider::class) theme: Theme,
 ) {
-    val mockTabGroupRepository = FakeTabGroupRepository(
-        tabGroupFlow = MutableStateFlow(
-            listOf(
-                StoredTabGroup(
-                    id = "1",
-                    title = "Mock Open",
-                    theme = "Blue",
-                    closed = false,
-                    lastModified = 0L,
-                ),
-                StoredTabGroup(
-                    id = "2",
-                    title = "Mock Closed",
-                    theme = "Orange",
-                    closed = true,
-                    lastModified = 0L,
-                ),
-            ),
-        ),
-    )
+    val mockTabGroupRepository = FakeTabGroupRepository()
 
     FirefoxTheme(theme) {
         TabGroupTools(

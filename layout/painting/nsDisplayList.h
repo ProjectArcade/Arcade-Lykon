@@ -16,9 +16,7 @@
 
 #include "DisplayItemClipChain.h"
 #include "DisplayListClipState.h"
-#include "FrameMetrics.h"
 #include "HitTestInfo.h"
-#include "ImgDrawResult.h"
 #include "RetainedDisplayListHelpers.h"
 #include "Units.h"
 #include "gfxContext.h"
@@ -2027,7 +2025,7 @@ class nsDisplayListBuilder {
 
 template <typename T>
 MOZ_ALWAYS_INLINE T* MakeClone(nsDisplayListBuilder* aBuilder, const T* aItem) {
-  static_assert(std::is_base_of<nsDisplayWrapList, T>::value,
+  static_assert(std::is_base_of_v<nsDisplayWrapList, T>,
                 "Display item type should be derived from nsDisplayWrapList");
   T* item = new (aBuilder) T(aBuilder, *aItem);
   item->SetType(T::ItemType());
@@ -2055,9 +2053,9 @@ template <typename T, typename F, typename... Args>
 MOZ_ALWAYS_INLINE T* MakeDisplayItemWithIndex(nsDisplayListBuilder* aBuilder,
                                               F* aFrame, const uint16_t aIndex,
                                               Args&&... aArgs) {
-  static_assert(std::is_base_of<nsDisplayItem, T>::value,
+  static_assert(std::is_base_of_v<nsDisplayItem, T>,
                 "Display item type should be derived from nsDisplayItem");
-  static_assert(std::is_base_of<nsIFrame, F>::value,
+  static_assert(std::is_base_of_v<nsIFrame, F>,
                 "Frame type should be derived from nsIFrame");
 
   const DisplayItemType type = T::ItemType();
@@ -4480,7 +4478,7 @@ class nsDisplayBackgroundColor : public nsPaintedDisplayItem {
 
   bool HasBackgroundClipText() const {
     MOZ_ASSERT(mHasStyle);
-    return mBottomLayerClip == StyleGeometryBox::Text;
+    return mBottomLayerClip == StyleBackgroundClip::Text;
   }
 
   void Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) override;
@@ -4508,6 +4506,10 @@ class nsDisplayBackgroundColor : public nsPaintedDisplayItem {
 
   bool CanPaintWithClip(const DisplayItemClip& aClip) override {
     if (HasBackgroundClipText()) {
+      return false;
+    }
+
+    if (mBottomLayerClip == StyleBackgroundClip::BorderArea) {
       return false;
     }
 
@@ -4564,7 +4566,7 @@ class nsDisplayBackgroundColor : public nsPaintedDisplayItem {
  protected:
   const nsRect mBackgroundRect;
   const bool mHasStyle;
-  StyleGeometryBox mBottomLayerClip;
+  StyleBackgroundClip mBottomLayerClip = StyleBackgroundClip::BorderBox;
   nsIFrame* mDependentFrame;
   gfx::sRGBColor mColor;
 };
@@ -5920,8 +5922,7 @@ class nsDisplayAsyncZoom final : public nsDisplayOwnLayer {
   nsDisplayAsyncZoom(nsDisplayListBuilder* aBuilder, nsIFrame* aFrame,
                      nsDisplayList* aList,
                      const ActiveScrolledRoot* aActiveScrolledRoot,
-                     ContainerASRType aContainerASRType,
-                     layers::FrameMetrics::ViewID aViewID);
+                     ContainerASRType aContainerASRType, ViewID aViewID);
   nsDisplayAsyncZoom(nsDisplayListBuilder* aBuilder,
                      const nsDisplayAsyncZoom& aOther)
       : nsDisplayOwnLayer(aBuilder, aOther), mViewID(aOther.mViewID) {
@@ -5938,7 +5939,7 @@ class nsDisplayAsyncZoom final : public nsDisplayOwnLayer {
                         layers::WebRenderLayerScrollData* aLayerData) override;
 
  protected:
-  layers::FrameMetrics::ViewID mViewID;
+  ViewID mViewID;
 };
 
 /**
@@ -6336,7 +6337,8 @@ class nsDisplayTransform final : public nsPaintedDisplayItem {
 
   bool ShouldSkipTransform(nsDisplayListBuilder* aBuilder) const;
   Matrix4x4 GetTransformForRendering(
-      LayoutDevicePoint* aOutOrigin = nullptr) const;
+      LayoutDevicePoint* aOutOrigin = nullptr,
+      const nsDisplayListBuilder* aBuilder = nullptr) const;
 
   /**
    * Return the transform that is aggregation of all transform on the

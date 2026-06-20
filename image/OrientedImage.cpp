@@ -88,7 +88,7 @@ already_AddRefed<SourceSurface> OrientedImage::OrientSurface(
   }
 
   // Create our drawable.
-  RefPtr<gfxDrawable> drawable = new gfxSurfaceDrawable(aSurface, originalSize);
+  auto drawable = MakeRefPtr<gfxSurfaceDrawable>(aSurface, originalSize);
 
   // Determine an appropriate format for the surface.
   gfx::SurfaceFormat surfaceFormat = IsOpaque(aSurface->GetFormat())

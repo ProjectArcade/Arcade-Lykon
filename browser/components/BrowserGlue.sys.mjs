@@ -15,7 +15,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource:///modules/asrouter/ASRouterDefaultConfig.sys.mjs",
   ASRouterNewTabHook: "resource:///modules/asrouter/ASRouterNewTabHook.sys.mjs",
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
-  shieldIntegration: "resource:///modules/ShieldIntegration.sys.mjs",
   BackupService: "resource:///modules/backup/BackupService.sys.mjs",
   BrowserSearchTelemetry:
     "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
@@ -85,8 +84,6 @@ XPCOMUtils.defineLazyServiceGetters(lazy, {
   PushService: ["@mozilla.org/push/Service;1", Ci.nsIPushService],
 });
 
-
-
 if (AppConstants.ENABLE_WEBDRIVER) {
   XPCOMUtils.defineLazyServiceGetter(
     lazy,
@@ -116,6 +113,7 @@ ChromeUtils.defineLazyGetter(
 
 if (AppConstants.MOZ_CRASHREPORTER) {
   ChromeUtils.defineESModuleGetters(lazy, {
+    CrashFileCleaner: "resource:///modules/ContentCrashHandlers.sys.mjs",
     UnsubmittedCrashHandler: "resource:///modules/ContentCrashHandlers.sys.mjs",
   });
 }
@@ -278,7 +276,7 @@ BrowserGlue.prototype = {
         // URI that it's been asked to load into a keyword search.
         let engine = null;
         try {
-          engine = lazy.SearchService.getEngineByName(
+          engine = lazy.SearchService.getEngineById(
             subject.QueryInterface(Ci.nsISupportsString).data
           );
         } catch (ex) {
@@ -389,9 +387,6 @@ BrowserGlue.prototype = {
   _beforeUIStartup: function BG__beforeUIStartup() {
     lazy.SessionStartup.init();
 
-    // Initialize Lykon Shield with ad blocking
-    this._initializeShield();
-
     // check if we're in safe mode
     if (Services.appinfo.inSafeMode) {
       Services.ww.openWindow(
@@ -455,27 +450,6 @@ BrowserGlue.prototype = {
         Cc["@mozilla.org/updates/update-service;1"]
           .getService(Ci.nsIApplicationUpdateService)
           .checkForBackgroundUpdates();
-      }
-    }
-  },
-
-  /**
-   * Initialize Lykon Shield with integrated ad blocking
-   */
-async _initializeShield() {
-    try {
-      await lazy.shieldIntegration.init();
-      console.log("[BrowserGlue] Lykon Shield initialized with ad blocking");
-    } catch (error) {
-      console.error("[BrowserGlue] Failed to initialize Lykon Shield:", error);
-      try {
-        const { AdblockService } = ChromeUtils.importESModule(
-          "resource:///modules/AdblockService.sys.mjs"
-        );
-        await AdblockService.init();
-        console.log("[BrowserGlue] Fallback: AdblockService initialized");
-      } catch (err) {
-        console.error("[BrowserGlue] Fallback AdblockService initialization failed:", err);
       }
     }
   },
@@ -890,9 +864,10 @@ async _initializeShield() {
         // This usually happens after the test harness is done collecting
         // test errors, thus we can't easily add a failure to it. The only
         // noticeable solution we have is crashing.
+        // See bug 2034905 for filename / fileName shenanigans.
         Cc["@mozilla.org/xpcom/debug;1"]
           .getService(Ci.nsIDebug2)
-          .abort(ex.filename, ex.lineNumber);
+          .abort(ex.filename || ex.fileName, ex.lineNumber);
       }
     }
 
@@ -982,6 +957,8 @@ async _initializeShield() {
     }
 
     if (AppConstants.MOZ_CRASHREPORTER) {
+      lazy.CrashFileCleaner.init();
+      lazy.CrashFileCleaner.scheduleCleanup();
       lazy.UnsubmittedCrashHandler.init();
       lazy.UnsubmittedCrashHandler.scheduleCheckForUnsubmittedCrashReports();
     }
@@ -1638,7 +1615,7 @@ async _initializeShield() {
     // Use an increasing number to keep track of the current state of the user's
     // profile, so we can move data around as needed as the browser evolves.
     // Completely unrelated to the current Firefox release number.
-    const APP_DATA_VERSION = 170;
+    const APP_DATA_VERSION = 176;
     const PREF = "browser.migration.version";
 
     let profileDataVersion = Services.prefs.getIntPref(PREF, -1);

@@ -50,6 +50,7 @@ import org.mozilla.fenix.home.topsites.interactor.TopSiteInteractor
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.utils.Settings
 import java.lang.ref.WeakReference
+import androidx.appcompat.R as appcompatR
 import mozilla.components.ui.icons.R as iconsR
 
 /**
@@ -105,6 +106,11 @@ interface TopSiteController {
      * @see [TopSiteInteractor.onShortcutsLibraryViewed]
      */
     fun handleShortcutsLibraryViewed()
+
+    /**
+     * @see [TopSiteInteractor.onSaveShortcut]
+     */
+    fun handleSaveShortcut(title: String, url: String)
 }
 
 /**
@@ -190,7 +196,7 @@ class DefaultTopSiteController(
                         dialog.dismiss()
                     } else {
                         val criticalColor = ColorStateList.valueOf(
-                            activity.getColorFromAttr(R.attr.textCritical),
+                            activity.getColorFromAttr(appcompatR.attr.colorError),
                         )
                         urlLayout.setErrorIconTintList(criticalColor)
                         urlLayout.setErrorTextColor(criticalColor)
@@ -402,6 +408,15 @@ class DefaultTopSiteController(
 
     override fun handleShortcutsLibraryViewed() {
         ShortcutsLibrary.viewed.record(NoExtras())
+    }
+
+    override fun handleSaveShortcut(title: String, url: String) {
+        viewLifecycleScope.launch {
+            topSitesUseCases.addPinnedSites(
+                title = title,
+                url = url,
+            )
+        }
     }
 
     /**

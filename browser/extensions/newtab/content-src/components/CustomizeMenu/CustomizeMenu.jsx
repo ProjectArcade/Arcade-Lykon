@@ -22,7 +22,6 @@ export class _CustomizeMenu extends React.PureComponent {
     this.dialogRef = React.createRef();
     this.closeButtonRef = React.createRef();
     this.state = {
-      exitEventFired: false,
       subpanelOpen: false,
     };
   }
@@ -51,7 +50,6 @@ export class _CustomizeMenu extends React.PureComponent {
   }
 
   onEntered() {
-    this.setState({ exitEventFired: false });
     if (this.closeButtonRef.current) {
       this.closeButtonRef.current.focus();
     }
@@ -61,7 +59,12 @@ export class _CustomizeMenu extends React.PureComponent {
     if (this.dialogRef.current?.open) {
       this.dialogRef.current.close();
     }
-    this.setState({ exitEventFired: true });
+    if (this.props.showWidgetsManagementPanel) {
+      this.props.toggleWidgetsManagementPanel();
+    }
+    if (this.props.showSectionsMgmtPanel) {
+      this.props.toggleSectionsMgmtPanel();
+    }
     if (this.personalizeButtonRef.current) {
       this.personalizeButtonRef.current.focus();
     }
@@ -112,7 +115,7 @@ export class _CustomizeMenu extends React.PureComponent {
                 <label data-l10n-id="newtab-customize-panel-icon-button-label" />
                 <div>
                   <img
-                    role="presentation"
+                    alt=""
                     src="chrome://global/skin/icons/edit-outline.svg"
                   />
                 </div>
@@ -170,8 +173,8 @@ export class _CustomizeMenu extends React.PureComponent {
                 mayHaveTimerWidget={this.props.mayHaveTimerWidget}
                 mayHaveListsWidget={this.props.mayHaveListsWidget}
                 mayHaveSportsWidget={this.props.mayHaveSportsWidget}
+                mayHaveClocksWidget={this.props.mayHaveClocksWidget}
                 dispatch={this.props.dispatch}
-                exitEventFired={this.state.exitEventFired}
                 onSubpanelToggle={this.onSubpanelToggle}
                 toggleSectionsMgmtPanel={this.props.toggleSectionsMgmtPanel}
                 showSectionsMgmtPanel={this.props.showSectionsMgmtPanel}

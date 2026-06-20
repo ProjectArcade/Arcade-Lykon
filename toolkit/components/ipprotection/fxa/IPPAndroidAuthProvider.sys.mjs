@@ -23,9 +23,9 @@ class IPPAndroidFxAAuthProviderSingleton extends IPPFxaActivateAuthProviderSingl
 
   async getToken(abortSignal = null) {
     abortSignal?.throwIfAborted();
-    const request = lazy.EventDispatcher.instance.sendRequestForResult({
-      type: "GeckoView:IPProtection:GetToken",
-    });
+    const request = lazy.EventDispatcher.instance.sendRequestForResult(
+      "GeckoView:IPProtection:GetToken"
+    );
     let response;
     if (abortSignal) {
       const cleanup = new AbortController();

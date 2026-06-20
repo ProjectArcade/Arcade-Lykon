@@ -68,7 +68,8 @@ static uint8_t SerializeTransports(
     } else if (str.EqualsLiteral(
                    MOZ_WEBAUTHN_AUTHENTICATOR_TRANSPORT_INTERNAL)) {
       transports |= MOZ_WEBAUTHN_AUTHENTICATOR_TRANSPORT_ID_INTERNAL;
-    } else if (str.EqualsLiteral(MOZ_WEBAUTHN_AUTHENTICATOR_TRANSPORT_HYBRID)) {
+    } else if (str.EqualsLiteral(MOZ_WEBAUTHN_AUTHENTICATOR_TRANSPORT_HYBRID) ||
+               str.EqualsLiteral(MOZ_WEBAUTHN_AUTHENTICATOR_TRANSPORT_CABLE)) {
       transports |= MOZ_WEBAUTHN_AUTHENTICATOR_TRANSPORT_ID_HYBRID;
     }
   }
@@ -149,11 +150,6 @@ void WebAuthnHandler::MakeCredential(
       return;
     }
   }
-  if (!IsValidRpId(principal, rpId)) {
-    aPromise->MaybeReject(NS_ERROR_DOM_SECURITY_ERR);
-    return;
-  }
-
   // Enforce 5.4.3 User Account Parameters for Credential Generation
   // When we add UX, we'll want to do more with this value, but for now
   // we just have to verify its correctness.
@@ -450,11 +446,6 @@ void WebAuthnHandler::GetAssertion(
       return;
     }
   }
-  if (!IsValidRpId(principal, rpId)) {
-    aPromise->MaybeReject(NS_ERROR_DOM_SECURITY_ERR);
-    return;
-  }
-
   // If timeoutSeconds was specified, check if its value lies within a
   // reasonable range as defined by the platform and if not, correct it to the
   // closest value lying within that range.

@@ -13,6 +13,8 @@ prefs = [
 ["test_AboutHomeStartupCacheWorker.js"]
 support-files = ["topstories.json"]
 
+["test_ActivityStream_contextualAds.js"]
+
 ["test_AdsFeed.js"]
 
 ["test_ExternalComponentsFeed.js"]
@@ -50,6 +52,8 @@ tags = "remote-settings"
 ["test_ShortcutRanker.js"]
 
 ["test_SmartShortcutsFeed.js"]
+
+["test_SportsFeed.js"]
 
 ["test_StartupCacheInit.js"]
 

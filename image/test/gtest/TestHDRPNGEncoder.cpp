@@ -184,8 +184,8 @@ static RefPtr<SourceSurface> DecodePNG(const nsTArray<uint8_t>& aPNGData) {
       DefaultSurfaceFlags());
   EXPECT_TRUE(decoder != nullptr);
 
-  RefPtr<IDecodingTask> task =
-      new AnonymousDecodingTask(WrapNotNull(decoder), /* aResumable */ false);
+  auto task = MakeRefPtr<AnonymousDecodingTask>(WrapNotNull(decoder),
+                                                /* aResumable */ false);
   task->Run();
 
   EXPECT_TRUE(decoder->GetDecodeDone());

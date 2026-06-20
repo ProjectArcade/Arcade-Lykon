@@ -30,6 +30,7 @@
 #include "mozilla/layers/SharedPlanarYCbCrImage.h"
 #include "mozilla/layers/SharedRGBImage.h"
 #include "mozilla/layers/TextureClientRecycleAllocator.h"
+#include "mozilla/UniquePtrExtensions.h"
 #include "nsProxyRelease.h"
 #include "nsISupportsUtils.h"  // for NS_IF_ADDREF
 
@@ -56,12 +57,12 @@ Atomic<int32_t> Image::sSerialCounter(0);
 Atomic<uint32_t> ImageContainer::sGenerationCounter(0);
 
 static void CopyPlane(uint8_t* aDst, const uint8_t* aSrc,
-                      const gfx::IntSize& aSize, int32_t aStride,
-                      int32_t aSkip);
+                      const gfx::IntSize& aSize, int32_t aStride, int32_t aSkip,
+                      int32_t aBytesPerElement = 1);
 
 RefPtr<PlanarYCbCrImage> ImageFactory::CreatePlanarYCbCrImage(
     const gfx::IntSize& aScaleHint, BufferRecycleBin* aRecycleBin) {
-  return new RecyclingPlanarYCbCrImage(aRecycleBin);
+  return MakeRefPtr<RecyclingPlanarYCbCrImage>(aRecycleBin);
 }
 
 BufferRecycleBin::BufferRecycleBin()
@@ -87,7 +88,7 @@ UniquePtr<uint8_t[]> BufferRecycleBin::GetBuffer(uint32_t aSize) {
   MutexAutoLock lock(mLock);
 
   if (mRecycledBuffers.IsEmpty() || mRecycledBufferSize != aSize) {
-    return UniquePtr<uint8_t[]>(new (fallible) uint8_t[aSize]);
+    return MakeUniqueFallible<uint8_t[]>(aSize);
   }
 
   return mRecycledBuffers.PopLastElement();
@@ -185,10 +186,10 @@ ImageContainer::ImageContainer(ImageUsageType aUsageType, Mode aFlag)
       mDroppedImageCount(0),
       mImageFactory(new ImageFactory()),
       mRotation(VideoRotation::kDegree_0),
-      mRecycleBin(new BufferRecycleBin()),
+      mRecycleBin(MakeRefPtr<BufferRecycleBin>()),
       mCurrentProducerID(-1) {
   if (aFlag == ASYNCHRONOUS) {
-    mNotifyCompositeListener = new ImageContainerListener(this);
+    mNotifyCompositeListener = MakeRefPtr<ImageContainerListener>(this);
     EnsureImageClient();
   }
 }
@@ -337,10 +338,10 @@ RefPtr<PlanarYCbCrImage> ImageContainer::CreatePlanarYCbCrImage() {
   RecursiveMutexAutoLock lock(mRecursiveMutex);
   EnsureImageClient();
   if (mImageClient && mImageClient->AsImageClientSingle()) {
-    return new SharedPlanarYCbCrImage(mImageClient);
+    return MakeRefPtr<SharedPlanarYCbCrImage>(mImageClient);
   }
   if (mRecycleAllocator) {
-    return new SharedPlanarYCbCrImage(mRecycleAllocator);
+    return MakeRefPtr<SharedPlanarYCbCrImage>(mRecycleAllocator);
   }
   return mImageFactory->CreatePlanarYCbCrImage(mScaleHint, mRecycleBin);
 }
@@ -349,10 +350,10 @@ RefPtr<SharedRGBImage> ImageContainer::CreateSharedRGBImage() {
   RecursiveMutexAutoLock lock(mRecursiveMutex);
   EnsureImageClient();
   if (mImageClient && mImageClient->AsImageClientSingle()) {
-    return new SharedRGBImage(mImageClient);
+    return MakeRefPtr<SharedRGBImage>(mImageClient);
   }
   if (mRecycleAllocator) {
-    return new SharedRGBImage(mRecycleAllocator);
+    return MakeRefPtr<SharedRGBImage>(mRecycleAllocator);
   }
   return nullptr;
 }
@@ -573,7 +574,7 @@ void ImageContainer::EnsureRecycleAllocatorForRDD(
   static const uint32_t MAX_POOLED_VIDEO_COUNT = 5;
 
   mRecycleAllocator =
-      new layers::TextureClientRecycleAllocator(aKnowsCompositor);
+      MakeRefPtr<layers::TextureClientRecycleAllocator>(aKnowsCompositor);
   mRecycleAllocator->SetMaxPoolSize(MAX_POOLED_VIDEO_COUNT);
 }
 
@@ -598,8 +599,8 @@ ImageContainer::GetD3D11RecycleAllocator(KnowsCompositor* aKnowsCompositor,
     return do_AddRef(mD3D11RecycleAllocator);
   }
 
-  mD3D11RecycleAllocator =
-      new D3D11RecycleAllocator(aKnowsCompositor, device, aPreferredFormat);
+  mD3D11RecycleAllocator = MakeRefPtr<D3D11RecycleAllocator>(
+      aKnowsCompositor, device, aPreferredFormat);
 
   if (device != DeviceManagerDx::Get()->GetCompositorDevice()) {
     RefPtr<SyncObjectClient> syncObject =
@@ -627,7 +628,7 @@ ImageContainer::GetD3D11YCbCrRecycleAllocator(
   }
 
   mD3D11YCbCrRecycleAllocator =
-      new D3D11YCbCrRecycleAllocator(aKnowsCompositor);
+      MakeRefPtr<D3D11YCbCrRecycleAllocator>(aKnowsCompositor);
   return do_AddRef(mD3D11YCbCrRecycleAllocator);
 }
 #endif
@@ -637,7 +638,7 @@ already_AddRefed<MacIOSurfaceRecycleAllocator>
 ImageContainer::GetMacIOSurfaceRecycleAllocator() {
   RecursiveMutexAutoLock lock(mRecursiveMutex);
   if (!mMacIOSurfaceRecycleAllocator) {
-    mMacIOSurfaceRecycleAllocator = new MacIOSurfaceRecycleAllocator();
+    mMacIOSurfaceRecycleAllocator = MakeRefPtr<MacIOSurfaceRecycleAllocator>();
   }
 
   return do_AddRef(mMacIOSurfaceRecycleAllocator);
@@ -847,7 +848,7 @@ nsresult PlanarYCbCrImage::BuildSurfaceDescriptorBuffer(
       pdata->mPictureRect, ySize, pdata->mYStride, cbcrSize, pdata->mCbCrStride,
       yOffset, cbOffset, crOffset, pdata->mStereoMode, pdata->mColorDepth,
       pdata->mYUVColorSpace, pdata->mColorRange, pdata->mTransferFunction,
-      pdata->mChromaSubsampling);
+      pdata->mChromaSubsampling, pdata->mHDRMetadata);
 
   CopyPlane(buffer + yOffset, pdata->mYChannel, ySize, pdata->mYStride,
             pdata->mYSkip);
@@ -887,12 +888,13 @@ UniquePtr<uint8_t[]> RecyclingPlanarYCbCrImage::AllocateBuffer(uint32_t aSize) {
 }
 
 static void CopyPlane(uint8_t* aDst, const uint8_t* aSrc,
-                      const gfx::IntSize& aSize, int32_t aStride,
-                      int32_t aSkip) {
+                      const gfx::IntSize& aSize, int32_t aStride, int32_t aSkip,
+                      int32_t aBytesPerElement) {
   int32_t height = aSize.height;
   int32_t width = aSize.width;
+  const int32_t rowBytes = width * aBytesPerElement;
 
-  MOZ_RELEASE_ASSERT(width <= aStride);
+  MOZ_RELEASE_ASSERT(rowBytes <= aStride);
 
   if (!aSkip) {
     // Fast path: planar input.
@@ -903,9 +905,14 @@ static void CopyPlane(uint8_t* aDst, const uint8_t* aSrc,
       uint8_t* dst = aDst;
       // Slow path
       for (int x = 0; x < width; ++x) {
-        *dst++ = *src++;
-        src += aSkip;
+        for (int b = 0; b < aBytesPerElement; ++b) {
+          *dst++ = *src++;
+        }
+        src += aSkip * aBytesPerElement;
       }
+      // Trailing stride bytes are not pixel data; zero them so
+      // VideoFrame.copyTo() does not expose stale buffer contents to JS.
+      memset(dst, 0, aStride - rowBytes);
       aSrc += aStride;
       aDst += aStride;
     }
@@ -939,12 +946,15 @@ nsresult RecyclingPlanarYCbCrImage::CopyData(const Data& aData) {
   mData.mCrChannel = mData.mCbChannel + mData.mCbCrStride * cbcrSize.height;
   mData.mYSkip = mData.mCbSkip = mData.mCrSkip = 0;
 
+  const int32_t bytesPerSample =
+      aData.mColorDepth == gfx::ColorDepth::COLOR_8 ? 1 : 2;
+
   CopyPlane(mData.mYChannel, aData.mYChannel, ySize, aData.mYStride,
             aData.mYSkip);
   CopyPlane(mData.mCbChannel, aData.mCbChannel, cbcrSize, aData.mCbCrStride,
-            aData.mCbSkip);
+            aData.mCbSkip, bytesPerSample);
   CopyPlane(mData.mCrChannel, aData.mCrChannel, cbcrSize, aData.mCbCrStride,
-            aData.mCrSkip);
+            aData.mCrSkip, bytesPerSample);
   if (aData.mAlpha) {
     MOZ_ASSERT(mData.mAlpha);
     mData.mAlpha->mChannel =
@@ -1035,7 +1045,7 @@ already_AddRefed<SourceSurface> NVImage::GetAsSourceSurface() {
   auto cbcrSize = mData.CbCrDataSize();
   const int bufferLength =
       ySize.height * mData.mYStride + cbcrSize.height * cbcrSize.width * 2;
-  UniquePtr<uint8_t[]> buffer(new uint8_t[bufferLength]);
+  auto buffer = MakeUnique<uint8_t[]>(bufferLength);
 
   Data aData = mData;
   aData.mCbCrStride = cbcrSize.width;
@@ -1220,8 +1230,7 @@ nsresult NVImage::SetData(const Data& aData) {
 const NVImage::Data* NVImage::GetData() const { return &mData; }
 
 UniquePtr<uint8_t[]> NVImage::AllocateBuffer(uint32_t aSize) {
-  UniquePtr<uint8_t[]> buffer(new uint8_t[aSize]);
-  return buffer;
+  return MakeUnique<uint8_t[]>(aSize);
 }
 
 SourceSurfaceImage::SourceSurfaceImage(const gfx::IntSize& aSize,

@@ -4,12 +4,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # MOZ_APP_DISPLAYNAME will be set by branding/configure.sh
-MOZ_APP_BASENAME=Lykon
-MOZ_APP_NAME=lykon
 # MOZ_BRANDING_DIRECTORY is the default branding directory used when none is
 # specified. It should never point to the "official" branding directory.
 # For mozilla-beta, mozilla-release, or mozilla-central repositories, use
 # "unofficial" branding.
 # For the mozilla-aurora repository, use "aurora".
-MOZ_BRANDING_DIRECTORY=browser/branding/lykon
+MOZ_BRANDING_DIRECTORY=browser/branding/unofficial
 MOZ_OFFICIAL_BRANDING_DIRECTORY=browser/branding/official

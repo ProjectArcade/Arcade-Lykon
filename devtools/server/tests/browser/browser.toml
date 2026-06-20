@@ -41,7 +41,6 @@ support-files = [
   "inspector-helpers.js",
   "storage-helpers.js",
   "!/devtools/client/shared/test/shared-head.js",
-  "!/devtools/client/shared/test/telemetry-test-helpers.js",
   "!/devtools/server/tests/chrome/hello-actor.js",
 ]
 
@@ -144,6 +143,8 @@ tags = "devtools-compat-data"
 ["browser_getProcess.js"]
 
 ["browser_inspector-anonymous.js"]
+
+["browser_inspector-comments.js"]
 
 ["browser_inspector-iframe.js"]
 

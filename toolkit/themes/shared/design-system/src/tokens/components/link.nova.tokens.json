@@ -2,6 +2,7 @@
   "color": {
     "@base": {
       "value": {
+        "nativeTheme": "LinkText",
         "default": "{color.accent.primary.@base}",
         "forcedColors": "LinkText"
       }
@@ -17,9 +18,6 @@
         "default": "{color.accent.primary.active}",
         "forcedColors": "ActiveText"
       }
-    },
-    "visited": {
-      "value": "{link.color.@base}"
     }
   }
 }

@@ -176,6 +176,8 @@ class WebTransportSessionProxy final
   void OnMaxDatagramSizeInternal(uint64_t aSize);
   void OnOutgoingDatagramOutComeInternal(
       uint64_t aId, WebTransportSessionEventListener::DatagramOutcome aOutCome);
+  void OnStopSendingInternal(uint64_t aStreamId, nsresult aError);
+  void OnResetReceivedInternal(uint64_t aStreamId, nsresult aError);
 
   nsCOMPtr<nsIChannel> mChannel;
   uint64_t mHttpChannelID = 0;
@@ -196,7 +198,7 @@ class WebTransportSessionProxy final
   nsCOMPtr<nsIEventTarget> mTarget MOZ_GUARDED_BY(mMutex);
   nsTArray<RefPtr<nsIWebTransportHash>> mServerCertHashes
       MOZ_GUARDED_BY(mMutex);
-  bool mDedicatedConnection;  // for WebTranport
+  bool mDedicatedConnection = false;  // for WebTranport
   nsIWebTransport::HTTPVersion mHTTPVersion = nsIWebTransport::HTTPVersion::h3;
 };
 

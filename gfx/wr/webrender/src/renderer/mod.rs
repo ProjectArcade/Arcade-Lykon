@@ -49,7 +49,7 @@ use core::time::Duration;
 
 use crate::pattern::PatternKind;
 use crate::render_api::{DebugCommand, ApiMsg, MemoryReport};
-use crate::batch::{AlphaBatchContainer, BatchKind, BatchFeatures, BatchTextures, BrushBatchKind, ClipBatchList};
+use crate::batch::{AlphaBatchContainer, BatchKind, BatchFeatures, BatchTextures, BrushBatchKind, ClipBatchList, TextureSet};
 use crate::batch::ClipMaskInstanceList;
 #[cfg(any(feature = "capture", feature = "replay"))]
 use crate::capture::{CaptureConfig, ExternalCaptureImage, PlainExternalImage};
@@ -273,9 +273,17 @@ impl BatchKind {
             }
             BatchKind::TextRun(_) => GPU_TAG_PRIM_TEXT_RUN,
             BatchKind::Quad(PatternKind::ColorOrTexture) => GPU_TAG_PRIMITIVE,
+            BatchKind::Quad(PatternKind::TextureExternal) => GPU_TAG_PRIMITIVE,
+            BatchKind::Quad(PatternKind::TextureExternalBT709) => GPU_TAG_PRIMITIVE,
+            BatchKind::Quad(PatternKind::TextureRect) => GPU_TAG_PRIMITIVE,
             BatchKind::Quad(PatternKind::Gradient) => GPU_TAG_GRADIENT,
             BatchKind::Quad(PatternKind::Repeat) => GPU_TAG_REPEAT,
             BatchKind::Quad(PatternKind::BoxShadow) => GPU_TAG_PRIMITIVE,
+            BatchKind::Quad(PatternKind::Yuv) => GPU_TAG_BRUSH_YUV_IMAGE,
+            BatchKind::Quad(PatternKind::YuvTextureExternal) => GPU_TAG_BRUSH_YUV_IMAGE,
+            BatchKind::Quad(PatternKind::YuvTextureExternalBT709) => GPU_TAG_BRUSH_YUV_IMAGE,
+            BatchKind::Quad(PatternKind::YuvTextureRect) => GPU_TAG_BRUSH_YUV_IMAGE,
+            BatchKind::Quad(PatternKind::Backdrop) => GPU_TAG_PRIMITIVE,
             BatchKind::Quad(PatternKind::Mask) => GPU_TAG_INDIRECT_MASK,
         }
     }
@@ -885,6 +893,14 @@ pub struct Renderer {
 
     /// Hold DebugItems of DebugFlags::EXTERNAL_COMPOSITE_BORDERS for debug overlay
     external_composite_debug_items: Vec<DebugItem>,
+
+    /// On-demand RenderDoc frame capture, driven from the debugger / wrshell.
+    #[cfg(feature = "debugger")]
+    renderdoc: crate::renderdoc::RenderDocCapture,
+    /// Pending reply channel for an in-flight RenderDoc capture request; sent the
+    /// written .rdc path (or an error) once the next frame has been captured.
+    #[cfg(feature = "debugger")]
+    renderdoc_capture_reply: Option<crate::api::channel::Sender<crate::api::debugger::RenderDocReply>>,
 }
 
 #[derive(Debug)]
@@ -1295,6 +1311,18 @@ impl Renderer {
                     &self.profiler,
                 );
             }
+            #[cfg(feature = "debugger")]
+            DebugCommand::CaptureRenderDoc(reply) => {
+                if self.renderdoc.is_available() {
+                    self.renderdoc.arm();
+                    self.renderdoc_capture_reply = Some(reply);
+                } else {
+                    let _ = reply.send(crate::api::debugger::RenderDocReply::Error(
+                        "RenderDoc not available (launch the host with \
+                         LD_PRELOAD=librenderdoc.so)".to_string(),
+                    ));
+                }
+            }
         }
     }
 
@@ -1349,12 +1377,36 @@ impl Renderer {
                     None
                 };
 
+                #[cfg(feature = "debugger")]
+                let capture = self.renderdoc.take_request();
+                #[cfg(feature = "debugger")]
+                if capture {
+                    self.renderdoc.start();
+                }
+
                 let result = self.render_impl(
                     doc_id,
                     &mut doc,
                     size,
                     buffer_age,
                 );
+
+                #[cfg(feature = "debugger")]
+                if capture {
+                    let path = self.renderdoc.end();
+                    if let Some(reply) = self.renderdoc_capture_reply.take() {
+                        let result = match path {
+                            Some(p) => crate::api::debugger::RenderDocReply::Path(
+                                p.to_string_lossy().into_owned()
+                            ),
+                            None => crate::api::debugger::RenderDocReply::Error(
+                                "RenderDoc capture failed (launch the host with \
+                                 LD_PRELOAD=librenderdoc.so)".to_string()
+                            ),
+                        };
+                        let _ = reply.send(result);
+                    }
+                }
 
                 self.active_documents.insert(doc_id, doc);
 
@@ -1668,6 +1720,10 @@ impl Renderer {
             &frame.deferred_resolves,
             &mut frame.gpu_buffer_f,
         );
+
+        // Now that external images are resolved, copy their (potentially Y-flipped) uv
+        // rects into the quad segment blocks that reference them.
+        frame.gpu_buffer_f.apply_deferred_uv_copies();
 
         self.draw_frame(
             frame,
@@ -2342,8 +2398,8 @@ impl Renderer {
     fn handle_prims(
         &mut self,
         draw_target: &DrawTarget,
-        prim_instances: &[FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>],
-        prim_instances_with_scissor: &FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>>,
+        prim_instances: &[FastHashMap<TextureSet, FrameVec<PrimitiveInstanceData>>],
+        prim_instances_with_scissor: &FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSet, FrameVec<PrimitiveInstanceData>>>,
         projection: &default::Transform3D<f32>,
         stats: &mut RendererStats,
     ) {
@@ -2370,8 +2426,11 @@ impl Renderer {
                     &mut self.command_log,
                 );
 
-                for (texture_source, prim_instances) in prim_instances_map {
-                    let texture_bindings = BatchTextures::composite_rgb(*texture_source);
+                for (texture_set, prim_instances) in prim_instances_map {
+                    let texture_bindings = BatchTextures {
+                        input: *texture_set,
+                        clip_mask: TextureSource::Invalid,
+                    };
 
                     self.draw_instanced_batch(
                         prim_instances,
@@ -2404,8 +2463,11 @@ impl Renderer {
 
                     self.device.set_scissor_rect(draw_target.to_framebuffer_rect(*scissor_rect));
 
-                    for (texture_source, prim_instances) in prim_instances_map {
-                        let texture_bindings = BatchTextures::composite_rgb(*texture_source);
+                    for (texture_set, prim_instances) in prim_instances_map {
+                        let texture_bindings = BatchTextures {
+                            input: *texture_set,
+                            clip_mask: TextureSource::Invalid,
+                        };
 
                         self.draw_instanced_batch(
                             prim_instances,

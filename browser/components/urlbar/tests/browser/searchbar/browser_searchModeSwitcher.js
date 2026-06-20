@@ -22,7 +22,7 @@ add_task(async function test_keyword_disabled() {
   let win = await BrowserTestUtils.openNewBrowserWindow();
 
   // Getting the icon is async, so wait until the icon is set.
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     async () =>
       SearchbarTestUtils.getSearchModeSwitcherIcon(win) ==
       (await SearchService.defaultEngine.getIconURL())
@@ -65,7 +65,7 @@ add_task(async function test_scotchbonnet_disabled() {
   let popup = await SearchbarTestUtils.openSearchModeSwitcher(window);
   Assert.ok(true, "Can still open search mode switcher");
   let popupHidden = SearchbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("panel-item[data-engine-id=engine2]").button.click();
+  popup.querySelector("panel-item[data-engine-id=engine2]").click();
   await popupHidden;
   await SearchbarTestUtils.assertSearchMode(window, {
     engineName: "engine2",

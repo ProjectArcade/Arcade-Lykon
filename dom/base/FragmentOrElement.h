@@ -32,7 +32,7 @@ class nsDOMStringMap;
 class nsIURI;
 
 namespace mozilla {
-class DeclarationBlock;
+struct StyleLockedDeclarationBlock;
 enum class ContentRelevancyReason;
 using ContentRelevancy = EnumSet<ContentRelevancyReason, uint8_t>;
 class ElementAnimationData;
@@ -83,7 +83,7 @@ class FragmentOrElement : public nsIContent {
   explicit FragmentOrElement(
       already_AddRefed<mozilla::dom::NodeInfo>& aNodeInfo);
   explicit FragmentOrElement(
-      already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo);
+      already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo);
 
   // We want to avoid the overhead of extra function calls for
   // refcounting when we're not doing refcount logging, so we can't
@@ -176,7 +176,7 @@ class FragmentOrElement : public nsIContent {
     /**
      * Holds any SMIL override style declaration for this element.
      */
-    RefPtr<DeclarationBlock> mSMILOverrideStyleDeclaration;
+    RefPtr<mozilla::StyleLockedDeclarationBlock> mSMILOverrideStyleDeclaration;
 
     /**
      * The controllers of the XUL Element.

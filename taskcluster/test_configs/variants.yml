@@ -453,7 +453,12 @@ media-gpu:
                         "windows" in task["test-platform"]
                         && "hw" in task["test-platform"]
                     )
-                    || "macosx" in task["test-platform"] ||
+                    ||
+                    (
+                        "macosx" in task["test-platform"]
+                        && !("vms" in task["test-platform"])
+                    )
+                    ||
                     (
                         "android" in task["test-platform"]
                         && "hw" in task["test-platform"]
@@ -600,7 +605,7 @@ async-event-dispatching:
 vertical-tabs:
     description: "{description} limited to tests identified as being applicable to also run with vertical tabs enabled"
     component: "Firefox::Tabbed Browser"
-    expiration: "2026-11-01"
+    expiration: "never"
     suffix: "vt"
     mozinfo: "vertical_tab"
     merge:
@@ -658,3 +663,15 @@ privatebrowsing-inc-origin-init:
         mozharness:
             extra-options:
                 - "--setpref=browser.privatebrowsing.autostart=true"
+
+nova:
+    description: "{description} with Nova enabled"
+    component: "Firefox::Theme"
+    expiration: "2026-12-31"
+    suffix: "nv"
+    replace:
+        tier: 3
+    merge:
+        mozharness:
+            extra-options:
+                - "--setpref=browser.nova.enabled=true"

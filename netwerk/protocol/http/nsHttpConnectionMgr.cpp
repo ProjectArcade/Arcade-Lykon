@@ -648,15 +648,23 @@ nsresult nsHttpConnectionMgr::UpdateParam(nsParamName name, uint16_t value) {
 
 void nsHttpConnectionMgr::ProcessPendingQForEntry(ConnectionEntry* aEntry) {
   LOG(("nsHttpConnectionMgr::ProcessPendingQForEntry [aEntry=%p]\n", aEntry));
+
+  if (aEntry->mPendingQProcessingScheduled) {
+    return;
+  }
+  aEntry->mPendingQProcessingScheduled = true;
+
   RefPtr<ConnectionEntry> entry = aEntry;
   NS_DispatchToCurrentThread(NS_NewRunnableFunction(
       "nsHttpConnectionMgr::ProcessPendingQForEntry",
       [self = RefPtr{this}, entry]() {
+        entry->mPendingQProcessingScheduled = false;
         if (!self->ProcessPendingQForEntry(entry, false)) {
           // if we reach here, it means that we couldn't dispatch a transaction
           // for the specified connection info.  walk the connection table...
           for (const auto& ent : self->mCT.Values()) {
-            if (self->ProcessPendingQForEntry(ent.get(), false)) {
+            if (ent.get() != entry.get() &&
+                self->ProcessPendingQForEntry(ent.get(), false)) {
               break;
             }
           }
@@ -2399,19 +2407,9 @@ void nsHttpConnectionMgr::OnMsgCancelTransaction(int32_t reason,
   // then ask the connection to close the transaction.  otherwise, close the
   // transaction directly (removing it from the pending queue first).
   //
-  // If the transaction has a HappyEyeballsTransaction proxy, cancel through
-  // the proxy so the connection can find its transaction properly, and so
-  // the proxy doesn't re-queue the transaction.
-  RefPtr<nsAHttpTransaction> proxyTrans;
-  if (nsAHttpTransaction* proxy = trans->HappyEyeballsProxy()) {
-    proxy->Cancel(closeCode);
-    proxyTrans = proxy;
-  }
-
-  nsAHttpTransaction* transToClose = proxyTrans ? proxyTrans.get() : trans;
   RefPtr<nsAHttpConnection> conn(trans->Connection());
   if (conn && !trans->IsDone()) {
-    conn->CloseTransaction(transToClose, closeCode);
+    conn->CloseTransaction(trans, closeCode);
   } else {
     ConnectionEntry* ent = nullptr;
     if (trans->ConnectionInfo()) {
@@ -2424,7 +2422,7 @@ void nsHttpConnectionMgr::OnMsgCancelTransaction(int32_t reason,
            trans));
     }
 
-    transToClose->Close(closeCode);
+    trans->Close(closeCode);
 
     // Cancel is a pretty strong signal that things might be hanging
     // so we want to cancel any null transactions related to this connection
@@ -3675,12 +3673,13 @@ void nsHttpConnectionMgr::DoSpeculativeConnectionInternal(
     return;
   }
 
-  ProxyDNSStrategy strategy = GetProxyDNSStrategyHelper(
+  nsIHttpChannelInternal::ProxyDNSStrategy strategy = GetProxyDNSStrategyHelper(
       aEnt->mConnInfo->ProxyType(), aEnt->mConnInfo->ProxyFlag());
   // Speculative connections can be triggered by non-Necko consumers,
   // so add an extra check to ensure HTTPS RR isn't fetched when a proxy is
   // used.
-  if (aFetchHTTPSRR && strategy == ProxyDNSStrategy::ORIGIN &&
+  if (aFetchHTTPSRR &&
+      strategy == nsIHttpChannelInternal::PROXY_DNS_STRATEGY_ORIGIN &&
       NS_SUCCEEDED(aTrans->FetchHTTPSRR())) {
     // nsHttpConnectionMgr::DoSpeculativeConnection will be called again
     // when HTTPS RR is available.
@@ -3798,9 +3797,6 @@ void nsHttpConnectionMgr::RegisterOriginCoalescingKey(HttpConnectionBase* conn,
 
 bool nsHttpConnectionMgr::GetConnectionData(nsTArray<HttpRetParams>* aArg) {
   for (const RefPtr<ConnectionEntry>& ent : mCT.Values()) {
-    if (ent->mConnInfo->GetPrivate()) {
-      continue;
-    }
     aArg->AppendElement(ent->GetConnectionData());
   }
 
@@ -3950,6 +3946,9 @@ nsHttpConnectionMgr::FindTransactionHelper(bool removeWhenFound,
     info = (*pendingQ)[index];
     if (removeWhenFound) {
       pendingQ->RemoveElementAt(index);
+      if (!(aTrans->Caps() & NS_HTTP_URGENT_START)) {
+        aEnt->OnPendingTransactionRemovedFromTable();
+      }
     }
   }
   return info.forget();
@@ -4040,7 +4039,6 @@ nsHttpConnectionMgr::GetServerCertHashes(nsHttpConnectionInfo* aConnInfo) {
 }
 
 void nsHttpConnectionMgr::CheckTransInPendingQueue(nsHttpTransaction* aTrans) {
-#ifdef MOZ_DIAGNOSTIC_ASSERT_ENABLED
   // We only do this check on socket thread. When this function is called on
   // main thread, the transaction is newly created, so we can skip this check.
   if (!OnSocketThread()) {
@@ -4054,8 +4052,10 @@ void nsHttpConnectionMgr::CheckTransInPendingQueue(nsHttpTransaction* aTrans) {
   }
 
   bool foundInPendingQ = RemoveTransFromConnEntry(aTrans, hashKey);
-  MOZ_DIAGNOSTIC_ASSERT(!foundInPendingQ);
-#endif
+  if (foundInPendingQ) {
+    glean::networking::trans_found_in_pending_queue.Add(1);
+  }
+  MOZ_ASSERT(!foundInPendingQ);
 }
 
 bool nsHttpConnectionMgr::AllowToRetryDifferentIPFamilyForHttp3(

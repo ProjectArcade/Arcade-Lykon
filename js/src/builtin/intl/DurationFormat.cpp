@@ -109,16 +109,7 @@ static const JSPropertySpec durationFormat_properties[] = {
 static bool DurationFormat(JSContext* cx, unsigned argc, Value* vp);
 
 const JSClassOps DurationFormatObject::classOps_ = {
-    nullptr,                         // addProperty
-    nullptr,                         // delProperty
-    nullptr,                         // enumerate
-    nullptr,                         // newEnumerate
-    nullptr,                         // resolve
-    nullptr,                         // mayResolve
-    DurationFormatObject::finalize,  // finalize
-    nullptr,                         // call
-    nullptr,                         // construct
-    nullptr,                         // trace
+    .finalize = DurationFormatObject::finalize,
 };
 
 const ClassSpec DurationFormatObject::classSpec_ = {
@@ -1167,30 +1158,55 @@ static auto ComputeFractionalDigits(const temporal::Duration& duration,
     timeDuration = timeDuration.abs();
   }
 
-  // Next the string representation of the seconds value.
-  auto res =
-      std::to_chars(chars, std::end(result.decimal), timeDuration.seconds);
-  MOZ_ASSERT(res.ec == std::errc());
+  // Start of the integer part, without leading sign character.
+  [[maybe_unused]] const char* integer = chars;
 
-  // Set |chars| to one past the last character written by `std::to_chars`.
-  chars = res.ptr;
+  // Avoid writing leading zeros.
+  bool isZero = timeDuration.seconds == 0;
+
+  // Next the string representation of the seconds value.
+  if (!isZero) {
+    auto res =
+        std::to_chars(chars, std::end(result.decimal), timeDuration.seconds);
+    MOZ_ASSERT(res.ec == std::errc());
+
+    // Set |chars| to one past the last character written by `std::to_chars`.
+    chars = res.ptr;
+  }
 
   // Finish with string representation of the nanoseconds value, without any
   // trailing zeros.
   int32_t nanos = timeDuration.nanoseconds;
-  for (int32_t k = 100'000'000; k != 0 && nanos != 0; k /= 10) {
-    // Add decimal separator add the correct position based on |exponent|.
+  [[maybe_unused]] bool hasFractional = false;
+  for (int32_t k = 100'000'000; k != 0 && (k > exponent || nanos != 0);
+       k /= 10) {
+    // Add decimal separator at the correct position based on |exponent|.
     if (k == exponent) {
+      // Add leading zero if necessary.
+      if (isZero) {
+        isZero = false;
+        *chars++ = '0';
+      }
+      hasFractional = true;
       *chars++ = '.';
     }
 
-    *chars++ = char('0' + (nanos / k));
+    int32_t digit = (nanos / k);
     nanos %= k;
+
+    isZero = isZero && digit == 0;
+    if (!isZero) {
+      *chars++ = char('0' + digit);
+    }
   }
 
   MOZ_ASSERT((chars - result.decimal) <=
                  ptrdiff_t(DurationValue::MaximumDecimalStringLength),
              "unexpected decimal string length");
+  MOZ_ASSERT(chars > integer, "unexpected empty decimal string");
+  MOZ_ASSERT(!isZero, "unexpected all zero decimal string");
+  MOZ_ASSERT(integer[0] != '0' || integer[1] == '.', "unexpected leading zero");
+  MOZ_ASSERT(!hasFractional || chars[-1] != '0', "unexpected trailing zero");
 
   return result;
 }
@@ -1509,6 +1525,7 @@ static bool FormatNumericUnits(JSContext* cx,
 
   // Return early when no units are displayed.
   if (!hoursFormatted && !minutesFormatted && !secondsFormatted) {
+    result.setUndefined();
     return true;
   }
 

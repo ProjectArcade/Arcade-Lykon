@@ -646,8 +646,11 @@ static void PrintStackValue(JSContext* maybeCx, StackValue* stackVal,
 }
 #endif
 
+WasmBaselinePerfSpewer::WasmBaselinePerfSpewer()
+    : needsToRecordInstruction_(PerfIREnabled() || PerfSrcEnabled()) {}
+
 [[nodiscard]] bool WasmBaselinePerfSpewer::needsToRecordInstruction() const {
-  return PerfIREnabled() || PerfSrcEnabled();
+  return needsToRecordInstruction_;
 }
 
 void WasmBaselinePerfSpewer::recordInstruction(MacroAssembler& masm,
@@ -800,7 +803,7 @@ void PerfSpewer::CollectJitCodeInfo(UniqueChars& function_name, void* code_addr,
 #endif
 #ifdef XP_WIN
   if (etwCollection) {
-    void* scriptContextId = NULL;
+    void* scriptContextId = nullptr;
     uint32_t flags = 0;
     uint64_t map = 0;
     uint64_t assembly = 0;

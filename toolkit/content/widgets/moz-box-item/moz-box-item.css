@@ -15,6 +15,11 @@
   padding-inline-start: calc(var(--button-size-icon) + var(--space-small));
 }
 
+:host(:focus-visible) {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-inset);
+}
+
 .text-content {
   .label-wrapper {
     grid-area: label;
@@ -78,6 +83,10 @@ slot[name="actions-start"] {
       This cannot be disabled, hence the color should remain the default. */
   fill: var(--box-item-handle-icon-color);
   flex-shrink: 0;
+}
+
+.actions {
+  word-wrap: normal;
 }
 
 .actions:has(> slot:not(:has-slotted)) {

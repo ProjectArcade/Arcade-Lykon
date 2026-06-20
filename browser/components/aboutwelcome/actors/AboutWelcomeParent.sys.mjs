@@ -15,9 +15,11 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BackupService: "resource:///modules/backup/BackupService.sys.mjs",
   BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
   BuiltInThemes: "resource:///modules/BuiltInThemes.sys.mjs",
+  EnrollmentType: "resource://nimbus/ExperimentAPI.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   FxAccounts: "resource://gre/modules/FxAccounts.sys.mjs",
   LangPackMatcher: "resource://gre/modules/LangPackMatcher.sys.mjs",
+  NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   ShellService: "moz-src:///browser/components/shell/ShellService.sys.mjs",
   SpecialMessageActions:
     "resource://messaging-system/lib/SpecialMessageActions.sys.mjs",
@@ -347,6 +349,8 @@ export class AboutWelcomeParent extends JSWindowActorParent {
         return lazy.ASRouterScreenUtils.evaluateTargetingAndRemoveScreens(data);
       case "AWPage:ADD_SCREEN_IMPRESSION":
         return lazy.ASRouterScreenUtils.addScreenImpression(data);
+      case "AWPage:IMPRESSION_ACTION":
+        return lazy.ASRouterScreenUtils.handleImpressionAction(data, browser);
       case "AWPage:EVALUATE_ATTRIBUTE_TARGETING":
         return lazy.ASRouterScreenUtils.evaluateScreenTargeting(data);
       case "AWPage:NEGOTIATE_LANGPACK":
@@ -392,6 +396,15 @@ export class AboutWelcomeParent extends JSWindowActorParent {
       }
       case "AWPage:WAIT_FOR_NIMBUS": {
         return waitForNimbusForAboutWelcome();
+      }
+      case "AWPage:GET_ABOUTWELCOME_FEATURE_CONFIG": {
+        return {
+          experimentMetadata:
+            lazy.NimbusFeatures.aboutwelcome.getEnrollmentMetadata(
+              lazy.EnrollmentType.EXPERIMENT
+            ) ?? {},
+          featureConfig: lazy.NimbusFeatures.aboutwelcome.getAllVariables(),
+        };
       }
       default:
         lazy.log.debug(`Unexpected event ${type} was not handled.`);

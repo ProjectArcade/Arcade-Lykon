@@ -6,9 +6,9 @@ package mozilla.components.browser.storage.sync
 
 import android.content.Context
 import androidx.annotation.VisibleForTesting
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import mozilla.appservices.places.PlacesApi
-import mozilla.appservices.places.uniffi.PlacesApiException
 import mozilla.components.concept.storage.BookmarkInfo
 import mozilla.components.concept.storage.BookmarkNode
 import mozilla.components.concept.storage.BookmarksStorage
@@ -19,6 +19,7 @@ import mozilla.components.concept.toolbar.AutocompleteResult
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.utils.doesUrlStartsWithText
 import mozilla.components.support.utils.segmentAwareDomainMatch
+import kotlin.coroutines.resume
 
 @VisibleForTesting
 internal const val BOOKMARKS_AUTOCOMPLETE_SOURCE_NAME = "placesBookmarks"
@@ -213,13 +214,9 @@ open class PlacesBookmarksStorage(
      */
     override suspend fun countBookmarksInTrees(guids: List<String>): UInt {
         return withContext(readScope.coroutineContext) {
-            try {
+            handlePlacesExceptions("countBookmarksInTrees", 0U, {
                 reader.countBookmarksInTrees(guids)
-            } catch (e: PlacesApiException) {
-                crashReporter?.submitCaughtException(e)
-                logger.warn("Ignoring PlacesApiException while running countBookmarksInTrees", e)
-                0U
-            }
+            })
         }
     }
 
@@ -247,9 +244,18 @@ open class PlacesBookmarksStorage(
         }
 
     override suspend fun insertTree(tree: InsertableBookmarkTreeRoot): Result<String> {
-        return withContext(writeScope.coroutineContext) {
+        return withContext(writeDispatcher) {
             runCatching {
-                writer.insertBookmarkTree(tree.rootFolder.toPlacesItem(tree.parentGuid).f)
+                // we use a suspendable cancellable coroutine to
+                // 1. create a suspension point around the blocking code
+                // 2. give us a handle we can use to stop the work on cancellation
+                suspendCancellableCoroutine { continuation ->
+                    continuation.invokeOnCancellation {
+                        writer.interrupt()
+                    }
+                    val guid = writer.insertBookmarkTree(tree.rootFolder.toPlacesItem(tree.parentGuid).f)
+                    continuation.resume(guid)
+                }
             }
         }
     }

@@ -68,7 +68,7 @@ use crate::applicable_declarations::ApplicableDeclarationBlock;
 use crate::bloom::StyleBloom;
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::context::{CascadeInputs, SharedStyleContext, StyleContext};
-use crate::dom::{SendElement, TElement, TShadowRoot};
+use crate::dom::{SendElement, TElement};
 use crate::properties::ComputedValues;
 use crate::selector_map::RelevantAttributes;
 use crate::style_resolver::{PrimaryStyle, ResolvedElementStyles};
@@ -781,10 +781,23 @@ impl<E: TElement> StyleSharingCache<E> {
             return None;
         }
 
-        // If two elements belong to different shadow trees, different rules may
-        // apply to them, from the respective trees.
-        if target.element.containing_shadow() != candidate.element.containing_shadow() {
-            trace!("Miss: Different containing shadow roots");
+        // If two elements belong to different shadow trees, different rules may apply to them, from
+        // the respective trees, so check their cascade data pointers.
+        if !checks::shadow_root_style_data_equals(
+            target.element.containing_shadow(),
+            candidate.element.containing_shadow(),
+        ) {
+            trace!("Miss: Different containing shadow root style data");
+            return None;
+        }
+
+        // Shadow hosts can share style when they have matching CascadeData pointers, which ensures
+        // they match the same :host rules.
+        if !checks::shadow_root_style_data_equals(
+            target.element.shadow_root(),
+            candidate.element.shadow_root(),
+        ) {
+            trace!("Miss: Different shadow root style data");
             return None;
         }
 
@@ -804,20 +817,6 @@ impl<E: TElement> StyleSharingCache<E> {
         if target.implemented_pseudo_element() != candidate.implemented_pseudo_element() {
             trace!("Miss: Element backed pseudo-element");
             return None;
-        }
-
-        // Shadow hosts can share style when they have matching CascadeData pointers, which
-        // ensures they match the same :host rules.
-        match (
-            target.element.shadow_root().and_then(|s| s.style_data()),
-            candidate.element.shadow_root().and_then(|s| s.style_data()),
-        ) {
-            (Some(td), Some(cd)) if std::ptr::eq(td, cd) => {},
-            (None, None) => {},
-            _ => {
-                trace!("Miss: Different shadow root style data");
-                return None;
-            },
         }
 
         if target.element.has_animations(shared_context)
@@ -870,6 +869,11 @@ impl<E: TElement> StyleSharingCache<E> {
             return None;
         }
 
+        if !checks::have_shareable_tree_counting_functions(target, candidate) {
+            trace!("Miss: Tree counting functions");
+            return None;
+        }
+
         if !checks::revalidate(target, candidate, shared, bloom, selector_caches) {
             trace!("Miss: Revalidation");
             return None;
@@ -912,15 +916,19 @@ impl<E: TElement> StyleSharingCache<E> {
             if !candidate.parent_style_identity().eq(inherited) {
                 return None;
             }
-            if !checks::have_same_referenced_attrs(&StyleSharingTarget::new(target), candidate) {
-                return None;
-            }
             let data = candidate.element.borrow_data().unwrap();
             let style = data.styles.primary();
             if style.rules.as_ref() != Some(&inputs.rules.as_ref().unwrap()) {
                 return None;
             }
             if style.visited_rules() != inputs.visited_rules.as_ref() {
+                return None;
+            }
+            let sharing_target = StyleSharingTarget::new(target);
+            if !checks::have_same_referenced_attrs(&sharing_target, candidate) {
+                return None;
+            }
+            if !checks::have_shareable_tree_counting_functions(&sharing_target, candidate) {
                 return None;
             }
             // NOTE(emilio): We only need to check name / namespace because we

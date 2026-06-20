@@ -78,7 +78,7 @@ already_AddRefed<dom::SVGPathSegment> SVGPathData::GetPathSegmentAtLength(
   for (const auto& cmd : aPath) {
     SVGPathSegUtils::TraversePathSegment(cmd, state);
     if (state.length >= aDistance) {
-      return do_AddRef(new dom::SVGPathSegment(aPathElement, cmd));
+      return MakeAndAddRef<dom::SVGPathSegment>(aPathElement, cmd);
     }
   }
   return nullptr;
@@ -430,7 +430,7 @@ ComputeSegAnglesAndCorrectRadii(const Point& aSegStart, const Point& aSegEnd,
   float ry = std::abs(aRy);
 
   // F.6.5.1:
-  const float angle = static_cast<float>(aAngle * M_PI / 180.0);
+  const float angle = static_cast<float>(aAngle * kRadPerDegree);
   double x1p = cos(angle) * (aSegStart.x - aSegEnd.x) / 2.0 +
                sin(angle) * (aSegStart.y - aSegEnd.y) / 2.0;
   double y1p = -sin(angle) * (aSegStart.x - aSegEnd.x) / 2.0 +
@@ -694,9 +694,7 @@ void SVGPathData::GetMarkerPositioningData(Span<const StylePathCommand> aPath,
     // Add the mark at the end of this segment, and set its position:
     // XXX(Bug 1631371) Check if this should use a fallible operation as it
     // pretended earlier.
-    aMarks->AppendElement(SVGMark(static_cast<float>(segEnd.x),
-                                  static_cast<float>(segEnd.y), 0.0f,
-                                  SVGMark::Type::Mid));
+    aMarks->AppendElement(SVGMark(segEnd, 0.0f, SVGMark::Type::Mid));
 
     if (cmd.IsClose() && !(prevSeg && prevSeg->IsClose())) {
       aMarks->LastElement().angle = aMarks->ElementAt(pathStartIndex).angle =

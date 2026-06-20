@@ -24,43 +24,32 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#ifdef JS_SIMULATOR_RISCV64
-#  include "jit/riscv64/Simulator-riscv64.h"
 
-#  include "mozilla/Casting.h"
+#include "jit/riscv64/Simulator-riscv64.h"
 
-#  include <cinttypes>
-#  include <float.h>
-#  include <iostream>
-#  include <limits>
+#include "mozilla/Casting.h"
 
-#  include "jit/AtomicOperations.h"
-#  include "jit/riscv64/Assembler-riscv64.h"
-#  include "js/UniquePtr.h"
-#  include "js/Utility.h"
-#  include "threading/LockGuard.h"
-#  include "vm/JSContext.h"
-#  include "vm/Runtime.h"
-#  include "wasm/WasmSignalHandlers.h"
+#include <cinttypes>
+#include <float.h>
+#include <iostream>
+#include <limits>
 
-#  define I8(v) static_cast<int8_t>(v)
-#  define I16(v) static_cast<int16_t>(v)
-#  define U16(v) static_cast<uint16_t>(v)
-#  define I32(v) static_cast<int32_t>(v)
-#  define U32(v) static_cast<uint32_t>(v)
-#  define I64(v) static_cast<int64_t>(v)
-#  define U64(v) static_cast<uint64_t>(v)
-#  define I128(v) static_cast<__int128_t>(v)
-#  define U128(v) static_cast<__uint128_t>(v)
+#include "jit/AtomicOperations.h"
+#include "jit/riscv64/Assembler-riscv64.h"
+#include "js/UniquePtr.h"
+#include "js/Utility.h"
+#include "threading/LockGuard.h"
+#include "vm/JSContext.h"
+#include "vm/Runtime.h"
+#include "wasm/WasmSignalHandlers.h"
 
-#  define REGIx_FORMAT PRIx64
-#  define REGId_FORMAT PRId64
+#define I32(v) static_cast<int32_t>(v)
+#define U32(v) static_cast<uint32_t>(v)
+#define I64(v) static_cast<int64_t>(v)
+#define U64(v) static_cast<uint64_t>(v)
 
-#  define I32_CHECK(v)                   \
-    ({                                   \
-      MOZ_ASSERT(I64(I32(v)) == I64(v)); \
-      I32((v));                          \
-    })
+#define REGIx_FORMAT PRIx64
+#define REGId_FORMAT PRId64
 
 namespace js {
 namespace jit {
@@ -79,14 +68,14 @@ static void UNREACHABLE() {
   MOZ_CRASH();
 }
 
-#  define UNSUPPORTED()                                                  \
-    do {                                                                 \
-      std::cout << "Unrecognized instruction [@pc=0x" << std::hex        \
-                << registers_[pc] << "]: 0x" << instr_.InstructionBits() \
-                << '\n';                                                 \
-      printf("Unsupported instruction.\n");                              \
-      MOZ_CRASH();                                                       \
-    } while (0)
+#define UNSUPPORTED()                                                  \
+  do {                                                                 \
+    std::cout << "Unrecognized instruction [@pc=0x" << std::hex        \
+              << registers_[pc] << "]: 0x" << instr_.InstructionBits() \
+              << '\n';                                                 \
+    printf("Unsupported instruction.\n");                              \
+    MOZ_CRASH();                                                       \
+  } while (0)
 
 static char* ReadLine(const char* prompt) {
   UniqueChars result;
@@ -140,7 +129,6 @@ static char* ReadLine(const char* prompt) {
 // C/C++ argument slots size.
 const int kCArgSlotCount = 0;
 const int kCArgsSlotsSize = kCArgSlotCount * sizeof(uintptr_t);
-const int kBranchReturnOffset = 2 * kInstrSize;
 
 class CachePage {
  public:
@@ -215,7 +203,6 @@ Simulator* Simulator::Create() {
 
 void Simulator::Destroy(Simulator* sim) { js_delete(sim); }
 
-#  if JS_CODEGEN_RISCV64
 void Simulator::TraceRegWr(int64_t value, TraceType t) {
   if (FLAG_trace_sim) {
     union {
@@ -253,42 +240,6 @@ void Simulator::TraceRegWr(int64_t value, TraceType t) {
   }
 }
 
-#  elif JS_CODEGEN_RISCV32
-template <typename T>
-void Simulator::TraceRegWr(T value, TraceType t) {
-  if (::v8::internal::FLAG_trace_sim) {
-    union {
-      int32_t fmt_int32;
-      float fmt_float;
-      double fmt_double;
-    } v;
-    if (t != DOUBLE) {
-      v.fmt_int32 = value;
-    } else {
-      DCHECK_EQ(sizeof(T), 8);
-      v.fmt_double = value;
-    }
-    switch (t) {
-      case WORD:
-        SNPrintF(trace_buf_,
-                 "%016" REGIx_FORMAT "    (%" PRId64 ")    int32:%" REGId_FORMAT
-                 " uint32:%" PRIu32,
-                 v.fmt_int32, icount_, v.fmt_int32, v.fmt_int32);
-        break;
-      case FLOAT:
-        SNPrintF(trace_buf_, "%016" REGIx_FORMAT "    (%" PRId64 ")    flt:%e",
-                 v.fmt_int32, icount_, v.fmt_float);
-        break;
-      case DOUBLE:
-        SNPrintF(trace_buf_, "%016" PRIx64 "    (%" PRId64 ")    dbl:%e",
-                 static_cast<int64_t>(v.fmt_double), icount_, v.fmt_double);
-        break;
-      default:
-        UNREACHABLE();
-    }
-  }
-}
-#  endif
 // The RiscvDebugger class is used by the simulator while debugging simulated
 // code.
 class RiscvDebugger {
@@ -310,9 +261,9 @@ class RiscvDebugger {
   int64_t GetFPURegisterValue(int regnum);
   float GetFPURegisterValueFloat(int regnum);
   double GetFPURegisterValueDouble(int regnum);
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
   __int128_t GetVRegisterValue(int regnum);
-#  endif
+#endif
   bool GetValue(const char* desc, int64_t* value);
 };
 
@@ -344,7 +295,7 @@ double RiscvDebugger::GetFPURegisterValueDouble(int regnum) {
   return sim_->getFpuRegisterDouble(regnum);
 }
 
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
 __int128_t RiscvDebugger::GetVRegisterValue(int regnum) {
   if (regnum == kNumVRegisters) {
     return sim_->get_pc();
@@ -352,7 +303,7 @@ __int128_t RiscvDebugger::GetVRegisterValue(int regnum) {
     return sim_->get_vregister(regnum);
   }
 }
-#  endif
+#endif
 
 bool RiscvDebugger::GetValue(const char* desc, int64_t* value) {
   int regnum = Registers::FromName(desc);
@@ -372,9 +323,9 @@ bool RiscvDebugger::GetValue(const char* desc, int64_t* value) {
   return sscanf(desc, "%" SCNu64, reinterpret_cast<int64_t*>(value)) == 1;
 }
 
-#  define REG_INFO(name)                               \
-    name, GetRegisterValue(Registers::FromName(name)), \
-        GetRegisterValue(Registers::FromName(name))
+#define REG_INFO(name)                               \
+  name, GetRegisterValue(Registers::FromName(name)), \
+      GetRegisterValue(Registers::FromName(name))
 
 void RiscvDebugger::PrintRegs(char name_prefix, int start_index,
                               int end_index) {
@@ -418,34 +369,34 @@ void RiscvDebugger::printAllRegs() {
   PrintRegs('t', 0, 6);
 }
 
-#  undef REG_INFO
+#undef REG_INFO
 
 void RiscvDebugger::printAllRegsIncludingFPU() {
-#  define FPU_REG_INFO(n)                               \
-    FloatRegisters::GetName(n), GetFPURegisterValue(n), \
-        GetFPURegisterValueDouble(n)
+#define FPU_REG_INFO(n)                               \
+  FloatRegisters::GetName(n), GetFPURegisterValue(n), \
+      GetFPURegisterValueDouble(n)
 
   printAllRegs();
 
   printf("\n\n");
   // f0, f1, f2, ... f31.
-  MOZ_ASSERT(kNumFPURegisters % 2 == 0);
-  for (int i = 0; i < kNumFPURegisters; i += 2) {
+  MOZ_ASSERT(FloatRegisters::TotalPhys % 2 == 0);
+  for (uint32_t i = 0; i < FloatRegisters::TotalPhys; i += 2) {
     printf("%3s: 0x%016" PRIx64 "  %16.4e \t%3s: 0x%016" PRIx64 "  %16.4e\n",
            FPU_REG_INFO(i), FPU_REG_INFO(i + 1));
   }
-#  undef FPU_REG_INFO
+#undef FPU_REG_INFO
 }
 
 void RiscvDebugger::Debug() {
   intptr_t last_pc = -1;
   bool done = false;
 
-#  define COMMAND_SIZE 63
-#  define ARG_SIZE 255
+#define COMMAND_SIZE 63
+#define ARG_SIZE 255
 
-#  define STR(a) #a
-#  define XSTR(a) STR(a)
+#define STR(a) #a
+#define XSTR(a) STR(a)
 
   char cmd[COMMAND_SIZE + 1];
   char arg1[ARG_SIZE + 1];
@@ -463,7 +414,7 @@ void RiscvDebugger::Debug() {
       disasm::Disassembler dasm(converter);
       // Use a reasonably large buffer.
       EmbeddedVector<char, 256> buffer;
-      dasm.InstructionDecode(buffer, reinterpret_cast<byte*>(sim_->get_pc()));
+      dasm.InstructionDecode(buffer, sim_->get_pc_as<Instruction*>());
       printf("  0x%016" REGIx_FORMAT "   %s\n", sim_->get_pc(), buffer.start());
       last_pc = sim_->get_pc();
     }
@@ -487,7 +438,7 @@ void RiscvDebugger::Debug() {
             "%" XSTR(ARG_SIZE) "s",
             cmd, arg1, arg2);
     if ((strcmp(cmd, "si") == 0) || (strcmp(cmd, "stepi") == 0)) {
-      SimInstruction instr(reinterpret_cast<Instruction*>(sim_->get_pc()));
+      SimInstruction instr(sim_->get_pc_as<Instruction*>());
       if (!(instr.IsTrap()) || instr.InstructionBits() == rtCallRedirInstr) {
         sim_->icount_++;
         sim_->InstructionDecode(instr);
@@ -511,9 +462,9 @@ void RiscvDebugger::Debug() {
         } else {
           int regnum = Registers::FromName(arg1);
           int fpuregnum = FloatRegisters::FromName(arg1);
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
           int vregnum = VRegisters::FromName(arg1);
-#  endif
+#endif
           if (regnum != Registers::invalid_reg) {
             value = GetRegisterValue(regnum);
             printf("%s: 0x%08" REGIx_FORMAT "  %" REGId_FORMAT "  \n", arg1,
@@ -523,13 +474,13 @@ void RiscvDebugger::Debug() {
             dvalue = GetFPURegisterValueDouble(fpuregnum);
             printf("%3s: 0x%016" PRIx64 "  %16.4e\n",
                    FloatRegisters::GetName(fpuregnum), fvalue, dvalue);
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
           } else if (vregnum != kInvalidVRegister) {
             __int128_t v = GetVRegisterValue(vregnum);
             printf("\t%s:0x%016" REGIx_FORMAT "%016" REGIx_FORMAT "\n",
                    VRegisters::GetName(vregnum), (uint64_t)(v >> 64),
                    (uint64_t)v);
-#  endif
+#endif
           } else {
             printf("%s unrecognized\n", arg1);
           }
@@ -610,11 +561,12 @@ void RiscvDebugger::Debug() {
       // Use a reasonably large buffer.
       EmbeddedVector<char, 256> buffer;
 
+      using byte = uint8_t;
       byte* cur = nullptr;
       byte* end = nullptr;
 
       if (argc == 1) {
-        cur = reinterpret_cast<byte*>(sim_->get_pc());
+        cur = sim_->get_pc_as<byte*>();
         end = cur + (10 * kInstrSize);
       } else if (argc == 2) {
         auto regnum = Registers::FromName(arg1);
@@ -630,7 +582,7 @@ void RiscvDebugger::Debug() {
           // The argument is the number of instructions.
           sreg_t value;
           if (GetValue(arg1, &value)) {
-            cur = reinterpret_cast<byte*>(sim_->get_pc());
+            cur = sim_->get_pc_as<byte*>();
             // Disassemble <arg1> instructions.
             end = cur + (value * kInstrSize);
           }
@@ -778,11 +730,11 @@ void RiscvDebugger::Debug() {
     }
   }
 
-#  undef COMMAND_SIZE
-#  undef ARG_SIZE
+#undef COMMAND_SIZE
+#undef ARG_SIZE
 
-#  undef STR
-#  undef XSTR
+#undef STR
+#undef XSTR
 }
 
 void Simulator::SetBreakpoint(const SimInstruction& location, bool is_tbreak) {
@@ -821,7 +773,7 @@ void Simulator::ListBreakpoints() {
 void Simulator::CheckBreakpoints() {
   bool hit_a_breakpoint = false;
   bool is_tbreak = false;
-  SimInstruction pc_(reinterpret_cast<Instruction*>(get_pc()));
+  SimInstruction pc_(get_pc_as<Instruction*>());
   for (unsigned i = 0; i < breakpoints_.size(); i++) {
     if ((breakpoints_.at(i).location == pc_.instr()) &&
         breakpoints_.at(i).enabled) {
@@ -1116,44 +1068,38 @@ void Simulator::setRegister(int reg, int64_t value) {
 }
 
 void Simulator::setFpuRegister(int fpureg, int64_t value) {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   FPUregisters_[fpureg] = value;
 }
 
-void Simulator::setFpuRegisterLo(int fpureg, int32_t value) {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
-  *mozilla::BitwiseCast<int32_t*>(&FPUregisters_[fpureg]) = value;
+void Simulator::setFpuRegisterFloat16(int fpureg, float16 value) {
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  FPUregisters_[fpureg] = box_float16(value);
 }
 
-void Simulator::setFpuRegisterHi(int fpureg, int32_t value) {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
-  *((mozilla::BitwiseCast<int32_t*>(&FPUregisters_[fpureg])) + 1) = value;
+void Simulator::setFpuRegisterFloat16(int fpureg, Float16 value) {
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  FPUregisters_[fpureg] = box_float16(value.get_bits());
 }
 
 void Simulator::setFpuRegisterFloat(int fpureg, float value) {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
-  *mozilla::BitwiseCast<int64_t*>(&FPUregisters_[fpureg]) = box_float(value);
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  FPUregisters_[fpureg] = box_float(value);
 }
 
 void Simulator::setFpuRegisterFloat(int fpureg, Float32 value) {
   MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  Float64 t = Float64::FromBits(box_float(value.get_bits()));
-  memcpy(&FPUregisters_[fpureg], &t, 8);
+  FPUregisters_[fpureg] = box_float(value.get_bits());
 }
 
 void Simulator::setFpuRegisterDouble(int fpureg, double value) {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
-  *mozilla::BitwiseCast<double*>(&FPUregisters_[fpureg]) = value;
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  FPUregisters_[fpureg] = mozilla::BitwiseCast<int64_t>(value);
 }
 
 void Simulator::setFpuRegisterDouble(int fpureg, Float64 value) {
   MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  memcpy(&FPUregisters_[fpureg], &value, 8);
+  FPUregisters_[fpureg] = value.get_bits();
 }
 
 // Get the register from the architecture state. This function does handle
@@ -1167,41 +1113,38 @@ int64_t Simulator::getRegister(int reg) const {
 }
 
 int64_t Simulator::getFpuRegister(int fpureg) const {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return FPUregisters_[fpureg];
 }
 
-int32_t Simulator::getFpuRegisterLo(int fpureg) const {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
-  return *mozilla::BitwiseCast<int32_t*>(&FPUregisters_[fpureg]);
-}
-
-int32_t Simulator::getFpuRegisterHi(int fpureg) const {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
-  return *((mozilla::BitwiseCast<int32_t*>(&FPUregisters_[fpureg])) + 1);
+// Fix NaN boxing error according to
+// https://riscv.github.io/riscv-isa-manual/snapshot/spec/#nanboxing
+Float16 Simulator::getFpuRegisterFloat16(int fpureg, bool check_nanbox) const {
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  if (check_nanbox && !is_boxed_float16(FPUregisters_[fpureg])) {
+    return Float16::FromBits(0x7e00);
+  }
+  return Float16::FromBits(uint16_t(FPUregisters_[fpureg] & 0xFFFF));
 }
 
 float Simulator::getFpuRegisterFloat(int fpureg) const {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  if (!is_boxed_float(FPUregisters_[fpureg])) {
+    return std::numeric_limits<float>::quiet_NaN();
+  }
   return *mozilla::BitwiseCast<float*>(&FPUregisters_[fpureg]);
 }
 
-Float32 Simulator::getFpuRegisterFloat32(int fpureg) const {
+Float32 Simulator::getFpuRegisterFloat32(int fpureg, bool check_nanbox) const {
   MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  if (!is_boxed_float(FPUregisters_[fpureg])) {
+  if (check_nanbox && !is_boxed_float(FPUregisters_[fpureg])) {
     return Float32::FromBits(0x7ffc0000);
   }
-  return Float32::FromBits(
-      *bit_cast<uint32_t*>(const_cast<int64_t*>(&FPUregisters_[fpureg])));
+  return Float32::FromBits(FPUregisters_[fpureg] & 0xFFFF'FFFF);
 }
 
 double Simulator::getFpuRegisterDouble(int fpureg) const {
-  MOZ_ASSERT((fpureg >= 0) &&
-             (fpureg < Simulator::FPURegister::kNumFPURegisters));
+  MOZ_ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return *mozilla::BitwiseCast<double*>(&FPUregisters_[fpureg]);
 }
 
@@ -1305,6 +1248,16 @@ void Simulator::TraceMemRd(sreg_t addr, T value, sreg_t reg_value) {
     } else {
       UNREACHABLE();
     }
+  }
+}
+
+void Simulator::TraceMemRdFloat16(sreg_t addr, Float16 value,
+                                  int64_t reg_value) {
+  if (FLAG_trace_sim) {
+    SNPrintF(trace_buf_,
+             "%016" PRIx64 "    (%" PRId64
+             ")    flt:%e <-- [addr: %" REGIx_FORMAT "]",
+             reg_value, icount_, static_cast<float>(value.get_scalar()), addr);
   }
 }
 
@@ -1472,7 +1425,6 @@ T Simulator::ReadMem(sreg_t addr, Instruction* instr) {
 template <typename T>
 void Simulator::WriteMem(sreg_t addr, T value, Instruction* instr) {
   if (handleWasmSegFault(addr, sizeof(T))) {
-    value = -1;
     return;
   }
   if (addr >= 0 && addr < 0x400) {
@@ -1492,9 +1444,25 @@ void Simulator::WriteMem(sreg_t addr, T value, Instruction* instr) {
 }
 
 template <>
+void Simulator::WriteMem(sreg_t addr, Float16 value, Instruction* instr) {
+  if (handleWasmSegFault(addr, 2)) {
+    return;
+  }
+  if (addr >= 0 && addr < 0x400) {
+    // This has to be a nullptr-dereference, drop into debugger.
+    printf("Memory write to bad address: 0x%08" REGIx_FORMAT
+           " , pc=0x%08" PRIxPTR " \n",
+           addr, reinterpret_cast<intptr_t>(instr));
+    DieOrDebug();
+  }
+  float16* ptr = reinterpret_cast<float16*>(addr);
+  TraceMemWr(addr, static_cast<float>(value.get_scalar()));
+  memcpy(ptr, &value, 2);
+}
+
+template <>
 void Simulator::WriteMem(sreg_t addr, Float32 value, Instruction* instr) {
   if (handleWasmSegFault(addr, 4)) {
-    value = Float32(-1.0f);
     return;
   }
   if (addr >= 0 && addr < 0x400) {
@@ -1512,7 +1480,6 @@ void Simulator::WriteMem(sreg_t addr, Float32 value, Instruction* instr) {
 template <>
 void Simulator::WriteMem(sreg_t addr, Float64 value, Instruction* instr) {
   if (handleWasmSegFault(addr, 8)) {
-    value = Float64(-1.0);
     return;
   }
   if (addr >= 0 && addr < 0x400) {
@@ -1555,10 +1522,86 @@ void Simulator::format(const SimInstruction& instr, const char* format) {
 // is fine because it is caller-saved.
 ABI_FUNCTION_TYPE_SIM_PROTOTYPES
 
+// FLI.S immediate values lookup table (Zfa extension).
+// Each entry is a 32-bit IEEE 754 single-precision representation.
+// Index corresponds to imm5 value (0-31).
+static constexpr uint32_t kFLISImm[32] = {
+    0xbf800000,  /* -1.0 */
+    0x00800000,  /* minimum positive normal */
+    0x37800000,  /* 1.0 * 2^-16 */
+    0x38000000,  /* 1.0 * 2^-15 */
+    0x3b800000,  /* 1.0 * 2^-8  */
+    0x3c000000,  /* 1.0 * 2^-7  */
+    0x3d800000,  /* 1.0 * 2^-4  */
+    0x3e000000,  /* 1.0 * 2^-3  */
+    0x3e800000,  /* 0.25 */
+    0x3ea00000,  /* 0.3125 */
+    0x3ec00000,  /* 0.375 */
+    0x3ee00000,  /* 0.4375 */
+    0x3f000000,  /* 0.5 */
+    0x3f200000,  /* 0.625 */
+    0x3f400000,  /* 0.75 */
+    0x3f600000,  /* 0.875 */
+    0x3f800000,  /* 1.0 */
+    0x3fa00000,  /* 1.25 */
+    0x3fc00000,  /* 1.5 */
+    0x3fe00000,  /* 1.75 */
+    0x40000000,  /* 2.0 */
+    0x40200000,  /* 2.5 */
+    0x40400000,  /* 3 */
+    0x40800000,  /* 4 */
+    0x41000000,  /* 8 */
+    0x41800000,  /* 16 */
+    0x43000000,  /* 2^7 */
+    0x43800000,  /* 2^8 */
+    0x47000000,  /* 2^15 */
+    0x47800000,  /* 2^16 */
+    0x7f800000,  /* +inf */
+    0x7fc00000,  // imm5=31: Canonical NaN
+};
+
+// FLI.D immediate values lookup table (Zfa extension).
+// Each entry is a 64-bit IEEE 754 double-precision representation.
+// Index corresponds to imm5 value (0-31).
+static constexpr uint64_t kFLIDImm[32] = {
+    0xbff0000000000000ull,  /* -1.0 */
+    0x0010000000000000ull,  /* minimum positive normal */
+    0x3ef0000000000000ull,  /* 1.0 * 2^-16 */
+    0x3f00000000000000ull,  /* 1.0 * 2^-15 */
+    0x3f70000000000000ull,  /* 1.0 * 2^-8  */
+    0x3f80000000000000ull,  /* 1.0 * 2^-7  */
+    0x3fb0000000000000ull,  /* 1.0 * 2^-4  */
+    0x3fc0000000000000ull,  /* 1.0 * 2^-3  */
+    0x3fd0000000000000ull,  /* 0.25 */
+    0x3fd4000000000000ull,  /* 0.3125 */
+    0x3fd8000000000000ull,  /* 0.375 */
+    0x3fdc000000000000ull,  /* 0.4375 */
+    0x3fe0000000000000ull,  /* 0.5 */
+    0x3fe4000000000000ull,  /* 0.625 */
+    0x3fe8000000000000ull,  /* 0.75 */
+    0x3fec000000000000ull,  /* 0.875 */
+    0x3ff0000000000000ull,  /* 1.0 */
+    0x3ff4000000000000ull,  /* 1.25 */
+    0x3ff8000000000000ull,  /* 1.5 */
+    0x3ffc000000000000ull,  /* 1.75 */
+    0x4000000000000000ull,  /* 2.0 */
+    0x4004000000000000ull,  /* 2.5 */
+    0x4008000000000000ull,  /* 3 */
+    0x4010000000000000ull,  /* 4 */
+    0x4020000000000000ull,  /* 8 */
+    0x4030000000000000ull,  /* 16 */
+    0x4060000000000000ull,  /* 2^7 */
+    0x4070000000000000ull,  /* 2^8 */
+    0x40e0000000000000ull,  /* 2^15 */
+    0x40f0000000000000ull,  /* 2^16 */
+    0x7ff0000000000000ull,  /* +inf */
+    0x7ff8000000000000ULL,  // imm5=31: Canonical NaN
+};
+
 // Generated by Assembler::break_()/stop(), ebreak code is passed as immediate
 // field of a subsequent LUI instruction; otherwise returns -1
 static inline uint32_t get_ebreak_code(Instruction* instr) {
-  MOZ_ASSERT(instr->InstructionBits() == kBreakInstr);
+  MOZ_ASSERT(instr->IsTrap());
   uint8_t* cur = reinterpret_cast<uint8_t*>(instr);
   Instruction* next_instr = reinterpret_cast<Instruction*>(cur + kInstrSize);
   if (next_instr->BaseOpcodeFieldRaw() == LUI) {
@@ -1624,7 +1667,7 @@ void Simulator::SoftwareInterrupt() {
     setRegister(ra, saved_ra);
     set_pc(getRegister(ra));
 
-  } else if (instr_.InstructionBits() == kBreakInstr &&
+  } else if (instr_.IsTrap() &&
              (get_ebreak_code(instr_.instr()) <= kMaxStopCode)) {
     uint32_t code = get_ebreak_code(instr_.instr());
     if (code == 0) {
@@ -1709,7 +1752,9 @@ void Simulator::handleStop(uint32_t code) {
 }
 
 bool Simulator::isStopInstruction(const SimInstruction& instr) {
-  if (instr.InstructionBits() != kBreakInstr) return false;
+  if (!instr.IsTrap()) {
+    return false;
+  }
   int32_t code = get_ebreak_code(instr.instr());
   return code != -1 && static_cast<uint32_t>(code) > kMaxWatchpointCode &&
          static_cast<uint32_t>(code) <= kMaxStopCode;
@@ -1801,7 +1846,7 @@ void Simulator::InstructionDecode(const SimInstruction& instr) {
     disasm::NameConverter converter;
     disasm::Disassembler dasm(converter);
     // Use a reasonably large buffer.
-    dasm.InstructionDecode(buffer, reinterpret_cast<byte*>(instr.instr()));
+    dasm.InstructionDecode(buffer, instr.instr());
   }
 
   instr_ = instr.instr();
@@ -1854,11 +1899,11 @@ void Simulator::InstructionDecode(const SimInstruction& instr) {
     case Instruction::kCSType:
       DecodeCSType();
       break;
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
     case Instruction::kVType:
       DecodeVType();
       break;
-#  endif
+#endif
     default:
       UNSUPPORTED();
   }
@@ -1984,9 +2029,8 @@ void Simulator::DecodeRVRType() {
       set_rd(rs1() | (~rs2()));
       break;
     case RO_XNOR:
-      set_rd((~rs1()) ^ (~rs2()));
+      set_rd(~(rs1() ^ rs2()));
       break;
-#  ifdef JS_CODEGEN_RISCV64
     case RO_ADDW: {
       set_rd(sext32(rs1() + rs2()));
       break;
@@ -2034,7 +2078,6 @@ void Simulator::DecodeRVRType() {
       set_rd(sext32((extz_rs1 >> shamt) | (extz_rs1 << (32 - shamt))));
       break;
     }
-#  endif /* JS_CODEGEN_RISCV64 */
       // TODO(riscv): Add RISCV M extension macro
     case RO_MUL: {
       set_rd(rs1() * rs2());
@@ -2096,7 +2139,6 @@ void Simulator::DecodeRVRType() {
       }
       break;
     }
-#  ifdef JS_CODEGEN_RISCV64
     case RO_MULW: {
       set_rd(sext32(sext32(rs1()) * sext32(rs2())));
       break;
@@ -2145,7 +2187,6 @@ void Simulator::DecodeRVRType() {
       }
       break;
     }
-#  endif /*JS_CODEGEN_RISCV64*/
     case RO_SH1ADD:
       set_rd(rs2() + (rs1() << 1));
       break;
@@ -2186,7 +2227,7 @@ void Simulator::DecodeRVRType() {
     }
     case RO_BCLR: {
       sreg_t index = rs2() & (xlen - 1);
-      set_rd(rs1() & ~(1l << index));
+      set_rd(rs1() & ~(static_cast<reg_t>(1) << index));
       break;
     }
     case RO_BEXT: {
@@ -2196,12 +2237,22 @@ void Simulator::DecodeRVRType() {
     }
     case RO_BINV: {
       sreg_t index = rs2() & (xlen - 1);
-      set_rd(rs1() ^ (1 << index));
+      set_rd(rs1() ^ (static_cast<reg_t>(1) << index));
       break;
     }
     case RO_BSET: {
       sreg_t index = rs2() & (xlen - 1);
-      set_rd(rs1() | (1 << index));
+      set_rd(rs1() | (static_cast<reg_t>(1) << index));
+      break;
+    }
+    case RO_CZERO_EQZ: {
+      sreg_t condition = rs2();
+      set_rd(condition == 0 ? 0 : rs1());
+      break;
+    }
+    case RO_CZERO_NEZ: {
+      sreg_t condition = rs2();
+      set_rd(condition != 0 ? 0 : rs1());
       break;
     }
       // TODO(riscv): End Add RISCV M extension macro
@@ -2248,6 +2299,30 @@ T Simulator::FMaxMinHelper(T a, T b, MaxMinKind kind) {
   return result;
 }
 
+// IEEE 754-2019 minimum/maximum for Zfa extension (fminm/fmaxm).
+// Like Fmax/Fmin except that if either input is NaN, the result
+// is the canonical NaN.
+template <typename T>
+T Simulator::FMaxMinMHelper(T a, T b, MaxMinKind kind) {
+  // IEEE 754-2019: if either operand is NaN, return canonical NaN
+  if (std::isnan(a) || std::isnan(b)) {
+    return std::numeric_limits<T>::quiet_NaN();
+  }
+
+  // Handle -0.0 vs +0.0 case
+  if (a == b) {
+    // For min: return -0.0 (the one with sign bit set)
+    // For max: return +0.0 (the one without sign bit set)
+    if (kind == MaxMinKind::kMax) {
+      return std::signbit(b) ? a : b;
+    } else {
+      return std::signbit(b) ? b : a;
+    }
+  }
+
+  return (kind == MaxMinKind::kMax) ? fmax(a, b) : fmin(a, b);
+}
+
 float Simulator::RoundF2FHelper(float input_val, int rmode) {
   if (rmode == DYN) rmode = get_dynamic_rounding_mode();
 
@@ -2286,6 +2361,9 @@ float Simulator::RoundF2FHelper(float input_val, int rmode) {
       UNREACHABLE();
   }
 
+  if (std::isnan(input_val) || std::isnan(rounded)) {
+    return std::numeric_limits<float>::quiet_NaN();
+  }
   return rounded;
 }
 
@@ -2325,6 +2403,9 @@ double Simulator::RoundF2FHelper(double input_val, int rmode) {
       break;
     default:
       UNREACHABLE();
+  }
+  if (std::isnan(input_val) || std::isnan(rounded)) {
+    return std::numeric_limits<double>::quiet_NaN();
   }
   return rounded;
 }
@@ -2700,7 +2781,6 @@ void Simulator::DecodeRVRAType() {
           instr_.instr(), WORD)));
       break;
     }
-#  ifdef JS_CODEGEN_RISCV64
     case RO_LR_D: {
       sreg_t addr = rs1();
       set_rd(loadLinkedD(addr, instr_));
@@ -2771,7 +2851,6 @@ void Simulator::DecodeRVRAType() {
           instr_.instr(), DWORD));
       break;
     }
-#  endif /*JS_CODEGEN_RISCV64*/
     // TODO(riscv): End Add macro for RISCV A extension
     default: {
       UNSUPPORTED();
@@ -2856,7 +2935,7 @@ void Simulator::DecodeRVRFPType() {
       }
       break;
     }
-    case RO_FSGNJ_S: {  // RO_FSGNJN_S  RO_FSQNJX_S
+    case RO_FSGNJ_S: {  // RO_FSGNJN_S  RO_FSGNJX_S
       switch (instr_.Funct3Value()) {
         case 0b000: {  // RO_FSGNJ_S
           set_frd(fsgnj32(frs1_boxed(), frs2_boxed(), false, false));
@@ -2866,7 +2945,7 @@ void Simulator::DecodeRVRFPType() {
           set_frd(fsgnj32(frs1_boxed(), frs2_boxed(), true, false));
           break;
         }
-        case 0b010: {  // RO_FSQNJX_S
+        case 0b010: {  // RO_FSGNJX_S
           set_frd(fsgnj32(frs1_boxed(), frs2_boxed(), false, true));
           break;
         }
@@ -2876,7 +2955,7 @@ void Simulator::DecodeRVRFPType() {
       }
       break;
     }
-    case RO_FMIN_S: {  // RO_FMAX_S
+    case RO_FMIN_S: {  // RO_FMAX_S, RO_FMINM_S, RO_FMAXM_S
       switch (instr_.Funct3Value()) {
         case 0b000: {  // RO_FMIN_S
           set_frd(FMaxMinHelper(frs1(), frs2(), MaxMinKind::kMin));
@@ -2884,6 +2963,14 @@ void Simulator::DecodeRVRFPType() {
         }
         case 0b001: {  // RO_FMAX_S
           set_frd(FMaxMinHelper(frs1(), frs2(), MaxMinKind::kMax));
+          break;
+        }
+        case 0b010: {  // RO_FMINM_S (Zfa extension)
+          set_frd(FMaxMinMHelper(frs1(), frs2(), MaxMinKind::kMin));
+          break;
+        }
+        case 0b011: {  // RO_FMAXM_S (Zfa extension)
+          set_frd(FMaxMinMHelper(frs1(), frs2(), MaxMinKind::kMax));
           break;
         }
         default: {
@@ -2904,7 +2991,6 @@ void Simulator::DecodeRVRFPType() {
               RoundF2IHelper<uint32_t>(original_val, instr_.RoundMode())));
           break;
         }
-#  ifdef JS_CODEGEN_RISCV64
         case 0b00010: {  // RO_FCVT_L_S
           set_rd(RoundF2IHelper<int64_t>(original_val, instr_.RoundMode()));
           break;
@@ -2913,14 +2999,13 @@ void Simulator::DecodeRVRFPType() {
           set_rd(RoundF2IHelper<uint64_t>(original_val, instr_.RoundMode()));
           break;
         }
-#  endif /* JS_CODEGEN_RISCV64 */
         default: {
           UNSUPPORTED();
         }
       }
       break;
     }
-    case RO_FMV: {  // RO_FCLASS_S
+    case RO_FMV_X_W: {  // RO_FCLASS_S
       switch (instr_.Funct3Value()) {
         case 0b000: {
           if (instr_.Rs2Value() == 0b00000) {
@@ -2941,7 +3026,7 @@ void Simulator::DecodeRVRFPType() {
       }
       break;
     }
-    case RO_FLE_S: {  // RO_FEQ_S RO_FLT_S RO_FLE_S
+    case RO_FLE_S: {  // RO_FEQ_S RO_FLT_S RO_FLE_S RO_FLEQ_S RO_FLTQ_S
       switch (instr_.Funct3Value()) {
         case 0b010: {  // RO_FEQ_S
           set_rd(CompareFHelper(frs1(), frs2(), EQ));
@@ -2953,6 +3038,28 @@ void Simulator::DecodeRVRFPType() {
         }
         case 0b000: {  // RO_FLE_S
           set_rd(CompareFHelper(frs1(), frs2(), LE));
+          break;
+        }
+        case 0b100: {  // RO_FLEQ_S (Zfa extension) - quiet LE comparison
+          // fleq.s: Quiet less-than-or-equal comparison
+          // Does NOT raise invalid exception for NaN (unlike fle.s)
+          // Returns false if either operand is NaN
+          if (std::isnan(frs1()) || std::isnan(frs2())) {
+            set_rd(0);
+          } else {
+            set_rd(frs1() <= frs2() ? 1 : 0);
+          }
+          break;
+        }
+        case 0b101: {  // RO_FLTQ_S (Zfa extension) - quiet LT comparison
+          // fltq.s: Quiet less-than comparison
+          // Does NOT raise invalid exception for NaN (unlike flt.s)
+          // Returns false if either operand is NaN
+          if (std::isnan(frs1()) || std::isnan(frs2())) {
+            set_rd(0);
+          } else {
+            set_rd(frs1() < frs2() ? 1 : 0);
+          }
           break;
         }
         default: {
@@ -2971,7 +3078,6 @@ void Simulator::DecodeRVRFPType() {
           set_frd(static_cast<float>((uint32_t)rs1()));
           break;
         }
-#  ifdef JS_CODEGEN_RISCV64
         case 0b00010: {  // RO_FCVT_S_L
           set_frd(static_cast<float>((int64_t)rs1()));
           break;
@@ -2980,7 +3086,6 @@ void Simulator::DecodeRVRFPType() {
           set_frd(static_cast<float>((uint64_t)rs1()));
           break;
         }
-#  endif /* JS_CODEGEN_RISCV64 */
         default: {
           UNSUPPORTED();
         }
@@ -2989,9 +3094,17 @@ void Simulator::DecodeRVRFPType() {
     }
     case RO_FMV_W_X: {
       if (instr_.Funct3Value() == 0b000) {
-        // since FMV preserves source bit-pattern, no need to canonize
-        Float32 result = Float32::FromBits((uint32_t)rs1());
-        set_frd(result);
+        if (instr_.Rs2Value() == 0b00000) {
+          // fmv.w.x: since FMV preserves source bit-pattern, no need to
+          // canonize
+          Float32 result = Float32::FromBits((uint32_t)rs1());
+          set_frd(result);
+        } else if (instr_.Rs2Value() == 0b00001) {
+          // fli.s: Load floating-point immediate (Zfa extension)
+          set_frd(Float32::FromBits(kFLISImm[instr_.Rs1Value()]));
+        } else {
+          UNSUPPORTED();
+        }
       } else {
         UNSUPPORTED();
       }
@@ -3068,7 +3181,7 @@ void Simulator::DecodeRVRFPType() {
       }
       break;
     }
-    case RO_FSGNJ_D: {  // RO_FSGNJN_D RO_FSQNJX_D
+    case RO_FSGNJ_D: {  // RO_FSGNJN_D RO_FSGNJX_D
       switch (instr_.Funct3Value()) {
         case 0b000: {  // RO_FSGNJ_D
           set_drd(fsgnj64(drs1_boxed(), drs2_boxed(), false, false));
@@ -3078,7 +3191,7 @@ void Simulator::DecodeRVRFPType() {
           set_drd(fsgnj64(drs1_boxed(), drs2_boxed(), true, false));
           break;
         }
-        case 0b010: {  // RO_FSQNJX_D
+        case 0b010: {  // RO_FSGNJX_D
           set_drd(fsgnj64(drs1_boxed(), drs2_boxed(), false, true));
           break;
         }
@@ -3088,7 +3201,7 @@ void Simulator::DecodeRVRFPType() {
       }
       break;
     }
-    case RO_FMIN_D: {  // RO_FMAX_D
+    case RO_FMIN_D: {  // RO_FMAX_D, RO_FMINM_D, RO_FMAXM_D
       switch (instr_.Funct3Value()) {
         case 0b000: {  // RO_FMIN_D
           set_drd(FMaxMinHelper(drs1(), drs2(), MaxMinKind::kMin));
@@ -3096,6 +3209,14 @@ void Simulator::DecodeRVRFPType() {
         }
         case 0b001: {  // RO_FMAX_D
           set_drd(FMaxMinHelper(drs1(), drs2(), MaxMinKind::kMax));
+          break;
+        }
+        case 0b010: {  // RO_FMINM_D (Zfa extension)
+          set_drd(FMaxMinMHelper(drs1(), drs2(), MaxMinKind::kMin));
+          break;
+        }
+        case 0b011: {  // RO_FMAXM_D (Zfa extension)
+          set_drd(FMaxMinMHelper(drs1(), drs2(), MaxMinKind::kMax));
           break;
         }
         default: {
@@ -3108,6 +3229,20 @@ void Simulator::DecodeRVRFPType() {
       if (instr_.Rs2Value() == 0b00001) {
         auto fn = [](double drs) { return static_cast<float>(drs); };
         set_frd(CanonicalizeDoubleToFloatOperation(fn));
+      } else if (instr_.Rs2Value() == 0b00010) {
+        auto fn = [](float16 drs) { return static_cast<float>(drs); };
+        set_frd(CanonicalizeFloat16ToFloatOperation(fn));
+      } else if (instr_.Rs2Value() == 0b00100) {
+        // fround.s: Round single-precision to integer (Zfa extension)
+        set_frd(RoundF2FHelper(frs1(), instr_.RoundMode()));
+      } else if (instr_.Rs2Value() == 0b00101) {
+        // froundnx.s: Round single-precision to integer with inexact (Zfa
+        // extension)
+        float result = RoundF2FHelper(frs1(), instr_.RoundMode());
+        if (frs1() != result) {
+          set_fflags(kInexact);
+        }
+        set_frd(result);
       } else {
         UNSUPPORTED();
       }
@@ -3117,14 +3252,28 @@ void Simulator::DecodeRVRFPType() {
       if (instr_.Rs2Value() == 0b00000) {
         auto fn = [](float frs) { return static_cast<double>(frs); };
         set_drd(CanonicalizeFloatToDoubleOperation(fn));
+      } else if (instr_.Rs2Value() == 0b00010) {  // RO_FCVT_D_H
+        auto fn = [](float16 frs) { return static_cast<double>(frs); };
+        set_drd(CanonicalizeFloat16ToDoubleOperation(fn));
+      } else if (instr_.Rs2Value() == 0b00100) {
+        // fround.d: Round double-precision to integer (Zfa extension)
+        set_drd(RoundF2FHelper(drs1(), instr_.RoundMode()));
+      } else if (instr_.Rs2Value() == 0b00101) {
+        // froundnx.d: Round double-precision to integer with inexact (Zfa
+        // extension)
+        double result = RoundF2FHelper(drs1(), instr_.RoundMode());
+        if (drs1() != result) {
+          set_fflags(kInexact);
+        }
+        set_drd(result);
       } else {
         UNSUPPORTED();
       }
       break;
     }
-    case RO_FLE_D: {  // RO_FEQ_D RO_FLT_D RO_FLE_D
+    case RO_FLE_D: {  // RO_FEQ_D RO_FLT_D RO_FLE_D RO_FLEQ_D RO_FLTQ_D
       switch (instr_.Funct3Value()) {
-        case 0b010: {  // RO_FEQ_S
+        case 0b010: {  // RO_FEQ_D
           set_rd(CompareFHelper(drs1(), drs2(), EQ));
           break;
         }
@@ -3134,6 +3283,28 @@ void Simulator::DecodeRVRFPType() {
         }
         case 0b000: {  // RO_FLE_D
           set_rd(CompareFHelper(drs1(), drs2(), LE));
+          break;
+        }
+        case 0b100: {  // RO_FLEQ_D (Zfa extension) - quiet LE comparison
+          // fleq.d: Quiet less-than-or-equal comparison
+          // Does NOT raise invalid exception for NaN (unlike fle.d)
+          // Returns false if either operand is NaN
+          if (std::isnan(drs1()) || std::isnan(drs2())) {
+            set_rd(0);
+          } else {
+            set_rd(drs1() <= drs2() ? 1 : 0);
+          }
+          break;
+        }
+        case 0b101: {  // RO_FLTQ_D (Zfa extension) - quiet LT comparison
+          // fltq.d: Quiet less-than comparison
+          // Does NOT raise invalid exception for NaN (unlike flt.d)
+          // Returns false if either operand is NaN
+          if (std::isnan(drs1()) || std::isnan(drs2())) {
+            set_rd(0);
+          } else {
+            set_rd(drs1() < drs2() ? 1 : 0);
+          }
           break;
         }
         default: {
@@ -3151,12 +3322,10 @@ void Simulator::DecodeRVRFPType() {
           set_rd(FclassHelper(drs1()));
           break;
         }
-#  ifdef JS_CODEGEN_RISCV64
         case 0b000: {  // RO_FMV_X_D
           set_rd(bit_cast<int64_t>(drs1()));
           break;
         }
-#  endif /* JS_CODEGEN_RISCV64 */
         default: {
           UNSUPPORTED();
         }
@@ -3175,7 +3344,6 @@ void Simulator::DecodeRVRFPType() {
               RoundF2IHelper<uint32_t>(original_val, instr_.RoundMode())));
           break;
         }
-#  ifdef JS_CODEGEN_RISCV64
         case 0b00010: {  // RO_FCVT_L_D
           set_rd(RoundF2IHelper<int64_t>(original_val, instr_.RoundMode()));
           break;
@@ -3184,7 +3352,80 @@ void Simulator::DecodeRVRFPType() {
           set_rd(RoundF2IHelper<uint64_t>(original_val, instr_.RoundMode()));
           break;
         }
-#  endif /* JS_CODEGEN_RISCV64 */
+        case 0b01000: {  // RO_FCVTMOD_W_D (Zfa extension)
+          MOZ_ASSERT(instr_.RoundMode() == FPURoundingMode::RTZ);
+
+          // FCVTMOD.W.D converts double to signed 32-bit integer modulo 2^32.
+          // Key differences from FCVT.W.D:
+          // 1. Always rounds towards zero (RTZ)
+          // 2. Bits 31:0 are taken from the rounded result (modulo 2^32)
+          // 3. Result is sign-extended to XLEN
+          // 4. NaN and infinity are converted to zero with invalid exception
+          // 5. Overflow raises invalid exception (but result is still modulo
+          // 2^32)
+
+          uint64_t a = bit_cast<uint64_t>(original_val);
+          uint32_t sign = (a >> 63) & 1;
+          uint32_t exp = (a >> 52) & 0x7FF;
+          uint64_t frac = a & ((1ULL << 52) - 1);
+
+          bool inexact = false;
+          bool invalid = false;
+
+          if (exp == 0) {
+            // Zero or subnormal
+            inexact = (frac != 0);
+            frac = 0;
+          } else if (exp == 0x7FF) {
+            // Infinity or NaN
+            invalid = true;
+            frac = 0;
+          } else {
+            int true_exp = exp - 1023;
+            int shift = true_exp - 52;
+
+            // Restore implicit bit
+            frac |= (1ULL << 52);
+
+            // Shift the fraction into place
+            if (shift >= 64) {
+              // The fraction is shifted out entirely
+              frac = 0;
+            } else if (shift >= 0) {
+              // Shift left
+              frac <<= shift;
+            } else if (shift > -64) {
+              // Normal case -- shift right and notice if bits shift out
+              inexact = (frac << (64 + shift)) != 0;
+              frac >>= -shift;
+            } else {
+              // The fraction is shifted out entirely
+              frac = 0;
+              inexact = true;
+            }
+
+            // Handle overflow: check if result exceeds 32-bit signed range
+            if (true_exp > 31 ||
+                frac > (sign ? 0x80000000ULL : 0x7FFFFFFFULL)) {
+              invalid = true;
+              inexact = false;  // invalid takes precedence
+            }
+
+            // Honor the sign
+            if (sign) {
+              frac = -static_cast<int64_t>(frac);
+            }
+          }
+
+          // Take bits 31:0 and sign-extend
+          uint32_t result = static_cast<uint32_t>(frac & 0xFFFFFFFFULL);
+          set_rd(sext32(result));
+
+          // Raise exceptions
+          if (inexact) set_fflags(kInexact);
+          if (invalid) set_fflags(kInvalidOperation);
+          break;
+        }
         default: {
           UNSUPPORTED();
         }
@@ -3201,7 +3442,6 @@ void Simulator::DecodeRVRFPType() {
           set_drd((uint32_t)rs1());
           break;
         }
-#  ifdef JS_CODEGEN_RISCV64
         case 0b00010: {  // RO_FCVT_D_L
           set_drd((int64_t)rs1());
           break;
@@ -3210,24 +3450,94 @@ void Simulator::DecodeRVRFPType() {
           set_drd((uint64_t)rs1());
           break;
         }
-#  endif /* JS_CODEGEN_RISCV64 */
         default: {
           UNSUPPORTED();
         }
       }
       break;
     }
-#  ifdef JS_CODEGEN_RISCV64
     case RO_FMV_D_X: {
-      if (instr_.Funct3Value() == 0b000 && instr_.Rs2Value() == 0b00000) {
-        // Since FMV preserves source bit-pattern, no need to canonize
-        set_drd(bit_cast<double>(rs1()));
+      if (instr_.Funct3Value() == 0b000) {
+        if (instr_.Rs2Value() == 0b00000) {
+          // fmv.d.x: Since FMV preserves source bit-pattern, no need to
+          // canonize
+          set_drd(bit_cast<double>(rs1()));
+        } else if (instr_.Rs2Value() == 0b00001) {
+          // fli.d: Load floating-point immediate (Zfa extension)
+          set_drd(bit_cast<double>(kFLIDImm[instr_.Rs1Value()]));
+        } else {
+          UNSUPPORTED();
+        }
       } else {
         UNSUPPORTED();
       }
       break;
     }
-#  endif /* JS_CODEGEN_RISCV64 */
+    case RO_FADD_H:
+    case RO_FSUB_H:
+    case RO_FMUL_H:
+    case RO_FDIV_H:
+    case RO_FSQRT_H:
+    case RO_FSGNJ_H:   // RO_FSGNJN_H, RO_FSQNJX_H
+    case RO_FMIN_H:    // RO_FMAX_H
+    case RO_FLE_H:     // RO_FEQ_H, RO_FLT_H
+    case RO_FCVT_W_H:  // RO_FCVT_WU_H, RO_FCVT_L_H, RO_FCVT_LU_H
+    case RO_FCVT_H_W:  // RO_FCVT_H_WU, RO_FCVT_H_L, RO_FCVT_H_LU
+      // Zfh not supported.
+      UNSUPPORTED();
+    case RO_FMV_X_H: {  // RO_FCLASS_H
+      if (instr_.Rs2Value() != 0b00000) {
+        UNSUPPORTED();
+      }
+      switch (instr_.Funct3Value()) {
+        case 0b000:  // RO_FMV_X_H
+          set_rd(sext16(getFpuRegister(rs1_reg())));
+          break;
+        case 0b001: {  // RO_FCLASS_H
+          UNSUPPORTED();
+        }
+        default: {
+          UNSUPPORTED();
+        }
+      }
+      break;
+    }
+    case RO_FMV_H_X: {
+      if (instr_.Funct3Value() == 0b000) {
+        if (instr_.Rs2Value() == 0b00000) {
+          // since FMV preserves source bit-pattern, no need to canonize
+          Float16 result = Float16::FromBits((uint16_t)rs1());
+          set_frd(result);
+        } else if (instr_.Rs2Value() == 0b00001) {
+          // fli.h: Load floating-point immediate (Zfa extension)
+          UNSUPPORTED();
+        } else {
+          UNSUPPORTED();
+        }
+      } else {
+        UNSUPPORTED();
+      }
+      break;
+    }
+    case RO_FCVT_H_S: {
+      if (instr_.Rs2Value() == 0b00000) {  // fcvt.h.s
+        auto fn = [](float drs) { return static_cast<float16>(drs); };
+        set_frd(CanonicalizeFloatToFloat16Operation(fn));
+      } else if (instr_.Rs2Value() == 0b00001) {  // fcvt.h.d
+        auto fn = [](double drs) { return static_cast<float16>(drs); };
+        set_frd(CanonicalizeDoubleToFloat16Operation(fn));
+      } else if (instr_.Rs2Value() == 0b00100) {
+        // fround.h: Round half-precision to integer (Zfa extension)
+        UNSUPPORTED();
+      } else if (instr_.Rs2Value() == 0b00101) {
+        // froundnx.h: Round half-precision to integer with inexact (Zfa
+        // extension)
+        UNSUPPORTED();
+      } else {
+        UNSUPPORTED();
+      }
+      break;
+    }
     default: {
       UNSUPPORTED();
     }
@@ -3339,7 +3649,7 @@ void Simulator::DecodeRVR4Type() {
   }
 }
 
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
 bool Simulator::DecodeRvvVL() {
   uint32_t instr_temp =
       instr_.InstructionBits() & (kRvvMopMask | kRvvNfMask | kBaseOpcodeMask);
@@ -3466,7 +3776,7 @@ bool Simulator::DecodeRvvVS() {
     return false;
   }
 }
-#  endif
+#endif
 
 void Simulator::DecodeRVIType() {
   switch (instr_.InstructionBits() & kITypeMask) {
@@ -3512,7 +3822,6 @@ void Simulator::DecodeRVIType() {
       TraceMemRd(addr, val, getRegister(rd_reg()));
       break;
     }
-#  ifdef JS_CODEGEN_RISCV64
     case RO_LWU: {
       int64_t addr = rs1() + imm12();
       uint32_t val = ReadMem<uint32_t>(addr, instr_.instr());
@@ -3527,7 +3836,6 @@ void Simulator::DecodeRVIType() {
       TraceMemRd(addr, val, getRegister(rd_reg()));
       break;
     }
-#  endif /*JS_CODEGEN_RISCV64*/
     case RO_ADDI: {
       set_rd(sext_xlen(rs1() + imm12()));
       break;
@@ -3658,11 +3966,7 @@ void Simulator::DecodeRVIType() {
           break;
         }
         case RO_RORI: {
-#  ifdef JS_CODEGEN_RISCV64
           int16_t shamt = shamt6();
-#  else
-          int16_t shamt = shamt5();
-#  endif
           set_rd((static_cast<reg_t>(rs1()) >> shamt) |
                  (static_cast<reg_t>(rs1()) << (xlen - shamt)));
           break;
@@ -3686,7 +3990,6 @@ void Simulator::DecodeRVIType() {
       }
       break;
     }
-#  ifdef JS_CODEGEN_RISCV64
     case RO_ADDIW: {
       set_rd(sext32(rs1() + imm12()));
       break;
@@ -3763,7 +4066,6 @@ void Simulator::DecodeRVIType() {
       }
       break;
     }
-#  endif /*JS_CODEGEN_RISCV64*/
     case RO_FENCE: {
       // DO nothing in sumulator
       break;
@@ -3837,6 +4139,14 @@ void Simulator::DecodeRVIType() {
       break;
     }
     // TODO(riscv): use F Extension macro block
+    case RO_FLH: {
+      sreg_t addr = rs1() + imm12();
+      uint32_t val = ReadMem<uint16_t>(addr, instr_.instr());
+      set_frd(Float16::FromBits(val), false);
+      TraceMemRdFloat16(addr, Float16::FromBits(val),
+                        getFpuRegister(frd_reg()));
+      break;
+    }
     case RO_FLW: {
       sreg_t addr = rs1() + imm12();
       uint32_t val = ReadMem<uint32_t>(addr, instr_.instr());
@@ -3853,14 +4163,14 @@ void Simulator::DecodeRVIType() {
       break;
     }
     default: {
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
       if (!DecodeRvvVL()) {
         UNSUPPORTED();
       }
       break;
-#  else
+#else
       UNSUPPORTED();
-#  endif
+#endif
     }
   }
 }
@@ -3876,14 +4186,19 @@ void Simulator::DecodeRVSType() {
     case RO_SW:
       WriteMem<uint32_t>(rs1() + s_imm12(), (uint32_t)rs2(), instr_.instr());
       break;
-#  ifdef JS_CODEGEN_RISCV64
     case RO_SD:
       WriteMem<uint64_t>(rs1() + s_imm12(), (uint64_t)rs2(), instr_.instr());
       break;
-#  endif /*JS_CODEGEN_RISCV64*/
     // TODO(riscv): use F Extension macro block
+    case RO_FSH: {
+      WriteMem<Float16>(rs1() + s_imm12(),
+                        getFpuRegisterFloat16(rs2_reg(), false),
+                        instr_.instr());
+      break;
+    }
     case RO_FSW: {
-      WriteMem<Float32>(rs1() + s_imm12(), getFpuRegisterFloat32(rs2_reg()),
+      WriteMem<Float32>(rs1() + s_imm12(),
+                        getFpuRegisterFloat32(rs2_reg(), false),
                         instr_.instr());
       break;
     }
@@ -3894,14 +4209,14 @@ void Simulator::DecodeRVSType() {
       break;
     }
     default:
-#  ifdef CAN_USE_RVV_INSTRUCTIONS
+#ifdef CAN_USE_RVV_INSTRUCTIONS
       if (!DecodeRvvVS()) {
         UNSUPPORTED();
       }
       break;
-#  else
+#else
       UNSUPPORTED();
-#  endif
+#endif
   }
 }
 
@@ -4018,14 +4333,12 @@ void Simulator::DecodeCAType() {
     case RO_C_AND:
       set_rvc_rs1s(rvc_rs1s() & rvc_rs2s());
       break;
-#  if JS_CODEGEN_RISCV64
     case RO_C_SUBW:
       set_rvc_rs1s(sext32(rvc_rs1s() - rvc_rs2s()));
       break;
     case RO_C_ADDW:
       set_rvc_rs1s(sext32(rvc_rs1s() + rvc_rs2s()));
       break;
-#  endif
     default:
       UNSUPPORTED();
   }
@@ -4040,11 +4353,9 @@ void Simulator::DecodeCIType() {
         set_rvc_rd(sext_xlen(rvc_rs1() + rvc_imm6()));
       }
       break;
-#  if JS_CODEGEN_RISCV64
     case RO_C_ADDIW:
       set_rvc_rd(sext32(rvc_rs1() + rvc_imm6()));
       break;
-#  endif
     case RO_C_LI:
       set_rvc_rd(sext_xlen(rvc_imm6()));
       break;
@@ -4071,7 +4382,6 @@ void Simulator::DecodeCIType() {
                        getFpuRegister(rvc_frd_reg()));
       break;
     }
-#  if JS_CODEGEN_RISCV64
     case RO_C_LWSP: {
       sreg_t addr = getRegister(sp) + rvc_imm6_lwsp();
       int64_t val = ReadMem<int32_t>(addr, instr_.instr());
@@ -4086,23 +4396,6 @@ void Simulator::DecodeCIType() {
       TraceMemRd(addr, val, getRegister(rvc_rd_reg()));
       break;
     }
-#  elif JS_CODEGEN_RISCV32
-    case RO_C_FLWSP: {
-      sreg_t addr = getRegister(sp) + rvc_imm6_ldsp();
-      uint32_t val = ReadMem<uint32_t>(addr, instr_.instr());
-      set_rvc_frd(Float32::FromBits(val), false);
-      TraceMemRdFloat(addr, Float32::FromBits(val),
-                      getFpuRegister(rvc_frd_reg()));
-      break;
-    }
-    case RO_C_LWSP: {
-      sreg_t addr = getRegister(sp) + rvc_imm6_lwsp();
-      int32_t val = ReadMem<int32_t>(addr, instr_.instr());
-      set_rvc_rd(sext_xlen(val), false);
-      TraceMemRd(addr, val, getRegister(rvc_rd_reg()));
-      break;
-    }
-#  endif
     default:
       UNSUPPORTED();
   }
@@ -4127,26 +4420,16 @@ void Simulator::DecodeCSSType() {
                         instr_.instr());
       break;
     }
-#  if JS_CODEGEN_RISCV32
-    case RO_C_FSWSP: {
-      sreg_t addr = getRegister(sp) + rvc_imm6_sdsp();
-      WriteMem<Float32>(addr, getFpuRegisterFloat32(rvc_rs2_reg()),
-                        instr_.instr());
-      break;
-    }
-#  endif
     case RO_C_SWSP: {
       sreg_t addr = getRegister(sp) + rvc_imm6_swsp();
       WriteMem<int32_t>(addr, (int32_t)rvc_rs2(), instr_.instr());
       break;
     }
-#  if JS_CODEGEN_RISCV64
     case RO_C_SDSP: {
       sreg_t addr = getRegister(sp) + rvc_imm6_sdsp();
       WriteMem<int64_t>(addr, (int64_t)rvc_rs2(), instr_.instr());
       break;
     }
-#  endif
     default:
       UNSUPPORTED();
   }
@@ -4167,7 +4450,6 @@ void Simulator::DecodeCLType() {
       set_rvc_drs2s(Float64::FromBits(val), false);
       break;
     }
-#  if JS_CODEGEN_RISCV64
     case RO_C_LD: {
       sreg_t addr = rvc_rs1s() + rvc_imm5_d();
       int64_t val = ReadMem<int64_t>(addr, instr_.instr());
@@ -4175,14 +4457,6 @@ void Simulator::DecodeCLType() {
       TraceMemRd(addr, val, getRegister(rvc_rs2s_reg()));
       break;
     }
-#  elif JS_CODEGEN_RISCV32
-    case RO_C_FLW: {
-      sreg_t addr = rvc_rs1s() + rvc_imm5_d();
-      uint32_t val = ReadMem<uint32_t>(addr, instr_.instr());
-      set_rvc_frs2s(Float32::FromBits(val), false);
-      break;
-    }
-#  endif
     default:
       UNSUPPORTED();
   }
@@ -4195,13 +4469,11 @@ void Simulator::DecodeCSType() {
       WriteMem<int32_t>(addr, (int32_t)rvc_rs2s(), instr_.instr());
       break;
     }
-#  if JS_CODEGEN_RISCV64
     case RO_C_SD: {
       sreg_t addr = rvc_rs1s() + rvc_imm5_d();
       WriteMem<int64_t>(addr, (int64_t)rvc_rs2s(), instr_.instr());
       break;
     }
-#  endif
     case RO_C_FSD: {
       sreg_t addr = rvc_rs1s() + rvc_imm5_d();
       WriteMem<double>(addr, static_cast<double>(rvc_drs2s()), instr_.instr());
@@ -4239,7 +4511,7 @@ void Simulator::DecodeCBType() {
       break;
     case RO_C_MISC_ALU:
       if (instr_.RvcFunct2BValue() == 0b00) {  // c.srli
-        set_rvc_rs1s(sext_xlen(sext_xlen(rvc_rs1s()) >> rvc_shamt6()));
+        set_rvc_rs1s(sext_xlen(zext_xlen(rvc_rs1s()) >> rvc_shamt6()));
       } else if (instr_.RvcFunct2BValue() == 0b01) {  // c.srai
         require(rvc_shamt6() < xlen);
         set_rvc_rs1s(sext_xlen(sext_xlen(rvc_rs1s()) >> rvc_shamt6()));
@@ -4394,5 +4666,3 @@ uintptr_t Simulator::popAddress() {
 }  // namespace js
 
 js::jit::Simulator* JSContext::simulator() const { return simulator_; }
-
-#endif  // JS_SIMULATOR_RISCV64

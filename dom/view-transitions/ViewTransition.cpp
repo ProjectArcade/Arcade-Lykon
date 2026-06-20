@@ -110,7 +110,7 @@ static StyleViewTransitionClass DocumentScopedClassListFor(
   const auto& classInfo = aFrame->StyleUIReset()->mViewTransitionClass;
   nsIContent* content = aFrame->GetContent();
   if (!content || AnchorPositioningUtils::GetShadowRootForTreeScope(
-                      *content, classInfo.scope)) {
+                      *content->AsElement(), classInfo.scope)) {
     return StyleViewTransitionClass();
   }
 
@@ -704,7 +704,7 @@ static nsTArray<Keyframe> BuildGroupKeyframes(
     Document* aDoc, const CSSToCSSMatrix4x4Flagged& aTransform,
     const nsSize& aSize, const StyleOwnedSlice<StyleFilter>& aBackdropFilters) {
   Keyframe firstKeyframe;
-  firstKeyframe.mOffset = Some(0.0);
+  firstKeyframe.mOffset = Some(Keyframe::OffsetType::PercentageOffset(0.0));
   PropertyValuePair transform{
       CSSPropertyId(eCSSProperty_transform),
       Servo_DeclarationBlock_CreateEmpty().Consume(),
@@ -736,7 +736,7 @@ static nsTArray<Keyframe> BuildGroupKeyframes(
   firstKeyframe.mPropertyValues.AppendElement(std::move(backdropFilters));
 
   Keyframe lastKeyframe;
-  lastKeyframe.mOffset = Some(1.0);
+  lastKeyframe.mOffset = Some(Keyframe::OffsetType::PercentageOffset(1.0));
   lastKeyframe.mPropertyValues.AppendElement(
       PropertyValuePair{CSSPropertyId(eCSSProperty_transform)});
   lastKeyframe.mPropertyValues.AppendElement(
@@ -1907,7 +1907,7 @@ already_AddRefed<nsAtom> ViewTransition::DocumentScopedTransitionNameFor(
   // https://drafts.csswg.org/css-view-transitions-1/#document-scoped-view-transition-name
   nsIContent* content = aFrame->GetContent();
   if (MOZ_UNLIKELY(!content) ||
-      AnchorPositioningUtils::GetShadowRootForTreeScope(*content,
+      AnchorPositioningUtils::GetShadowRootForTreeScope(*content->AsElement(),
                                                         computed.scope)) {
     return nullptr;
   }

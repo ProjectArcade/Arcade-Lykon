@@ -205,7 +205,7 @@ IrregexpInterpreter::Result ThrowStackOverflow(Isolate* isolate,
   CHECK(call_origin == RegExp::CallOrigin::kFromRuntime);
   // We abort interpreter execution after the stack overflow is thrown, and thus
   // allow allocation here despite the outer DisallowGarbageCollectionScope.
-  AllowGarbageCollection yes_gc;
+  [[maybe_unused]] AllowGarbageCollection yes_gc;
   isolate->StackOverflow();
   return IrregexpInterpreter::EXCEPTION;
 }
@@ -282,10 +282,10 @@ IrregexpInterpreter::Result HandleInterrupts(
           String::IsOneByteRepresentationUnderneath(*subject_string_out);
       Tagged<Object> result;
       {
-        AllowGarbageCollection yes_gc;
+        [[maybe_unused]] AllowGarbageCollection yes_gc;
         result = isolate->stack_guard()->HandleInterrupts();
       }
-      if (IsExceptionHole(result, isolate)) {
+      if (IsExceptionHole(result)) {
         return IrregexpInterpreter::EXCEPTION;
       }
 
@@ -481,6 +481,7 @@ bool CheckSpecialClassRanges(uint32_t current_char,
     case StandardCharacterSet::kEverything:
       return true;
   }
+  UNREACHABLE();
 }
 
 }  // namespace
@@ -1363,8 +1364,8 @@ int IrregexpInterpreter::MatchForCallFromJs(
   DisallowHandleDereference no_deref;
 
   Tagged<String> subject_string = Cast<String>(Tagged<Object>(subject));
-  Tagged<IrRegExpData> regexp_data_obj =
-      SbxCast<IrRegExpData>(Tagged<Object>(regexp_data));
+  Tagged<IrRegExpData> regexp_data_obj = SbxCast<IrRegExpData>(
+      TrustedCast<TrustedObject>(Tagged<Object>(regexp_data)));
 
   if (regexp_data_obj->MarkedForTierUp()) {
     // Returning RETRY will re-enter through runtime, where actual recompilation

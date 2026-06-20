@@ -5,10 +5,7 @@
 "use strict";
 
 add_setup(async function () {
-  await setCookieBehaviorPref(
-    BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN,
-    false
-  );
+  await setCookieBehaviorPref(BEHAVIOR_PARTITION_FOREIGN, false);
 });
 
 const TEST_TOP_A_PAGE = TEST_TOP_PAGE_HTTPS;
@@ -119,9 +116,5 @@ add_task(async function runTest() {
 
   info("Clean up");
   BrowserTestUtils.removeTab(tab);
-  await new Promise(resolve => {
-    Services.clearData.deleteData(Ci.nsIClearDataService.CLEAR_ALL, () =>
-      resolve()
-    );
-  });
+  await clearSiteTestData();
 });

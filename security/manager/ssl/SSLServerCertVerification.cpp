@@ -499,7 +499,7 @@ void GatherCertificateTransparencyTelemetry(
   glean::ssl::scts_per_connection.AccumulateSingleSample(sctsCount);
 
   uint32_t sctsFromTiledLogs = 0;
-  for (auto verifiedSCT : info.verifyResult.verifiedScts) {
+  for (const auto& verifiedSCT : info.verifyResult.verifiedScts) {
     if (verifiedSCT.logFormat == ct::CTLogFormat::Tiled) {
       sctsFromTiledLogs++;
     }
@@ -899,8 +899,8 @@ SECStatus AuthCertificateHookInternal(
   }
 
   uint64_t addr = reinterpret_cast<uintptr_t>(aPtrForLogging);
-  RefPtr<SSLServerCertVerificationResult> resultTask =
-      new SSLServerCertVerificationResult(socketControl);
+  RefPtr resultTask =
+      MakeRefPtr<SSLServerCertVerificationResult>(socketControl);
 
   if (XRE_IsSocketProcess()) {
     return RemoteProcessCertVerification(
@@ -1077,7 +1077,9 @@ SSLServerCertVerificationResult::SSLServerCertVerificationResult(
       mFinalError(0),
       mOverridableErrorCategory(
           nsITransportSecurityInfo::OverridableErrorCategory::ERROR_UNSET),
-      mProviderFlags(0) {}
+      mIsBuiltCertChainRootBuiltInRoot(false),
+      mProviderFlags(0),
+      mMadeOCSPRequests(false) {}
 
 nsresult SSLServerCertVerificationResult::Dispatch(
     nsTArray<nsTArray<uint8_t>>&& aBuiltChain,

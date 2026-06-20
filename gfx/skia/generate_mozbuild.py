@@ -56,9 +56,9 @@ if CONFIG['INTEL_ARCHITECTURE']:
     SOURCES['skia/src/core/SkBlitMask_opts_ssse3.cpp'].flags += skia_ssse3_flags
     SOURCES['skia/src/core/SkSwizzler_opts_ssse3.cpp'].flags += ['-Dskvx=skvx_ssse3']
     SOURCES['skia/src/core/SkMemset_opts_avx.cpp'].flags += skia_avx_flags
-    SOURCES['skia/src/core/SkBlitRow_opts_hsw.cpp'].flags += skia_hsw_flags
-    SOURCES['skia/src/core/SkSwizzler_opts_hsw.cpp'].flags += ['-Dskvx=skvx_hsw']
-    SOURCES['skia/src/opts/SkOpts_hsw.cpp'].flags += skia_hsw_flags
+    SOURCES['skia/src/core/SkBlitRow_opts_ml3.cpp'].flags += skia_hsw_flags
+    SOURCES['skia/src/core/SkSwizzler_opts_ml3.cpp'].flags += ['-Dskvx=skvx_hsw']
+    SOURCES['skia/src/opts/SkOpts_ml3.cpp'].flags += skia_hsw_flags
     SOURCES['skia/modules/skcms/src/skcms_TransformHsw.cc'].flags += skia_hsw_flags
 
 DEFINES['MOZ_SKIA'] = True
@@ -69,6 +69,9 @@ DEFINES['SK_PDF_USE_HARFBUZZ_SUBSET'] = 1
 
 if CONFIG['MOZ_TREE_FREETYPE']:
     DEFINES['SK_CAN_USE_DLOPEN'] = 0
+
+if CONFIG['MOZ_VALGRIND']:
+    DEFINES['SK_CPU_LIMIT_AVX'] = True
 
 # Suppress warnings in third-party code.
 CXXFLAGS += [
@@ -142,7 +145,7 @@ def parse_sources(output):
   return set(v.replace('//', 'skia/') for v in output.decode('utf-8').split() if v.endswith('.cpp') or v.endswith('.S'))
 
 def generate_opt_sources():
-  cpus = [('intel', 'x86', [':hsw'])]
+  cpus = [('intel', 'x86', [':ml3'])]
 
   opt_sources = {}
   for key, cpu, deps in cpus:
@@ -213,6 +216,7 @@ def generate_separated_sources(platform_sources):
     'SkCapture',
     'SkCanvasStack',
     'SkCanvasStateUtils',
+    'SkImage_AndroidFactories',
     'SkMultiPictureDocument',
     'SkNullCanvas',
     'SkNWayCanvas',
@@ -237,6 +241,7 @@ def generate_separated_sources(platform_sources):
       'skia/src/codec/SkCodec.cpp',
       'skia/src/codec/SkCodecImageGenerator.cpp',
       'skia/src/codec/SkColorPalette.cpp',
+      'skia/src/codec/SkEncodedInfo.cpp',
       'skia/src/codec/SkImageGenerator_FromEncoded.cpp',
       'skia/src/codec/SkPixmapUtils.cpp',
       'skia/src/codec/SkSampler.cpp',
@@ -252,7 +257,6 @@ def generate_separated_sources(platform_sources):
       'skia/src/ports/SkDiscardableMemory_none.cpp',
       'skia/src/ports/SkGlobalInitialization_default.cpp',
       'skia/src/ports/SkMemory_mozalloc.cpp',
-      'skia/src/ports/SkImageGenerator_none.cpp',
       'skia/modules/skcms/skcms.cc',
       'skia/modules/skcms/src/skcms_TransformBaseline.cc',
       'skia/src/core/SkImageFilterTypes.cpp',

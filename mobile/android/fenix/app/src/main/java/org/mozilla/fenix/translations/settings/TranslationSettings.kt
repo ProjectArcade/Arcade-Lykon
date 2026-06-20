@@ -29,12 +29,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import mozilla.components.compose.base.InfoCard
+import mozilla.components.compose.base.InfoType
+import mozilla.components.compose.base.LinkText
+import mozilla.components.compose.base.LinkTextState
 import mozilla.components.concept.engine.translate.TranslationError
 import org.mozilla.fenix.R
-import org.mozilla.fenix.compose.InfoCard
-import org.mozilla.fenix.compose.InfoType
-import org.mozilla.fenix.compose.LinkText
-import org.mozilla.fenix.compose.LinkTextState
 import org.mozilla.fenix.compose.list.SwitchListItem
 import org.mozilla.fenix.compose.list.TextListItem
 import org.mozilla.fenix.settings.SupportUtils
@@ -110,7 +110,7 @@ fun TranslationSettings(
                                     vertical = FirefoxTheme.layout.space.static100,
                                 )
                                 .semantics { heading() },
-                            color = MaterialTheme.colorScheme.tertiary.copy(
+                            color = MaterialTheme.colorScheme.onSurface.copy(
                                 alpha = if (state.translationsEnabled) 1.0f else 0.3f,
                             ),
                             style = FirefoxTheme.typography.headline8,
@@ -175,6 +175,7 @@ private fun TranslationsControlSwitchItem(
         description = stringResource(R.string.translation_settings_control_description),
         checked = enabled,
         maxLabelLines = Int.MAX_VALUE,
+        maxDescriptionLines = Int.MAX_VALUE,
         showSwitchAfter = true,
         onClick = onFeatureControlToggled,
     )

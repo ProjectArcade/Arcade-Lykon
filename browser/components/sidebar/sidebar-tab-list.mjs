@@ -20,11 +20,6 @@ export class SidebarTabList extends FxviewTabListBase {
     // Panel is open, assume we always want to react to updates.
     this.updatesPaused = false;
     this.multiSelect = true;
-    this.selectedGuids = new Set();
-    this.shortcutsLocalization = new Localization(
-      ["toolkit/global/textActions.ftl"],
-      true
-    );
   }
 
   static queries = {
@@ -33,6 +28,23 @@ export class SidebarTabList extends FxviewTabListBase {
       all: "sidebar-tab-row",
     },
   };
+
+  /**
+   * The tree view controller that owns selection state for the page this list
+   * belongs to.
+   *
+   * @returns {SidebarTreeView}
+   */
+  get treeView() {
+    let host = this.getRootNode()?.host;
+    while (host) {
+      if (host.treeView) {
+        return host.treeView;
+      }
+      host = host.getRootNode()?.host;
+    }
+    return null;
+  }
 
   #dispatchFocusRowEvent = event => {
     const [row] = event.composedPath();
@@ -58,170 +70,35 @@ export class SidebarTabList extends FxviewTabListBase {
     this.removeEventListener("focusin", this.#dispatchFocusRowEvent);
   }
 
-  /**
-   * Only handle vertical navigation in sidebar.
-   *
-   * @param {KeyboardEvent} e
-   */
+  willUpdate(changedProperties) {
+    if (changedProperties.has("tabItems") && Array.isArray(this.tabItems)) {
+      for (const item of this.tabItems) {
+        item.guid ??= Services.uuid.generateUUID().toString();
+      }
+    }
+  }
+
   handleFocusElementInRow(e) {
-    // Handle vertical navigation.
-    let stayedInList = false;
-    if (
-      (e.code == "ArrowUp" && this.activeIndex > 0) ||
-      (e.code == "ArrowDown" && this.activeIndex < this.rowEls.length - 1)
-    ) {
+    if (!this.treeView) {
       super.handleFocusElementInRow(e);
-      stayedInList = true;
-    } else if (
-      (e.code == "ArrowUp" && this.activeIndex == 0) ||
-      e.code === "ArrowLeft"
-    ) {
-      this.#focusParentHeader(e);
-    } else if (
-      e.code == "ArrowDown" &&
-      this.activeIndex == this.rowEls.length - 1
-    ) {
-      this.#focusNextHeader(e);
-    }
-
-    // Update or clear multi-selection (depending on whether shift key is used).
-    const accelKeyDown = e.getModifierState("Accel");
-    if (
-      this.multiSelect &&
-      (e.code === "ArrowUp" || e.code === "ArrowDown") &&
-      !accelKeyDown
-    ) {
-      this.#updateSelection(e, stayedInList);
-    }
-
-    // (Ctrl / Cmd) + A should select all rows.
-    if (accelKeyDown && e.key.toUpperCase() === this.selectAllShortcut) {
-      e.preventDefault();
-      this.selectAll();
-    }
-  }
-
-  #focusParentHeader(e) {
-    let parentCard = e.target.getRootNode().host.closest("moz-card");
-    if (parentCard) {
-      e.preventDefault();
-      this.#focusHeader(parentCard);
-    }
-  }
-
-  #focusNextHeader(e) {
-    let parentCard = e.target.getRootNode().host.closest("moz-card");
-    if (
-      this.sortOption == "datesite" &&
-      parentCard.classList.contains("last-card")
-    ) {
-      // If we're going down from the last site, then focus the next date.
-      const dateCard = parentCard.parentElement;
-      const nextDate = dateCard.nextElementSibling;
-      if (nextDate) {
-        e.preventDefault();
-        this.#focusHeader(nextDate);
-      }
       return;
     }
-    let nextCard = parentCard.nextElementSibling;
-    if (nextCard && nextCard.localName == "moz-card") {
-      e.preventDefault();
-      this.#focusHeader(nextCard);
-    }
-  }
-
-  #focusHeader(card) {
-    card.summaryEl.focus({ preventScroll: true });
-    card.summaryEl.scrollIntoView({ block: "nearest" });
-  }
-
-  /**
-   * Update multi-selection state during keyboard navigation.
-   *
-   * Without Shift, clears the selection and resets the anchor to the newly
-   * focused row. With Shift, extends the selection from the current anchor to
-   * the newly focused row.
-   *
-   * @param {KeyboardEvent} event
-   * @param {boolean} stayedInList
-   *   Whether focus remained within this list after the navigation.
-   */
-  #updateSelection(event, stayedInList) {
-    if (!event.shiftKey) {
-      this.clearSelection();
-      this.dispatchEvent(
-        new CustomEvent("clear-selection", {
-          bubbles: true,
-          composed: true,
-        })
-      );
-      if (stayedInList) {
-        const newRow = this.rowEls[this.activeIndex];
-        if (newRow) {
-          this.dispatchEvent(
-            new CustomEvent("set-anchor", {
-              bubbles: true,
-              composed: true,
-              detail: { guid: newRow.guid },
-            })
-          );
-        }
-      }
-      return;
-    }
-
-    const newRow = this.rowEls[this.activeIndex];
-    if (newRow) {
-      this.dispatchEvent(
-        new CustomEvent("shift-select", {
-          bubbles: true,
-          composed: true,
-          detail: { row: newRow },
-        })
-      );
+    this.treeView.handleKeydown(e);
+    if (e.defaultPrevented) {
+      e.stopPropagation();
     }
   }
 
   toggleRowSelection(guid) {
-    if (this.selectedGuids.has(guid)) {
-      this.selectedGuids.delete(guid);
-    } else {
-      this.selectedGuids.add(guid);
-    }
-    this.requestVirtualListUpdate();
-    this.dispatchEvent(
-      new CustomEvent("update-selection", {
-        bubbles: true,
-        composed: true,
-      })
-    );
+    this.treeView?.toggleSelection(this, guid);
   }
 
   clearSelection() {
-    this.selectedGuids.clear();
-    this.requestVirtualListUpdate();
-  }
-
-  get selectAllShortcut() {
-    const [l10nMessage] = this.shortcutsLocalization.formatMessagesSync([
-      "text-action-select-all-shortcut",
-    ]);
-    const shortcutKey = l10nMessage.attributes[0].value;
-    return shortcutKey;
+    this.treeView?.resetSelection();
   }
 
   selectAll() {
-    for (const { guid } of this.tabItems) {
-      this.selectedGuids.add(guid);
-    }
-    this.requestVirtualListUpdate();
-    this.dispatchEvent(
-      new CustomEvent("update-selection", {
-        bubbles: true,
-        composed: true,
-      })
-    );
+    this.treeView?.selectAllInList(this);
   }
 
   itemTemplate = (tabItem, i) => {
@@ -268,7 +145,7 @@ export class SidebarTabList extends FxviewTabListBase {
   };
 
   isTabItemSelected(tabItem) {
-    return this.selectedGuids.has(tabItem.guid);
+    return !!this.treeView?.isSelected(this, tabItem.guid);
   }
 
   stylesheets() {
@@ -283,13 +160,55 @@ export class SidebarTabList extends FxviewTabListBase {
 }
 customElements.define("sidebar-tab-list", SidebarTabList);
 
+/**
+ * A sidebar-specific tab row.
+ *
+ * Three Boolean states coexist on this row and they each mean something
+ * different:
+ *   - `active`   (inherited from FxviewTabRowBase): the row currently has
+ *                keyboard focus via the parent list's activeIndex.
+ *   - `selected`: the row is selected through the SidebarTreeView (user
+ *                click or multi-select inside the panel).
+ *   - `current`:  the row's tabElement is gBrowser.selectedTab. Tracked
+ *                live via a MutationObserver on the tab's [selected]
+ *                attribute.
+ */
 export class SidebarTabRow extends FxviewTabRowBase {
   static properties = {
     containerObj: { type: Object },
-    guid: { type: String },
+    guid: { type: String, reflect: true, attribute: "data-guid" },
     selected: { type: Boolean, reflect: true },
+    current: { type: Boolean, reflect: true },
     indicators: { type: Array },
   };
+
+  #tabSelectObserver = null;
+
+  willUpdate(changedProperties) {
+    super.willUpdate?.(changedProperties);
+    if (changedProperties.has("tabElement")) {
+      this.#tabSelectObserver?.disconnect();
+      this.#tabSelectObserver = null;
+      if (this.tabElement) {
+        this.current = this.tabElement.selected;
+        this.#tabSelectObserver = new MutationObserver(() => {
+          this.current = this.tabElement?.selected ?? false;
+        });
+        this.#tabSelectObserver.observe(this.tabElement, {
+          attributes: true,
+          attributeFilter: ["selected"],
+        });
+      } else {
+        this.current = false;
+      }
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.#tabSelectObserver?.disconnect();
+    this.#tabSelectObserver = null;
+  }
 
   get tooltipText() {
     return !this.primaryL10nId ? this.url : null;

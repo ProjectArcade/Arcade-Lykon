@@ -6,13 +6,7 @@
   @include newtab-card-style;
 
   .nova-enabled & {
-    box-shadow: var(--box-shadow-level-2);
-
-    &:hover,
-    &:focus-within {
-      outline: 1px solid var(--border-color-deemphasized);
-      box-shadow: var(--card-box-shadow-hover);
-    }
+    @include widget-base-style;
   }
 
   border-radius: var(--border-radius-large);
@@ -20,6 +14,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  height: 100%;
 
   // Classic layout (when Nova is disabled)
   // @nova-cleanup(remove-conditional): Remove classic fixed-width/height styles after Nova ships
@@ -35,14 +30,6 @@
     }
   }
 
-  &.medium-widget {
-    grid-row: span 2;
-  }
-
-  &.large-widget {
-    grid-row: span 4;
-  }
-
   // @nova-cleanup(remove-conditional): Once Nova ships, hoist these rules to the root selector
   .nova-enabled & {
     --timer-focus-color: var(--color-orange-30, #FF8D5B);
@@ -53,7 +40,7 @@
     /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
     --timer-celebration-trailing: #FF9565;
     // Diverges from --border-color for dark-mode contrast on translucent surfaces.
-    --timer-ring-idle-color: light-dark(var(--color-neutral-20), var(--color-neutral-30));
+    --timer-ring-idle-color: light-dark(var(--color-gray-20), var(--color-gray-30));
     --widget-celebration-accent-color: var(--timer-celebration-leading);
     --widget-celebration-copy-color: var(--text-color-deemphasized);
     --widget-celebration-surface-color: var(--newtab-background-card);

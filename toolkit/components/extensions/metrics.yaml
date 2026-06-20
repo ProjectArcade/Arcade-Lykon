@@ -184,7 +184,7 @@ extensions.apis.dnr:
   startup_cache_read_size:
     type: memory_distribution
     memory_unit: byte
-    expires: 155
+    expires: 165
     description: |
       Amount of data read from the DNR startup cache file.
     notification_emails:
@@ -199,16 +199,18 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
   startup_cache_read_time:
     type: timing_distribution
     time_unit: millisecond
-    expires: 155
+    expires: 165
     description: |
       Amount of time it takes to read data into the DNR startup cache file.
     notification_emails:
@@ -223,16 +225,18 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
   startup_cache_write_size:
     type: memory_distribution
     memory_unit: byte
-    expires: 155
+    expires: 165
     description: |
       Amount of data written to the DNR startup cache file.
     notification_emails:
@@ -247,16 +251,18 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
   startup_cache_write_time:
     type: timing_distribution
     time_unit: millisecond
-    expires: 155
+    expires: 165
     description: |
       Amount of time it takes to write data into the DNR startup cache file.
     notification_emails:
@@ -271,15 +277,17 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
   startup_cache_entries:
     type: labeled_counter
-    expires: 155
+    expires: 165
     description: |
       Counters for startup cache data hits or misses on initializating
       DNR rules for extensions loaded on application startup.
@@ -296,9 +304,11 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
     labels:
@@ -308,7 +318,7 @@ extensions.apis.dnr:
   validate_rules_time:
     type: timing_distribution
     time_unit: millisecond
-    expires: 155
+    expires: 165
     description: |
       Amount of time it takes to validate DNR rules of individual ruleset
       when dynamic or static rulesets have been loaded from disk.
@@ -324,16 +334,18 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
   evaluate_rules_time:
     type: timing_distribution
     time_unit: millisecond
-    expires: 155
+    expires: 165
     description: |
       Amount of time it takes to evaluate DNR rules for one network request.
     notification_emails:
@@ -348,16 +360,18 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
   evaluate_rules_count_max:
     type: quantity
     unit: rules
-    expires: 155
+    expires: 165
     description: |
       Max amount of DNR rules being evaluated.
     lifetime: ping
@@ -373,9 +387,11 @@ extensions.apis.dnr:
       - https://bugzilla.mozilla.org/1984252/
       - https://bugzilla.mozilla.org/1984461/
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1803363#c11
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2048453/
     data_sensitivity:
       - technical
 
@@ -400,8 +416,10 @@ extensions.data:
       - https://bugzilla.mozilla.org/1912166
       - https://bugzilla.mozilla.org/1958151
       - https://bugzilla.mozilla.org/1994595
+      - https://bugzilla.mozilla.org/2041168/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1470213#c15
+      - https://bugzilla.mozilla.org/2041168/
     data_sensitivity:
       - technical
     notification_emails:
@@ -429,7 +447,7 @@ extensions.data:
       has_olddata:
         description: Extension had some data stored in JSONFile ("y" / "n").
         type: string
-    expires: 154
+    expires: 161
 
   storage_local_error:
     type: event
@@ -448,8 +466,10 @@ extensions.data:
       - https://bugzilla.mozilla.org/1912166
       - https://bugzilla.mozilla.org/1958151
       - https://bugzilla.mozilla.org/1994595
+      - https://bugzilla.mozilla.org/2041168/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1606903#c3
+      - https://bugzilla.mozilla.org/2041168/
     data_sensitivity:
       - technical
     notification_emails:
@@ -465,7 +485,7 @@ extensions.data:
         description: |
           A DOMException error name if any ("OtherError" for unknown errors).
         type: string
-    expires: 154
+    expires: 161
 
   storage_local_corrupted_reset:
     type: event
@@ -528,8 +548,10 @@ extensions.data:
       - https://bugzilla.mozilla.org/1915183
       - https://bugzilla.mozilla.org/1958156
       - https://bugzilla.mozilla.org/1994599
+      - https://bugzilla.mozilla.org/2041170/
     data_reviews:
       - https://phabricator.services.mozilla.com/D222442
+      - https://bugzilla.mozilla.org/2041170/
     data_sensitivity:
       - technical
     notification_emails:
@@ -550,7 +572,7 @@ extensions.data:
       backend:
         description: Backend engine used, currently either "kinto" or "rust"
         type: string
-    expires: 154
+    expires: 161
 
   migrate_result_count:
     type: labeled_counter
@@ -579,6 +601,7 @@ extensions.data:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2041168/
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1465129
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -592,10 +615,11 @@ extensions.data:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
       - https://bugzilla.mozilla.org/2018311/
+      - https://bugzilla.mozilla.org/2041168/
     notification_emails:
       - addons-dev-internal@mozilla.com
       - lgreco@mozilla.com
-    expires: 154
+    expires: 161
 
 extensions.counters:
 
@@ -665,6 +689,7 @@ extensions.counters:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1960567
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -679,10 +704,11 @@ extensions.counters:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1958168
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     event_page_idle_result:
       type: labeled_counter
@@ -743,6 +769,7 @@ extensions.counters:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1787940
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1817103
@@ -750,10 +777,11 @@ extensions.counters:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1958168
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
 extensions.timing:
 
@@ -803,6 +831,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -816,10 +845,11 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     browser_action_popup_open:
       type: timing_distribution
@@ -876,6 +906,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -889,10 +920,11 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     content_script_injection:
       type: timing_distribution
@@ -938,6 +970,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -951,10 +984,11 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     event_page_running_time:
       type: custom_distribution
@@ -997,16 +1031,18 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1787940
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1817103
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     extension_startup:
       type: timing_distribution
@@ -1054,6 +1090,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -1067,10 +1104,11 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     page_action_popup_open:
       type: timing_distribution
@@ -1127,6 +1165,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -1140,10 +1179,11 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     storage_local_get_idb:
       type: timing_distribution
@@ -1200,6 +1240,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -1213,10 +1254,11 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161
 
     storage_local_set_idb:
       type: timing_distribution
@@ -1273,6 +1315,7 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994581
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1994599
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       data_reviews:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1483002
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1513556
@@ -1286,7 +1329,8 @@ extensions.timing:
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1861303
         - https://bugzilla.mozilla.org/show_bug.cgi?id=1912170
         - https://bugzilla.mozilla.org/2018311/
+        - https://bugzilla.mozilla.org/2041168/
       notification_emails:
         - addons-dev-internal@mozilla.com
         - lgreco@mozilla.com
-      expires: 154
+      expires: 161

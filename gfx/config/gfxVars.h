@@ -97,6 +97,7 @@ class MOZ_STACK_CLASS gfxVarsCollectUpdates;
   _(UseAV1HwEncode, bool, false)                                   \
   _(UseH264HwDecode, bool, false)                                  \
   _(UseH264HwEncode, bool, false)                                  \
+  _(HasWebrtcH264Hw, bool, false)                                  \
   _(UseHEVCHwDecode, bool, false)                                  \
   _(UseHEVCHwEncode, bool, false)                                  \
   _(HwDecodedVideoZeroCopy, bool, false)                           \
@@ -118,8 +119,12 @@ class MOZ_STACK_CLASS gfxVarsCollectUpdates;
   _(AllowGLNorm16Textures, bool, false)                            \
   _(WebRenderLayerCompositorDCompTexture, bool, false)             \
   _(WebRenderOverlayHDR, bool, false)                              \
-  _(UseWebRenderDCompositionTextureOverlayWin, bool, false)
-
+  _(UseWebRenderDCompositionTextureOverlayWin, bool, false)        \
+  _(VideoHDR, bool, false)                                         \
+  _(AdapterVendorID, nsCString, nsCString())                       \
+  _(AdapterDeviceID, nsCString, nsCString())                       \
+  _(AdapterDriverVersion, nsCString, nsCString())                  \
+  _(UseAImageReaderVideoGpuProcessAndroid, bool, false)            \
 /* Add new entries above this line. */
 
 // Some graphics settings are computed on the UI process and must be
@@ -221,6 +226,15 @@ class gfxVars final {
     }
 
     void SetListener(const std::function<void()>& aListener) {
+      // Each gfxVar exposes a single-slot listener: a second registration
+      // would silently overwrite the first, breaking whatever consumer the
+      // first listener belonged to. Catch an accidental second consumer in
+      // diagnostic builds (debug / Nightly) rather than producing silent
+      // misbehaviour. If a future use case legitimately needs more than one
+      // listener per variable, change this storage to a list.
+      MOZ_DIAGNOSTIC_ASSERT(!mListener,
+                            "gfxVar already has a listener; only one "
+                            "consumer is supported per variable.");
       mListener = aListener;
     }
 

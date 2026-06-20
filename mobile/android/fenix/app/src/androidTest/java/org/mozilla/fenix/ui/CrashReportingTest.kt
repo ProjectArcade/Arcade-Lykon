@@ -4,10 +4,10 @@
 
 package org.mozilla.fenix.ui
 
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.core.net.toUri
 import org.junit.Rule
 import org.junit.Test
+import org.mozilla.fenix.customannotations.Converted
 import org.mozilla.fenix.customannotations.SmokeTest
 import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
@@ -19,6 +19,7 @@ import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
 import org.mozilla.fenix.ui.robots.clickPageObject
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.navigationToolbar
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 class CrashReportingTest {
     @get:Rule(order = 0)
@@ -26,16 +27,16 @@ class CrashReportingTest {
 
     private val mockWebServer get() = fenixTestRule.mockWebServer
 
-    @get:Rule
-    val composeTestRule = AndroidComposeTestRule(
+    @get:Rule(order = 1)
+    val composeTestRule = AndroidComposeTestRuleV2(
         HomeActivityIntentTestRule(
             isPocketEnabled = false,
             isWallpaperOnboardingEnabled = false,
         ),
     ) { it.activity }
 
-    @get:Rule
-    val memoryLeaksRule = DetectMemoryLeaksRule()
+    @get:Rule(order = 2)
+    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/308906
     @Test
@@ -65,6 +66,11 @@ class CrashReportingTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1681928
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.CrashReportingTest#useAppWhileTabIsCrashedTest"],
+        bug = 2046392,
+        since = "2026-06",
+    )
     @SmokeTest
     @Test
     fun useAppWhileTabIsCrashedTest() {

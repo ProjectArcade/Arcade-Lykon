@@ -82,6 +82,8 @@ support-files = [
   "import_attributes_css.mjs",
   "import_attributes_data.css",
   "import_attributes_data.json",
+  "import_attributes_data.txt",
+  "import_attributes_text.mjs",
   "import_attributes_worker.js",
 ]
 

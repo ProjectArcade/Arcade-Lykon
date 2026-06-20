@@ -17,7 +17,9 @@ HOST_SOURCES += [
     "EnumSerializerChecker.cpp",
     "ExplicitImplicitChecker.cpp",
     "ExplicitOperatorBoolChecker.cpp",
+    "FinalCycleCollectingIsupportsChecker.cpp",
     "GlobalVariableInitializationChecker.cpp",
+    "IntToEnumCastChecker.cpp",
     "JSHandleRootedTypedefChecker.cpp",
     "KnownLiveChecker.cpp",
     "KungFuDeathGripChecker.cpp",
@@ -56,6 +58,7 @@ HOST_SOURCES += [
 if CONFIG["OS_ARCH"] == "WINNT":
     HOST_DEFINES["TARGET_IS_WINDOWS"] = True
     HOST_SOURCES += [
+        "EmptyBasesChecker.cpp",
         "FopenUsageChecker.cpp",
         "LoadLibraryUsageChecker.cpp",
     ]

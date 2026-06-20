@@ -92,6 +92,65 @@ add_task(async function test_about_logins() {
   });
 });
 
+add_task(async function test_import_button_hidden_in_palette() {
+  let customizationReady = BrowserTestUtils.waitForEvent(
+    gNavToolbox,
+    "customizationready"
+  );
+  gCustomizeMode.enter();
+  await customizationReady;
+
+  ok(
+    document.documentElement.hasAttribute("disableprofileimport"),
+    "Root should have disableprofileimport attribute in customize mode."
+  );
+  let wrapper = document.getElementById("wrapper-import-button");
+  ok(wrapper, "Import button wrapper should exist in palette.");
+  ok(
+    BrowserTestUtils.isHidden(wrapper),
+    "Import button wrapper should be hidden in palette."
+  );
+
+  let afterCustomization = BrowserTestUtils.waitForEvent(
+    gNavToolbox,
+    "aftercustomization"
+  );
+  gCustomizeMode.exit();
+  await afterCustomization;
+});
+
+add_task(async function test_import_button_existing_profile() {
+  // Simulate an existing profile that had the import button previously added.
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.bookmarks.addedImportButton", true]],
+  });
+  CustomizableUI.addWidgetToArea(
+    "import-button",
+    CustomizableUI.AREA_BOOKMARKS,
+    0
+  );
+  ok(
+    document.getElementById("import-button"),
+    "Import button should be present before calling maybeAddImportButton."
+  );
+
+  const { PlacesBrowserStartup } = ChromeUtils.importESModule(
+    "moz-src:///browser/components/places/PlacesBrowserStartup.sys.mjs"
+  );
+  await PlacesBrowserStartup.maybeAddImportButton();
+
+  ok(
+    !document.getElementById("import-button"),
+    "Import button should be removed when DisableProfileImport policy is set."
+  );
+  ok(
+    !Services.prefs.prefHasUserValue("browser.bookmarks.addedImportButton"),
+    "addedImportButton pref should be cleared."
+  );
+
+  await SpecialPowers.popPrefEnv();
+});
+
 add_task(async function test_prefs_entrypoint() {
   await SpecialPowers.pushPrefEnv({
     set: [["browser.migrate.preferences-entrypoint.enabled", true]],
@@ -109,12 +168,15 @@ add_task(async function test_prefs_entrypoint() {
         "migration-wizard"
       );
       let doc = browser.contentDocument;
+      const entrypoint = Services.prefs.getBoolPref(
+        "browser.settings-redesign.enabled",
+        false
+      )
+        ? doc.querySelector('setting-group[groupid="importBrowserData"]')
+        : doc.getElementById("dataMigrationGroup");
+      ok(entrypoint, "Import entrypoint group should exist.");
       ok(
-        doc.getElementById("dataMigrationGroup"),
-        "Import entrypoint group should exist."
-      );
-      ok(
-        BrowserTestUtils.isHidden(doc.getElementById("dataMigrationGroup")),
+        BrowserTestUtils.isHidden(entrypoint),
         "Import entrypoint should be hidden in prefs if disabled via policy."
       );
       ok(

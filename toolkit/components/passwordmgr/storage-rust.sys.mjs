@@ -17,6 +17,12 @@ ChromeUtils.defineESModuleGetters(lazy, {
   AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
 });
 
+ChromeUtils.defineLazyGetter(
+  lazy,
+  "l10n",
+  () => new Localization(["toolkit/passwordmgr/passwordmgr.ftl"])
+);
+
 import { initialize as initRustComponents } from "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustInitRustComponents.sys.mjs";
 
 import {
@@ -26,6 +32,7 @@ import {
   BulkResultEntry,
   PrimaryPasswordAuthenticator,
   createLoginStoreWithNssKeymanager,
+  AuthenticationCanceled,
 } from "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustLogins.sys.mjs";
 
 const LoginInfo = Components.Constructor(
@@ -52,19 +59,21 @@ const loginInfoToLoginEntry = loginInfo =>
 
 // Convert a LoginInfo to a LoginEntryWithMeta, to be used for migrating
 // records between legacy and Rust storage.
-const loginInfoToLoginEntryWithMeta = loginInfo =>
-  new LoginEntryWithMeta({
+const loginInfoToLoginEntryWithMeta = loginInfo => {
+  const now = Date.now();
+  return new LoginEntryWithMeta({
     entry: loginInfoToLoginEntry(loginInfo),
     meta: new LoginMeta({
       id: loginInfo.guid || Services.uuid.generateUUID().toString(),
-      timesUsed: loginInfo.timesUsed,
-      timeCreated: loginInfo.timeCreated,
-      timeLastUsed: loginInfo.timeLastUsed,
-      timePasswordChanged: loginInfo.timePasswordChanged,
+      timesUsed: loginInfo.timesUsed || 1,
+      timeCreated: loginInfo.timeCreated || now,
+      timeLastUsed: loginInfo.timeLastUsed || now,
+      timePasswordChanged: loginInfo.timePasswordChanged || now,
       timeLastBreachAlertDismissed:
         loginInfo.timeLastBreachAlertDismissed || null,
     }),
   });
+};
 
 // Convert a Login instance, as returned from Rust Logins, to a LoginInfo
 const loginToLoginInfo = login => {
@@ -156,7 +165,7 @@ class RustLoginsStoreAdapter {
     // otherwise throw first error
     const error = results.find(l => l instanceof BulkResultEntry.Error);
     if (error) {
-      throw error;
+      throw new Error(error.message);
     }
     // and return login info objects
     return results
@@ -242,14 +251,64 @@ class RustLoginsStoreAdapter {
   }
 }
 
-// This is a mock atm, as the Rust Logins mirror is not enabled for primary
-// password users. A primary password entered outide of Rust will still unlock
-// the Rust encdec, because it uses the same NSS.
-class LoginStorageAuthenticator extends PrimaryPasswordAuthenticator {}
+class RustLoginStorageAuthenticator extends PrimaryPasswordAuthenticator {
+  #logger = null;
+
+  constructor() {
+    super();
+    this.#logger = lazy.LoginHelper.createLogger(
+      "RustLoginStorageAuthenticator"
+    );
+  }
+
+  // Called by Rust when the NSS key needs to be unlocked. Concurrent calls are not
+  // possible: all store operations hold the store's internal Mutex<LoginDb> while
+  // calling get_key(), so this method is always invoked serially.
+  async getPrimaryPassword() {
+    this.#logger.log("getPrimaryPassword called");
+    const win = Services.wm.getMostRecentBrowserWindow();
+    // Empty title causes Prompter.sys.mjs to fall back to the localised
+    // "PromptPassword3" string ("Password Required - <AppName>").
+    const message = await lazy.l10n.formatValue(
+      "primary-password-prompt-message"
+    );
+    const result = await Services.prompt.asyncPromptPassword(
+      win?.browsingContext,
+      Services.prompt.MODAL_TYPE_WINDOW,
+      "",
+      message,
+      ""
+    );
+
+    if (!result.getProperty("ok")) {
+      Services.obs.notifyObservers(null, "passwordmgr-crypto-loginCanceled");
+      throw new AuthenticationCanceled("User cancelled");
+    }
+
+    this.#logger.log("got a password");
+    return result.getProperty("pass");
+  }
+
+  async onAuthenticationSuccess() {
+    Services.obs.notifyObservers(null, "passwordmgr-crypto-login");
+    this.#logger.log("authenticated with success");
+  }
+
+  async onAuthenticationFailure() {
+    this.#logger.log("failed to authenticate");
+  }
+}
 
 export class LoginManagerRustStorage {
   #storageAdapter = null;
   #initializationPromise = null;
+  // Only the active backend fires storage-changed events to avoid duplicates
+  // when both JSON and Rust stores are initialized.
+  // Default is false (json is active)
+  #isActive = false;
+  set isActive(v) {
+    this.#isActive = v;
+  }
 
   // have it a singleton
   constructor() {
@@ -272,7 +331,7 @@ export class LoginManagerRustStorage {
           this.log(`Initializing Rust login storage at ${path}`);
 
           initRustComponents(profilePath).then(() => {
-            const authenticator = new LoginStorageAuthenticator();
+            const authenticator = new RustLoginStorageAuthenticator();
             const store = createLoginStoreWithNssKeymanager(
               path,
               authenticator
@@ -281,14 +340,7 @@ export class LoginManagerRustStorage {
             this.#storageAdapter = new RustLoginsStoreAdapter(store);
             this.log("Rust login storage ready.");
 
-            // All LoginManager storage backends must have their own shutdown
-            // blocker to ensure that they finalize properly.
-            lazy.AsyncShutdown.profileChangeTeardown.addBlocker(
-              "LoginManagerRustStorage: Interrupt IO operations on login store",
-              async () => this.finalize()
-            );
-
-            resolve(this);
+            this._registerShutdownBlocker().then(() => resolve(this));
           });
         });
       } catch (e) {
@@ -310,6 +362,28 @@ export class LoginManagerRustStorage {
 
     // Note: This is a synchronous call.
     this.#storageAdapter.shutdown();
+    return Promise.resolve();
+  }
+
+  /**
+   * Ensure the storage is finalized at shutdown. All LoginManager storage
+   * backends must have their own shutdown blocker to finalize properly.
+   *
+   * In the corner case where the shutdown phase has already passed by the time
+   * we get here, registering a blocker would throw, so we call `finalize()`
+   * immediately instead.
+   *
+   * @param {object} phase An `AsyncShutdown` phase object. Exposed as a
+   *   parameter for testing.
+   */
+  _registerShutdownBlocker(phase = lazy.AsyncShutdown.profileChangeTeardown) {
+    if (phase.isClosed) {
+      return this.finalize();
+    }
+    phase.addBlocker(
+      "LoginManagerRustStorage: Interrupt IO operations on login store",
+      async () => this.finalize()
+    );
     return Promise.resolve();
   }
 
@@ -372,22 +446,29 @@ export class LoginManagerRustStorage {
       continueOnDuplicates
     );
 
+    if (this.#isActive) {
+      Glean.pwmgr.numSavedPasswords.set(
+        await this.countLoginsAsync("", "", "")
+      );
+      for (const item of result) {
+        const login = continueOnDuplicates ? item.login : item;
+        if (login) {
+          lazy.LoginHelper.notifyStorageChanged("addLogin", login);
+        }
+      }
+    }
+
     return result;
   }
 
-  modifyLogin(_oldLogin, _newLoginData, _fromSync) {
-    throw Components.Exception("modifyLogin", Cr.NS_ERROR_NOT_IMPLEMENTED);
-  }
-
   async modifyLoginAsync(oldLogin, newLoginData, _fromSync) {
-    const oldStoredLogin =
-      await this.#storageAdapter.findLoginToUpdate(oldLogin);
+    const oldStoredLogin = await this.#storageAdapter.get(oldLogin.guid);
 
     if (!oldStoredLogin) {
       throw new Error("No matching logins");
     }
 
-    const idToModify = oldStoredLogin.guid;
+    const idToModify = oldLogin.guid;
 
     const newLogin = lazy.LoginHelper.buildModifiedLogin(
       oldStoredLogin,
@@ -424,14 +505,15 @@ export class LoginManagerRustStorage {
       idToModify,
       newLogin
     );
-    return updatedLogin;
-  }
 
-  recordPasswordUse(_login) {
-    throw Components.Exception(
-      "recordPasswordUse",
-      Cr.NS_ERROR_NOT_IMPLEMENTED
-    );
+    if (this.#isActive) {
+      lazy.LoginHelper.notifyStorageChanged("modifyLogin", [
+        oldStoredLogin,
+        updatedLogin,
+      ]);
+    }
+
+    return updatedLogin;
   }
 
   async recordPasswordUseAsync(login) {
@@ -468,10 +550,6 @@ export class LoginManagerRustStorage {
       );
     }
     return await this.#storageAdapter.list();
-  }
-
-  searchLogins(_matchData, _includeDeleted) {
-    throw Components.Exception("searchLogins", Cr.NS_ERROR_NOT_IMPLEMENTED);
   }
 
   async searchLoginsAsync(matchData, includeDeleted) {
@@ -625,18 +703,18 @@ export class LoginManagerRustStorage {
     return [foundLogins, foundIds];
   }
 
-  removeLogin(_login, _fromSync) {
-    throw Components.Exception("removeLogin", Cr.NS_ERROR_NOT_IMPLEMENTED);
-  }
-
   async removeLoginAsync(login, _fromSync) {
-    const storedLogin = await this.#storageAdapter.findLoginToUpdate(login);
-
-    if (!storedLogin) {
+    const deleted = await this.#storageAdapter.delete(login.guid);
+    if (!deleted) {
       throw new Error("No matching logins");
     }
 
-    await this.#storageAdapter.delete(storedLogin.guid);
+    if (this.#isActive) {
+      Glean.pwmgr.numSavedPasswords.set(
+        await this.countLoginsAsync("", "", "")
+      );
+      lazy.LoginHelper.notifyStorageChanged("removeLogin", login);
+    }
   }
 
   /**
@@ -645,12 +723,12 @@ export class LoginManagerRustStorage {
    * NOTE: You probably want removeAllUserFacingLogins instead of this function.
    *
    */
-  removeAllLogins() {
-    throw Components.Exception("removeLogin", Cr.NS_ERROR_NOT_IMPLEMENTED);
-  }
-
   async removeAllLoginsAsync() {
-    return await this.#removeLogins(false, true);
+    const removed = await this.#removeLogins(false, true);
+    if (this.#isActive) {
+      lazy.LoginHelper.notifyStorageChanged("removeAllLogins", removed ?? []);
+    }
+    return removed;
   }
 
   /**
@@ -660,13 +738,6 @@ export class LoginManagerRustStorage {
    *
    * @param fullyRemove remove the logins rather than mark them deleted.
    */
-  removeAllUserFacingLogins(_fullyRemove) {
-    throw Components.Exception(
-      "removeAllUserFacingLogins",
-      Cr.NS_ERROR_NOT_IMPLEMENTED
-    );
-  }
-
   async removeAllUserFacingLoginsAsync(fullyRemove) {
     return await this.#removeLogins(fullyRemove, true);
   }
@@ -703,14 +774,6 @@ export class LoginManagerRustStorage {
     if (idsToDelete.length) {
       await this.#storageAdapter.deleteMany(idsToDelete);
     }
-  }
-
-  findLogins(_origin, _formActionOrigin, _httpRealm) {
-    throw Components.Exception("findLogins", Cr.NS_ERROR_NOT_IMPLEMENTED);
-  }
-
-  countLogins(_origin, _formActionOrigin, _httpRealm) {
-    throw Components.Exception("countLogins", Cr.NS_ERROR_NOT_IMPLEMENTED);
   }
 
   async countLoginsAsync(origin, formActionOrigin, httpRealm) {
@@ -750,6 +813,12 @@ export class LoginManagerRustStorage {
     await this.#storageAdapter.recordPotentiallyVulnerablePasswords([
       login.password,
     ]);
+    if (this.#isActive) {
+      lazy.LoginHelper.notifyStorageChanged(
+        "addPotentiallyVulnerablePassword",
+        login
+      );
+    }
   }
 
   // adding multiple potentially vulnerable passwords during migration
@@ -770,6 +839,11 @@ export class LoginManagerRustStorage {
 
   async clearAllPotentiallyVulnerablePasswords() {
     await this.#storageAdapter.clearAllPotentiallyVulnerablePasswords();
+    if (this.#isActive) {
+      lazy.LoginHelper.notifyStorageChanged(
+        "clearAllPotentiallyVulnerablePasswords"
+      );
+    }
   }
 
   get _crypto() {

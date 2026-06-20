@@ -19,7 +19,6 @@ import mozilla.components.concept.menu.candidate.SmallMenuCandidate
 import mozilla.components.support.test.robolectric.testContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,6 +27,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import androidx.appcompat.R as appcompatR
 
 @RunWith(AndroidJUnit4::class)

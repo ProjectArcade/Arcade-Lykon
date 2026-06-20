@@ -2337,6 +2337,8 @@ impl<'a, W: Write> Writer<'a, W> {
                     //
                     // While `core` doesn't necessarily need it, it's allowed and since `es` needs it we
                     // always write it as the extra branch wouldn't have any benefit in readability
+                    crate::Literal::U16(value) => write!(self.out, "uint16_t({value})")?,
+                    crate::Literal::I16(value) => write!(self.out, "int16_t({value})")?,
                     crate::Literal::U32(value) => write!(self.out, "{value}u")?,
                     crate::Literal::I32(value) => write!(self.out, "{value}")?,
                     crate::Literal::Bool(value) => write!(self.out, "{value}")?,
@@ -4586,7 +4588,8 @@ impl<'a, W: Write> Writer<'a, W> {
                 items.push(ImmediateItem {
                     access_path: name,
                     offset: *offset,
-                    ty,
+                    ty: self.module.types[ty].inner.clone(),
+                    size_bytes: layout.size,
                 });
                 *offset += layout.size;
             }

@@ -64,8 +64,14 @@ class AudioSession final : public IAudioSessionEvents {
     // Shouldn't create twice.
     MOZ_ASSERT(!sService);
     NS_ENSURE_TRUE_VOID(!sService);
-    sService = new AudioSession(std::move(aDisplayName), std::move(aIconPath),
-                                std::move(aSessionGroupingParameter));
+    // Hold a local strong ref across Start() so that the failure-cleanup
+    // path's UnregisterAudioSessionNotification cannot drop the refcount
+    // to zero before sService takes ownership.
+    RefPtr session =
+        new AudioSession(std::move(aDisplayName), std::move(aIconPath),
+                         std::move(aSessionGroupingParameter));
+    session->Start();
+    sService = std::move(session);
     LOGD("Created AudioSession.");
   }
 
@@ -143,9 +149,7 @@ class AudioSession final : public IAudioSessionEvents {
                nsID&& aSessionGroupingParameter) MOZ_REQUIRES(sMutex)
       : mDisplayName(aDisplayName),
         mIconPath(aIconPath),
-        mSessionGroupingParameter(aSessionGroupingParameter) {
-    Start();
-  }
+        mSessionGroupingParameter(aSessionGroupingParameter) {}
   ~AudioSession() {
     // Must have stopped and not restarted.
     MOZ_ASSERT(!mAudioSessionControl);
@@ -377,3 +381,5 @@ void AudioSession::Stop(bool aShouldRestart) {
 
 }  // namespace widget
 }  // namespace mozilla
+
+#undef LOGD

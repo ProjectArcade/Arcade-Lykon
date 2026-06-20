@@ -38,6 +38,7 @@ let patterns: string[];
 
 - [`openArticleURL`](#openarticleurl)
 - [`openBookmarkedURL`](#openbookmarkedurl)
+- [`userBookmarkFolderActivity`](#userbookmarkfolderactivity)
 - [`frequentVisits`](#frequentvisits)
 - [`openURL`](#openurl)
 - [`newSavedLogin`](#newsavedlogin)
@@ -78,6 +79,12 @@ Happens when the user loads a Reader Mode compatible webpage.
 Happens when the user bookmarks or navigates to a bookmarked URL.
 
 Does not filter by host or patterns.
+
+### `userBookmarkFolderActivity`
+
+Happens when the user either creates a new bookmark folder or saves a bookmark
+into a user-created folder. Does not fire if the active window is a private
+window.
 
 ### `frequentVisits`
 
@@ -239,6 +246,16 @@ Happens when the user closes n or more tabs in a session
   targeting: "currentTabsOpen >= 4"
 }
 ```
+```js
+// The trigger also includes an optional action context variable
+// when a caller marks the tab.smartWindowActionSource before close.
+// Here, the message triggers when the close was attributed to a specific source
+// (e.g., "close_current_tab" set by a toolcall)
+{
+  trigger: { id: "nthTabClosed" },
+  targeting: "actionSource == 'close_current_tab'"
+}
+```
 
 ### `nthTabOpened`
 
@@ -377,7 +394,9 @@ Happens when a page action appears in the location bar. The specific page action
 ```js
 {
   trigger: { id: "pageActionInUrlbar" },
-  targeting: "pageAction == 'reader-mode-button'"
+  targeting: "pageAction == 'reader-mode-button'",
+  params: ["example.com"],
+  patterns: ["https://www.example.com/*"]
 }
 ```
 

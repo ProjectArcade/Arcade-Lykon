@@ -9,7 +9,7 @@ import {
   isWidgetEnabled,
   resolveWidgetSize,
   resolveWidgetHasSidebar,
-} from "./WidgetsRegistry.mjs";
+} from "common/WidgetsRegistry.mjs";
 import { Weather as WeatherWidget } from "./Weather/Weather";
 import { ErrorBoundary } from "content-src/components/ErrorBoundary/ErrorBoundary";
 import { WIDGET_SIDEBAR_COMPONENTS } from "./WidgetsComponentRegistry.jsx";

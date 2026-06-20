@@ -4,6 +4,7 @@
 
 //! Computed color values.
 
+use crate::typed_om::{TypedValue, KeywordValue, ToTyped};
 use crate::color::AbsoluteColor;
 use crate::values::animated::ToAnimatedZero;
 use crate::values::computed::percentage::Percentage;
@@ -11,7 +12,8 @@ use crate::values::generics::color::{
     GenericCaretColor, GenericColor, GenericColorMix, GenericColorOrAuto,
 };
 use std::fmt::{self, Write};
-use style_traits::{CssWriter, ToCss};
+use style_traits::{CssWriter, ToCss, CssString};
+use thin_vec::ThinVec;
 
 pub use crate::values::specified::color::{ColorScheme, ForcedColorAdjust, PrintColorAdjust};
 
@@ -43,6 +45,18 @@ impl ToCss for Color {
     }
 }
 
+impl ToTyped for Color {
+    fn to_typed(&self, dest: &mut ThinVec<TypedValue>) -> Result<(), ()> {
+        match *self {
+            Self::CurrentColor => {
+              dest.push(TypedValue::Keyword(KeywordValue(CssString::from("currentcolor"))));
+              Ok(())
+            },
+            _ => Err(())
+        }
+    }
+}
+
 impl Color {
     /// A fully transparent color.
     pub const TRANSPARENT_BLACK: Self = Self::Absolute(AbsoluteColor::TRANSPARENT_BLACK);
@@ -63,11 +77,8 @@ impl Color {
         }
     }
 
-    /// Combine this complex color with the given foreground color into an
-    /// absolute color.
+    /// Combine this complex color with the given foreground color into an absolute color.
     pub fn resolve_to_absolute(&self, current_color: &AbsoluteColor) -> AbsoluteColor {
-        use crate::values::specified::percentage::ToPercentage;
-
         match *self {
             Self::Absolute(c) => c,
             Self::ColorFunction(ref color_function) => {
@@ -82,7 +93,7 @@ impl Color {
                     mix.items.iter().map(|item| {
                         mix::ColorMixItem::new(
                             item.color.resolve_to_absolute(current_color),
-                            item.percentage.to_percentage(),
+                            item.percentage.0,
                         )
                     }),
                     mix.flags,

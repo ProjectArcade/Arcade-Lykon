@@ -394,10 +394,14 @@ public final class GeckoRuntime implements Parcelable {
           } else if ("GeckoView:GeckoPreferences:Change".equals(event)) {
             final GeckoPreferenceController.GeckoPreference<?> observedPreference =
                 GeckoPreferenceController.GeckoPreference.fromBundle(message.getBundle("data"));
-            if (observedPreference != null) {
-              mPreferencesObserverDelegate.onGeckoPreferenceChange(observedPreference);
-            } else {
+            final GeckoPreferenceController.Observer.Delegate delegate =
+                mPreferencesObserverDelegate;
+            if (observedPreference == null) {
               Log.w(LOGTAG, "Could not deserialize a message for onGeckoPreferenceChange!");
+            } else if (delegate == null) {
+              Log.w(LOGTAG, "No observer delegate is registered for onGeckoPreferenceChange!");
+            } else {
+              delegate.onGeckoPreferenceChange(observedPreference);
             }
           }
         }
@@ -427,7 +431,7 @@ public final class GeckoRuntime implements Parcelable {
     }
 
     final Context context = GeckoAppShell.getApplicationContext();
-    final CrashHelper.Pipes pipes = CrashHelper.createCrashHelperPipes(context);
+    final CrashHelper.Pipes pipes = CrashHelper.createCrashHelperPipes();
 
     if (pipes == null) {
       Log.e(LOGTAG, "Could not create the crash reporter IPC pipes");

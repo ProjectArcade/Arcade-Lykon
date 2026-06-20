@@ -40,6 +40,7 @@ EXPORTS.mozilla.dom += [
     "IDBIndex.h",
     "IDBKeyRange.h",
     "IDBObjectStore.h",
+    "IDBRecord.h",
     "IDBRequest.h",
     "IDBTransaction.h",
     "IndexedDatabase.h",
@@ -55,6 +56,7 @@ EXPORTS.mozilla.dom.indexedDB += [
     "KeyPath.h",
     "SerializationHelpers.h",
     "ThreadLocal.h",
+    "TransactionOpResult.h",
 ]
 
 XPCOM_MANIFESTS += [
@@ -71,9 +73,11 @@ UNIFIED_SOURCES += [
     "IDBDatabase.cpp",
     "IDBEvents.cpp",
     "IDBFactory.cpp",
+    "IDBGetAllOptions.cpp",
     "IDBIndex.cpp",
     "IDBKeyRange.cpp",
     "IDBObjectStore.cpp",
+    "IDBRecord.cpp",
     "IDBRequest.cpp",
     "IDBTransaction.cpp",
     "IndexedDatabase.cpp",
@@ -85,6 +89,7 @@ UNIFIED_SOURCES += [
     "ReportInternalError.cpp",
     "SchemaUpgrades.cpp",
     "ScriptErrorHelper.cpp",
+    "TransactionOpResult.cpp",
 ]
 
 SOURCES += [

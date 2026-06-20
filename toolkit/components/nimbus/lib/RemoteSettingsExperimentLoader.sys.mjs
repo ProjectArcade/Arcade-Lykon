@@ -422,7 +422,7 @@ export class RemoteSettingsExperimentLoader {
   ) {
     lazy.log.debug(`Updating recipes with trigger "${trigger ?? ""}"`);
 
-    this.manager._clearOptInRecipes({ onlyFeatureIds });
+    this.manager._clearOptIns(this.SOURCE, { onlyFeatureIds });
 
     // The targeting context metrics do not work in artifact builds.
     // See-also: https://bugzilla.mozilla.org/show_bug.cgi?id=1936317
@@ -511,8 +511,6 @@ export class RemoteSettingsExperimentLoader {
         Services.obs.notifyObservers(null, "nimbus:enrollments-updated");
       }
     } finally {
-      this.manager._sortOptInRecipes();
-
       // Submit targeting context ping after all enrollment status events should be generated
       GleanPings.nimbusTargetingContext.submit();
     }
@@ -849,12 +847,7 @@ export class RemoteSettingsExperimentLoader {
       throw new Error(`Recipe ${recipe.slug} did not match targeting`);
     }
 
-    const branch = recipe.branches.find(b => b.slug === branchSlug);
-    if (!branch) {
-      throw new Error(`Could not find branch slug ${branchSlug} in ${slug}`);
-    }
-
-    await this.manager.forceEnroll(recipe, branch);
+    this.manager.forceEnroll(recipe, branchSlug);
   }
 
   /**
@@ -862,9 +855,9 @@ export class RemoteSettingsExperimentLoader {
    * and vice versa.
    */
   async onEnabledPrefChange() {
-    if (lazy.ExperimentAPI.enabled) {
+    if (!this._enabled && lazy.ExperimentAPI.enabled) {
       await this.enable();
-    } else {
+    } else if (this._enabled && !lazy.ExperimentAPI.enabled) {
       this.disable();
     }
   }

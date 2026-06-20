@@ -93,7 +93,7 @@ void NodeIterator::NodePointer::AdjustForRemoval(nsINode* aRoot,
 }
 
 bool NodeIterator::NodePointer::MoveForward(nsINode* aRoot, nsINode* aNode) {
-  while (1) {
+  while (true) {
     if (aNode == aRoot) break;
 
     nsINode* sibling = aNode->GetNextSibling();
@@ -190,9 +190,7 @@ already_AddRefed<nsINode> NodeIterator::NextOrPrevNode(
 }
 
 void NodeIterator::Detach() {
-  if (mRoot) {
-    mRoot->OwnerDoc()->WarnOnceAbout(DeprecatedOperations::eNodeIteratorDetach);
-  }
+  // Intentionally a no-op, as this API is deprecated.
 }
 
 /*

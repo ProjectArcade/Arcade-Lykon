@@ -37,6 +37,7 @@
 #include "jArray.h"
 #include "nsHtml5ArrayCopy.h"
 #include "nsAHtml5TreeBuilderState.h"
+#include "nsGkAtoms.h"
 #include "nsHtml5ByteReadable.h"
 #include "nsHtml5Macros.h"
 #include "nsIContentHandle.h"
@@ -58,7 +59,7 @@ class nsHtml5Portability {
   static nsHtml5String newStringFromBuffer(char16_t* buf, int32_t offset,
                                            int32_t length,
                                            nsHtml5TreeBuilder* treeBuilder,
-                                           bool maybeAtomize);
+                                           nsHtml5AtomTable* interner);
   static nsHtml5String newEmptyString();
   static nsHtml5String newStringFromLiteral(const char* literal);
   static nsHtml5String newStringFromString(nsHtml5String string);
@@ -73,6 +74,8 @@ class nsHtml5Portability {
   static bool stringEqualsString(nsHtml5String one, nsHtml5String other);
   static void initializeStatics();
   static void releaseStatics();
+
+#include "nsHtml5PortabilityHSupplement.h"
 };
 
 #endif

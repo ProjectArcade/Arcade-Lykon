@@ -113,6 +113,19 @@ testGetter(f.importEntries[0], "localName");
 testGetter(f.importEntries[0], "lineNumber");
 testGetter(f.importEntries[0], "columnNumber");
 
+const f2 = parseModule(`
+import source ns from 'b';
+`);
+assertEq(f2.importEntries.length, 1);
+assertEq(f2.importEntries[0].moduleRequest.specifier, 'b');
+assertEq(f2.importEntries[0].importName, '*source*');
+assertEq(f2.importEntries[0].localName, 'ns');
+assertEq(f2.importEntries[0].lineNumber, 2);
+assertEq(f2.importEntries[0].columnNumber, 15);
+testGetter(f2, "importEntries");
+testGetter(f2.importEntries[0], "importName");
+testGetter(f2.importEntries[0], "localName");
+
 // ==== localExportEntries getter ====
 const g = parseModule(`
 export const v = 1;
@@ -151,7 +164,7 @@ export * from "b";
 assertEq(i.starExportEntries.length, 1);
 assertEq(i.starExportEntries[0].exportName, null);
 assertEq(i.starExportEntries[0].moduleRequest.specifier, "b");
-assertEq(i.starExportEntries[0].importName, null);
+assertEq(i.starExportEntries[0].importName, "*all-but-default*");
 assertEq(i.starExportEntries[0].localName, null);
 assertEq(i.starExportEntries[0].lineNumber, 2);
 assertEq(i.starExportEntries[0].columnNumber, 8);

@@ -53,14 +53,19 @@ FINAL_TARGET_FILES.data.css["nova"] += [
 FINAL_TARGET_FILES.prerendered += [
     "../prerendered/activity-stream-noscripts.html",
     "../prerendered/activity-stream.html",
-    "../prerendered/lykon-home.html",
-    "../prerendered/wallpaper.json",
 ]
 
 # The following are resources that exist in other component folders that are
 # included in the newtab resources at build time. Specifically, these are for
 # external UI components maintained by other teams that have the ability to
 # "train-hop" with the rest of newtab.
+FINAL_TARGET_FILES.data.data.content["external-components"][
+    "asrouter-newtab-multistage"
+] += [
+    "../../../components/asrouter/content/components/asrouter-newtab-multistage/asrouter-newtab-multistage.bundle.js",
+    "../../../components/asrouter/content/components/asrouter-newtab-multistage/asrouter-newtab-multistage.css",
+]
+
 FINAL_TARGET_FILES.data.data.content["external-components"][
     "asrouter-newtab-message"
 ] += [

@@ -36,6 +36,9 @@ add_setup(async function () {
       ["browser.search.separatePrivateDefault.ui.enabled", false],
       ["browser.urlbar.suggest.quickactions", false],
       ["browser.urlbar.scotchBonnet.enableOverride", false],
+      // Force settings redesign to false, so that `hideOneOffButton` will correctly
+      // work for the time being.
+      ["browser.settings-redesign.enabled", false],
     ],
   });
 
@@ -671,15 +674,14 @@ add_task(async function localShortcutEmptySearchString() {
 
     let resultCount = UrlbarTestUtils.getResultCount(window);
     if (!resultCount) {
-      Assert.equal(
-        gURLBar.panel.getAttribute("noresults"),
-        "true",
+      Assert.ok(
+        gURLBar.hasAttribute("noresults"),
         "Panel has no results, therefore should have noresults attribute"
       );
       continue;
     }
     Assert.ok(
-      !gURLBar.panel.hasAttribute("noresults"),
+      !gURLBar.hasAttribute("noresults"),
       "Panel has results, therefore should not have noresults attribute"
     );
     let result = await UrlbarTestUtils.getDetailsOfResultAt(window, 0);
@@ -744,7 +746,7 @@ add_task(async function avoidWillHideRace() {
   // We can't wait for UrlbarTestUtils.promiseSearchComplete here since we
   // expect the popup will not open. We wait for _engineInfo to be populated
   // instead.
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => !!oneOffSearchButtons._engineInfo,
     "_engineInfo is set."
   );

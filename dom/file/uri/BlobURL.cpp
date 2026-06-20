@@ -79,8 +79,7 @@ BlobURL::Write(nsIObjectOutputStream* aStream) {
   return NS_OK;
 }
 
-NS_IMETHODIMP_(void)
-BlobURL::Serialize(mozilla::ipc::URIParams& aParams) {
+void BlobURL::Serialize(mozilla::ipc::URIParams& aParams) {
   using namespace mozilla::ipc;
 
   HostObjectURIParams hostParams;

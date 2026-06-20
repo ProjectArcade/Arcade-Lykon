@@ -34,16 +34,7 @@ using namespace js::intl;
 /**************** RelativeTimeFormat *****************/
 
 const JSClassOps RelativeTimeFormatObject::classOps_ = {
-    nullptr,                             // addProperty
-    nullptr,                             // delProperty
-    nullptr,                             // enumerate
-    nullptr,                             // newEnumerate
-    nullptr,                             // resolve
-    nullptr,                             // mayResolve
-    RelativeTimeFormatObject::finalize,  // finalize
-    nullptr,                             // call
-    nullptr,                             // construct
-    nullptr,                             // trace
+    .finalize = RelativeTimeFormatObject::finalize,
 };
 
 const JSClass RelativeTimeFormatObject::class_ = {

@@ -61,8 +61,14 @@ When Firefox uses a model, it will
 
 We have two collections in Remote Settings:
 
-- `ml-onnx-runtime`: provides all the WASM files we need to run the inference runtime.
-- `ml-inference-options`: provides for each `taskId` a list of running options, such as the `modelId`.
+- ``ml-onnx-runtime``
+  (`dashboard <https://firefox-ai.github.io/runtime-tools/ml-onnx-runtime/>`__,
+  `searchfox <https://searchfox.org/firefox-main/search?q=%22ml-onnx-runtime%22>`__):
+  provides all the WASM files we need to run the inference runtime.
+- ``ml-inference-options``
+  (`dashboard <https://firefox-ai.github.io/runtime-tools/ml-inference-options/>`__,
+  `searchfox <https://searchfox.org/firefox-main/search?q=%22ml-inference-options%22>`__):
+  provides for each ``taskId`` a list of running options, such as the ``modelId``.
 
 Running the inference API will download the WASM files if needed, and then see
 if there's an entry for the task in `ml-inference-options`, to grab the options.

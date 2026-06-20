@@ -842,7 +842,7 @@ class InterpreterStack {
   }
 };
 
-void TraceInterpreterActivations(JSContext* cx, JSTracer* trc);
+void TraceActivations(JSContext* cx, JSTracer* trc);
 
 /*****************************************************************************/
 
@@ -851,6 +851,7 @@ class AnyInvokeArgs : public JS::CallArgs {};
 
 /** Base class for all function construction args. */
 class AnyConstructArgs : public JS::CallArgs {
+ public:
   // Only js::Construct (or internal methods that call the qualified CallArgs
   // versions) should do these things!
   void setCallee(const Value& v) = delete;

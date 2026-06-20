@@ -14,14 +14,9 @@
 #include "mozilla/dom/Element.h"
 #include "nsString.h"
 
-namespace mozilla {
-class DeclarationBlock;
-struct MutationClosureData;
-
-namespace dom {
+namespace mozilla::dom {
 class StylePropertyMap;
-}
-}  // namespace mozilla
+}  // namespace mozilla::dom
 
 // IID for nsStyledElement interface
 #define NS_STYLED_ELEMENT_IID \
@@ -32,7 +27,7 @@ using nsStyledElementBase = mozilla::dom::Element;
 class nsStyledElement : public nsStyledElementBase {
  protected:
   inline explicit nsStyledElement(
-      already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+      already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
       : nsStyledElementBase(std::move(aNodeInfo)) {}
 
  public:
@@ -45,7 +40,7 @@ class nsStyledElement : public nsStyledElementBase {
   virtual void InlineStyleDeclarationWillChange(
       mozilla::MutationClosureData& aData) override;
   virtual nsresult SetInlineStyleDeclaration(
-      mozilla::DeclarationBlock& aDeclaration,
+      mozilla::StyleLockedDeclarationBlock&,
       mozilla::MutationClosureData& aData) override;
   virtual nsresult BindToTree(BindContext& aContext, nsINode& aParent) override;
 

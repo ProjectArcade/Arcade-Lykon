@@ -7,7 +7,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
-use remote_settings::{RemoteSettingsConfig2, RemoteSettingsServer, RemoteSettingsService};
+use remote_settings::{RemoteSettingsConfig, RemoteSettingsServer, RemoteSettingsService};
 use suggest::{
     AmpMatchingStrategy, SuggestIngestionConstraints, SuggestStore, SuggestStoreBuilder,
     SuggestionProvider, SuggestionProviderConstraints, SuggestionQuery,
@@ -111,7 +111,7 @@ fn main() -> Result<()> {
     } else {
         DEFAULT_LOG_FILTER
     });
-    nss::ensure_initialized();
+    nss_as::ensure_initialized();
     viaduct_hyper::viaduct_init_backend_hyper()?;
     let store = build_store(&cli)?;
     match cli.command {
@@ -144,7 +144,7 @@ fn build_store(cli: &Cli) -> Result<Arc<SuggestStore>> {
 }
 
 fn build_remote_settings_service(cli: &Cli) -> Arc<RemoteSettingsService> {
-    let config = RemoteSettingsConfig2 {
+    let config = RemoteSettingsConfig {
         server: cli.remote_settings_server.as_ref().map(|s| match s {
             RemoteSettingsServerArg::Dev => RemoteSettingsServer::Dev,
             RemoteSettingsServerArg::Stage => RemoteSettingsServer::Stage,

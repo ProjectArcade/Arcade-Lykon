@@ -23,6 +23,7 @@
 
 #include "AnchorPositioningUtils.h"
 #include "nsIDocShell.h"
+#include "mozilla/dom/BrowsingContext.h"
 #include "mozilla/dom/Document.h"
 #include "nsPIDOMWindow.h"
 #include "nsIContentInlines.h"
@@ -150,8 +151,6 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(DocAccessible, LocalAccessible)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(DocAccessible)
-  NS_INTERFACE_MAP_ENTRY(nsIDocumentObserver)
-  NS_INTERFACE_MAP_ENTRY(nsIMutationObserver)
   NS_INTERFACE_MAP_ENTRY(nsISupportsWeakReference)
 NS_INTERFACE_MAP_END_INHERITING(HyperTextAccessible)
 
@@ -388,6 +387,23 @@ static uint64_t GetCacheDomainsQueueUpdateSuperset(uint64_t aCacheDomains) {
   return aCacheDomains;
 }
 
+bool DocAccessible::IsPrintDoc() const {
+  if (!mDocumentNode || !mDocumentNode->IsStaticDocument()) {
+    return false;
+  }
+  // A DocAccessible should only ever be created for a static document if it's a
+  // print document.
+  MOZ_ASSERT(mDocumentNode->GetBrowsingContext()->Top()->GetIsPrinting());
+  return true;
+}
+
+uint64_t DocAccessible::EffectiveCacheDomains() const {
+  if (IsPrintDoc()) {
+    return kPdfCacheDomains;
+  }
+  return nsAccessibilityService::GetActiveCacheDomains();
+}
+
 void DocAccessible::QueueCacheUpdate(LocalAccessible* aAcc, uint64_t aNewDomain,
                                      bool aBypassActiveDomains) {
   if (!mIPCDoc || !HasLoadState(eTreeConstructed)) {
@@ -430,8 +446,7 @@ void DocAccessible::QueueCacheUpdate(LocalAccessible* aAcc, uint64_t aNewDomain,
   const uint64_t newDomains = GetCacheDomainsQueueUpdateSuperset(aNewDomain);
 
   // Only queue cache updates for domains that are active.
-  const uint64_t domainsToUpdate =
-      nsAccessibilityService::GetActiveCacheDomains() & newDomains;
+  const uint64_t domainsToUpdate = EffectiveCacheDomains() & newDomains;
 
   // Avoid queueing cache updates if we have no domains to update.
   if (domainsToUpdate == CacheDomain::None) {
@@ -516,7 +531,8 @@ void DocAccessible::Init() {
 #endif
 
   // Initialize notification controller.
-  mNotificationController = new NotificationController(this, mPresShell);
+  mNotificationController =
+      MakeRefPtr<NotificationController>(this, mPresShell);
 
   // Mark the DocAccessible as loaded if its DOM document is already loaded at
   // this point. This can happen for one of three reasons:
@@ -703,9 +719,6 @@ nsRect DocAccessible::RelativeBounds(nsIFrame** aRelativeFrame) const {
 // DocAccessible protected member
 nsresult DocAccessible::AddEventListeners() {
   SelectionMgr()->AddDocSelectionListener(mPresShell);
-
-  // Add document observer.
-  mDocumentNode->AddObserver(this);
   return NS_OK;
 }
 
@@ -713,10 +726,6 @@ nsresult DocAccessible::AddEventListeners() {
 nsresult DocAccessible::RemoveEventListeners() {
   // Remove listeners associated with content documents
   NS_ASSERTION(mDocumentNode, "No document during removal of listeners.");
-
-  if (mDocumentNode) {
-    mDocumentNode->RemoveObserver(this);
-  }
 
   if (mScrollWatchTimer) {
     mScrollWatchTimer->Cancel();
@@ -821,12 +830,6 @@ std::pair<nsPoint, nsRect> DocAccessible::ComputeScrollData(
   return {scrollPoint, scrollRange};
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// nsIDocumentObserver
-
-NS_IMPL_NSIDOCUMENTOBSERVER_CORE_STUB(DocAccessible)
-NS_IMPL_NSIDOCUMENTOBSERVER_LOAD_STUB(DocAccessible)
-
 // When a reflected element IDL attribute changes, we might get the following
 // synchronous calls:
 // 1. AttributeWillChange for the element.
@@ -864,8 +867,8 @@ void DocAccessible::AttributeWillChange(dom::Element* aElement,
 
   if (aAttribute == nsGkAtoms::id) {
     if (accessible->IsActiveDescendant()) {
-      RefPtr<AccEvent> event =
-          new AccStateChangeEvent(accessible, states::ACTIVE, false);
+      auto event =
+          MakeRefPtr<AccStateChangeEvent>(accessible, states::ACTIVE, false);
       FireDelayedEvent(event);
     }
 
@@ -874,8 +877,8 @@ void DocAccessible::AttributeWillChange(dom::Element* aElement,
 
   if (aAttribute == nsGkAtoms::aria_activedescendant) {
     if (LocalAccessible* activeDescendant = accessible->CurrentItem()) {
-      RefPtr<AccEvent> event =
-          new AccStateChangeEvent(activeDescendant, states::ACTIVE, false);
+      auto event = MakeRefPtr<AccStateChangeEvent>(activeDescendant,
+                                                   states::ACTIVE, false);
       FireDelayedEvent(event);
     }
   }
@@ -959,7 +962,7 @@ void DocAccessible::AttributeChanged(dom::Element* aElement,
   MOZ_ASSERT(accessible->IsBoundToParent() || accessible->IsDoc(),
              "DOM attribute change on an accessible detached from the tree");
 
-  if (aAttribute == nsGkAtoms::id) {
+  if (aNameSpaceID == kNameSpaceID_None && aAttribute == nsGkAtoms::id) {
     // TODO(1983819): updates to referenceTarget should trigger these same
     // actions
     dom::Element* elm = accessible->Elm();
@@ -1041,8 +1044,8 @@ void DocAccessible::ARIAActiveDescendantChanged(LocalAccessible* aAccessible) {
             nsCoreUtils::GetAriaActiveDescendantElement(elm)) {
       LocalAccessible* activeDescendant = GetAccessible(activeDescendantElm);
       if (activeDescendant) {
-        RefPtr<AccEvent> event =
-            new AccStateChangeEvent(activeDescendant, states::ACTIVE, true);
+        auto event = MakeRefPtr<AccStateChangeEvent>(activeDescendant,
+                                                     states::ACTIVE, true);
         FireDelayedEvent(event);
         if (aAccessible->IsActiveWidget()) {
           FocusMgr()->ActiveItemChanged(activeDescendant, false);
@@ -1071,11 +1074,6 @@ void DocAccessible::ARIAActiveDescendantChanged(LocalAccessible* aAccessible) {
   }
 }
 
-void DocAccessible::ContentAppended(nsIContent* aFirstNewContent,
-                                    const ContentAppendInfo&) {
-  MaybeHandleChangeToHiddenNameOrDescription(aFirstNewContent);
-}
-
 void DocAccessible::ElementStateChanged(dom::Document* aDocument,
                                         dom::Element* aElement,
                                         dom::ElementState aStateMask) {
@@ -1090,13 +1088,13 @@ void DocAccessible::ElementStateChanged(dom::Document* aDocument,
       !accessible->IsTextField()) {
     const bool isEditable =
         aElement->State().HasState(dom::ElementState::READWRITE);
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::EDITABLE, isEditable);
+    auto event = MakeRefPtr<AccStateChangeEvent>(accessible, states::EDITABLE,
+                                                 isEditable);
     FireDelayedEvent(event);
     if (accessible == this || aElement->IsHTMLElement(nsGkAtoms::article)) {
       // We want <article> to behave like a document in terms of readonly state.
-      event =
-          new AccStateChangeEvent(accessible, states::READONLY, !isEditable);
+      event = MakeRefPtr<AccStateChangeEvent>(accessible, states::READONLY,
+                                              !isEditable);
       FireDelayedEvent(event);
     }
 
@@ -1123,8 +1121,8 @@ void DocAccessible::ElementStateChanged(dom::Document* aDocument,
       AccSelChangeEvent::SelChangeType selChangeType =
           checked ? AccSelChangeEvent::eSelectionAdd
                   : AccSelChangeEvent::eSelectionRemove;
-      RefPtr<AccEvent> event =
-          new AccSelChangeEvent(widget, accessible, selChangeType);
+      auto event =
+          MakeRefPtr<AccSelChangeEvent>(widget, accessible, selChangeType);
       FireDelayedEvent(event);
 
       if (aElement->IsXULElement(nsGkAtoms::radio) && checked) {
@@ -1138,33 +1136,31 @@ void DocAccessible::ElementStateChanged(dom::Document* aDocument,
       return;
     }
 
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::CHECKED, checked);
+    auto event =
+        MakeRefPtr<AccStateChangeEvent>(accessible, states::CHECKED, checked);
     FireDelayedEvent(event);
   }
 
   if (aStateMask.HasState(dom::ElementState::INVALID)) {
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::INVALID);
+    auto event = MakeRefPtr<AccStateChangeEvent>(accessible, states::INVALID);
     FireDelayedEvent(event);
   }
 
   if (aStateMask.HasState(dom::ElementState::REQUIRED)) {
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::REQUIRED);
+    auto event = MakeRefPtr<AccStateChangeEvent>(accessible, states::REQUIRED);
     FireDelayedEvent(event);
   }
 
   if (aStateMask.HasState(dom::ElementState::MODAL)) {
     const bool isModal = aElement->State().HasState(dom::ElementState::MODAL);
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::MODAL, isModal);
+    auto event =
+        MakeRefPtr<AccStateChangeEvent>(accessible, states::MODAL, isModal);
     FireDelayedEvent(event);
   }
 
   if (aStateMask.HasState(dom::ElementState::VISITED)) {
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::TRAVERSED, true);
+    auto event =
+        MakeRefPtr<AccStateChangeEvent>(accessible, states::TRAVERSED, true);
     FireDelayedEvent(event);
   }
 
@@ -1172,13 +1168,12 @@ void DocAccessible::ElementStateChanged(dom::Document* aDocument,
   // notifications for other controls like checkboxes.
   if (aStateMask.HasState(dom::ElementState::DEFAULT) &&
       accessible->IsButton()) {
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::DEFAULT);
+    auto event = MakeRefPtr<AccStateChangeEvent>(accessible, states::DEFAULT);
     FireDelayedEvent(event);
   }
 
   if (aStateMask.HasState(dom::ElementState::INDETERMINATE)) {
-    RefPtr<AccEvent> event = new AccStateChangeEvent(accessible, states::MIXED);
+    auto event = MakeRefPtr<AccStateChangeEvent>(accessible, states::MIXED);
     FireDelayedEvent(event);
   }
 
@@ -1187,13 +1182,13 @@ void DocAccessible::ElementStateChanged(dom::Document* aDocument,
                                    nsGkAtoms::_true, eCaseMatters)) {
     // The DOM disabled state has changed and there is no aria-disabled="true"
     // taking precedence.
-    RefPtr<AccEvent> event =
-        new AccStateChangeEvent(accessible, states::UNAVAILABLE);
+    auto event =
+        MakeRefPtr<AccStateChangeEvent>(accessible, states::UNAVAILABLE);
     FireDelayedEvent(event);
-    event = new AccStateChangeEvent(accessible, states::ENABLED);
+    event = MakeRefPtr<AccStateChangeEvent>(accessible, states::ENABLED);
     FireDelayedEvent(event);
     // This likely changes focusability as well.
-    event = new AccStateChangeEvent(accessible, states::FOCUSABLE);
+    event = MakeRefPtr<AccStateChangeEvent>(accessible, states::FOCUSABLE);
     FireDelayedEvent(event);
   }
 
@@ -1204,35 +1199,11 @@ void DocAccessible::ElementStateChanged(dom::Document* aDocument,
     // which would change this association).
     QueueCacheUpdateForPopoverInvokers(aElement);
   }
-}
 
-void DocAccessible::CharacterDataWillChange(nsIContent* aContent,
-                                            const CharacterDataChangeInfo&) {}
-
-void DocAccessible::CharacterDataChanged(nsIContent* aContent,
-                                         const CharacterDataChangeInfo&) {
-  MaybeHandleChangeToHiddenNameOrDescription(aContent);
-}
-
-void DocAccessible::ContentInserted(nsIContent* aChild,
-                                    const ContentInsertInfo&) {
-  MaybeHandleChangeToHiddenNameOrDescription(aChild);
-}
-
-void DocAccessible::ContentWillBeRemoved(nsIContent* aChildNode,
-                                         const ContentRemoveInfo&) {
-#ifdef A11Y_LOG
-  if (logging::IsEnabled(logging::eTree)) {
-    logging::MsgBegin("TREE", "DOM content removed; doc: %p", this);
-    logging::Node("container node", aChildNode->GetParent());
-    logging::Node("content node", aChildNode);
-    logging::MsgEnd();
+  if (aStateMask.HasAtLeastOneOfStates(dom::ElementState::HEADING_LEVEL_BITS)) {
+    QueueCacheUpdate(accessible, CacheDomain::GroupInfo);
   }
-#endif
-  ContentRemoved(aChildNode);
 }
-
-void DocAccessible::ParentChainChanged(nsIContent* aContent) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // LocalAccessible
@@ -1723,7 +1694,7 @@ void DocAccessible::ProcessQueuedCacheUpdates(uint64_t aInitialDomains) {
   // DO NOT ADD CODE ABOVE THIS BLOCK: THIS CODE IS MEASURING TIMINGS.
 
   nsTArray<CacheData> data;
-  for (auto [acc, domain] : mQueuedCacheUpdatesArray) {
+  for (const auto& [acc, domain] : mQueuedCacheUpdatesArray) {
     if (acc && acc->IsInDocument() && !acc->IsDefunct()) {
       RefPtr<AccAttributes> fields = acc->BundleFieldsForCache(
           domain, CacheUpdateType::Update, aInitialDomains);
@@ -1812,15 +1783,14 @@ void DocAccessible::NotifyOfLoading(bool aIsReloading) {
     // Fire reload and state busy events on existing document accessible while
     // event from user input flag can be calculated properly and accessible
     // is alive. When new document gets loaded then this one is destroyed.
-    RefPtr<AccEvent> reloadEvent =
-        new AccEvent(nsIAccessibleEvent::EVENT_DOCUMENT_RELOAD, this);
+    auto reloadEvent =
+        MakeRefPtr<AccEvent>(nsIAccessibleEvent::EVENT_DOCUMENT_RELOAD, this);
     nsEventShell::FireEvent(reloadEvent);
   }
 
   // Fire state busy change event. Use delayed event since we don't care
   // actually if event isn't delivered when the document goes away like a shot.
-  RefPtr<AccEvent> stateEvent =
-      new AccStateChangeEvent(this, states::BUSY, true);
+  auto stateEvent = MakeRefPtr<AccStateChangeEvent>(this, states::BUSY, true);
   FireDelayedEvent(stateEvent);
 }
 
@@ -1887,7 +1857,7 @@ void DocAccessible::DoInitialUpdate() {
     // That's okay.
     MOZ_ASSERT(parent || mDocumentNode->IsStaticDocument());
     if (parent) {
-      RefPtr<AccReorderEvent> reorderEvent = new AccReorderEvent(LocalParent());
+      auto reorderEvent = MakeRefPtr<AccReorderEvent>(LocalParent());
       ParentDocument()->FireDelayedEvent(reorderEvent);
     }
   }
@@ -1902,8 +1872,7 @@ void DocAccessible::DoInitialUpdate() {
       // Send an initial update for this document and its attributes. Each acc
       // contained in this doc will have its initial update sent in
       // `InsertIntoIpcTree`.
-      SendCache(nsAccessibilityService::GetActiveCacheDomains(),
-                CacheUpdateType::Initial);
+      SendCache(EffectiveCacheDomains(), CacheUpdateType::Initial);
 
       for (auto idx = 0U; idx < mChildren.Length(); idx++) {
         ipcDoc->InsertIntoIpcTree(mChildren.ElementAt(idx), true);
@@ -1929,15 +1898,14 @@ void DocAccessible::ProcessLoad() {
 
   // Fire complete/load stopped if the load event type is given.
   if (mLoadEventType) {
-    RefPtr<AccEvent> loadEvent = new AccEvent(mLoadEventType, this);
+    auto loadEvent = MakeRefPtr<AccEvent>(mLoadEventType, this);
     FireDelayedEvent(loadEvent);
 
     mLoadEventType = 0;
   }
 
   // Fire busy state change event.
-  RefPtr<AccEvent> stateEvent =
-      new AccStateChangeEvent(this, states::BUSY, false);
+  auto stateEvent = MakeRefPtr<AccStateChangeEvent>(this, states::BUSY, false);
   FireDelayedEvent(stateEvent);
 }
 
@@ -2404,8 +2372,8 @@ void DocAccessible::MaybeFireEventsForChangedPopover(LocalAccessible* aAcc) {
   // Additionally iterate over any commandfor invokers.
   invokers.AppendIter(new RelatedAccIterator(mDoc, el, nsGkAtoms::commandfor));
   while (Accessible* invoker = invokers.LocalNext()) {
-    RefPtr<AccEvent> expandedChangeEvent =
-        new AccStateChangeEvent(invoker->AsLocal(), states::EXPANDED);
+    auto expandedChangeEvent =
+        MakeRefPtr<AccStateChangeEvent>(invoker->AsLocal(), states::EXPANDED);
     FireDelayedEvent(expandedChangeEvent);
   }
 
@@ -3161,6 +3129,14 @@ void DocAccessible::ShutdownChildrenInSubtree(LocalAccessible* aAccessible) {
 }
 
 bool DocAccessible::IsLoadEventTarget() const {
+  if (XRE_IsParentProcess() && !ParentDocument()) {
+    // This document is definitely detached from the tree. We should not fire
+    // events from detached documents, as this might confuse clients. Note that
+    // in the content process, the parent document might be in a different
+    // process, so we can't be sure it's detached in that case. Thus, we
+    // restrict this check to the parent process where we can be certain.
+    return false;
+  }
   return mDocumentNode->GetBrowsingContext()->IsContent();
 }
 
@@ -3193,9 +3169,9 @@ void DocAccessible::DispatchScrollingEvent(nsINode* aTarget,
   LayoutDeviceIntRect scrollRangeDP =
       LayoutDeviceRect::FromAppUnitsToNearest(scrollRange, appUnitsPerDevPixel);
 
-  RefPtr<AccEvent> event =
-      new AccScrollingEvent(aEventType, acc, scrollPointDP.x, scrollPointDP.y,
-                            scrollRangeDP.width, scrollRangeDP.height);
+  auto event = MakeRefPtr<AccScrollingEvent>(
+      aEventType, acc, scrollPointDP.x, scrollPointDP.y, scrollRangeDP.width,
+      scrollRangeDP.height);
   nsEventShell::FireEvent(event);
 }
 

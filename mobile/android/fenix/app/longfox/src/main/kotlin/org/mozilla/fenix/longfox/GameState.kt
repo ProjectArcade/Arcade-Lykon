@@ -158,6 +158,29 @@ data class GameState(
     }
 
     /**
+     * Handles a swipe gesture vector by picking the dominant axis. Swipes shorter than
+     * minDistance along both axes are ignored, as are swipes that would reverse direction
+     * (the fox cannot reverse).
+     */
+    fun onSwipeGesture(dx: Float, dy: Float, minDistance: Float): GameState {
+        val absDx = kotlin.math.abs(dx)
+        val absDy = kotlin.math.abs(dy)
+        if (maxOf(absDx, absDy) < minDistance) return this
+        val swipeDirection = if (absDx > absDy) {
+            if (dx > 0) RIGHT else LEFT
+        } else {
+            if (dy > 0) DOWN else UP
+        }
+        val canChange = when (swipeDirection) {
+            UP -> direction != DOWN
+            DOWN -> direction != UP
+            LEFT -> direction != RIGHT
+            RIGHT -> direction != LEFT
+        }
+        return if (canChange) copy(direction = swipeDirection) else this
+    }
+
+    /**
      * Food can spawn anywhere except right next to the walls, because that's quite annoying
      */
     private fun randomGridPoint(): GridPoint = GridPoint(

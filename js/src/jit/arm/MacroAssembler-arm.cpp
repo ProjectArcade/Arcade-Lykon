@@ -9,7 +9,6 @@
 #include "mozilla/MathAlgorithms.h"
 #include "mozilla/Maybe.h"
 
-#include "jit/arm/Simulator-arm.h"
 #include "jit/AtomicOp.h"
 #include "jit/AtomicOperations.h"
 #include "jit/Bailouts.h"
@@ -1727,8 +1726,8 @@ void MacroAssemblerARMCompat::movePtr(ImmPtr imm, Register dest) {
 
 void MacroAssemblerARMCompat::movePtr(wasm::SymbolicAddress imm,
                                       Register dest) {
-  append(wasm::SymbolicAccess(CodeOffset(currentOffset()), imm));
-  ma_movPatchable(Imm32(-1), dest, Always);
+  BufferOffset offset = ma_movPatchable(Imm32(-1), dest, Always);
+  append(wasm::SymbolicAccess(CodeOffset(offset.getOffset()), imm));
 }
 
 FaultingCodeOffset MacroAssemblerARMCompat::load8ZeroExtend(

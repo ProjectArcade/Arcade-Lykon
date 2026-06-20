@@ -627,6 +627,12 @@ void RunTestsContent(SandboxTestingChild* child) {
     return fd;
   });
 
+  child->ErrnoValueTest("symlink"_ns, EPERM,
+                        [] { return symlink("something", "/tmp/testlink"); });
+  child->ErrnoValueTest("symlinkat"_ns, EPERM, [] {
+    return symlinkat("something", AT_FDCWD, "/tmp/testlink");
+  });
+
 #  endif  // XP_LINUX
 
 #  ifdef XP_MACOSX
@@ -897,7 +903,7 @@ void RunTestsRDD(SandboxTestingChild* child) {
   });
 
 #  elif XP_MACOSX
-  RunMacTestLaunchProcess(child);
+  RunMacTestLaunchProcess(child, EPERM);
   RunMacTestWindowServer(child);
   RunMacTestAudioAPI(child, true);
 #  endif

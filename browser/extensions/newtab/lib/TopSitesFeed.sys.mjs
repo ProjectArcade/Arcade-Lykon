@@ -98,7 +98,14 @@ const DEFAULT_SOV_SLOT_COUNT = 3;
 
 // Search experiment stuff
 const FILTER_DEFAULT_SEARCH_PREF = "improvesearch.noDefaultSearchTile";
-const SEARCH_FILTERS = ["google", "search.yahoo", "yahoo", "ask", "duckduckgo"];
+const SEARCH_FILTERS = [
+  "google",
+  "search.yahoo",
+  "yahoo",
+  "bing",
+  "ask",
+  "duckduckgo",
+];
 
 const REMOTE_SETTING_DEFAULTS_PREF = "browser.topsites.useRemoteSetting";
 const DEFAULT_SITES_OVERRIDE_PREF =
@@ -322,9 +329,7 @@ class TopSitesTelemetry {
         for (let i = 1; i <= this.sponsoredTilesConfigured; i++) {
           if (!tilePositionsAssigned.includes(i)) {
             let tileProperty = tilesMissingPosition.shift();
-            if (tileProperty && this.allSponsoredTiles[tileProperty]) {
-              this.allSponsoredTiles[tileProperty].display_position = i;
-            }
+            this.allSponsoredTiles[tileProperty].display_position = i;
           }
         }
       }
@@ -411,9 +416,14 @@ export class ContileIntegration {
    *   An array of the tile objects
    */
   _filterBlockedSponsors(tiles) {
-    const blocklist = JSON.parse(
-      Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "[]")
-    );
+    let blocklist;
+    try {
+      blocklist = JSON.parse(
+        Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "[]")
+      );
+    } catch (e) {
+      blocklist = [];
+    }
     return tiles.filter(
       tile => !blocklist.includes(lazy.NewTabUtils.shortURL(tile))
     );
@@ -1083,9 +1093,14 @@ export class TopSitesFeed {
     this._useRemoteSetting = true;
     let remoteSettingData = await this._getRemoteConfig();
 
-    const sponsoredBlocklist = JSON.parse(
-      Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "[]")
-    );
+    let sponsoredBlocklist;
+    try {
+      sponsoredBlocklist = JSON.parse(
+        Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "[]")
+      );
+    } catch (e) {
+      sponsoredBlocklist = [];
+    }
 
     for (let siteData of remoteSettingData) {
       let hostname = lazy.NewTabUtils.shortURL(siteData);

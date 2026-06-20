@@ -439,12 +439,18 @@ static std::shared_ptr<EglDisplay> GetAndInitDisplayForAccelANGLE(
 
 // -
 
-#if defined(XP_UNIX)
+#if defined(XP_DARWIN)
+#  define EGL_LIB "libEGL.dylib"
+#  define GLES2_LIB "libGLESv2.dylib"
+#elif defined(XP_UNIX)
+#  define EGL_LIB "libEGL.so"
+#  define EGL_LIB2 "libEGL.so.1"
 #  define GLES2_LIB "libGLESv2.so"
 #  define GLES2_LIB2 "libGLESv2.so.2"
 #  define GL_LIB "libGL.so"
 #  define GL_LIB2 "libGL.so.1"
 #elif defined(XP_WIN)
+#  define EGL_LIB "libEGL.dll"
 #  define GLES2_LIB "libGLESv2.dll"
 #else
 #  error "Platform not recognized"
@@ -452,7 +458,17 @@ static std::shared_ptr<EglDisplay> GetAndInitDisplayForAccelANGLE(
 
 Maybe<SymbolLoader> GLLibraryEGL::GetSymbolLoader() const {
   auto ret = SymbolLoader(mSymbols.fGetProcAddress);
-  ret.mLib = mGLLibrary;
+  // For ANGLE, use ANGLE's eglGetProcAddress as the only source for GL entry
+  // points, avoiding raw library symbol lookups. In particular, dlsym on macOS
+  // may resolve missing symbols from another GL implementation, such as the
+  // system libGL.dylib, resulting in crashes.
+  //
+  // For non-ANGLE, we must prefer to use the library lookup. Some older EGL
+  // implementations do not reliably return core GL entry points from
+  // eglGetProcAddress. See bug 1420745.
+  if (!IsANGLE()) {
+    ret.mLib = mGLLibrary;
+  }
   return Some(ret);
 }
 
@@ -512,11 +528,12 @@ bool GLLibraryEGL::Init(nsACString* const out_failureId) {
 #  endif
 
   if (!mEGLLibrary) {
-    mEGLLibrary = PR_LoadLibrary("libEGL.so");
+    mEGLLibrary = PR_LoadLibrary(EGL_LIB);
   }
-#  if defined(XP_UNIX)
+
+#  ifdef EGL_LIB2
   if (!mEGLLibrary) {
-    mEGLLibrary = PR_LoadLibrary("libEGL.so.1");
+    mEGLLibrary = PR_LoadLibrary(EGL_LIB2);
   }
 #  endif
 
@@ -639,14 +656,17 @@ bool GLLibraryEGL::Init(nsACString* const out_failureId) {
   // Client exts are ready. (But not display exts!)
 
   if (mIsANGLE) {
-    MOZ_ASSERT(IsExtensionSupported(EGLLibExtension::ANGLE_platform_angle_d3d));
     const SymLoadStruct angleSymbols[] = {SYMBOL(GetPlatformDisplay),
                                           END_OF_SYMBOLS};
     if (!fnLoadSymbols(angleSymbols)) {
       gfxCriticalError() << "Failed to load ANGLE symbols!";
       return false;
     }
+
+#ifdef XP_WIN
     MOZ_ASSERT(IsExtensionSupported(EGLLibExtension::ANGLE_platform_angle_d3d));
+#endif
+
     const SymLoadStruct createDeviceSymbols[] = {
         SYMBOL(CreateDeviceANGLE), SYMBOL(ReleaseDeviceANGLE), END_OF_SYMBOLS};
     if (!fnLoadSymbols(createDeviceSymbols)) {
@@ -827,8 +847,7 @@ EglDisplay::EglDisplay(const PrivateUseOnly&, GLLibraryEGL& lib,
     : mLib(&lib), mDisplay(disp), mIsWARP(isWarp) {
   const bool shouldDumpExts = GLContext::ShouldDumpExts();
 
-  auto rawExtString =
-      (const char*)mLib->fQueryString(mDisplay, LOCAL_EGL_EXTENSIONS);
+  auto rawExtString = mLib->fQueryString(mDisplay, LOCAL_EGL_EXTENSIONS);
   if (!rawExtString) {
     NS_WARNING("Failed to query EGL display extensions!.");
     rawExtString = "";
@@ -843,8 +862,7 @@ EglDisplay::EglDisplay(const PrivateUseOnly&, GLLibraryEGL& lib,
   }
 
   if (IsExtensionSupported(EGLExtension::KHR_surfaceless_context)) {
-    const auto vendor =
-        (const char*)mLib->fQueryString(mDisplay, LOCAL_EGL_VENDOR);
+    const auto vendor = mLib->fQueryString(mDisplay, LOCAL_EGL_VENDOR);
 
     // Bug 1464610: Mali T720 (Amazon Fire 8 HD) claims to support this
     // extension, but if you actually eglMakeCurrent() with EGL_NO_SURFACE, it
@@ -997,7 +1015,7 @@ void GLLibraryEGL::InitLibExtensions() {
   // Ideally we would only blocklist this there, but for now we don't need the
   // client extension list on ANDROID (we mostly need it on ANGLE), and we'd
   // rather not crash.
-  rawExtString = (const char*)fQueryString(nullptr, LOCAL_EGL_EXTENSIONS);
+  rawExtString = fQueryString(nullptr, LOCAL_EGL_EXTENSIONS);
 #endif
 
   if (!rawExtString) {

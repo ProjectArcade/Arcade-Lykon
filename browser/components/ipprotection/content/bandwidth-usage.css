@@ -15,12 +15,6 @@
   gap: var(--space-medium);
 }
 
-#bandwidth-header {
-  margin: 0;
-  font-weight: var(--font-weight-heading);
-  font-size: var(--font-size-heading-medium);
-}
-
 #usage-help-text {
   color: var(--text-color-deemphasized);
 }
@@ -55,21 +49,49 @@
   }
 }
 
+#progress-description {
+  margin-block-start: var(--space-small);
+}
+
+#progress-description [data-l10n-name="usage"] {
+  font-weight: var(--font-weight-bold);
+}
+
 #progress-container {
   position: relative;
+}
 
-  & > #min-progress {
+#min-progress {
+  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
+  width: var(--progress-height);
+  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
+  height: var(--progress-height);
+  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, stylelint-plugin-mozilla/no-non-semantic-token-usage */
+  background-color: var(--progress-color);
+  border-radius: var(--border-radius-circle);
+  position: absolute;
+  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, stylelint-plugin-mozilla/use-size-tokens */
+  top: var(--progress-border-width);
+  /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, stylelint-plugin-mozilla/use-size-tokens */
+  inset-inline-start: var(--progress-border-width);
+}
+
+@media (forced-colors) {
+  #progress-bar {
     /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
-    width: var(--progress-height);
+    background-color: SelectedItemText;
+    border-color: var(--border-color);
+
+    &::-moz-progress-bar {
+      /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
+      background-color: SelectedItem;
+      border-color: var(--border-color);
+      box-shadow: none;
+    }
+  }
+
+  #min-progress {
     /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
-    height: var(--progress-height);
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, stylelint-plugin-mozilla/no-non-semantic-token-usage */
-    background-color: var(--progress-color);
-    border-radius: var(--border-radius-circle);
-    position: absolute;
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, stylelint-plugin-mozilla/use-size-tokens */
-    top: var(--progress-border-width);
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens, stylelint-plugin-mozilla/use-size-tokens */
-    left: var(--progress-border-width);
+    background-color: SelectedItem;
   }
 }

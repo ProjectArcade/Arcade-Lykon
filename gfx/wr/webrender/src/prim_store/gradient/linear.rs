@@ -9,7 +9,7 @@
 //! Linear gradients are rendered via cached render tasks and composited with the image brush.
 
 use euclid::approxeq::ApproxEq;
-use euclid::{point2, vec2};
+use euclid::point2;
 use api::{ExtendMode, GradientStop};
 use api::units::*;
 use crate::pattern::gradient::linear_gradient_pattern;
@@ -18,7 +18,6 @@ use crate::scene_building::IsVisible;
 use crate::intern::{Internable, InternDebug, Handle as InternHandle};
 use crate::internal_types::LayoutPrimitiveInfo;
 use crate::image_tiling::simplify_repeated_primitive;
-use crate::prim_store::BrushSegment;
 use crate::prim_store::{PrimitiveKind, PrimitiveOpacity};
 use crate::prim_store::{PrimKeyCommonData, PrimTemplateCommonData, PrimitiveStore};
 use crate::prim_store::{NinePatchDescriptor, PointKey, SizeKey, InternablePrimitive};
@@ -26,8 +25,6 @@ use crate::segment::EdgeMask;
 use super::{stops_and_min_alpha, GradientStopKey, apply_gradient_local_clip};
 use std::ops::{Deref, DerefMut};
 use std::mem::swap;
-
-pub const MAX_CACHED_SIZE: f32 = 1024.0;
 
 /// Identifying key for a linear gradient.
 #[cfg_attr(feature = "capture", derive(Serialize))]
@@ -38,7 +35,9 @@ pub struct LinearGradientKey {
     pub extend_mode: ExtendMode,
     pub start_point: PointKey,
     pub end_point: PointKey,
-    pub stretch_size: SizeKey,
+    /// Per-axis tile size encoded as a fraction of `common.prim_size`. The
+    /// runtime `stretch_size` is `stretch_ratio * common.prim_size`.
+    pub stretch_ratio: SizeKey,
     pub tile_spacing: SizeKey,
     pub stops: Vec<GradientStopKey>,
     pub reverse_stops: bool,
@@ -56,7 +55,7 @@ impl LinearGradientKey {
             extend_mode: linear_grad.extend_mode,
             start_point: linear_grad.start_point,
             end_point: linear_grad.end_point,
-            stretch_size: linear_grad.stretch_size,
+            stretch_ratio: linear_grad.stretch_ratio,
             tile_spacing: linear_grad.tile_spacing,
             stops: linear_grad.stops,
             reverse_stops: linear_grad.reverse_stops,
@@ -76,13 +75,13 @@ pub struct LinearGradientTemplate {
     pub extend_mode: ExtendMode,
     pub start_point: LayoutPoint,
     pub end_point: LayoutPoint,
-    pub task_size: DeviceIntSize,
-    pub scale: DeviceVector2D,
-    pub stretch_size: LayoutSize,
+    /// Per-axis fraction of `common.prim_size` covered by one tile of the
+    /// gradient pattern. Multiply by `common.prim_size` at use to recover the
+    /// absolute stretch_size.
+    pub stretch_ratio: LayoutSize,
     pub tile_spacing: LayoutSize,
     pub stops_opacity: PrimitiveOpacity,
     pub stops: Vec<GradientStop>,
-    pub brush_segments: Vec<BrushSegment>,
     pub border_nine_patch: Option<Box<NinePatchDescriptor>>,
     pub reverse_stops: bool,
 }
@@ -130,8 +129,14 @@ impl DerefMut for LinearGradientTemplate {
 
 /// Perform a few optimizations to the gradient that are relevant to scene building.
 ///
-/// Returns true if the gradient was decomposed into fast-path primitives, indicating
-/// that we shouldn't emit a regular gradient primitive after this returns.
+/// Mutates `prim_rect`, `tile_size`, `start`, `end` to bake in the simplifications
+/// (repeated-tile collapse, equivalent-to-stretching on either axis, clip-induced
+/// offsets). Decomposition into per-segment quads is no longer done here -- the
+/// caller emits a single `LinearGradient` prim and prepare-time runs
+/// [`decompose_axis_aligned_gradient`] against the snapped prim_rect when the
+/// gradient is eligible. Doing the decomposition at frame-build keeps adjacent
+/// segments phase-aligned with the snapped outer prim, even when the frame-time
+/// snap pass nudges the outer rect.
 pub fn optimize_linear_gradient(
     prim_rect: &mut LayoutRect,
     tile_size: &mut LayoutSize,
@@ -139,33 +144,23 @@ pub fn optimize_linear_gradient(
     clip_rect: &LayoutRect,
     start: &mut LayoutPoint,
     end: &mut LayoutPoint,
-    extend_mode: ExtendMode,
-    stops: &mut [GradientStopKey],
-    enable_dithering: bool,
-    // Callback called for each fast-path segment (rect, start end, stops).
-    callback: &mut dyn FnMut(&LayoutRect, LayoutPoint, LayoutPoint, &[GradientStopKey], EdgeMask)
-) -> bool {
-    // First sanitize the gradient parameters. See if we can remove repetitions,
-    // tighten the primitive bounds, etc.
-
+) {
     simplify_repeated_primitive(&tile_size, &mut tile_spacing, prim_rect);
 
     let vertical = start.x.approx_eq(&end.x);
     let horizontal = start.y.approx_eq(&end.y);
 
-    let mut horizontally_tiled = prim_rect.width() > tile_size.width;
-    let mut vertically_tiled = prim_rect.height() > tile_size.height;
+    let horizontally_tiled = prim_rect.width() > tile_size.width;
+    let vertically_tiled = prim_rect.height() > tile_size.height;
 
     // Check whether the tiling is equivalent to stretching on either axis.
     // Stretching the gradient is more efficient than repeating it.
     if vertically_tiled && horizontal && tile_spacing.height == 0.0 {
         tile_size.height = prim_rect.height();
-        vertically_tiled = false;
     }
 
     if horizontally_tiled && vertical && tile_spacing.width == 0.0 {
         tile_size.width = prim_rect.width();
-        horizontally_tiled = false;
     }
 
     let offset = apply_gradient_local_clip(
@@ -182,14 +177,27 @@ pub fn optimize_linear_gradient(
 
     *start += offset;
     *end += offset;
+}
 
-    // Next, in the case of axis-aligned gradients, see if it is worth
-    // decomposing the gradient into multiple gradients with only two
-    // gradient stops per segment to get a faster shader.
-
+/// Whether a linear gradient is eligible for the fast-path two-stop-per-segment
+/// decomposition at prepare time. Inputs are the values produced by
+/// `optimize_linear_gradient` (i.e. already simplified and clip-adjusted).
+pub fn linear_gradient_decomposes(
+    prim_rect: &LayoutRect,
+    tile_size: LayoutSize,
+    tile_spacing: LayoutSize,
+    start: LayoutPoint,
+    end: LayoutPoint,
+    extend_mode: ExtendMode,
+    stops: &[GradientStop],
+    enable_dithering: bool,
+) -> bool {
     if extend_mode != ExtendMode::Clamp || stops.is_empty() {
         return false;
     }
+
+    let vertical = start.x.approx_eq(&end.x);
+    let horizontal = start.y.approx_eq(&end.y);
 
     if !vertical && !horizontal {
         return false;
@@ -199,72 +207,102 @@ pub fn optimize_linear_gradient(
         return false;
     }
 
-    if !tile_spacing.is_empty() || vertically_tiled || horizontally_tiled {
+    if !tile_spacing.is_empty() {
         return false;
     }
 
-    // If the gradient is small, no need to bother with decomposing it.
+    let horizontally_tiled = prim_rect.width() > tile_size.width;
+    let vertically_tiled = prim_rect.height() > tile_size.height;
+    if vertically_tiled || horizontally_tiled {
+        return false;
+    }
+
     if !enable_dithering &&
         ((horizontal && tile_size.width < 256.0)
         || (vertical && tile_size.height < 256.0)) {
         return false;
     }
 
-    // Flip x and y if need be so that we only deal with the horizontal case.
+    true
+}
 
-    // From now on don't return false. We are going modifying the caller's
-    // variables and not bother to restore them. If the control flow changes,
-    // Make sure to to restore &mut parameters to sensible values before
-    // returning false.
+/// Decompose an axis-aligned linear gradient into a sequence of two-stop
+/// segments that tile end-to-end across `prim_rect`. Each callback invocation
+/// is one segment, ready to be rendered as its own quad via the fast-path
+/// gradient shader. Run at frame-build (against the snapped prim_rect) so
+/// adjacent segments share a snapped boundary and tile without phase drift.
+///
+/// Caller must have verified eligibility via [`linear_gradient_decomposes`].
+pub fn decompose_axis_aligned_gradient(
+    prim_rect: &LayoutRect,
+    tile_size: LayoutSize,
+    start: LayoutPoint,
+    end: LayoutPoint,
+    stops: &[GradientStop],
+    clip_rect: &LayoutRect,
+    mut callback: impl FnMut(&LayoutRect, LayoutPoint, LayoutPoint, [GradientStop; 2], EdgeMask),
+) {
+    debug_assert!(!stops.is_empty());
 
+    let vertical = start.x.approx_eq(&end.x);
+
+    // Flip x/y when the gradient is vertical so the remaining math treats it
+    // as horizontal; un-flip per-segment outputs at the end.
     let adjust_rect = &mut |rect: &mut LayoutRect| {
         if vertical {
             swap(&mut rect.min.x, &mut rect.min.y);
             swap(&mut rect.max.x, &mut rect.max.y);
         }
     };
-
     let adjust_size = &mut |size: &mut LayoutSize| {
         if vertical { swap(&mut size.width, &mut size.height); }
     };
-
     let adjust_point = &mut |p: &mut LayoutPoint| {
         if vertical { swap(&mut p.x, &mut p.y); }
     };
 
     let clip_rect = match clip_rect.intersection(prim_rect) {
         Some(clip) => clip,
-        None => {
-            return false;
-        }
+        None => return,
     };
 
-    adjust_rect(prim_rect);
-    adjust_point(start);
-    adjust_point(end);
-    adjust_size(tile_size);
+    let mut prim_rect = *prim_rect;
+    let mut start = start;
+    let mut end = end;
+    let mut tile_size = tile_size;
+
+    adjust_rect(&mut prim_rect);
+    adjust_point(&mut start);
+    adjust_point(&mut end);
+    adjust_size(&mut tile_size);
+
+    // `clip_rect` stays in the original (un-swapped) space — segment_rect
+    // gets `adjust_rect` applied twice (once implicitly via the prim_rect
+    // copy, once explicitly after computing per-segment extent) and lands
+    // back in original space before this intersection.
 
     let length = (end.x - start.x).abs();
 
-    // Decompose the gradient into simple segments. This lets us:
-    // - separate opaque from semi-transparent segments,
-    // - compress long segments into small render tasks,
-    // - make sure hard stops stay so even if the primitive is large.
-
+    // Match the pre-refactor optimiser: when the gradient line points in
+    // decreasing-x (post-axis-swap), swap start/end and walk the stop list
+    // in reverse, so the loop always processes stops in increasing-x
+    // order. The pre-refactor code did this via `stops.reverse()` in
+    // place; we can't mutate the template's stops here, so use a reversed
+    // iterator and swap which end of the slice supplies the fake-stop
+    // colour accordingly.
     let reverse_stops = start.x > end.x;
-
-    // Handle reverse stops so we can assume stops are arranged in increasing x.
     if reverse_stops {
-        stops.reverse();
-        swap(start, end);
+        swap(&mut start, &mut end);
     }
 
-    // Use fake gradient stop to emulate the potential constant color sections
-    // before and after the gradient endpoints.
-    let mut prev = *stops.first().unwrap();
-    let mut last = *stops.last().unwrap();
+    let (first_stop, last_stop) = if reverse_stops {
+        (*stops.last().unwrap(), *stops.first().unwrap())
+    } else {
+        (*stops.first().unwrap(), *stops.last().unwrap())
+    };
 
-    // Set the offsets of the fake stops to position them at the edges of the primitive.
+    let mut prev = first_stop;
+    let mut last = last_stop;
     prev.offset = -start.x / length;
     last.offset = (tile_size.width - start.x) / length;
     if reverse_stops {
@@ -276,31 +314,41 @@ pub fn optimize_linear_gradient(
         (
             EdgeMask::LEFT | EdgeMask::RIGHT,
             EdgeMask::TOP,
-            EdgeMask::BOTTOM
+            EdgeMask::BOTTOM,
         )
     } else {
         (
             EdgeMask::TOP | EdgeMask::BOTTOM,
             EdgeMask::LEFT,
-            EdgeMask::RIGHT
+            EdgeMask::RIGHT,
         )
     };
 
     let mut is_first = true;
     let last_offset = last.offset;
-    for stop in stops.iter().chain((&[last]).iter()) {
+
+    // Iterate stops in increasing-x order. When reverse_stops is set, walk the
+    // backing slice in reverse instead of mutating it.
+    let stops_iter: Box<dyn Iterator<Item = &GradientStop>> = if reverse_stops {
+        Box::new(stops.iter().rev())
+    } else {
+        Box::new(stops.iter())
+    };
+
+    for stop in stops_iter.chain(std::iter::once(&last)) {
         let prev_stop = prev;
         prev = *stop;
 
-        if prev_stop.color.a == 0 && stop.color.a == 0 {
+        if prev_stop.color.a == 0.0 && stop.color.a == 0.0 {
             continue;
         }
-
 
         let prev_offset = if reverse_stops { 1.0 - prev_stop.offset } else { prev_stop.offset };
         let offset = if reverse_stops { 1.0 - stop.offset } else { stop.offset };
 
-        // In layout space, relative to the primitive.
+        // Segment_start and segment_end are in the gradient's pre-flip space
+        // (relative to the prim's origin); the adjust_* helpers below restore
+        // axis orientation when emitting.
         let segment_start = start.x + prev_offset * length;
         let segment_end = start.x + offset * length;
         let segment_length = segment_end - segment_start;
@@ -309,29 +357,25 @@ pub fn optimize_linear_gradient(
             continue;
         }
 
-        let mut segment_rect = *prim_rect;
+        let mut segment_rect = prim_rect;
         segment_rect.min.x += segment_start;
         segment_rect.max.x = segment_rect.min.x + segment_length;
 
-        let mut start = point2(0.0, 0.0);
-        let mut end = point2(segment_length, 0.0);
+        let mut seg_start = point2(0.0, 0.0);
+        let mut seg_end = point2(segment_length, 0.0);
 
-        adjust_point(&mut start);
-        adjust_point(&mut end);
+        adjust_point(&mut seg_start);
+        adjust_point(&mut seg_end);
         adjust_rect(&mut segment_rect);
 
         let origin_before_clip = segment_rect.min;
         segment_rect = match segment_rect.intersection(&clip_rect) {
             Some(rect) => rect,
-            None => {
-                continue;
-            }
+            None => continue,
         };
-        let offset = segment_rect.min - origin_before_clip;
-
-        // Account for the clipping since start and end are relative to the origin.
-        start -= offset;
-        end -= offset;
+        let clip_offset = segment_rect.min - origin_before_clip;
+        seg_start -= clip_offset;
+        seg_end -= clip_offset;
 
         let mut edge_flags = side_edges;
         if is_first {
@@ -344,17 +388,15 @@ pub fn optimize_linear_gradient(
 
         callback(
             &segment_rect,
-            start,
-            end,
-            &[
-                GradientStopKey { offset: 0.0, .. prev_stop },
-                GradientStopKey { offset: 1.0, .. *stop },
+            seg_start,
+            seg_end,
+            [
+                GradientStop { offset: 0.0, color: prev_stop.color },
+                GradientStop { offset: 1.0, color: stop.color },
             ],
             edge_flags,
         );
     }
-
-    true
 }
 
 impl From<LinearGradientKey> for LinearGradientTemplate {
@@ -364,12 +406,6 @@ impl From<LinearGradientKey> for LinearGradientTemplate {
 
         let (stops, min_alpha) = stops_and_min_alpha(&item.stops);
 
-        let mut brush_segments = Vec::new();
-
-        if let Some(ref nine_patch) = item.nine_patch {
-            brush_segments = nine_patch.create_brush_segments(common.prim_size);
-        }
-
         // Save opacity of the stops for use in
         // selecting which pass this gradient
         // should be drawn in.
@@ -378,52 +414,17 @@ impl From<LinearGradientKey> for LinearGradientTemplate {
         let start_point = LayoutPoint::new(item.start_point.x, item.start_point.y);
         let end_point = LayoutPoint::new(item.end_point.x, item.end_point.y);
         let tile_spacing: LayoutSize = item.tile_spacing.into();
-        let stretch_size: LayoutSize = item.stretch_size.into();
-        let mut task_size: DeviceSize = stretch_size.cast_unit();
-
-        let horizontal = !item.enable_dithering &&
-            start_point.y.approx_eq(&end_point.y);
-        let vertical = !item.enable_dithering &&
-            start_point.x.approx_eq(&end_point.x);
-
-        if horizontal {
-            // Completely horizontal, we can stretch the gradient vertically.
-            task_size.height = 1.0;
-        }
-
-        if vertical {
-            // Completely vertical, we can stretch the gradient horizontally.
-            task_size.width = 1.0;
-        }
-
-        // Avoid rendering enormous gradients. Linear gradients are mostly made of soft transitions,
-        // so it is unlikely that rendering at a higher resolution than 1024 would produce noticeable
-        // differences, especially with 8 bits per channel.
-
-        let mut scale = vec2(1.0, 1.0);
-
-        if task_size.width > MAX_CACHED_SIZE {
-            scale.x = task_size.width / MAX_CACHED_SIZE;
-            task_size.width = MAX_CACHED_SIZE;
-        }
-
-        if task_size.height > MAX_CACHED_SIZE {
-            scale.y = task_size.height / MAX_CACHED_SIZE;
-            task_size.height = MAX_CACHED_SIZE;
-        }
+        let stretch_ratio: LayoutSize = item.stretch_ratio.into();
 
         LinearGradientTemplate {
             common,
             extend_mode: item.extend_mode,
             start_point,
             end_point,
-            task_size: task_size.ceil().to_i32(),
-            scale,
-            stretch_size,
+            stretch_ratio,
             tile_spacing,
             stops_opacity,
             stops,
-            brush_segments,
             border_nine_patch: item.nine_patch,
             reverse_stops: item.reverse_stops,
         }
@@ -439,7 +440,9 @@ pub struct LinearGradient {
     pub extend_mode: ExtendMode,
     pub start_point: PointKey,
     pub end_point: PointKey,
-    pub stretch_size: SizeKey,
+    /// Per-axis tile size encoded as a fraction of the prim's size. See
+    /// [`LinearGradientKey::stretch_ratio`].
+    pub stretch_ratio: SizeKey,
     pub tile_spacing: SizeKey,
     pub stops: Vec<GradientStopKey>,
     pub reverse_stops: bool,

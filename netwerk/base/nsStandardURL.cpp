@@ -382,6 +382,7 @@ void nsStandardURL::ShutdownGlobalObjects() {
 
 void nsStandardURL::Clear() {
   mSpec.Truncate();
+  ResetSpecHash();
 
   mPort = -1;
 
@@ -787,6 +788,7 @@ nsresult nsStandardURL::BuildNormalizedSpec(const char* spec,
     CoalescePath(buf + mDirectory.mPos);
   }
   mSpec.Truncate(strlen(buf));
+  ResetSpecHash();
   NS_ASSERTION(mSpec.Length() <= approxLen,
                "We've overflowed the mSpec buffer!");
   MOZ_ASSERT(mSpec.Length() <= StaticPrefs::network_standard_url_max_length(),
@@ -1145,6 +1147,8 @@ NS_INTERFACE_MAP_BEGIN(nsStandardURL)
   NS_INTERFACE_MAP_ENTRY(nsISerializable)
   NS_IMPL_QUERY_CLASSINFO(nsStandardURL)
   NS_INTERFACE_MAP_ENTRY(nsISensitiveInfoHiddenURI)
+  NS_INTERFACE_MAP_ENTRY(nsIIPCSerializableURI)
+  NS_INTERFACE_MAP_ENTRY(nsIURIWithSizeOf)
   // see nsStandardURL::Equals
   if (aIID.Equals(kThisImplCID)) {
     foundInterface = static_cast<nsIURI*>(this);
@@ -1163,6 +1167,8 @@ nsStandardURL::GetSpec(nsACString& result) {
   result = mSpec;
   return NS_OK;
 }
+
+uint32_t nsStandardURL::SpecHash() { return CachedSpecHash(mSpec); }
 
 // result may contain unescaped UTF-8 characters
 NS_IMETHODIMP
@@ -2959,7 +2965,7 @@ nsresult nsStandardURL::SetRef(const nsACString& input) {
     mRef.mLen = 0;
   }
 
-  // If precent encoding is necessary, `ref` will point to `buf`'s content.
+  // If percent encoding is necessary, `ref` will point to `buf`'s content.
   // `buf` needs to outlive any use of the `ref` pointer.
   nsAutoCString buf;
   // encode ref if necessary
@@ -3442,6 +3448,17 @@ nsresult nsStandardURL::ReadPrivate(nsIObjectInputStream* stream) {
     mExtension.Merge(mSpec, ';', old_param);
   }
 
+  NS_ENSURE_TRUE(mScheme.mPos == 0, NS_ERROR_MALFORMED_URI);
+  NS_ENSURE_TRUE(mScheme.mLen > 0, NS_ERROR_MALFORMED_URI);
+  // Make sure scheme is followed by :// (3 characters)
+  NS_ENSURE_TRUE(mScheme.mLen < INT32_MAX - 3,
+                 NS_ERROR_MALFORMED_URI);  // avoid overflow
+  NS_ENSURE_TRUE(mSpec.Length() >= (uint32_t)mScheme.mLen + 3,
+                 NS_ERROR_MALFORMED_URI);
+  NS_ENSURE_TRUE(
+      nsDependentCSubstring(mSpec, mScheme.mLen, 3).EqualsLiteral("://"),
+      NS_ERROR_MALFORMED_URI);
+
   rv = CheckIfHostIsAscii();
   if (NS_FAILED(rv)) {
     return rv;
@@ -3665,6 +3682,7 @@ bool nsStandardURL::Deserialize(const URIParams& aParams) {
   mPort = params.port();
   mDefaultPort = params.defaultPort();
   mSpec = params.spec();
+  ResetSpecHash();
   NS_ENSURE_TRUE(
       mSpec.Length() <= StaticPrefs::network_standard_url_max_length(), false);
   NS_ENSURE_TRUE(FromIPCSegment(mSpec, params.scheme(), mScheme), false);
@@ -3714,6 +3732,12 @@ bool nsStandardURL::Deserialize(const URIParams& aParams) {
   NS_ENSURE_TRUE(isSubSegment(mHost, mAuthority), false);
   NS_ENSURE_TRUE(isSubSegment(mUsername, mAuthority), false);
   NS_ENSURE_TRUE(isSubSegment(mPassword, mAuthority), false);
+  NS_ENSURE_TRUE(isSubSegment(mQuery, mPath), false);
+  NS_ENSURE_TRUE(isSubSegment(mRef, mPath), false);
+
+  if (mAuthority.mLen >= 0 && mPath.mLen >= 0) {
+    NS_ENSURE_TRUE(mPath.mPos == mAuthority.mPos + mAuthority.mLen, false);
+  }
 
   if (!IsValid()) {
     return false;

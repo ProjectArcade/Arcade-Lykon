@@ -8,7 +8,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import mozilla.components.concept.engine.preferences.Branch
 import mozilla.components.concept.engine.preferences.BrowserPrefType
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,6 +17,7 @@ import org.mozilla.experiments.nimbus.internal.OriginalGeckoPref
 import org.mozilla.experiments.nimbus.internal.PrefBranch
 import org.mozilla.experiments.nimbus.internal.PrefEnrollmentData
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class NimbusGeckoUtilsTest {
@@ -106,7 +106,7 @@ class NimbusGeckoUtilsTest {
         val stringResult =
             createPrefSetter(geckoPrefState = stringPref, setType = BrowserPrefType.STRING)
         assertNotNull(stringResult)
-        assertEquals("string.pref", stringResult!!.pref)
+        assertEquals("string.pref", stringResult.pref)
         assertEquals("some-value", stringResult.value)
         assertEquals(Branch.USER, stringResult.branch)
 
@@ -120,7 +120,7 @@ class NimbusGeckoUtilsTest {
         val boolPref = GeckoPrefState(GeckoPref(pref = "bool.pref", branch = PrefBranch.DEFAULT), geckoValue = null, enrollmentValue = PrefEnrollmentData(experimentSlug = "123", prefValue = "true", featureId = "123", variable = "abc"), isUserSet = false)
         val boolResult = createPrefSetter(geckoPrefState = boolPref, setType = BrowserPrefType.BOOL)
         assertNotNull(boolResult)
-        assertEquals("bool.pref", boolResult!!.pref)
+        assertEquals("bool.pref", boolResult.pref)
         assertEquals(true, boolResult.value)
         assertEquals(Branch.DEFAULT, boolResult.branch)
     }

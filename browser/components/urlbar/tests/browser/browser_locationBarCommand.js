@@ -100,7 +100,7 @@ add_task(async function shift_accel_left_click_test() {
   // Check the load occurred in a new background tab.
   info("URL should be loaded in a new background tab");
   is(gURLBar.value, "", "Urlbar reverted to original value");
-  ok(!gURLBar.focused, "Urlbar is no longer focused after urlbar command");
+  ok(gURLBar.focused, "Urlbar keeps focus after opening in a background tab");
   is(gBrowser.selectedTab, tab, "Focus did not change to the new tab");
 
   // Select the new background tab
@@ -182,6 +182,12 @@ add_task(async function load_in_new_tab_test() {
       desc: "Ctrl/Cmd left click on go button",
       type: "click",
       details: { accelKey: true },
+      url: "about:blank",
+    },
+    {
+      desc: "Middleclick on go button",
+      type: "click",
+      details: { button: 1 },
       url: "about:blank",
     },
     {

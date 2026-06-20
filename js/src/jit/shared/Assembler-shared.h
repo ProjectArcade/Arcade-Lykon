@@ -255,7 +255,7 @@ class ImmGCPtr {
   explicit ImmGCPtr(const JSOffThreadAtom* atom) : ImmGCPtr(atom->raw()) {}
 
  private:
-  ImmGCPtr() : value(0) {}
+  ImmGCPtr() : value(nullptr) {}
 };
 
 // Pointer to trampoline code. Trampoline code is kept alive until the runtime
@@ -786,7 +786,7 @@ class MOZ_RAII AutoCreatedBy {
   inline AutoCreatedBy(AssemblerShared& ash, const char* who) {}
   // A user-defined constructor is necessary to stop some compilers from
   // complaining about unused variables.
-  inline ~AutoCreatedBy() {}
+  inline ~AutoCreatedBy() = default;
 };
 #endif
 

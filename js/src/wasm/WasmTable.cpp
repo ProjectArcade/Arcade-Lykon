@@ -19,12 +19,12 @@
 #include "mozilla/CheckedInt.h"
 
 #include "vm/JSContext.h"
-#include "vm/Realm.h"
 #include "wasm/WasmInstance.h"
 #include "wasm/WasmJS.h"
 #include "wasm/WasmValue.h"
 
 #include "gc/StableCellHasher-inl.h"
+#include "vm/Realm-inl.h"
 #include "wasm/WasmInstance-inl.h"
 
 using namespace js;
@@ -104,7 +104,7 @@ void Table::tracePrivate(JSTracer* trc) {
   // WasmTableObject's trace hook so maybeObject_ must already be marked.
   // TraceEdge is called so that the pointer can be updated during a moving
   // GC.
-  TraceNullableEdge(trc, &maybeObject_, "wasm table object");
+  TraceEdge(trc, &maybeObject_, "wasm table object");
 
   switch (repr()) {
     case TableRepr::Func: {
@@ -171,6 +171,7 @@ bool Table::getFuncRef(JSContext* cx, uint32_t address,
 
   Instance& instance = *elem.instance;
   const CodeRange& codeRange = *instance.code().lookupFuncRange(elem.code);
+  AutoRealmUnchecked ar(cx, instance.realm());
   return instance.getExportedFunction(cx, codeRange.funcIndex(), fun);
 }
 

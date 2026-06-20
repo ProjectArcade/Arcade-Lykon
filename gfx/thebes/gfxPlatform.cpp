@@ -81,6 +81,7 @@
 #  include "gfxQuartzSurface.h"
 #elif defined(MOZ_WIDGET_GTK)
 #  include "gfxPlatformGtk.h"
+#  include "DMABufFormats.h"
 #elif defined(ANDROID)
 #  include "gfxAndroidPlatform.h"
 #endif
@@ -253,9 +254,9 @@ bool CrashStatsLogForwarder::UpdateStringsVectorInternal(
   // just out of paranoia, but we know index <= mBuffer.size().
   LoggingRecordEntry newEntry(mIndex, aString, tStamp);
   if (index >= static_cast<int32_t>(mBuffer.size())) {
-    mBuffer.push_back(newEntry);
+    mBuffer.push_back(std::move(newEntry));
   } else {
-    mBuffer[index] = newEntry;
+    mBuffer[index] = std::move(newEntry);
   }
   return true;
 }
@@ -907,6 +908,20 @@ void gfxPlatform::Init() {
     gfxVars::SetDXNV12Blocked(IsDXNV12Blocked());
     gfxVars::SetDXP010Blocked(IsDXP010Blocked());
     gfxVars::SetDXP016Blocked(IsDXP016Blocked());
+
+    // The primary adapter identifiers are only available from GfxInfo in the
+    // parent process; propagate them so other processes can attach them to
+    // telemetry.
+    if (gfxInfo) {
+      nsString adapterVendorID, adapterDeviceID, adapterDriverVersion;
+      gfxInfo->GetAdapterVendorID(adapterVendorID);
+      gfxInfo->GetAdapterDeviceID(adapterDeviceID);
+      gfxInfo->GetAdapterDriverVersion(adapterDriverVersion);
+      gfxVars::SetAdapterVendorID(NS_ConvertUTF16toUTF8(adapterVendorID));
+      gfxVars::SetAdapterDeviceID(NS_ConvertUTF16toUTF8(adapterDeviceID));
+      gfxVars::SetAdapterDriverVersion(
+          NS_ConvertUTF16toUTF8(adapterDriverVersion));
+    }
   }
 
 #if defined(XP_WIN)
@@ -1031,12 +1046,12 @@ void gfxPlatform::Init() {
     MOZ_CRASH("Could not initialize ImageLib");
   }
 
-  RegisterStrongMemoryReporter(new GfxMemoryImageReporter());
+  RegisterStrongMemoryReporter(MakeAndAddRef<GfxMemoryImageReporter>());
   if (XRE_IsParentProcess()) {
-    RegisterStrongAsyncMemoryReporter(new WebRenderMemoryReporter());
+    RegisterStrongAsyncMemoryReporter(MakeAndAddRef<WebRenderMemoryReporter>());
   }
 
-  RegisterStrongMemoryReporter(new SkMemoryReporter());
+  RegisterStrongMemoryReporter(MakeAndAddRef<SkMemoryReporter>());
 
   uint32_t skiaCacheSize = GetSkiaGlyphCacheSize();
   if (skiaCacheSize != kDefaultGlyphCacheSize) {
@@ -1069,8 +1084,8 @@ void gfxPlatform::Init() {
 void gfxPlatform::InitMemoryReportersForGPUProcess() {
   MOZ_RELEASE_ASSERT(XRE_IsGPUProcess());
 
-  RegisterStrongMemoryReporter(new GfxMemoryImageReporter());
-  RegisterStrongMemoryReporter(new SkMemoryReporter());
+  RegisterStrongMemoryReporter(MakeAndAddRef<GfxMemoryImageReporter>());
+  RegisterStrongMemoryReporter(MakeAndAddRef<SkMemoryReporter>());
 }
 
 void gfxPlatform::ReportTelemetry() {
@@ -1240,6 +1255,19 @@ bool gfxPlatform::IsHeadless() {
 /* static */
 bool gfxPlatform::UseRemoteCanvas() {
   return XRE_IsContentProcess() && gfx::gfxVars::UseAcceleratedCanvas2D();
+}
+
+/* static */
+bool gfxPlatform::UseHDR() {
+  // If the user set gfx.color_management.hdr.force_enabled then we want to
+  // honor that, if gfx.color_management.hdr is false or the GPU vendor is
+  // blocklisted then we want to do what we did before with HDR video - which
+  // did not look good, but we'll be implementing workarounds for driver
+  // limitations in future so that this will be less common.
+  //
+  // This parallels the logic in Gecko_MediaFeatures_VideoDynamicRange().
+  return (StaticPrefs::gfx_color_management_hdr() && gfxVars::VideoHDR()) ||
+         StaticPrefs::gfx_color_management_hdr_force_enabled();
 }
 
 /* static */
@@ -1907,7 +1935,7 @@ bool gfxPlatform::IsKnownIconFontFamily(const nsAtom* aFamilyName) const {
       aFamilyName);
 }
 
-gfxFontEntry* gfxPlatform::LookupLocalFont(
+already_AddRefed<gfxFontEntry> gfxPlatform::LookupLocalFont(
     FontVisibilityProvider* aFontVisibilityProvider,
     const nsACString& aFontName, const WeightRange& aWeightForEntry,
     const StretchRange& aStretchForEntry,
@@ -1917,7 +1945,7 @@ gfxFontEntry* gfxPlatform::LookupLocalFont(
       aStyleForEntry);
 }
 
-gfxFontEntry* gfxPlatform::MakePlatformFont(
+already_AddRefed<gfxFontEntry> gfxPlatform::MakePlatformFont(
     const nsACString& aFontName, const WeightRange& aWeightForEntry,
     const StretchRange& aStretchForEntry, const SlantStyleRange& aStyleForEntry,
     const uint8_t* aFontData, uint32_t aLength) {
@@ -2704,6 +2732,11 @@ void gfxPlatform::InitWebRenderConfig() {
   }
 #endif
 
+#ifdef MOZ_WIDGET_ANDROID
+  gfxVars::SetUseAImageReaderVideoGpuProcessAndroid(
+      StaticPrefs::gfx_video_aimage_reader_gpu_process_android_AtStartup());
+#endif
+
 #ifdef XP_WIN
   if (gfxConfig::IsEnabled(Feature::WEBRENDER_DCOMP_PRESENT)) {
     gfxVars::SetUseWebRenderDCompWin(true);
@@ -2985,6 +3018,10 @@ void gfxPlatform::InitHardwareVideoConfig() {
     return;
   }
 
+#ifdef XP_MACOSX
+  const bool isXpcshell = !!PR_GetEnv("XPCSHELL_TEST_PROFILE_DIR");
+#endif
+
   // Collect the gfxVar updates into a single message.
   gfxVarsCollectUpdates collect;
 
@@ -3031,6 +3068,13 @@ void gfxPlatform::InitHardwareVideoConfig() {
                             "Force disabled by failed sanity test",
                             "FEATURE_FAILURE_SANITY_TEST_FAILED"_ns);
   }
+#ifdef XP_MACOSX
+  else if (isXpcshell) {
+    featureDec.ForceDisable(FeatureStatus::Unavailable,
+                            "Force disabled in xpcshell due to signing",
+                            "FEATURE_FAILURE_OSX_XPCSHELL_SIGNING"_ns);
+  }
+#endif
 
   FeatureState& featureEnc =
       gfxConfig::GetFeature(Feature::HARDWARE_VIDEO_ENCODING);
@@ -3073,6 +3117,26 @@ void gfxPlatform::InitHardwareVideoConfig() {
                             "Force disabled by failed sanity test",
                             "FEATURE_FAILURE_SANITY_TEST_FAILED"_ns);
   }
+#ifdef XP_MACOSX
+  else if (isXpcshell) {
+    featureEnc.ForceDisable(FeatureStatus::Unavailable,
+                            "Force disabled in xpcshell due to signing",
+                            "FEATURE_FAILURE_OSX_XPCSHELL_SIGNING"_ns);
+  }
+#endif
+
+  FeatureState& featureHdr = gfxConfig::GetFeature(Feature::VIDEO_HDR);
+  featureHdr.Reset();
+  featureHdr.EnableByDefault();
+  if (NS_FAILED(gfxInfo->GetFeatureStatus(nsIGfxInfo::FEATURE_VIDEO_HDR,
+                                          failureId, &status))) {
+    featureHdr.Disable(FeatureStatus::BlockedNoGfxInfo, "gfxInfo is broken",
+                       "FEATURE_FAILURE_NO_GFX_INFO"_ns);
+  } else if (status != nsIGfxInfo::FEATURE_STATUS_OK) {
+    featureHdr.Disable(FeatureStatus::Blocklisted, "Blocklisted by gfxInfo",
+                       failureId);
+  }
+  gfxVars::SetVideoHDR(featureHdr.IsEnabled());
 
   InitPlatformHardwareVideoConfig();
   InitPlatformHardwarDRMConfig();
@@ -3086,6 +3150,13 @@ void gfxPlatform::InitHardwareVideoConfig() {
         "User disabled via media.hardware-video-decoding-vulkan.enabled pref",
         "FEATURE_HARDWARE_VIDEO_DECODING_VULKAN_PREF_DISABLED"_ns);
   }
+#ifdef XP_MACOSX
+  if (isXpcshell) {
+    featureVulkanDec.ForceDisable(FeatureStatus::Unavailable,
+                                  "Force disabled in xpcshell due to signing",
+                                  "FEATURE_FAILURE_OSX_XPCSHELL_SIGNING"_ns);
+  }
+#endif
 
   bool canUseVulkanDecode = false;
   int32_t vulkanDecStatus = nsIGfxInfo::FEATURE_STATUS_UNKNOWN;
@@ -3150,6 +3221,13 @@ void gfxPlatform::InitHardwareVideoConfig() {
   CODEC_HW_FEATURE_SETUP(HEVC)
 #endif
 
+  status = nsIGfxInfo::FEATURE_STATUS_UNKNOWN;
+  gfxVars::SetHasWebrtcH264Hw(
+      NS_SUCCEEDED(gfxInfo->GetFeatureStatus(
+          nsIGfxInfo::FEATURE_WEBRTC_HW_ACCELERATION_H264, failureId,
+          &status)) &&
+      status == nsIGfxInfo::FEATURE_STATUS_OK);
+
 #undef CODEC_HW_FEATURE_SETUP_PLATFORM
 #undef CODEC_HW_FEATURE_SETUP
 }
@@ -3205,7 +3283,9 @@ void gfxPlatform::InitWebGLConfig() {
       StaticPrefs::webgl_out_of_process_enable_ahardwarebuffer_AtStartup());
 #endif
 
-  if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS) &&
+  // Until bug 1999136 lands and the GPU process works with headless, we should
+  // allow WebGL in the parent process when headless.
+  if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS) && !IsHeadless() &&
       !StaticPrefs::webgl_allow_in_parent_AtStartup()) {
     featureWebGL.Disable(FeatureStatus::UnavailableNoGpuProcess,
                          "Disabled without GPU process",

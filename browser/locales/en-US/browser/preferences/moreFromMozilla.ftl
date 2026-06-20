@@ -4,7 +4,8 @@
 
 ## These strings are used in the about:preferences moreFromMozilla page
 
-more-from-moz-title = More from { -vendor-short-name }
+more-from-moz-title2 = More from { -vendor-short-name }
+  .title = More from { -vendor-short-name }
 more-from-moz-page-header =
     .heading = More from { -vendor-short-name }
 more-from-moz-category =
@@ -98,13 +99,13 @@ more-from-moz-thunderbird-card =
     .label = { -thunderbird-brand-name }
     .description = Access your email, calendars, and contacts in one fast app.
 
-more-from-moz-solo-card =
+more-from-moz-solo-card-1 =
     .label = { -solo-ai-brand-name }
-    .description = Explore our latest ideas and experimental technologies.
+    .description = Create your website instantly and connect your own custom domain for free.
 
-more-from-moz-new-products-card =
+more-from-moz-new-products-card2 =
     .label = { -vendor-short-name } New Products
-    .description = Discover the latest products from { -vendor-short-name }.
+    .description = Explore our latest ideas and experimental technologies.
 
 more-from-moz-mozilla-monitor-box-link =
     .label = Get { -monitor-brand-short-name }

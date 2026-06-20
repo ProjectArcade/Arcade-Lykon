@@ -17,8 +17,10 @@ import androidx.navigation.fragment.navArgs
 import kotlinx.coroutines.launch
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.GenaiAiControls
+import org.mozilla.fenix.R
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.requireComponents
+import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.theme.FirefoxTheme
 
@@ -34,7 +36,7 @@ class AIControlsFragment : Fragment(), SystemInsetsPaddedFragment {
         savedInstanceState: Bundle?,
     ): View = content {
         val registry = requireComponents.aiFeatureRegistry
-        val features = remember { registry.getFeatures() }
+        val features = remember { registry.getFeatures().sortedForDisplay() }
         val featureBlock = requireComponents.aiControlsFeatureBlock
         val scope = rememberCoroutineScope()
 
@@ -98,6 +100,12 @@ class AIControlsFragment : Fragment(), SystemInsetsPaddedFragment {
                 },
             )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Ensures the toolbar shows when navigating to this fragment via Global Directions.
+        showToolbar(getString(R.string.preferences_ai_controls))
     }
 
     private fun openAiControlsSumoPage() {

@@ -11,13 +11,11 @@
 #include "builtin/String.h"
 #include "gc/Cell.h"
 #include "gc/GC.h"
-#include "jit/arm/Simulator-arm.h"
 #include "jit/AtomicOperations.h"
 #include "jit/BaselineIC.h"
 #include "jit/CalleeToken.h"
 #include "jit/JitFrames.h"
 #include "jit/JitRuntime.h"
-#include "jit/mips64/Simulator-mips64.h"
 #include "jit/Simulator.h"
 #include "js/Date.h"
 #include "js/experimental/JitInfo.h"
@@ -535,8 +533,8 @@ bool InvokeFunction(JSContext* cx, HandleObject obj, bool constructing,
     // we can use normal construction code without creating an extraneous
     // object.
     if (thisv.isMagic()) {
-      MOZ_ASSERT(thisv.whyMagic() == JS_IS_CONSTRUCTING ||
-                 thisv.whyMagic() == JS_UNINITIALIZED_LEXICAL);
+      MOZ_RELEASE_ASSERT(thisv.whyMagic() == JS_IS_CONSTRUCTING ||
+                         thisv.whyMagic() == JS_UNINITIALIZED_LEXICAL);
 
       RootedObject obj(cx);
       if (!Construct(cx, fval, cargs, newTarget, &obj)) {
@@ -1653,7 +1651,7 @@ bool CallDOMGetter(JSContext* cx, const JSJitInfo* info, HandleObject obj,
 #endif
 
   // Loading DOM_OBJECT_SLOT, which must be the first slot.
-  JS::Value val = JS::GetReservedSlot(obj, 0);
+  JS::Value val = obj->as<NativeObject>().getReservedSlot(0);
   JSJitGetterOp getter = info->getter;
   return getter(cx, obj, val.toPrivate(), JSJitGetterCallArgs(result));
 }
@@ -1687,7 +1685,7 @@ bool CallDOMSetter(JSContext* cx, const JSJitInfo* info, HandleObject obj,
 #endif
 
   // Loading DOM_OBJECT_SLOT, which must be the first slot.
-  JS::Value val = JS::GetReservedSlot(obj, 0);
+  JS::Value val = obj->as<NativeObject>().getReservedSlot(0);
   JSJitSetterOp setter = info->setter;
 
   RootedValue v(cx, value);
@@ -3296,40 +3294,40 @@ double DateLocalTimeToUTC(JSContext* cx, int64_t localTime) {
   return JS::CanonicalizeNaN(js::LocalTimeToUTC(cx, localTime).toDouble());
 }
 
-double DateYearFromTime(JSContext* cx, double utcTime) {
+void DateYearFromTime(JSContext* cx, double utcTime, JS::Value* result) {
   AutoUnsafeCallWithABI unsafe;
 
   auto clipped = JS::TimeClip(utcTime);
   if (!clipped.isValid()) {
-    return JS::GenericNaN();
+    *result = JS::NaNValue();
+  } else {
+    int64_t localTime = js::UTCToLocalTime(cx, int64_t(clipped.toDouble()));
+    *result = JS::Int32Value(ToYearMonthDay(localTime).year);
   }
-
-  int64_t localTime = js::UTCToLocalTime(cx, int64_t(clipped.toDouble()));
-  return double(ToYearMonthDay(localTime).year);
 }
 
-double DateMonthFromTime(JSContext* cx, double utcTime) {
+void DateMonthFromTime(JSContext* cx, double utcTime, JS::Value* result) {
   AutoUnsafeCallWithABI unsafe;
 
   auto clipped = JS::TimeClip(utcTime);
   if (!clipped.isValid()) {
-    return JS::GenericNaN();
+    *result = JS::NaNValue();
+  } else {
+    int64_t localTime = js::UTCToLocalTime(cx, int64_t(clipped.toDouble()));
+    *result = JS::Int32Value(ToYearMonthDay(localTime).month);
   }
-
-  int64_t localTime = js::UTCToLocalTime(cx, int64_t(clipped.toDouble()));
-  return double(ToYearMonthDay(localTime).month);
 }
 
-double DateDateFromTime(JSContext* cx, double utcTime) {
+void DateDateFromTime(JSContext* cx, double utcTime, JS::Value* result) {
   AutoUnsafeCallWithABI unsafe;
 
   auto clipped = JS::TimeClip(utcTime);
   if (!clipped.isValid()) {
-    return JS::GenericNaN();
+    *result = JS::NaNValue();
+  } else {
+    int64_t localTime = js::UTCToLocalTime(cx, int64_t(clipped.toDouble()));
+    *result = JS::Int32Value(ToYearMonthDay(localTime).day);
   }
-
-  int64_t localTime = js::UTCToLocalTime(cx, int64_t(clipped.toDouble()));
-  return double(ToYearMonthDay(localTime).day);
 }
 
 JSObject* NewDateObject(JSContext* cx, double utcTime) {
@@ -3445,29 +3443,31 @@ void AssertPropertyLookup(NativeObject* obj, PropertyKey id, uint32_t slot) {
 #endif
 }
 
-// This is a specialized version of WeakMap::valueReadBarrier. It should
-// only be called with a tenured cell that is not marked black.
-void WeakMapValueReadBarrier(js::gc::TenuredCell* cell, Zone* zone) {
+// This is a specialized version of WeakMap::valueReadBarrier.
+
+void WeakMapValueReadBarrier(js::gc::TenuredCell* cell, Zone* mapZone) {
   AutoUnsafeCallWithABI unsafe;
 
   // This is an inlined and specialized copy of ExposeGCThingToActiveJS.
   {
     MOZ_ASSERT(!JS::RuntimeHeapIsCollecting());
     MOZ_ASSERT(!gc::IsInsideNursery(cell));
-    MOZ_ASSERT(!gc::detail::TenuredCellIsMarkedBlack(cell));
 
-    if (zone->needsMarkingBarrier()) {
-      gc::PerformIncrementalReadBarrier(cell);
-    } else if (!zone->isGCPreparing() &&
-               gc::detail::NonBlackCellIsMarkedGray(cell)) {
-      gc::UnmarkGrayGCThingRecursively(cell);
+    if (!cell->isMarkedBlack()) {
+      Zone* cellZone = cell->zone();
+      if (cellZone->needsMarkingBarrier()) {
+        gc::PerformIncrementalReadBarrier(cell);
+      } else if (!cellZone->isGCPreparing() &&
+                 gc::detail::NonBlackCellIsMarkedGray(cell)) {
+        gc::UnmarkGrayGCThingRecursively(cell);
+      }
+      MOZ_ASSERT_IF(!cellZone->isGCPreparing(),
+                    !gc::detail::TenuredCellIsMarkedGray(cell));
     }
-    MOZ_ASSERT_IF(!zone->isGCPreparing(),
-                  !gc::detail::TenuredCellIsMarkedGray(cell));
   }
 
   if (MOZ_UNLIKELY(cell->is<JS::Symbol>())) {
-    gc::MarkSymbolForWeakMapReadBarrier(zone, cell->as<JS::Symbol>());
+    gc::MarkSymbolForWeakMapReadBarrier(mapZone, cell->as<JS::Symbol>());
   }
 }
 

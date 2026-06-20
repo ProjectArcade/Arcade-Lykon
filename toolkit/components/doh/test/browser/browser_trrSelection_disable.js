@@ -16,7 +16,7 @@ add_task(async function testTrrSelectionDisable() {
   setPassingHeuristics();
   let promise = waitForDoorhanger();
   Services.prefs.setBoolPref(prefs.ENABLED_PREF, true);
-  await BrowserTestUtils.waitForCondition(() => {
+  await TestUtils.waitForCondition(() => {
     return Services.prefs.getBoolPref(prefs.BREADCRUMB_PREF, false);
   });
   is(
@@ -33,7 +33,7 @@ add_task(async function testTrrSelectionDisable() {
     "https://example.com/1",
     "doh-rollout.uri set to first provider in the list."
   );
-  ensureNoTRRSelectionTelemetry();
+  await ensureNoTRRSelectionTelemetry();
 
   let tab = await BrowserTestUtils.openNewForegroundTab(gBrowser, EXAMPLE_URL);
   let panel = await promise;
@@ -47,7 +47,7 @@ add_task(async function testTrrSelectionDisable() {
   await ensureTRRMode(2);
   await checkHeuristicsTelemetry("enable_doh", "startup");
 
-  await BrowserTestUtils.waitForCondition(() => {
+  await TestUtils.waitForCondition(() => {
     return Services.prefs.getStringPref(prefs.DOORHANGER_USER_DECISION_PREF);
   });
   is(
@@ -65,7 +65,7 @@ add_task(async function testTrrSelectionDisable() {
 
   // Restart the controller for good measure.
   await restartDoHController();
-  ensureNoTRRSelectionTelemetry();
+  await ensureNoTRRSelectionTelemetry();
   ok(
     !Services.prefs.prefHasUserValue(prefs.TRR_SELECT_DRY_RUN_RESULT_PREF),
     "TRR selection dry run not performed."

@@ -1633,7 +1633,8 @@ void TextLeafPoint::AddTextOffsetAttributes(AccAttributes* aAttrs) const {
 
   RemoteAccessible* acc = mAcc->AsRemote();
   MOZ_ASSERT(acc);
-  if (RequestDomainsIfInactive(CacheDomain::TextOffsetAttributes)) {
+  if (acc->Document()->RequestDomainsIfInactive(
+          CacheDomain::TextOffsetAttributes)) {
     return;
   }
   if (!acc->mCachedFields) {
@@ -1749,7 +1750,8 @@ TextLeafPoint TextLeafPoint::FindTextOffsetAttributeSameAcc(
 
   RemoteAccessible* acc = mAcc->AsRemote();
   MOZ_ASSERT(acc);
-  if (RequestDomainsIfInactive(CacheDomain::TextOffsetAttributes)) {
+  if (acc->Document()->RequestDomainsIfInactive(
+          CacheDomain::TextOffsetAttributes)) {
     return TextLeafPoint();
   }
   if (!acc->mCachedFields) {
@@ -2048,7 +2050,7 @@ already_AddRefed<AccAttributes> TextLeafPoint::GetTextAttributesLocalAcc(
   }
   HyperTextAccessible* hyperAcc = parent->AsHyperText();
   MOZ_ASSERT(hyperAcc);
-  RefPtr<AccAttributes> attributes = new AccAttributes();
+  auto attributes = MakeRefPtr<AccAttributes>();
   if (hyperAcc) {
     TextAttrsMgr mgr(hyperAcc, aIncludeDefaults, acc);
     mgr.GetAttributes(attributes);
@@ -2268,10 +2270,10 @@ LayoutDeviceIntRect TextLeafPoint::CharBounds() const {
     return bounds;
   }
 
-  if (RequestDomainsIfInactive(CacheDomain::TextBounds)) {
+  RemoteAccessible* remote = mAcc->AsRemote();
+  if (remote->Document()->RequestDomainsIfInactive(CacheDomain::TextBounds)) {
     return LayoutDeviceIntRect();
   }
-  RemoteAccessible* remote = mAcc->AsRemote();
   if (!remote->mCachedFields) {
     return LayoutDeviceIntRect();
   }

@@ -19,7 +19,6 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.test.whenever
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -36,6 +35,7 @@ import java.io.InputStream
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class AMOAddonsProviderTest {
@@ -156,8 +156,6 @@ class AMOAddonsProviderTest {
                 conservative = true,
             ),
         )
-
-        Unit
     }
 
     @Test
@@ -174,7 +172,6 @@ class AMOAddonsProviderTest {
                 conservative = true,
             ),
         )
-        Unit
     }
 
     @Test(expected = IOException::class)
@@ -182,7 +179,6 @@ class AMOAddonsProviderTest {
         val mockedClient = prepareClient(status = 500)
         val provider = AMOAddonsProvider(testContext, client = mockedClient, ioDispatcher = dispatcher)
         provider.getFeaturedAddons()
-        Unit
     }
 
     @Test
@@ -200,7 +196,6 @@ class AMOAddonsProviderTest {
         whenever(provider.cacheExpired(testContext, null, useFallbackFile = false)).thenReturn(false)
         provider.getFeaturedAddons(true)
         verify(provider).readFromDiskCache(null, useFallbackFile = false)
-        Unit
     }
 
     @Test
@@ -369,7 +364,7 @@ class AMOAddonsProviderTest {
     }
 
     @Test
-    fun `loadIconAsync - with a successful status will return a bitmap`() = runTest(dispatcher) {
+    fun `loadIcon - with a successful status will return a bitmap`() = runTest(dispatcher) {
         val mockedClient = mock<Client>()
         val mockedResponse = mock<Response>()
         val stream: InputStream = javaClass.getResourceAsStream("/png/mozac.png")!!.buffered()
@@ -381,12 +376,12 @@ class AMOAddonsProviderTest {
 
         val provider = AMOAddonsProvider(testContext, client = mockedClient, ioDispatcher = dispatcher)
 
-        val bitmap = provider.loadIconAsync("id", "https://example.com/image.png").await()
+        val bitmap = provider.loadIcon("id", "https://example.com/image.png")
         assertIs<Bitmap>(bitmap)
     }
 
     @Test
-    fun `loadIconAsync - will return bitmap from the cache when available`() = runTest(dispatcher) {
+    fun `loadIcon - will return bitmap from the cache when available`() = runTest(dispatcher) {
         val mockedClient = mock<Client>()
         val expectedIcon = mock<Bitmap>()
 
@@ -394,7 +389,7 @@ class AMOAddonsProviderTest {
 
         provider.iconsCache["id"] = expectedIcon
 
-        val bitmap = provider.loadIconAsync("id", "https://example.com/image.png").await()
+        val bitmap = provider.loadIcon("id", "https://example.com/image.png")
 
         verify(mockedClient, times(0)).fetch(any())
         assertEquals(expectedIcon, bitmap)
@@ -402,11 +397,11 @@ class AMOAddonsProviderTest {
     }
 
     @Test
-    fun `loadIconAsync - with an unsuccessful status will return null`() = runTest(dispatcher) {
+    fun `loadIcon - with an unsuccessful status will return null`() = runTest(dispatcher) {
         val mockedClient = prepareClient(status = 500)
         val provider = AMOAddonsProvider(testContext, client = mockedClient, ioDispatcher = dispatcher)
 
-        val bitmap = provider.loadIconAsync("id", "https://example.com/image.png").await()
+        val bitmap = provider.loadIcon("id", "https://example.com/image.png")
         assertNull(bitmap)
     }
 
@@ -553,8 +548,6 @@ class AMOAddonsProviderTest {
                 conservative = true,
             ),
         )
-
-        Unit
     }
 
     @Test
@@ -691,7 +684,7 @@ class AMOAddonsProviderTest {
         val addon = provider.getAddonByID("{58c32ac4-0d6c-4d6f-ae2c-96aaf8ffcb66}")
 
         assertNotNull(addon)
-        assertEquals("uBlock0@raymondhill.net", addon!!.id)
+        assertEquals("uBlock0@raymondhill.net", addon.id)
         assertEquals(
             "https://addons.mozilla.org/firefox/downloads/file/4141256/ublock_origin-1.51.0.xpi",
             addon.downloadUrl,
@@ -706,7 +699,7 @@ class AMOAddonsProviderTest {
         val addon = provider.getAddonByID("58c32ac4-0d6c-4d6f-ae2c-96aaf8ffcb66")
 
         assertNotNull(addon)
-        assertEquals("uBlock0@raymondhill.net", addon!!.id)
+        assertEquals("uBlock0@raymondhill.net", addon.id)
     }
 
     @Test

@@ -32,7 +32,6 @@ class SandboxBrokerCommon {
     SANDBOX_FILE_STAT,
     SANDBOX_FILE_CHMOD,
     SANDBOX_FILE_LINK,
-    SANDBOX_FILE_SYMLINK,
     SANDBOX_FILE_MKDIR,
     SANDBOX_FILE_RENAME,
     SANDBOX_FILE_RMDIR,
@@ -44,15 +43,25 @@ class SandboxBrokerCommon {
   };
   MOZ_USING_ENUM_STATIC(Operation, SANDBOX_FILE_OPEN, SANDBOX_FILE_ACCESS,
                         SANDBOX_FILE_STAT, SANDBOX_FILE_CHMOD,
-                        SANDBOX_FILE_LINK, SANDBOX_FILE_SYMLINK,
-                        SANDBOX_FILE_MKDIR, SANDBOX_FILE_RENAME,
-                        SANDBOX_FILE_RMDIR, SANDBOX_FILE_UNLINK,
-                        SANDBOX_FILE_READLINK, SANDBOX_SOCKET_CONNECT,
-                        SANDBOX_SOCKET_CONNECT_ABSTRACT, SANDBOX_OP_MAX_VALUE);
+                        SANDBOX_FILE_LINK, SANDBOX_FILE_MKDIR,
+                        SANDBOX_FILE_RENAME, SANDBOX_FILE_RMDIR,
+                        SANDBOX_FILE_UNLINK, SANDBOX_FILE_READLINK,
+                        SANDBOX_SOCKET_CONNECT, SANDBOX_SOCKET_CONNECT_ABSTRACT,
+                        SANDBOX_OP_MAX_VALUE);
 
   static bool OperationIsValid(Operation aOp) {
     return static_cast<unsigned>(aOp) <=
            static_cast<unsigned>(SANDBOX_OP_MAX_VALUE);
+  }
+
+  static int OperationPaths(Operation aOp) {
+    switch (aOp) {
+      case SANDBOX_FILE_LINK:
+      case SANDBOX_FILE_RENAME:
+        return 2;
+      default:
+        return 1;
+    }
   }
 
   static unsigned OperationToInt(Operation);

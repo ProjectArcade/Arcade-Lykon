@@ -15,7 +15,7 @@ use std::{
 
 use enum_map::EnumMap;
 use neqo_common::{Datagram, Decoder, Role, event::Provider as _, qdebug, qtrace};
-use neqo_crypto::{AllowZeroRtt, AuthenticationStatus, ResumptionToken, random};
+use nss::{AllowZeroRtt, AuthenticationStatus, ResumptionToken, random};
 use test_fixture::{DEFAULT_ADDR, fixture_init, new_neqo_qlog, now};
 
 use super::{CloseReason, Connection, ConnectionId, Output, State, test_internal};
@@ -101,9 +101,9 @@ impl ConnectionIdGenerator for CountingConnectionIdGenerator {
 // test_fixture because they produce different - and incompatible - types.
 //
 // These are a direct copy of those functions.
-pub fn new_client(params: ConnectionParameters) -> Connection {
+fn new_client_with_qlog(params: ConnectionParameters) -> (Connection, test_fixture::SharedVec) {
     fixture_init();
-    let (log, _contents) = new_neqo_qlog();
+    let (log, contents) = new_neqo_qlog();
     let mut client = Connection::new_client(
         test_fixture::DEFAULT_SERVER_NAME,
         test_fixture::DEFAULT_ALPN,
@@ -115,7 +115,11 @@ pub fn new_client(params: ConnectionParameters) -> Connection {
     )
     .expect("create a default client");
     client.set_qlog(log);
-    client
+    (client, contents)
+}
+
+pub fn new_client(params: ConnectionParameters) -> Connection {
+    new_client_with_qlog(params).0
 }
 
 pub fn default_client() -> Connection {

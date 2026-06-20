@@ -101,6 +101,7 @@ export class FieldDetail {
       fathomConfidence = null,
       isVisible = true,
       isLookup = false,
+      mlData = null,
     } = {}
   ) {
     const fieldDetail = new FieldDetail(element);
@@ -136,6 +137,8 @@ export class FieldDetail {
     } else {
       fieldDetail.reason = "regex-heuristic";
     }
+
+    fieldDetail.mlData = mlData;
 
     try {
       fieldDetail.browsingContextId =

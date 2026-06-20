@@ -6,12 +6,10 @@
 
 @layer input-common {
   :host {
-    --input-height: var(--size-item-small);
-    --input-width: var(--size-item-small);
     --input-space-offset: calc(var(--input-width) + var(--space-small));
     --input-nested-offset: var(--input-space-offset);
     --input-margin-block-adjust: calc((1lh - var(--input-height)) / 2);
-    --icon-margin-block-adjust: calc((1lh - var(--icon-size)) / 2);
+    --input-icon-margin-block-adjust: calc((1lh - var(--icon-size)) / 2);
     --input-margin-inline-start-adjust: calc(-1 * var(--input-space-offset));
   }
 
@@ -93,7 +91,7 @@
   }
 
   /* Undocumented hack for AI controls, do not use, it WILL be removed. (bug 2012250) */
-  h2.text {
+  h3.text {
     display: inline-block;
     margin: 0;
   }
@@ -130,7 +128,7 @@
     height: var(--icon-size);
     /* Margin is calculated from line height and icon size. */
     /* stylelint-disable-next-line stylelint-plugin-mozilla/use-design-tokens */
-    margin-block: var(--icon-margin-block-adjust);
+    margin-block: var(--input-icon-margin-block-adjust);
     -moz-context-properties: fill, fill-opacity, stroke;
     fill: currentColor;
     stroke: currentColor;
@@ -183,5 +181,97 @@
   input:is([type="tel"], [type="url"], [type="email"], [type="number"]):not(:placeholder-shown) {
     direction: ltr;
     text-align: match-parent;
+  }
+}
+
+/* Only Nova uses custom checkbox/radio styles. Previously, accent-color was the only customization. */
+@media -moz-pref("browser.nova.enabled") {
+  input[type="checkbox"],
+  input[type="radio"] {
+    appearance: none;
+    border: var(--border-width) solid var(--checkbox-border-color);
+    border-radius: var(--checkbox-border-radius);
+    background-color: var(--checkbox-background-color);
+    min-width: var(--checkbox-size);
+
+    &:active {
+      background-color: var(--checkbox-background-color-active);
+    }
+
+    &[disabled] {
+      background-color: var(--checkbox-background-color-disabled);
+      opacity: var(--checkbox-opacity-disabled);
+    }
+
+    &:focus-visible {
+      outline: var(--focus-outline);
+      outline-offset: var(--focus-outline-offset);
+    }
+
+    &:checked {
+      border-color: var(--checkbox-border-color-checked);
+
+      &:active {
+        border-color: var(--checkbox-border-color-checked-active);
+      }
+
+      &[disabled] {
+        border-color: var(--checkbox-border-color-checked-disabled);
+      }
+    }
+
+    label:hover &:not(:active, [disabled]) {
+      background-color: var(--checkbox-background-color-hover);
+
+      &:checked {
+        border-color: var(--checkbox-border-color-checked-hover);
+      }
+    }
+  }
+
+  input[type="checkbox"] {
+    &:checked {
+      background: url("chrome://global/content/elements/moz-checkbox-icon.svg") no-repeat center center / var(--icon-size-xsmall) var(--icon-size-xsmall);
+      background-color: var(--checkbox-background-color-checked);
+      -moz-context-properties: stroke;
+      stroke: light-dark(white, black);
+
+      &:active {
+        background-color: var(--checkbox-background-color-checked-active);
+      }
+
+      &[disabled] {
+        background-color: var(--checkbox-background-color-checked-disabled);
+      }
+    }
+
+    label:hover &:not(:active, [disabled]):checked {
+      background-color: var(--checkbox-background-color-checked-hover);
+    }
+  }
+
+  input[type="radio"] {
+    border-radius: var(--border-radius-circle);
+
+    &:checked {
+      --radio-indicator-background-color: var(--checkbox-background-color-checked);
+
+      background: radial-gradient(circle at 50%, var(--radio-indicator-background-color) 4px, transparent 4px);
+      background-color: transparent;
+
+      &:active {
+        --radio-indicator-background-color: var(--checkbox-background-color-checked-active);
+      }
+
+      &[disabled] {
+        --radio-indicator-background-color: var(--checkbox-background-color-checked-disabled);
+      }
+    }
+
+    label:hover &:not(:active, [disabled]):checked {
+      --radio-indicator-background-color: var(--checkbox-background-color-checked-hover);
+
+      background-color: transparent;
+    }
   }
 }

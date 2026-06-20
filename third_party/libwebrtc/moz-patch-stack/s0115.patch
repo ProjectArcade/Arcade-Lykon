@@ -1,87 +1,39 @@
-From: Michael Froman <mjfroman@mac.com>
-Date: Mon, 15 Sep 2025 14:53:58 -0500
-Subject: Bug 1973648 - move applicable libwebrtc changes to our new
- libwebrtc_overrides location. r=ng
+From: Michael Froman <mfroman@mozilla.com>
+Date: Thu, 18 Sep 2025 22:33:00 -0500
+Subject: Bug 1985396 - (fix-38c5a66082) fix windows build failure caused by a
+ macro expansion
 
-Differential Revision: https://phabricator.services.mozilla.com/D258499
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/19164e58323d59c1f66f7fcf671b8d0b6366f708
+Commit 38c5a66082 adds the include rtc_base/strings/string_builder.h to
+third_party/libwebrtc/modules/desktop_capture/desktop_geometry.h, but we
+pick this up through a chain of includes in CamerasParent.cpp.  On Windows
+builds we then get a failure because Shlwapi.h has a macro that expands
+StrCat to StrCatW, which means we're changing absl::StrCat to
+absl::StrCatW which doesn't exist.
+
+We can avoid the desktop_geometry.h include and forward declare
+"class DesktopVector" to work around this issue.
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/9541460d001e1a62ae567a18d810e35e50ac791c
 ---
- call/call.cc                     | 13 -------------
- call/call.h                      | 16 ++--------------
- modules/desktop_capture/BUILD.gn |  5 +++++
- 3 files changed, 7 insertions(+), 27 deletions(-)
+ modules/desktop_capture/desktop_capturer.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/call/call.cc b/call/call.cc
-index df8786c886..c23eeb3b54 100644
---- a/call/call.cc
-+++ b/call/call.cc
-@@ -482,19 +482,6 @@ class Call final : public webrtc::Call,
- };
- }  // namespace internal
+diff --git a/modules/desktop_capture/desktop_capturer.h b/modules/desktop_capture/desktop_capturer.h
+index c85d0eba7a..8219358e1e 100644
+--- a/modules/desktop_capture/desktop_capturer.h
++++ b/modules/desktop_capture/desktop_capturer.h
+@@ -23,7 +23,6 @@
+ #include "modules/desktop_capture/delegated_source_list_controller.h"
+ #include "modules/desktop_capture/desktop_capture_metadata.h"
+ #include "modules/desktop_capture/desktop_capture_types.h"
+-#include "modules/desktop_capture/desktop_frame.h"
+ #include "modules/desktop_capture/desktop_geometry.h"
+ #include "modules/desktop_capture/shared_memory.h"
+ #include "rtc_base/system/rtc_export.h"
+@@ -34,6 +33,7 @@ void RTC_EXPORT LogDesktopCapturerFullscreenDetectorUsage();
  
--std::string Call::Stats::ToString(int64_t time_ms) const {
--  char buf[1024];
--  SimpleStringBuilder ss(buf);
--  ss << "Call stats: " << time_ms << ", {";
--  ss << "send_bw_bps: " << send_bandwidth_bps << ", ";
--  ss << "recv_bw_bps: " << recv_bandwidth_bps << ", ";
--  ss << "max_pad_bps: " << max_padding_bitrate_bps << ", ";
--  ss << "pacer_delay_ms: " << pacer_delay_ms << ", ";
--  ss << "rtt_ms: " << rtt_ms;
--  ss << '}';
--  return ss.str();
--}
--
- std::unique_ptr<Call> Call::Create(CallConfig config) {
-   auto transport_send = std::make_unique<RtpTransportControllerSend>(
-       config.ExtractTransportConfig());
-diff --git a/call/call.h b/call/call.h
-index 636c0f9737..752dbfbfe5 100644
---- a/call/call.h
-+++ b/call/call.h
-@@ -27,6 +27,7 @@
- #include "api/video/video_stream_encoder_settings.h"
- #include "call/audio_receive_stream.h"
- #include "call/audio_send_stream.h"
-+#include "call/call_basic_stats.h"
- #include "call/call_config.h"
- #include "call/flexfec_receive_stream.h"
- #include "call/packet_receiver.h"
-@@ -52,20 +53,7 @@ namespace webrtc {
+ class DesktopCaptureOptions;
+ class DesktopFrame;
++class DesktopVector;
  
- class Call {
-  public:
--  struct Stats {
--    std::string ToString(int64_t time_ms) const;
--
--    int send_bandwidth_bps = 0;       // Estimated available send bandwidth.
--    int max_padding_bitrate_bps = 0;  // Cumulative configured max padding.
--    int recv_bandwidth_bps = 0;       // Estimated available receive bandwidth.
--    int64_t pacer_delay_ms = 0;
--    int64_t rtt_ms = -1;
--    std::optional<int64_t> ccfb_messages_received = std::nullopt;
--    flat_map<uint32_t, SentCongestionControllerFeedbackStats>
--        sent_ccfb_stats_per_ssrc;
--    flat_map<uint32_t, ReceivedCongestionControlFeedbackStats>
--        received_ccfb_stats_per_ssrc;
--  };
-+  using Stats = CallBasicStats;
- 
-   static std::unique_ptr<Call> Create(CallConfig config);
- 
-diff --git a/modules/desktop_capture/BUILD.gn b/modules/desktop_capture/BUILD.gn
-index 6ca070fce7..82be9d5882 100644
---- a/modules/desktop_capture/BUILD.gn
-+++ b/modules/desktop_capture/BUILD.gn
-@@ -402,6 +402,11 @@ rtc_library("desktop_capture") {
-     ]
-     if (build_with_mozilla) {
-       libs -= [ "Xtst" ]
-+      # Mozilla provides custom impl of x_error_trap.*
-+      sources -= [
-+        "linux/x11/x_error_trap.cc",
-+        "linux/x11/x_error_trap.h",
-+      ]
-     }
-   }
- 
+ // Abstract interface for screen and window capturers.
+ class RTC_EXPORT DesktopCapturer {

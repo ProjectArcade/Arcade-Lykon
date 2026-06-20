@@ -32,6 +32,7 @@
 #include "nsIContentPolicy.h"
 #include "nsINode.h"
 #include "nsIPrefetchService.h"
+#include "nsIURIWithSizeOf.h"
 #include "nsMimeTypes.h"
 #include "nsPIDOMWindow.h"
 #include "nsReadableUtils.h"
@@ -44,7 +45,7 @@ NS_IMPL_NS_NEW_HTML_ELEMENT(Link)
 namespace mozilla::dom {
 
 HTMLLinkElement::HTMLLinkElement(
-    already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo)
+    already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo)
     : nsGenericHTMLElement(std::move(aNodeInfo)) {}
 
 HTMLLinkElement::~HTMLLinkElement() { SupportsDNSPrefetch::Destroyed(*this); }
@@ -409,9 +410,10 @@ void HTMLLinkElement::AddSizeOfExcludingThis(nsWindowSizes& aSizes,
   // It is okay to include the size of mCachedURI here even though it might have
   // strong references from elsewhere because the URI was created for this
   // object, in nsGenericHTMLElement::GetURIAttr(). Only objects that created
-  // their own URI will call nsIURI::SizeOfIncludingThis().
+  // their own URI will call nsIURIWithSizeOf::SizeOfIncludingThis().
   if (mCachedURI) {
-    *aNodeSize += mCachedURI->SizeOfIncludingThis(aSizes.mState.mMallocSizeOf);
+    *aNodeSize += SizeOfIncludingThisIfURIWithSizeOf(
+        mCachedURI, aSizes.mState.mMallocSizeOf);
   }
 }
 

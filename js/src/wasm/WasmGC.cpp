@@ -140,7 +140,7 @@ void StackMap::show(uint32_t codeOffset) const {
     return;
   }
   memset(str, 0, nTotal);
-  sprintf(str, "%u words: LO{ ", nWords);
+  snprintf(str, nTotal, "%u words: LO{ ", nWords);
   uint32_t offs = strlen(str);
   for (uint32_t i = 0; i < nWords; i++) {
     char c = '.';
@@ -163,7 +163,7 @@ void StackMap::show(uint32_t codeOffset) const {
     MOZ_RELEASE_ASSERT(offs < nTotal);
     str[offs++] = c;
   }
-  sprintf(&str[offs], " }HI");
+  snprintf(&str[offs], nTotal - offs, " }HI");
   MOZ_RELEASE_ASSERT(str[nTotal - 1] == 0);
   JitSpew(jit::JitSpew_Codegen, "%06x  # <-- @ w::StackMap: %s", codeOffset,
           str);
@@ -280,9 +280,9 @@ void wasm::EmitWasmPreBarrierCallImmediate(MacroAssembler& masm,
   }
 
 #if defined(DEBUG) && defined(JS_CODEGEN_ARM64)
-  // The prebarrier assumes that x28 == sp.
+  // The prebarrier assumes that x20 == sp.
   Label ok;
-  masm.Cmp(sp, vixl::Operand(x28));
+  masm.Cmp(sp, vixl::Operand(x20));
   masm.B(&ok, Assembler::Equal);
   masm.breakpoint();
   masm.bind(&ok);
@@ -312,9 +312,9 @@ void wasm::EmitWasmPreBarrierCallIndex(MacroAssembler& masm, Register instance,
   masm.computeEffectiveAddress(addr, PreBarrierReg);
 
 #if defined(DEBUG) && defined(JS_CODEGEN_ARM64)
-  // The prebarrier assumes that x28 == sp.
+  // The prebarrier assumes that x20 == sp.
   Label ok;
-  masm.Cmp(sp, vixl::Operand(x28));
+  masm.Cmp(sp, vixl::Operand(x20));
   masm.B(&ok, Assembler::Equal);
   masm.breakpoint();
   masm.bind(&ok);

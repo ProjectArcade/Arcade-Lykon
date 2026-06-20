@@ -1303,7 +1303,7 @@ nsCString Classifier::GetProvider(const nsACString& aTableName) {
   nsCString provider;
   nsresult rv = urlUtil->GetProvider(aTableName, provider);
 
-  return NS_SUCCEEDED(rv) ? provider : ""_ns;
+  return NS_SUCCEEDED(rv) ? std::move(provider) : nsCString(""_ns);
 }
 
 /*

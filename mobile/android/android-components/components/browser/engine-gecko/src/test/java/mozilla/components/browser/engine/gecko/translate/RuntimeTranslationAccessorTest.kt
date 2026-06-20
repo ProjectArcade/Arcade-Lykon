@@ -5,7 +5,6 @@ package mozilla.components.browser.engine.gecko.translate
 
 import mozilla.components.concept.engine.translate.TranslationError
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -18,6 +17,7 @@ import org.mozilla.geckoview.TranslationsController.TranslationsException.ERROR_
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowLooper
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(RobolectricTestRunner::class)
 class RuntimeTranslationAccessorTest {

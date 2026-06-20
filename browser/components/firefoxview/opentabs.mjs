@@ -893,6 +893,12 @@ class OpenTabsContextMenu extends MozLitElement {
     });
   }
 
+  onSendTabVerifyAccountClick() {
+    this.ownerViewPage
+      .getWindow()
+      .openTrustedLinkIn("about:preferences#sync", "tab");
+  }
+
   sendTabDevicesTemplate() {
     return html` <panel-list slot="submenu" id="send-tab-menu">
       ${this.devices.map(device => {
@@ -905,12 +911,42 @@ class OpenTabsContextMenu extends MozLitElement {
     </panel-list>`;
   }
 
+  sendTabAccountUnverifiedTemplate() {
+    return html`<panel-item
+      data-l10n-id="fxviewtabrow-send-to-mobile"
+      data-l10n-attrs="accesskey"
+      submenu="send-tab-menu4"
+    >
+      <panel-list slot="submenu" id="send-tab-menu4">
+        <panel-item
+          data-l10n-id="fxviewtabrow-send-to-mobile-not-verified"
+          disabled="true"
+        >
+        </panel-item>
+        <hr />
+        <panel-item
+          data-l10n-id="fxviewtabrow-send-to-mobile-verify-account"
+          @click=${this.onSendTabVerifyAccountClick}
+        >
+        </panel-item>
+      </panel-list>
+    </panel-item>`;
+  }
+
   sendTabSignedOutTemplate() {
     return html`<panel-item
       data-l10n-id="fxviewtabrow-send-to-mobile"
       data-l10n-attrs="accesskey"
-      @click=${this.onSendTabSignedOutItemClick}
-    ></panel-item>`;
+      submenu="send-tab-menu3"
+    >
+      <panel-list slot="submenu" id="send-tab-menu3">
+        <panel-item
+          data-l10n-id="fxviewtabrow-send-to-mobile-sign-in"
+          @click=${this.onSendTabSignedOutItemClick}
+        >
+        </panel-item>
+      </panel-list>
+    </panel-item>`;
   }
 
   sendTabSyncDisabledTemplate() {
@@ -921,7 +957,7 @@ class OpenTabsContextMenu extends MozLitElement {
     >
       <panel-list slot="submenu" id="send-tab-menu1">
         <panel-item
-          data-l10n-id="fxviewtabrow-send-to-mobile-enable-sync2"
+          data-l10n-id="fxviewtabrow-send-to-mobile-turn-on-sync"
           @click=${this.onSendTabSyncDisabledItemClick}
         >
         </panel-item>
@@ -937,7 +973,7 @@ class OpenTabsContextMenu extends MozLitElement {
     >
       <panel-list slot="submenu" id="send-tab-menu2">
         <panel-item
-          data-l10n-id="fxviewtabrow-send-to-mobile-connect-phone2"
+          data-l10n-id="fxviewtabrow-send-to-mobile-connect-device"
           @click=${this.onSendTabConnectPhoneItemClick}
         >
         </panel-item>
@@ -974,6 +1010,9 @@ class OpenTabsContextMenu extends MozLitElement {
     }
 
     switch (true) {
+      case gSync.isUnverified:
+        sendTabPanel = this.sendTabAccountUnverifiedTemplate();
+        break;
       case gSync.isSignedIn === false:
         sendTabPanel = this.sendTabSignedOutTemplate();
         break;

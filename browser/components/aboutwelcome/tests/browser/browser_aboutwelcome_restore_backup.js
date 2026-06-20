@@ -110,10 +110,6 @@ add_task(async function test_aboutwelcome_embedded_backup_restore_properties() {
     Assert.ok(filePicker, "File picker input should be present");
     Assert.ok(fileSelectButton, "File select button should be present");
     Assert.ok(confirmButton, "Confirm button should be present");
-    Assert.ok(
-      confirmButton.hasAttribute("disabled"),
-      "Confirm button should be initially disabled"
-    );
   });
 
   await cleanup();

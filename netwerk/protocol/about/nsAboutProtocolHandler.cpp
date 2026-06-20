@@ -317,8 +317,7 @@ nsNestedAboutURI::Write(nsIObjectOutputStream* aStream) {
   return NS_OK;
 }
 
-NS_IMETHODIMP_(void)
-nsNestedAboutURI::Serialize(mozilla::ipc::URIParams& aParams) {
+void nsNestedAboutURI::Serialize(mozilla::ipc::URIParams& aParams) {
   using namespace mozilla::ipc;
 
   NestedAboutURIParams params;

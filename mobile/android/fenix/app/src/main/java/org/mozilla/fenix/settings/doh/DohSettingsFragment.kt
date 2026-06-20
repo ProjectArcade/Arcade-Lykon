@@ -6,20 +6,17 @@ package org.mozilla.fenix.settings.doh
 
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.fragment.compose.content
 import androidx.navigation.NavHostController
 import androidx.navigation.fragment.findNavController
 import mozilla.components.lib.state.helpers.StoreProvider.Companion.fragmentStore
 import org.mozilla.fenix.R
-import org.mozilla.fenix.databinding.FragmentDohSettingsBinding
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.openToBrowser
 import org.mozilla.fenix.ext.requireComponents
-import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.theme.FirefoxTheme
 
@@ -28,62 +25,47 @@ import org.mozilla.fenix.theme.FirefoxTheme
  */
 internal class DohSettingsFragment : Fragment(), SystemInsetsPaddedFragment {
 
-    private var _binding: FragmentDohSettingsBinding? = null
-    private val binding get() = _binding!!
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View {
-        _binding = FragmentDohSettingsBinding.inflate(inflater, container, false)
-        return binding.root
-    }
+    ) = content {
+        val buildStore = { composeNavController: NavHostController ->
+            val navController = findNavController()
+            val settingsProvider = DefaultDohSettingsProvider(
+                engine = requireContext().components.core.engine,
+                settings = requireContext().components.settings,
+            )
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        binding.composeView.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            val buildStore = { composeNavController: NavHostController ->
-                val navController = findNavController()
-                val settingsProvider = DefaultDohSettingsProvider(
-                    engine = requireContext().components.core.engine,
-                    settings = requireContext().settings(),
-                )
-
-                val store by fragmentStore(DohSettingsState()) {
-                    DohSettingsStore(
-                        middleware = listOf(
-                            DohSettingsMiddleware(
-                                getSettingsProvider = { settingsProvider },
-                                getNavController = { composeNavController },
-                                openUrlInBrowser = { url ->
-                                    navController.openToBrowser()
-                                    requireComponents.useCases.fenixBrowserUseCases.loadUrlOrSearch(
-                                        searchTermOrURL = url,
-                                        newTab = true,
-                                    )
-                                },
-                                exitDohSettings = { navController.popBackStack() },
-                            ),
+            val store by fragmentStore(DohSettingsState()) {
+                DohSettingsStore(
+                    middleware = listOf(
+                        DohSettingsMiddleware(
+                            getSettingsProvider = { settingsProvider },
+                            getNavController = { composeNavController },
+                            openUrlInBrowser = { url ->
+                                navController.openToBrowser()
+                                requireComponents.useCases.fenixBrowserUseCases.loadUrlOrSearch(
+                                    searchTermOrURL = url,
+                                    newTab = true,
+                                )
+                            },
+                            exitDohSettings = { navController.popBackStack() },
                         ),
-                    )
-                }
-
-                store
+                    ),
+                )
             }
 
-            setContent {
-                FirefoxTheme {
-                    DohSettingsNavHost(
-                        buildStore = buildStore,
-                        onUpdateToolbar = { titleResId ->
-                            safeShowToolbar(titleResId)
-                        },
-                    )
-                }
-            }
+            store
+        }
+
+        FirefoxTheme {
+            DohSettingsNavHost(
+                buildStore = buildStore,
+                onUpdateToolbar = { titleResId ->
+                    safeShowToolbar(titleResId)
+                },
+            )
         }
     }
 
@@ -97,10 +79,5 @@ internal class DohSettingsFragment : Fragment(), SystemInsetsPaddedFragment {
     override fun onResume() {
         super.onResume()
         showToolbar(getString(R.string.preference_doh_title))
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
     }
 }

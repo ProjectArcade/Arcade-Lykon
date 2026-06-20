@@ -381,7 +381,7 @@ add_task(
       return;
     }
 
-    sinon.stub(Policy, "isEligibleOnLinux").returns(false);
+    sinon.stub(Policy, "shouldEnableTOUAtRuntime").returns(false);
     let modalStub = sinon.stub(Policy, "showModal").returns(true);
 
     fakeResetAcceptedPolicy();
@@ -410,7 +410,7 @@ add_task(
       return;
     }
 
-    sinon.stub(Policy, "isEligibleOnLinux").returns(true);
+    sinon.stub(Policy, "shouldEnableTOUAtRuntime").returns(true);
     let modalStub = sinon.stub(Policy, "showModal").returns(true);
 
     fakeResetAcceptedPolicy();
@@ -791,10 +791,60 @@ add_task(
   }
 );
 
+// Regression test for Bug 1977258: AboutNewTab.init() must set the AS
+// telemetry pref default even when TOU has not yet been accepted, so that
+// about:welcome's first-screen impression is not dropped.
+add_task(
+  skipIfNotBrowser(),
+  async function test_as_telemetry_pref_set_before_tou_acceptance() {
+    const { AboutNewTab } = ChromeUtils.importESModule(
+      "resource:///modules/AboutNewTab.sys.mjs"
+    );
+    const ACTIVITY_STREAM_TELEMETRY_PREF =
+      "browser.newtabpage.activity-stream.telemetry";
+
+    // Reset any state so we can observe AboutNewTab.init() setting the pref.
+    AboutNewTab.uninit();
+    Services.prefs
+      .getDefaultBranch("")
+      .deleteBranch(ACTIVITY_STREAM_TELEMETRY_PREF);
+    Services.prefs.clearUserPref(ACTIVITY_STREAM_TELEMETRY_PREF);
+    Assert.equal(
+      Services.prefs.getPrefType(ACTIVITY_STREAM_TELEMETRY_PREF),
+      Services.prefs.PREF_INVALID,
+      "ActivityStream telemetry pref is unset before AboutNewTab.init()"
+    );
+
+    sinon.stub(Policy, "showModal").returns(true);
+    const doCleanup = await enrollInPreonboardingExperiment(999);
+    TelemetryReportingPolicy.reset();
+
+    try {
+      AboutNewTab.init();
+
+      Assert.equal(
+        Services.prefs
+          .getDefaultBranch("")
+          .getBoolPref(ACTIVITY_STREAM_TELEMETRY_PREF),
+        AppConstants.MOZILLA_OFFICIAL,
+        "ActivityStream telemetry pref default is set by AboutNewTab.init()"
+      );
+    } finally {
+      AboutNewTab.uninit();
+      Services.prefs
+        .getDefaultBranch("")
+        .deleteBranch(ACTIVITY_STREAM_TELEMETRY_PREF);
+      await doCleanup();
+      sinon.restore();
+    }
+  }
+);
+
 add_task(async function test_canUpload_unblocked_by_tou_accepted() {
-  // On Linux, TOU is disabled by default; stub isEligibleOnLinux to enable TOU
+  // On non-Win/Mac platforms, TOU is disabled by default; stub
+  // shouldEnableTOUAtRuntime to enable TOU.
   if (AppConstants.platform === "linux") {
-    sinon.stub(Policy, "isEligibleOnLinux").returns(true);
+    sinon.stub(Policy, "shouldEnableTOUAtRuntime").returns(true);
   }
 
   const cleanup = () => {
@@ -1022,7 +1072,7 @@ add_task(
       TelemetryUtils.Preferences.BypassNotification,
       true
     );
-    sinon.stub(Policy, "isEligibleOnLinux").returns(true);
+    sinon.stub(Policy, "shouldEnableTOUAtRuntime").returns(true);
     TelemetryReportingPolicy.reset();
 
     Assert.ok(
@@ -1049,7 +1099,7 @@ add_task(
     );
     Services.prefs.setStringPref(TOU_ACCEPTED_DATE_PREF, String(Date.now()));
     Services.prefs.setIntPref(TOU_ACCEPTED_VERSION_PREF, 4);
-    sinon.stub(Policy, "isEligibleOnLinux").returns(true);
+    sinon.stub(Policy, "shouldEnableTOUAtRuntime").returns(true);
     TelemetryReportingPolicy.reset();
 
     Assert.ok(
@@ -1074,7 +1124,7 @@ add_task(
       TelemetryUtils.Preferences.BypassNotification,
       true
     );
-    sinon.stub(Policy, "isEligibleOnLinux").returns(false);
+    sinon.stub(Policy, "shouldEnableTOUAtRuntime").returns(false);
     TelemetryReportingPolicy.reset();
 
     Assert.ok(
@@ -1089,14 +1139,54 @@ add_task(
   }
 );
 
-add_task(async function test_isEligibleOnLinux() {
+add_task(
+  skipIfNotBrowser(),
+  async function test_showModal_passes_browser_element_to_handleAction() {
+    const { BrowserWindowTracker } = ChromeUtils.importESModule(
+      "resource:///modules/BrowserWindowTracker.sys.mjs"
+    );
+    const { SpecialMessageActions } = ChromeUtils.importESModule(
+      "resource://messaging-system/lib/SpecialMessageActions.sys.mjs"
+    );
+
+    const browser = {};
+    const win = { gBrowser: { selectedBrowser: browser } };
+
+    sinon.stub(BrowserWindowTracker, "getTopWindow").returns(win);
+    const handleActionStub = sinon
+      .stub(SpecialMessageActions, "handleAction")
+      .resolves();
+
+    await Policy.showModal({
+      id: "TEST_MODAL",
+      screens: [{ id: "SCREEN_1" }],
+      requireAction: true,
+    });
+
+    Assert.equal(handleActionStub.callCount, 1, "handleAction called once");
+    Assert.strictEqual(
+      handleActionStub.firstCall.args[1],
+      browser,
+      "handleAction receives win.gBrowser.selectedBrowser"
+    );
+    Assert.notEqual(
+      handleActionStub.firstCall.args[1],
+      win,
+      "handleAction does not receive the chrome window"
+    );
+
+    sinon.restore();
+  }
+);
+
+add_task(async function test_shouldEnableTOUAtRuntime() {
   const defaultBranch = Services.prefs.getDefaultBranch(null);
 
   if (AppConstants.platform !== "linux") {
     defaultBranch.setCharPref("distribution.id", "mozilla-official");
     Assert.ok(
-      !Policy.isEligibleOnLinux(),
-      "isEligibleOnLinux() is always false on non-Linux platforms"
+      !Policy.shouldEnableTOUAtRuntime(),
+      "shouldEnableTOUAtRuntime() is always false on non-Linux platforms"
     );
     defaultBranch.deleteBranch("distribution.id");
     return;
@@ -1117,9 +1207,9 @@ add_task(async function test_isEligibleOnLinux() {
   ]) {
     defaultBranch.setCharPref("distribution.id", id);
     Assert.equal(
-      Policy.isEligibleOnLinux(),
+      Policy.shouldEnableTOUAtRuntime(),
       expected,
-      `isEligibleOnLinux() is ${expected} for distribution.id "${id}"`
+      `shouldEnableTOUAtRuntime() is ${expected} for distribution.id "${id}"`
     );
   }
 

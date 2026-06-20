@@ -9,6 +9,7 @@ const {
   DiscoveryStream,
   Search,
   ExternalComponents,
+  SportsWidget,
 } = reducers;
 import { actionTypes as at } from "common/Actions.mjs";
 
@@ -1221,6 +1222,298 @@ describe("Reducers", () => {
       });
       assert.deepEqual(nextState.components, newComponents);
       assert.notDeepEqual(nextState.components, oldComponents);
+    });
+  });
+  describe("SportsWidget", () => {
+    const baseMatches = {
+      previous: [],
+      current: [
+        { global_event_id: 1, status_type: "live", home_score: 0 },
+        { global_event_id: 2, status_type: "live", home_score: 1 },
+      ],
+      next: [],
+    };
+    const stateWithMatches = () => ({
+      ...INITIAL_STATE.SportsWidget,
+      data: { teams: [], matches: { ...baseMatches } },
+    });
+
+    it("WIDGETS_SPORTS_LIVE_UPDATE writes the incoming array to data.live", () => {
+      const liveEvents = [
+        { global_event_id: 1, home_score: 2 },
+        { global_event_id: 99, home_score: 0 },
+      ];
+      const next = SportsWidget(stateWithMatches(), {
+        type: at.WIDGETS_SPORTS_LIVE_UPDATE,
+        data: { live: liveEvents, lastLiveUpdated: 12345 },
+      });
+      assert.deepEqual(next.data.live, liveEvents);
+    });
+
+    it("WIDGETS_SPORTS_LIVE_UPDATE replaces data.live wholesale on each update", () => {
+      // /wcs/live returns the canonical set of in-progress games each tick,
+      // so the reducer simply overwrites; no merge against the prior set.
+      const prev = {
+        ...stateWithMatches(),
+        data: {
+          ...stateWithMatches().data,
+          live: [{ global_event_id: 1, home_score: 0 }],
+        },
+      };
+      const next = SportsWidget(prev, {
+        type: at.WIDGETS_SPORTS_LIVE_UPDATE,
+        data: {
+          live: [{ global_event_id: 2, home_score: 5 }],
+          lastLiveUpdated: 12345,
+        },
+      });
+      assert.deepEqual(next.data.live, [{ global_event_id: 2, home_score: 5 }]);
+    });
+
+    it("WIDGETS_SPORTS_LIVE_UPDATE records lastLiveUpdated at SportsWidget root", () => {
+      const next = SportsWidget(stateWithMatches(), {
+        type: at.WIDGETS_SPORTS_LIVE_UPDATE,
+        data: { live: [], lastLiveUpdated: 999_000 },
+      });
+      assert.equal(next.lastLiveUpdated, 999_000);
+    });
+
+    it("WIDGETS_SPORTS_LIVE_UPDATE lastLiveUpdated survives WIDGETS_SPORTS_WIDGET_SET", () => {
+      // Regression: the timestamp used to live under data.matches and was wiped
+      // by every post-match resync.
+      const afterLive = SportsWidget(stateWithMatches(), {
+        type: at.WIDGETS_SPORTS_LIVE_UPDATE,
+        data: { live: [], lastLiveUpdated: 12345 },
+      });
+      const afterResync = SportsWidget(afterLive, {
+        type: at.WIDGETS_SPORTS_WIDGET_SET,
+        data: { teams: [], matches: { previous: [], current: [], next: [] } },
+      });
+      assert.equal(afterResync.lastLiveUpdated, 12345);
+    });
+
+    it("WIDGETS_SPORTS_LIVE_UPDATE preserves data.matches", () => {
+      const next = SportsWidget(stateWithMatches(), {
+        type: at.WIDGETS_SPORTS_LIVE_UPDATE,
+        data: {
+          live: [{ global_event_id: 1, home_score: 0 }],
+          lastLiveUpdated: 12345,
+        },
+      });
+      assert.deepEqual(next.data.matches, baseMatches);
+    });
+
+    it("WIDGETS_SPORTS_LIVE_UPDATE preserves other SportsWidget fields", () => {
+      const prev = {
+        ...stateWithMatches(),
+        widgetState: "sports-intro",
+        selectedTeams: ["ENG"],
+      };
+      const next = SportsWidget(prev, {
+        type: at.WIDGETS_SPORTS_LIVE_UPDATE,
+        data: { live: [], lastLiveUpdated: 1 },
+      });
+      assert.equal(next.widgetState, "sports-intro");
+      assert.deepEqual(next.selectedTeams, ["ENG"]);
+    });
+
+    it("WIDGETS_SPORTS_SET_CELEBRATIONS replaces the celebrations map", () => {
+      const celebrations = {
+        endedAt: { 7: 12345 },
+        celebrated: [3, 5],
+      };
+      const next = SportsWidget(stateWithMatches(), {
+        type: at.WIDGETS_SPORTS_SET_CELEBRATIONS,
+        data: celebrations,
+      });
+      assert.deepEqual(next.celebrations, celebrations);
+    });
+
+    it("WIDGETS_SPORTS_SET_CELEBRATIONS preserves other SportsWidget fields", () => {
+      const prev = {
+        ...stateWithMatches(),
+        widgetState: "sports-matches",
+        selectedTeams: ["ENG"],
+      };
+      const next = SportsWidget(prev, {
+        type: at.WIDGETS_SPORTS_SET_CELEBRATIONS,
+        data: { endedAt: {}, celebrated: [1] },
+      });
+      assert.equal(next.widgetState, "sports-matches");
+      assert.deepEqual(next.selectedTeams, ["ENG"]);
+      assert.deepEqual(next.data.matches, baseMatches);
+    });
+
+    describe("WIDGETS_SPORTS_SET_LOAD_MORE", () => {
+      const matchA = {
+        global_event_id: 101,
+        home_team: { key: "ENG" },
+        away_team: { key: "FRA" },
+        date: "2026-06-22T18:00:00Z",
+      };
+      const matchB = {
+        global_event_id: 102,
+        home_team: { key: "ESP" },
+        away_team: { key: "POR" },
+        date: "2026-06-23T18:00:00Z",
+      };
+
+      it("merges partial load-more flags into the upcoming slot", () => {
+        const next = SportsWidget(stateWithMatches(), {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "upcoming", loading: true },
+        });
+        assert.deepEqual(next.loadMore.upcoming, {
+          loading: true,
+          exhausted: false,
+          lastFetchedDate: null,
+        });
+        // Results slot is unchanged.
+        assert.deepEqual(
+          next.loadMore.results,
+          INITIAL_STATE.SportsWidget.loadMore.results
+        );
+      });
+
+      it("merges partial load-more flags into the results slot", () => {
+        const next = SportsWidget(stateWithMatches(), {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "results", exhausted: true },
+        });
+        assert.deepEqual(next.loadMore.results, {
+          loading: false,
+          exhausted: true,
+          lastFetchedDate: null,
+        });
+        // Upcoming slot is unchanged.
+        assert.deepEqual(
+          next.loadMore.upcoming,
+          INITIAL_STATE.SportsWidget.loadMore.upcoming
+        );
+      });
+
+      it("appends upcoming matches to data.matches.next", () => {
+        const next = SportsWidget(stateWithMatches(), {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: {
+            direction: "upcoming",
+            matches: [matchA, matchB],
+            loading: false,
+            lastFetchedDate: "2026-06-21",
+            exhausted: false,
+          },
+        });
+        assert.deepEqual(next.data.matches.next, [matchA, matchB]);
+        assert.equal(next.loadMore.upcoming.lastFetchedDate, "2026-06-21");
+        assert.equal(next.loadMore.upcoming.loading, false);
+      });
+
+      it("appends results matches to data.matches.previous", () => {
+        const next = SportsWidget(stateWithMatches(), {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: {
+            direction: "results",
+            matches: [matchA, matchB],
+            loading: false,
+            lastFetchedDate: "2026-05-26",
+            exhausted: false,
+          },
+        });
+        assert.deepEqual(next.data.matches.previous, [matchA, matchB]);
+        assert.equal(next.loadMore.results.lastFetchedDate, "2026-05-26");
+      });
+
+      it("dedupes upcoming appends against existing next[]", () => {
+        const prev = {
+          ...stateWithMatches(),
+          data: {
+            teams: [],
+            matches: { previous: [], current: [], next: [matchA] },
+          },
+        };
+        const next = SportsWidget(prev, {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "upcoming", matches: [matchA, matchB] },
+        });
+        assert.deepEqual(next.data.matches.next, [matchA, matchB]);
+      });
+
+      it("dedupes results appends against existing previous[]", () => {
+        const prev = {
+          ...stateWithMatches(),
+          data: {
+            teams: [],
+            matches: { previous: [matchA], current: [], next: [] },
+          },
+        };
+        const next = SportsWidget(prev, {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "results", matches: [matchA, matchB] },
+        });
+        assert.deepEqual(next.data.matches.previous, [matchA, matchB]);
+      });
+
+      it("dedupes by composite key when global_event_id is missing", () => {
+        const tbdMatch = {
+          home_team: { key: "TBD-1" },
+          away_team: { key: "TBD-2" },
+          date: "2026-07-04T18:00:00Z",
+        };
+        const prev = {
+          ...stateWithMatches(),
+          data: {
+            teams: [],
+            matches: { previous: [], current: [], next: [tbdMatch] },
+          },
+        };
+        const next = SportsWidget(prev, {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "upcoming", matches: [tbdMatch, matchA] },
+        });
+        assert.deepEqual(next.data.matches.next, [tbdMatch, matchA]);
+      });
+
+      it("leaves existing matches alone when no new matches are provided", () => {
+        const next = SportsWidget(stateWithMatches(), {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "upcoming", loading: false, exhausted: true },
+        });
+        assert.deepEqual(next.data.matches, baseMatches);
+        assert.equal(next.loadMore.upcoming.exhausted, true);
+      });
+
+      it("ignores actions with an unknown direction", () => {
+        const prev = stateWithMatches();
+        const next = SportsWidget(prev, {
+          type: at.WIDGETS_SPORTS_SET_LOAD_MORE,
+          data: { direction: "sideways", loading: true },
+        });
+        // Unknown directions are a no-op — return the prior state untouched.
+        assert.strictEqual(next, prev);
+      });
+    });
+
+    it("WIDGETS_SPORTS_WIDGET_SET resets both load-more slots", () => {
+      const prev = {
+        ...stateWithMatches(),
+        loadMore: {
+          upcoming: {
+            loading: false,
+            exhausted: true,
+            lastFetchedDate: "2026-06-21",
+          },
+          results: {
+            loading: true,
+            exhausted: false,
+            lastFetchedDate: "2026-05-26",
+          },
+        },
+      };
+      const next = SportsWidget(prev, {
+        type: at.WIDGETS_SPORTS_WIDGET_SET,
+        data: { teams: [], matches: { previous: [], current: [], next: [] } },
+      });
+      assert.deepEqual(next.loadMore, INITIAL_STATE.SportsWidget.loadMore);
     });
   });
 });

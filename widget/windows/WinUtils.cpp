@@ -495,6 +495,23 @@ nsWindow* WinUtils::GetNSWindowPtr(HWND aWnd) {
 }
 
 /* static */
+bool WinUtils::QueryCloaked(HWND aWnd) {
+  // Safe to call off the main thread: this is a standalone DWM query that does
+  // not touch any nsWindow state. The window occlusion calculator relies on it
+  // from its own thread.
+  DWORD cloakedState = 0;
+  HRESULT hr = ::DwmGetWindowAttribute(aWnd, DWMWA_CLOAKED, &cloakedState,
+                                       sizeof(cloakedState));
+  if (FAILED(hr)) {
+    static mozilla::LazyLogModule sCloakingLog("DWMCloaking");
+    MOZ_LOG(sCloakingLog, LogLevel::Warning,
+            ("failed (%08lX) to query cloaking state for HWND %p", hr, aWnd));
+    return false;
+  }
+  return cloakedState != 0;
+}
+
+/* static */
 bool WinUtils::IsOurProcessWindow(HWND aWnd) {
   if (!aWnd) {
     return false;
@@ -1270,33 +1287,35 @@ bool WinUtils::IsIMEEnabled(IMEEnabled aIMEState) {
 
 /* static */
 void WinUtils::SetupKeyModifiersSequence(nsTArray<KeyPair>* aArray,
-                                         uint32_t aModifiers, UINT aMessage) {
-  MOZ_ASSERT(!(aModifiers & nsIWidget::ALTGRAPH) ||
-             !(aModifiers & (nsIWidget::CTRL_L | nsIWidget::ALT_R)));
+                                         nsIWidget::NativeModifiers aModifiers,
+                                         UINT aMessage) {
+  MOZ_ASSERT(!(aModifiers & nsIWidget::NativeModifiers::ALTGRAPH) ||
+             !(aModifiers & (nsIWidget::NativeModifiers::CTRL_L |
+                             nsIWidget::NativeModifiers::ALT_R)));
   if (aMessage == WM_KEYUP) {
     // If AltGr is released, ControlLeft key is released first, then,
     // AltRight key is released.
-    if (aModifiers & nsIWidget::ALTGRAPH) {
+    if (aModifiers & nsIWidget::NativeModifiers::ALTGRAPH) {
       aArray->AppendElement(
           KeyPair(VK_CONTROL, VK_LCONTROL, ScanCode::eControlLeft));
       aArray->AppendElement(KeyPair(VK_MENU, VK_RMENU, ScanCode::eAltRight));
     }
     for (uint32_t i = std::size(sModifierKeyMap); i; --i) {
       const uint32_t* map = sModifierKeyMap[i - 1];
-      if (aModifiers & map[0]) {
+      if (aModifiers & static_cast<nsIWidget::NativeModifiers>(map[0])) {
         aArray->AppendElement(KeyPair(map[1], map[2], map[3]));
       }
     }
   } else {
     for (uint32_t i = 0; i < std::size(sModifierKeyMap); ++i) {
       const uint32_t* map = sModifierKeyMap[i];
-      if (aModifiers & map[0]) {
+      if (aModifiers & static_cast<nsIWidget::NativeModifiers>(map[0])) {
         aArray->AppendElement(KeyPair(map[1], map[2], map[3]));
       }
     }
     // If AltGr is pressed, ControlLeft key is pressed first, then,
     // AltRight key is pressed.
-    if (aModifiers & nsIWidget::ALTGRAPH) {
+    if (aModifiers & nsIWidget::NativeModifiers::ALTGRAPH) {
       aArray->AppendElement(
           KeyPair(VK_CONTROL, VK_LCONTROL, ScanCode::eControlLeft));
       aArray->AppendElement(KeyPair(VK_MENU, VK_RMENU, ScanCode::eAltRight));

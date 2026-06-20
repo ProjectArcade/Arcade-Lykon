@@ -600,8 +600,7 @@ dom::RTCDataChannelStats RTCDataChannel::GetStats(
 void RTCDataChannel::UnsetWorkerNeedsUs() {
   MOZ_ASSERT(mEventTarget->IsOnCurrentThread());
   mWorkerNeedsUs = false;
-  DC_INFO(("%p: Unsetting mWorkerNeedsUs, clearing worker weak ref", this));
-  mWorkerRef = nullptr;
+  DC_INFO(("%p: Unsetting mWorkerNeedsUs", this));
   UpdateMustKeepAlive();
 }
 
@@ -746,7 +745,7 @@ nsresult RTCDataChannel::DoOnMessageAvailable(const nsACString& aData,
     jsData.setString(jsString);
   }
 
-  RefPtr<MessageEvent> event = new MessageEvent(this, nullptr, nullptr);
+  RefPtr event = MakeRefPtr<MessageEvent>(this, nullptr, nullptr);
 
   event->InitMessageEvent(nullptr, u"message"_ns, CanBubble::eNo,
                           Cancelable::eNo, jsData, mOrigin, u""_ns, nullptr,
@@ -907,7 +906,7 @@ void RTCDataChannel::EventListenerRemoved(nsAtom* aType) {
 }
 
 /* static */
-nsresult NS_NewDOMDataChannel(already_AddRefed<DataChannel>&& aDataChannel,
+nsresult NS_NewDOMDataChannel(already_AddRefed<DataChannel> aDataChannel,
                               const nsACString& aLabel,
                               const nsAString& aOrigin, bool aOrdered,
                               Nullable<uint16_t> aMaxLifeTime,
@@ -915,7 +914,7 @@ nsresult NS_NewDOMDataChannel(already_AddRefed<DataChannel>&& aDataChannel,
                               const nsACString& aProtocol, bool aNegotiated,
                               nsPIDOMWindowInner* aWindow,
                               RTCDataChannel** aDomDataChannel) {
-  RefPtr<RTCDataChannel> domdc = new RTCDataChannel(
+  RefPtr domdc = MakeRefPtr<RTCDataChannel>(
       aLabel, aOrigin, aOrdered, aMaxLifeTime, aMaxRetransmits, aProtocol,
       aNegotiated, aDataChannel, aWindow);
 

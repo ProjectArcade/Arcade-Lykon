@@ -6,6 +6,8 @@ package org.mozilla.fenix.components.menu.store
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.Immutable
+import mozilla.components.browser.state.state.CustomTabSessionState
+import mozilla.components.browser.state.state.SessionState
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.feature.addons.Addon
 import mozilla.components.lib.state.State
@@ -17,8 +19,6 @@ import org.mozilla.fenix.components.menu.MenuAccessPoint
  * Value type that represents the state of the menu.
  *
  * @property browserMenuState The [BrowserMenuState] of the current browser session if any.
- * @property customTabSessionId The ID of the custom tab session if navigating from
- * an external access point, and null otherwise.
  * @property extensionMenuState The [ExtensionMenuState] to display.
  * @property summarizationMenuState The [SummarizationMenuState] that handles summarization menu item
  * @property ipProtectionMenuState The [IPProtectionMenuState] for the IP protection menu item.
@@ -28,7 +28,6 @@ import org.mozilla.fenix.components.menu.MenuAccessPoint
  */
 data class MenuState(
     val browserMenuState: BrowserMenuState? = null,
-    val customTabSessionId: String? = null,
     val extensionMenuState: ExtensionMenuState = ExtensionMenuState(),
     val summarizationMenuState: SummarizationMenuState = SummarizationMenuState.Default,
     val ipProtectionMenuState: IPProtectionMenuState = IPProtectionMenuState(),
@@ -47,18 +46,35 @@ data class MenuState(
             val isContentUrl = url?.isContentUrl() ?: false
             return !isAboutUrl && !isContentUrl
         }
+
+    /**
+     * Checks whether the reader mode is active
+     *
+     * For custom tabs, this returns false and for regular tabs, it uses [TabSessionState]'s
+     * [mozilla.components.browser.state.state.ReaderState]
+     */
+    val isReaderModeActive: Boolean
+        get() {
+            val tab = browserMenuState?.selectedTab ?: return false
+            return when (tab) {
+                is TabSessionState -> tab.readerState.active
+                // intentionally separated from the else clause to make it visible and explicit
+                is CustomTabSessionState -> false
+                else -> false
+            }
+        }
 }
 
 /**
  * Value type that represents the state of the browser menu.
  *
- * @property selectedTab The current selected [TabSessionState].
+ * @property selectedTab The current selected [SessionState].
  * @property bookmarkState The [BookmarkState] of the selected tab.
  * @property isPinned Whether or not the selected tab is a pinned shortcut.
  * @property isLoading Whether or not the selected tab is loading.
  */
 data class BrowserMenuState(
-    val selectedTab: TabSessionState,
+    val selectedTab: SessionState,
     val bookmarkState: BookmarkState = BookmarkState(),
     val isPinned: Boolean = false,
     val isLoading: Boolean = false,
@@ -194,26 +210,38 @@ data class TranslationInfo(
 )
 
 /**
- * Represents the possible display states of the IP protection menu item badge.
+ * Represents the display states of the IP protection menu item.
  */
 enum class IPProtectionMenuStatus {
-    /** Proxy is ready but not active. */
-    Off,
+    /**
+     * IP protection is inactive.
+     */
+    Disabled,
 
-    /** Proxy is active and protecting traffic. */
-    On,
-
-    /** Proxy is in the process of activating. */
+    /**
+     * IP protection is in the process of activating.
+     */
     Activating,
 
-    /** Proxy is paused. */
-    Paused,
+    /**
+     * IP protection is active.
+     */
+    Enabled,
 
-    /** Proxy encountered an error. */
-    Error,
+    /**
+     * IP protection is paused until the data limit resets.
+     */
+    DataLimitReached,
 
-    /** User needs to authenticate before IP protection can be used. */
-    NeedsAuthentication,
+    /**
+     * IP protection has errored.
+     */
+    ConnectionError,
+
+    /**
+     * User needs to authenticate or to authorize ip protection service before IP protection can be used.
+     */
+    AuthRequired,
 }
 
 /**
@@ -224,6 +252,6 @@ enum class IPProtectionMenuStatus {
  */
 @Immutable
 data class IPProtectionMenuState(
-    val status: IPProtectionMenuStatus = IPProtectionMenuStatus.Off,
+    val status: IPProtectionMenuStatus = IPProtectionMenuStatus.Disabled,
     val dataLimitGb: Int = -1,
 )

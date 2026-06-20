@@ -19,6 +19,7 @@
 #include "nsIAsyncShutdown.h"
 #include "nsIObserver.h"
 #include "nsISerialEventTarget.h"
+#include "nsISupportsImpl.h"
 #include "nsITransportSecurityInfo.h"
 #include "nsTArray.h"
 #include "nsTHashMap.h"
@@ -74,16 +75,16 @@ class SSLTokensCache : public nsIMemoryReporter,
   static nsresult RemoveAll(const nsACString& aKey);
   static void Clear();
   static void RemoveByHostAndOAPattern(
-      const nsACString& aHost,
-      const mozilla::OriginAttributesPattern& aPattern);
+      const nsACString& aHost, const mozilla::OriginAttributesPattern& aPattern)
+      MOZ_EXCLUDES(sLock);
   static void RemoveBySiteAndOAPattern(
-      const nsACString& aSite,
-      const mozilla::OriginAttributesPattern& aPattern);
+      const nsACString& aSite, const mozilla::OriginAttributesPattern& aPattern)
+      MOZ_EXCLUDES(sLock);
 
   // Serialize the current cache state into STCF format for IPC transport.
   static nsTArray<uint8_t> SerializeForIPC();
 
-  // Replace the cache and Rust shadow with STCF data received via IPC.
+  // Replace the cache with STCF data received via IPC.
   static void DeserializeFromIPC(mozilla::Span<const uint8_t> aData);
   // Dispatches DeserializeFromIPC to a background thread; no-ops on empty buf.
   static void DeserializeFromIPCAsync(mozilla::ipc::ByteBuf&& aBuf);
@@ -94,31 +95,30 @@ class SSLTokensCache : public nsIMemoryReporter,
   static void LoadForTest(const nsACString& aPath);
   static uint32_t CountForTest();
   static void PutForTest(const nsACString& aKey);
+  static uint32_t CacheSizeForTest();
 #endif
 
  private:
+  class TokenCacheRecord;  // defined below
+
   SSLTokensCache();
   virtual ~SSLTokensCache();
 
   nsresult RemoveLocked(const nsACString& aKey, uint64_t aId)
       MOZ_REQUIRES(sLock);
   nsresult RemoveAllLocked(const nsACString& aKey) MOZ_REQUIRES(sLock);
-  // aRemovedIds collects IDs removed from the C++ cache; the caller must call
-  // ssl_tokens_cache_remove() for each after releasing sLock.
-  nsresult GetLocked(const nsACString& aKey, nsTArray<uint8_t>& aToken,
-                     SessionCacheInfo& aResult, uint64_t* aTokenId,
-                     nsTArray<uint64_t>& aRemovedIds) MOZ_REQUIRES(sLock);
+  // Extracts the first valid (non-expired) record for aKey, updating
+  // mCacheSize and mExpirationArray.  Sets *aTokenId if non-null.
+  // Returns the owned record on hit, nullptr on miss.
+  UniquePtr<TokenCacheRecord> GetRecordLocked(const nsACString& aKey,
+                                              uint64_t* aTokenId)
+      MOZ_REQUIRES(sLock);
 
-  // Evicts records until under capacity. Appends evicted IDs to aEvictedIds;
-  // the caller must call ssl_tokens_cache_remove() for each after releasing
-  // sLock.
-  void EvictIfNecessary(nsTArray<uint64_t>& aEvictedIds) MOZ_REQUIRES(sLock);
+  void EvictIfNecessary() MOZ_REQUIRES(sLock);
   void LogStats() MOZ_REQUIRES(sLock);
-  // Clears the C++ cache state under sLock. The caller must call
-  // ssl_tokens_cache_clear() after releasing sLock.
   void ClearCacheLocked() MOZ_REQUIRES(sLock);
-  // Returns true if a token for aKey with aOverridableError should be appended
-  // to the Rust shadow (i.e. is not PBM and has no cert-error override).
+  // Returns true if a token for aKey with aOverridableError should be
+  // persisted to disk (not PBM and no cert-error override).
   static bool ShouldPersistKey(const nsACString& aKey,
                                uint8_t aOverridableError);
 
@@ -132,15 +132,24 @@ class SSLTokensCache : public nsIMemoryReporter,
   uint32_t mCacheSize MOZ_GUARDED_BY(sLock){0};
 
   // Persistence state (parent process only)
+  bool mWriteObserversRegistered MOZ_GUARDED_BY(sLock){false};
   nsCOMPtr<nsIFile> mBackingFile MOZ_GUARDED_BY(sLock);
   nsCOMPtr<nsISerialEventTarget> mWriteTaskQueue MOZ_GUARDED_BY(sLock);
   bool mLoadComplete MOZ_GUARDED_BY(sLock){false};
   TimeStamp mLoadStartTime MOZ_GUARDED_BY(sLock);
   // Bumped by Clear() to invalidate in-flight background loads.
   uint32_t mLoadGeneration MOZ_GUARDED_BY(sLock){0};
-  void DoWrite(bool aSynchronous);
-  void RemoveShutdownBlocker();
+  void DoWrite(bool aSynchronous) MOZ_EXCLUDES(sLock);
+  void RegisterShutdownBlocker() MOZ_EXCLUDES(sLock);
+  void RemoveShutdownBlocker() MOZ_EXCLUDES(sLock);
   nsCOMPtr<nsIAsyncShutdownClient> mShutdownBarrier MOZ_GUARDED_BY(sLock);
+  // Sets up gInstance's mBackingFile/mWriteTaskQueue and captures load
+  // timing. Returns the path to load on success, empty if ProfD is
+  // unavailable. Parent-process only; caller must hold sLock and have
+  // verified mBackingFile is not yet set.
+  static nsCString SetupPersistenceLocked(uint32_t& aLoadGen)
+      MOZ_REQUIRES(sLock);
+  static void DispatchLoad(nsCString aPath, uint32_t aLoadGen);
   static void OnLoadCompleteNotify(uint32_t aCount);
   // aExpectedGen: mLoadGeneration captured at load start; insertion is skipped
   // if Clear() has run since (generation mismatch).
@@ -160,22 +169,18 @@ class SSLTokensCache : public nsIMemoryReporter,
   static OriginAttributes OAFromPeerId(const nsACString& aPeerId);
   static void RemoveByMatchAndOAPattern(
       const nsACString& aValue, const nsACString& aSeparatedValue,
-      const mozilla::OriginAttributesPattern& aPattern);
+      const mozilla::OriginAttributesPattern& aPattern) MOZ_EXCLUDES(sLock);
 
-  // Removes entries matching aPredicate and returns the IDs still in the cache.
-  template <typename Pred>
-  nsTArray<uint64_t> RemoveMatchingLocked(Pred&& aPredicate)
+  // Builds a snapshot of all currently cached records that should be
+  // persisted (filtered by ShouldPersistKey). Each snapshot record
+  // borrows the token bytes via raw pointer (valid only while sLock is
+  // held); cert chain fields are cloned so the snapshot owns them.
+  nsTArray<SslTokensPersistedRecord> CollectSnapshotLocked() const
       MOZ_REQUIRES(sLock);
-  // Collects the mId of every record currently in the cache.
-  nsTArray<uint64_t> CollectValidIdsLocked() const MOZ_REQUIRES(sLock);
-  // Syncs the Rust shadow to the given ID set.
-  // Must be called without sLock held.
-  static void SyncRustShadow(nsTArray<uint64_t>&& aRemainingIds)
-      MOZ_EXCLUDES(sLock);
-  // Removes entries matching aPredicate, acquires sLock, syncs the Rust
-  // shadow, then releases sLock before calling SyncRustShadow.
+  static nsTArray<uint8_t> SerializeSnapshotLocked() MOZ_REQUIRES(sLock);
+  // Removes entries matching aPredicate.
   template <typename Pred>
-  static void RemoveMatchingAndSync(Pred&& aPredicate) MOZ_EXCLUDES(sLock);
+  void RemoveMatchingLocked(Pred&& aPredicate) MOZ_REQUIRES(sLock);
   // FFI callback used by LoadForTest.
   static void PutFromPersistedCallback(void*,
                                        const SslTokensPersistedRecord* aRec);
@@ -185,14 +190,16 @@ class SSLTokensCache : public nsIMemoryReporter,
     ~TokenCacheRecord();
 
     uint32_t Size() const;
-    void Reset();
 
     nsCString mKey;
     PRTime mExpirationTime = 0;
-    nsTArray<uint8_t> mToken;
-    SessionCacheInfo mSessionCacheInfo;
-    // An unique id to identify the record. Mostly used when we want to remove a
-    // record from TokenCacheEntry.
+    // Compressed (token || serialized SessionCacheInfo). Storing them together
+    // lets the compressor find redundancies across the NSS token and the cert
+    // chain fields (both carry the same cert DER).
+    nsTArray<uint8_t> mCompressedPayload;
+    // Cached separately to allow ShouldPersistKey() filtering without
+    // decompressing the payload.
+    uint8_t mOverridableError = 0;
     uint64_t mId = 0;
   };
 
@@ -218,12 +225,7 @@ class SSLTokensCache : public nsIMemoryReporter,
   };
 
   void OnRecordDestroyed(TokenCacheRecord* aRec) MOZ_REQUIRES(sLock);
-  // Inserts aRec into the cache, updates mCacheSize, and evicts if needed.
-  // Returns the record ID. Appends any evicted IDs to aEvictedIds. sLock must
-  // be held; caller must call ssl_tokens_cache_remove() for each evicted ID
-  // after releasing sLock.
-  uint64_t InsertRecordLocked(UniquePtr<TokenCacheRecord> aRec,
-                              nsTArray<uint64_t>& aEvictedIds)
+  uint64_t InsertRecordLocked(UniquePtr<TokenCacheRecord> aRec)
       MOZ_REQUIRES(sLock);
 
   nsClassHashtable<nsCStringHashKey, TokenCacheEntry> mTokenCacheRecords

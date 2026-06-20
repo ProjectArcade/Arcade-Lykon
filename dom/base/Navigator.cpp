@@ -42,6 +42,7 @@
 #include "mozilla/StaticPrefs_privacy.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/StorageAccess.h"
+#include "mozilla/dom/AudioSession.h"
 #include "mozilla/dom/Clipboard.h"
 #include "mozilla/dom/ContentChild.h"
 #include "mozilla/dom/CredentialsContainer.h"
@@ -153,6 +154,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(Navigator)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mServiceWorkerContainer)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mMediaCapabilities)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mMediaSession)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mAudioSession)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mAddonManager)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mWebGpu)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mLocks)
@@ -241,6 +243,8 @@ void Navigator::Invalidate() {
     mMediaSession = nullptr;
   }
 
+  mAudioSession = nullptr;
+
   mAddonManager = nullptr;
 
   mWebGpu = nullptr;
@@ -280,7 +284,7 @@ void Navigator::GetUserAgent(nsAString& aUserAgent, CallerType aCallerType,
       docshell->GetBrowsingContext()->GetCustomUserAgent(customUserAgent);
 
       if (!customUserAgent.IsEmpty()) {
-        aUserAgent = customUserAgent;
+        aUserAgent = std::move(customUserAgent);
         return;
       }
     }
@@ -439,7 +443,7 @@ void Navigator::GetPlatform(nsAString& aPlatform, CallerType aCallerType,
       bc->GetCustomPlatform(customPlatform);
 
       if (!customPlatform.IsEmpty()) {
-        aPlatform = customPlatform;
+        aPlatform = std::move(customPlatform);
         return;
       }
     }
@@ -469,7 +473,7 @@ void Navigator::GetOscpu(nsAString& aOSCPU, CallerType aCallerType,
     nsAutoString override;
     nsresult rv = Preferences::GetString("general.oscpu.override", override);
     if (NS_SUCCEEDED(rv)) {
-      aOSCPU = override;
+      aOSCPU = std::move(override);
       return;
     }
   }
@@ -632,7 +636,7 @@ void Navigator::GetBuildID(nsAString& aBuildID, CallerType aCallerType,
     nsAutoString override;
     nsresult rv = Preferences::GetString("general.buildID.override", override);
     if (NS_SUCCEEDED(rv)) {
-      aBuildID = override;
+      aBuildID = std::move(override);
       return;
     }
 
@@ -2042,7 +2046,7 @@ nsresult Navigator::GetPlatform(nsAString& aPlatform, Document* aCallerDoc,
         mozilla::Preferences::GetString("general.platform.override", override);
 
     if (NS_SUCCEEDED(rv)) {
-      aPlatform = override;
+      aPlatform = std::move(override);
       return NS_OK;
     }
   }
@@ -2079,7 +2083,7 @@ nsresult Navigator::GetAppVersion(nsAString& aAppVersion, Document* aCallerDoc,
                                                   override);
 
     if (NS_SUCCEEDED(rv)) {
-      aAppVersion = override;
+      aAppVersion = std::move(override);
       return NS_OK;
     }
   }
@@ -2144,7 +2148,7 @@ nsresult Navigator::GetUserAgent(nsPIDOMWindowInner* aWindow,
         mozilla::Preferences::GetString("general.useragent.override", override);
 
     if (NS_SUCCEEDED(rv)) {
-      aUserAgent = override;
+      aUserAgent = std::move(override);
       return NS_OK;
     }
   }
@@ -2282,6 +2286,13 @@ dom::MediaSession* Navigator::MediaSession() {
     mMediaSession = new dom::MediaSession(GetWindow());
   }
   return mMediaSession;
+}
+
+dom::AudioSession* Navigator::AudioSession() {
+  if (!mAudioSession) {
+    mAudioSession = new dom::AudioSession(GetWindow());
+  }
+  return mAudioSession;
 }
 
 bool Navigator::HasCreatedMediaSession() const {

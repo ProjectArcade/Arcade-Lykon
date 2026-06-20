@@ -392,6 +392,104 @@ add_task(async function test_no_infobar_on_meta_refresh() {
   BrowserTestUtils.removeTab(tab);
 });
 
+// Telemetry: banner_shown counter increments when the infobar appears.
+add_task(async function test_telemetry_banner_shown() {
+  Services.fog.testResetFOG();
+
+  let blockingPromise = waitForContentBlockingEvent(pbWindow.gBrowser);
+  let tab = await BrowserTestUtils.openNewForegroundTab(
+    pbWindow.gBrowser,
+    TRACKING_PAGE
+  );
+  await blockingPromise;
+
+  let loadedPromise = BrowserTestUtils.browserLoaded(tab.linkedBrowser);
+  pbWindow.gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_NONE);
+  await loadedPromise;
+
+  await TestUtils.waitForCondition(
+    () => getNotification(tab.linkedBrowser),
+    "Waiting for notification to appear"
+  );
+
+  Assert.equal(
+    Glean.privacyReducedPageProtection.bannerShown.testGetValue(),
+    1,
+    "banner_shown counter incremented once when the infobar appeared"
+  );
+
+  BrowserTestUtils.removeTab(tab);
+});
+
+// Telemetry: reload_clicked counter increments when the reload button is clicked.
+add_task(async function test_telemetry_reload_clicked() {
+  Services.fog.testResetFOG();
+
+  let blockingPromise = waitForContentBlockingEvent(pbWindow.gBrowser);
+  let tab = await BrowserTestUtils.openNewForegroundTab(
+    pbWindow.gBrowser,
+    TRACKING_PAGE
+  );
+  await blockingPromise;
+
+  let loadedPromise = BrowserTestUtils.browserLoaded(tab.linkedBrowser);
+  pbWindow.gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_NONE);
+  await loadedPromise;
+
+  let notification = await TestUtils.waitForCondition(
+    () => getNotification(tab.linkedBrowser),
+    "Waiting for notification to appear"
+  );
+
+  let reloadPromise = BrowserTestUtils.browserLoaded(tab.linkedBrowser);
+  notification.buttonContainer.querySelector("button:last-child").click();
+  await reloadPromise;
+
+  Assert.equal(
+    Glean.privacyReducedPageProtection.reloadClicked.testGetValue(),
+    1,
+    "reload_clicked counter incremented once when the reload button was clicked"
+  );
+
+  BrowserTestUtils.removeTab(tab);
+});
+
+// Telemetry: disable_clicked counter increments when "Don't show again" is clicked.
+add_task(async function test_telemetry_disable_clicked() {
+  Services.fog.testResetFOG();
+
+  let blockingPromise = waitForContentBlockingEvent(pbWindow.gBrowser);
+  let tab = await BrowserTestUtils.openNewForegroundTab(
+    pbWindow.gBrowser,
+    TRACKING_PAGE
+  );
+  await blockingPromise;
+
+  let loadedPromise = BrowserTestUtils.browserLoaded(tab.linkedBrowser);
+  pbWindow.gBrowser.reloadWithFlags(Ci.nsIWebNavigation.LOAD_FLAGS_NONE);
+  await loadedPromise;
+
+  let notification = await TestUtils.waitForCondition(
+    () => getNotification(tab.linkedBrowser),
+    "Waiting for notification to appear"
+  );
+
+  notification.buttonContainer.querySelector("button:first-child").click();
+
+  Assert.equal(
+    Glean.privacyReducedPageProtection.disableClicked.testGetValue(),
+    1,
+    "disable_clicked counter incremented once when 'Don't show again' was clicked"
+  );
+
+  BrowserTestUtils.removeTab(tab);
+  // Restore pref value before test ran due to flipped when clicking on disable
+  Services.prefs.setBoolPref(
+    "privacy.reducePageProtection.infobar.enabled.pbmode",
+    true
+  );
+});
+
 // Clicking "Don't show again" sets the feature pref to false.
 add_task(async function test_dont_show_again_disables_pref() {
   let blockingPromise = waitForContentBlockingEvent(pbWindow.gBrowser);
@@ -430,7 +528,7 @@ add_task(async function test_dont_show_again_disables_pref() {
   );
 
   BrowserTestUtils.removeTab(tab);
-  // restore prefs to value before test ran
+  // Restore pref value before test ran due to flipped when clicking on disable
   Services.prefs.setBoolPref(
     "privacy.reducePageProtection.infobar.enabled.pbmode",
     true

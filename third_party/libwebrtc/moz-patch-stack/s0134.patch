@@ -1,23 +1,33 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Mon, 6 Apr 2026 14:37:00 -0500
-Subject: Bug 2029247 - (fix-0fc5aeecfb) base-toolchains build fix
+Date: Wed, 8 Apr 2026 10:58:00 -0500
+Subject: Bug 2030139 - (fix-bb3693c382) fix linux builds for constexpr
+ containing std::string
 
-Upstream was assigning a -2 to a uint16_t.
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/f5dfd2e6901c9d79ee528bf3801ded81b6dd65c9
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/cab51cf0d4e9e67e9f5b053128d05e859d47b7c2
 ---
- rtc_base/network_constants.h | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ modules/portal/pipewire_utils.cc | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
-diff --git a/rtc_base/network_constants.h b/rtc_base/network_constants.h
-index 8c43576c61..ca25d2b465 100644
---- a/rtc_base/network_constants.h
-+++ b/rtc_base/network_constants.h
-@@ -38,7 +38,7 @@ constexpr uint16_t kNetworkCostVpn = 1;
+diff --git a/modules/portal/pipewire_utils.cc b/modules/portal/pipewire_utils.cc
+index 850726cc58..7008696b7d 100644
+--- a/modules/portal/pipewire_utils.cc
++++ b/modules/portal/pipewire_utils.cc
+@@ -28,9 +28,18 @@
  
- // Add -2 to the network cost when using network slicing so that e.g. premium 5G
- // slice is preferred over regular 5G, everything else being equal.
--constexpr uint16_t kNetworkCostSlice = -2;
-+constexpr int16_t kNetworkCostSlice = -2;
+ namespace webrtc {
  
- // Aliases for correct wrap-around with network slice cost.
- constexpr uint16_t kNetworkCostCellular5GSlice =  // 248
++#if defined(__GNUC__) && defined(WEBRTC_MOZILLA_BUILD)
++// Mozilla linux builds are using -std=gnu++20, which doesn't approve
++// of using std::string in a constexpr.  PipewireVersion now contains
++// std::string as of libwebrtc commit d167fe9296.
++static const PipeWireVersion kReentrantDeinitMinVersion = {.major = 0,
++                                                           .minor = 3,
++                                                           .micro = 49};
++#else
+ constexpr PipeWireVersion kReentrantDeinitMinVersion = {.major = 0,
+                                                         .minor = 3,
+                                                         .micro = 49};
++#endif
+ 
+ PipeWireVersion PipeWireVersion::Parse(const std::string_view& version) {
+   std::vector<std::string_view> parsed_version = split(version, '.');

@@ -1,4 +1,5 @@
 [DEFAULT]
+tags = "urlbar"
 support-files = [
   "../browser/head-common.js",
   "head.js",
@@ -7,6 +8,10 @@ support-files = [
 ["browser_adaptive_origin_fallback.js"]
 
 ["browser_backspace_dismissal.js"]
+
+["browser_backspace_dismissal_guards.js"]
+
+["browser_backspace_dismissal_reintegration.js"]
 
 ["browser_backspaced.js"]
 

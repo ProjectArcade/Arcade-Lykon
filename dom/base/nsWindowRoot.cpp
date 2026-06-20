@@ -7,7 +7,10 @@
 #include "mozilla/BasicEvents.h"
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/EventListenerManager.h"
+#include "mozilla/HTMLEditor.h"
+#include "mozilla/PresShell.h"
 #include "mozilla/StaticPrefs_browser.h"
+#include "mozilla/TextControlElement.h"
 #include "mozilla/dom/BrowserParent.h"
 #include "mozilla/dom/CanonicalBrowsingContext.h"
 #include "mozilla/dom/HTMLInputElement.h"
@@ -20,6 +23,7 @@
 #include "nsFocusManager.h"
 #include "nsFrameLoader.h"
 #include "nsFrameLoaderOwner.h"
+#include "nsFrameSelection.h"
 #include "nsGlobalWindowOuter.h"
 #include "nsIContent.h"
 #include "nsIController.h"
@@ -110,9 +114,74 @@ void nsWindowRoot::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
   // To keep mWindow alive
   aVisitor.mItemData = static_cast<nsISupports*>(mWindow);
   aVisitor.SetParentTarget(mParent, false);
+
+  // We need to handle eFocus and eBlur to set up selection. However, that
+  // needs to be done before dispatching the event to the DOM:
+  // https://w3c.github.io/uievents/#event-type-focus
+  // > The focus MUST be given to the element before the dispatch of this
+  // > event type.
+  // https://w3c.github.io/uievents/#event-type-blur
+  // > The focus MUST be taken from the element before the dispatch of this
+  // > event type.
+  // Therefore, we want the pre handler.
+  if (aVisitor.mEvent->IsTrusted() && (aVisitor.mEvent->mMessage == eFocus ||
+                                       aVisitor.mEvent->mMessage == eBlur)) {
+    aVisitor.mWantsPreHandleEvent = true;
+  }
 }
 
-nsresult nsWindowRoot::PostHandleEvent(EventChainPostVisitor& aVisitor) {
+nsresult nsWindowRoot::PreHandleEvent(EventChainVisitor& aVisitor) {
+  MOZ_ASSERT(aVisitor.mEvent->mMessage == eFocus ||
+             aVisitor.mEvent->mMessage == eBlur);
+  MOZ_ASSERT(aVisitor.mEvent->IsTrusted());
+
+  const nsCOMPtr<nsINode> targetNode = nsINode::FromEventTargetOrNull(
+      aVisitor.mEvent->GetOriginalDOMEventTarget());
+  if (!targetNode) {
+    return NS_OK;
+  }
+
+  const RefPtr<PresShell> presShell = targetNode->OwnerDoc()->GetPresShell();
+  if (!presShell) [[unlikely]] {
+    return NS_OK;
+  }
+
+  // Maintain selection state before HTMLEditor and/or TextEditor handles
+  // focus/blur below.
+  if (Document* const targetDocument = Document::FromNodeOrNull(targetNode)) {
+    if (aVisitor.mEvent->mMessage == eFocus) {
+      nsFrameSelection::WillFocusDocument(*presShell, *targetDocument);
+    } else {
+      nsFrameSelection::WillBlurDocument(*presShell, *targetDocument);
+    }
+  }
+  // If new focused element is a text control element in an editing host,
+  // both HTMLEditor and TextEditor need to handle the focus event for the
+  // backward compatibility. Then, we need to make HTMLEditor handle it
+  // first, then TextEditor will handle it below via
+  // TextControlElement::WillFocus().
+  if (aVisitor.mEvent->mMessage == eFocus) {
+    HTMLEditor::WillFocusNode(*presShell, targetNode);
+  }
+  // To keep the traditional behavior at blur, we should call
+  // HTMLEditor::OnBlur() before TextEditor::OnBlur() which is now called by
+  // TextControlElement::WillBlur() called below.
+  else {
+    HTMLEditor::WillBlurNode(*presShell, targetNode);
+  }
+
+  // Finally, set up selection of `TextEditor` if and only if the event target
+  // is a text control.
+  if (auto* const targetTextControlElement =
+          TextControlElement::FromNodeOrNull(targetNode)) {
+    if (targetTextControlElement->IsSingleLineTextControlOrTextArea()) {
+      if (aVisitor.mEvent->mMessage == eFocus) {
+        MOZ_KnownLive(targetTextControlElement)->WillFocus(*aVisitor.mEvent);
+      } else {
+        MOZ_KnownLive(targetTextControlElement)->WillBlur(*aVisitor.mEvent);
+      }
+    }
+  }
   return NS_OK;
 }
 
@@ -197,13 +266,11 @@ nsresult nsWindowRoot::GetControllerForCommand(const char* aCommand,
       // focused, just check the controllers directly below.
       RefPtr<nsFrameLoader> frameLoader = loaderOwner->GetFrameLoader();
       if (frameLoader && frameLoader->IsRemoteFrame()) {
-        // GetActiveBrowsingContextInChrome actually returns the top-level
-        // browsing context if the focus is in a child process tab, or null if
-        // the focus is in chrome.
-        BrowsingContext* focusedBC =
-            fm->GetActiveBrowsingContextInChrome()
-                ? fm->GetFocusedBrowsingContextInChrome()
-                : nullptr;
+        // The focused browsing context points at the tab that last held content
+        // focus, even if the window in question isn't frontmost or the app
+        // isn't the active app at all. Use it so context-menu commands work on
+        // a background window.
+        BrowsingContext* focusedBC = fm->GetFocusedBrowsingContextInChrome();
         if (focusedBC) {
           // At this point, it is known that a child process is focused, so ask
           // its Controllers actor if the command is supported.

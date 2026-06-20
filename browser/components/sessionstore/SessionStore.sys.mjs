@@ -1077,10 +1077,6 @@ var SessionStoreInternal = {
   // they get restored).
   _crashedBrowsers: new WeakSet(),
 
-  // A map (xul:browser -> FrameLoader) that maps a browser to the last
-  // associated frameLoader we heard about.
-  _lastKnownFrameLoader: new WeakMap(),
-
   // A map (xul:browser -> object) that maps a browser associated with a
   // recently closed tab to all its necessary state information we need to
   // properly handle final update message.
@@ -2006,10 +2002,6 @@ var SessionStoreInternal = {
           target.frameLoader &&
           target.permanentKey
         ) {
-          this._lastKnownFrameLoader.set(
-            target.permanentKey,
-            target.frameLoader
-          );
           this.resetEpoch(target.permanentKey, target.frameLoader);
         }
         break;
@@ -3289,10 +3281,6 @@ var SessionStoreInternal = {
     browser.addEventListener("oop-browser-crashed", this);
     browser.addEventListener("oop-browser-buildid-mismatch", this);
 
-    if (browser.frameLoader) {
-      this._lastKnownFrameLoader.set(browser.permanentKey, browser.frameLoader);
-    }
-
     // Only restore if browser has been lazy.
     if (
       TAB_LAZY_STATES.has(aTab) &&
@@ -3539,7 +3527,6 @@ var SessionStoreInternal = {
 
     aTab.setAttribute("pending", "true");
 
-    this._lastKnownFrameLoader.delete(browser.permanentKey);
     this._crashedBrowsers.delete(browser.permanentKey);
     aTab.removeAttribute("crashed");
 
@@ -4633,7 +4620,6 @@ var SessionStoreInternal = {
 
     // Predict the remote type to use for the load to avoid unnecessary process
     // switches.
-    let preferredRemoteType = lazy.E10SUtils.DEFAULT_REMOTE_TYPE;
     let url;
     if (state.entries?.length) {
       let activeIndex = (state.index || state.entries.length) - 1;
@@ -4641,13 +4627,11 @@ var SessionStoreInternal = {
       activeIndex = Math.max(activeIndex, 0);
       url = state.entries[activeIndex].url;
     }
-    if (url) {
-      preferredRemoteType = this.getPreferredRemoteType(
-        url,
-        aTargetWindow,
-        state.userContextId
-      );
-    }
+    let preferredRemoteType = this.getPreferredRemoteType(
+      url,
+      aTargetWindow,
+      state.userContextId
+    );
 
     // create a new tab
     let tabbrowser = aTargetWindow.gBrowser;
@@ -4691,17 +4675,10 @@ var SessionStoreInternal = {
   },
 
   getPreferredRemoteType(url, aWindow, userContextId) {
-    return lazy.E10SUtils.getRemoteTypeForURI(
-      url,
-      aWindow.gMultiProcessBrowser,
-      aWindow.gFissionBrowser,
-      lazy.E10SUtils.DEFAULT_REMOTE_TYPE,
-      null,
-      lazy.E10SUtils.predictOriginAttributes({
-        window: aWindow,
-        userContextId,
-      })
-    );
+    return ChromeUtils.predictRemoteTypeForURI(url, {
+      window: aWindow,
+      userContextId,
+    });
   },
 
   /**
@@ -6818,7 +6795,6 @@ var SessionStoreInternal = {
         aWinData.sizemode || "",
         aWinData.sizemodeBeforeMinimized || ""
       );
-      this.restoreSidebar(aWindow, aWinData.sidebar, aWinData.isPopup);
       promiseParts.resolve(aWindow);
     }, 0);
     return promiseParts.promise;
@@ -6834,6 +6810,7 @@ var SessionStoreInternal = {
     if (!aSidebar || isPopup) {
       return;
     }
+    aWindow.SidebarController.markSessionRestoreStateReceived();
     aWindow.SidebarController.updateUIState(aSidebar);
   },
 

@@ -53,7 +53,7 @@ void RemoteTextureOwnerClient::RegisterTextureOwner(
   RefPtr<RemoteTextureRecycleBin> recycleBin;
   if (aSharedRecycling) {
     if (!mSharedRecycleBin) {
-      mSharedRecycleBin = new RemoteTextureRecycleBin(true);
+      mSharedRecycleBin = MakeRefPtr<RemoteTextureRecycleBin>(true);
     }
     recycleBin = mSharedRecycleBin;
   }
@@ -594,7 +594,7 @@ void RemoteTextureMap::RegisterTextureOwner(
   if (aRecycleBin) {
     owner->mRecycleBin = aRecycleBin;
   } else {
-    owner->mRecycleBin = new RemoteTextureRecycleBin(false);
+    owner->mRecycleBin = MakeRefPtr<RemoteTextureRecycleBin>(false);
   }
 
   auto itWaiting = mWaitingTextureOwners.find(key);
@@ -1445,7 +1445,7 @@ RemoteTextureMap::TextureDataHolder::TextureDataHolder(
 RemoteTextureMap::RenderingReadyCallbackHolder::RenderingReadyCallbackHolder(
     const RemoteTextureId aTextureId,
     std::function<void(const RemoteTextureInfo&)>&& aCallback)
-    : mTextureId(aTextureId), mCallback(aCallback) {}
+    : mTextureId(aTextureId), mCallback(std::move(aCallback)) {}
 
 RemoteTextureMap::RemoteTextureHostWrapperHolder::
     RemoteTextureHostWrapperHolder(

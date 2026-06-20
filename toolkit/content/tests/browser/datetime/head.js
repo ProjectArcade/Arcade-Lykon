@@ -44,12 +44,8 @@ class DateTimeTestHelper {
     if (openMethod === "click") {
       await SpecialPowers.spawn(bc, [], () => {
         const input = content.document.querySelector("input");
-        if (input.type == "time") {
-          input.click();
-        } else {
-          const shadowRoot = SpecialPowers.wrap(input).openOrClosedShadowRoot;
-          shadowRoot.getElementById("calendar-button").click();
-        }
+        const shadowRoot = SpecialPowers.wrap(input).openOrClosedShadowRoot;
+        shadowRoot.getElementById("picker-button").click();
       });
     } else if (openMethod === "showPicker") {
       await SpecialPowers.spawn(bc, [], function () {
@@ -109,6 +105,22 @@ class DateTimeTestHelper {
   }
 
   /**
+   * Returns the text contents of the given spinner element's enabled children.
+   *
+   * @param  {DOMElement} element
+   */
+  getSpinnerOptions(element) {
+    return [
+      ...new Set(
+        helper
+          .getChildren(element)
+          .filter(item => !item.classList.contains("disabled"))
+          .map(item => item.textContent)
+      ),
+    ];
+  }
+
+  /**
    * Click on an element
    *
    * @param  {DOMElement} element
@@ -157,6 +169,10 @@ const BTN_MONTH_YEAR = "#month-year-label",
   BTN_PREV_HOUR = "#spinner-hour-previous",
   BTN_NEXT_MIN = "#spinner-minute-next",
   BTN_PREV_MIN = "#spinner-minute-previous",
+  BTN_NEXT_SEC = "#spinner-second-next",
+  BTN_PREV_SEC = "#spinner-second-previous",
+  BTN_NEXT_MSEC = "#spinner-millisecond-next",
+  BTN_PREV_MSEC = "#spinner-millisecond-previous",
   BTN_NEXT_TIME = "#spinner-time-next",
   BTN_PREV_TIME = "#spinner-time-previous",
   BTN_CLEAR = "#clear-button",
@@ -172,6 +188,8 @@ const BTN_MONTH_YEAR = "#month-year-label",
   SPINNER_YEAR = "#spinner-year",
   SPINNER_HOUR = "#spinner-hour",
   SPINNER_MIN = "#spinner-minute",
+  SPINNER_SEC = "#spinner-second",
+  SPINNER_MSEC = "#spinner-millisecond",
   SPINNER_TIME = "#spinner-time",
   TIMEPICKER = "#time-picker",
   WEEK_HEADER = ".week-header";
@@ -257,13 +275,13 @@ function testAttributeL10n(el, attr, id, args = null) {
 }
 
 /**
- * Helper function to check the value of a Calendar button's specific attribute
+ * Helper function to check the value of a picker button's specific attribute
  *
  * @param {string} attr: The name of the attribute to be tested
  * @param {string} val: Value that is expected to be assigned to the attribute.
  * @param {boolean} presenceOnly: If "true", test only the presence of the attribute
  */
-async function testCalendarBtnAttribute(attr, val, presenceOnly = false) {
+async function testPickerBtnAttribute(attr, val, presenceOnly = false) {
   let browser = helper.tab.linkedBrowser;
 
   await SpecialPowers.spawn(
@@ -272,18 +290,18 @@ async function testCalendarBtnAttribute(attr, val, presenceOnly = false) {
     (attr, val, presenceOnly) => {
       const input = content.document.querySelector("input");
       const shadowRoot = SpecialPowers.wrap(input).openOrClosedShadowRoot;
-      const calendarBtn = shadowRoot.getElementById("calendar-button");
+      const pickerBtn = shadowRoot.getElementById("picker-button");
 
       if (presenceOnly) {
         Assert.ok(
-          calendarBtn.hasAttribute(attr),
-          `Calendar button has ${attr} attribute`
+          pickerBtn.hasAttribute(attr),
+          `Picker button has ${attr} attribute`
         );
       } else {
         Assert.equal(
-          calendarBtn.getAttribute(attr),
+          pickerBtn.getAttribute(attr),
           val,
-          `Calendar button has ${attr} attribute set to ${val}`
+          `Picker button has ${attr} attribute set to ${val}`
         );
       }
     }

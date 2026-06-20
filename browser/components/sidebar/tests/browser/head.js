@@ -153,6 +153,40 @@ async function openAndWaitForContextMenu(popup, button, onShown) {
   return popup;
 }
 
+/**
+ * Right-click a sidebar element to open the current sidebar context menu, then
+ * activate a menu item (or run a custom callback). Resolves once the command
+ * has fired and the menu has fully closed.
+ *
+ * @param {Element} triggerEl
+ *   The element to right-click.
+ * @param {string} menuItemId
+ *   The id of the `<menuitem>` to activate. Ignored if `callback` is provided.
+ * @param {(contextMenu: Element) => any} [callback]
+ *   Custom handler invoked to dispatch a command once the context menu is
+ *   shown. Receives the context menu popup element.
+ */
+async function activateContextMenuItem(triggerEl, menuItemId, callback) {
+  const contextMenu = SidebarController.currentContextMenu;
+  const promiseHidden = BrowserTestUtils.waitForPopupEvent(
+    contextMenu,
+    "hidden"
+  );
+  await openAndWaitForContextMenu(contextMenu, triggerEl, async () => {
+    const promiseCommand = BrowserTestUtils.waitForEvent(
+      contextMenu,
+      "command"
+    );
+    if (callback) {
+      await callback(contextMenu);
+    } else {
+      contextMenu.activateItem(document.getElementById(menuItemId));
+    }
+    await promiseCommand;
+  });
+  await promiseHidden;
+}
+
 function isActiveElement(el) {
   return el.getRootNode().activeElement == el;
 }
@@ -185,7 +219,7 @@ async function showHistorySidebar({ waitForPendingHistory = true } = {}) {
   const { contentDocument, contentWindow } = SidebarController.browser;
   const component = contentDocument.querySelector("sidebar-history");
   if (waitForPendingHistory) {
-    await BrowserTestUtils.waitForCondition(
+    await TestUtils.waitForCondition(
       () => !component.controller.isHistoryPending
     );
   }
@@ -227,6 +261,37 @@ async function populateHistory() {
   );
   await PlacesUtils.history.insertMany(pageInfos);
   return { URLs, dates };
+}
+
+async function showBookmarksSidebar() {
+  if (SidebarController.currentID !== "viewBookmarksSidebar") {
+    await SidebarTestUtils.showPanel(window, "viewBookmarksSidebar");
+  }
+  const { contentDocument, contentWindow } = SidebarController.browser;
+  const component = contentDocument.querySelector("sidebar-bookmarks");
+  await component.updateComplete;
+  return { component, contentWindow };
+}
+
+async function expandToolbarFolder(tabList) {
+  await BrowserTestUtils.waitForMutationCondition(
+    tabList.shadowRoot,
+    { childList: true, subtree: true },
+    () => tabList.folderEls[0]
+  );
+  const toolbarFolder = [...tabList.folderEls].find(
+    ({ guid }) => guid === PlacesUtils.bookmarks.toolbarGuid
+  );
+  Assert.ok(toolbarFolder, "Toolbar folder is rendered.");
+  if (!toolbarFolder.open) {
+    toolbarFolder.querySelector("summary").click();
+    await BrowserTestUtils.waitForMutationCondition(
+      toolbarFolder,
+      { attributes: true },
+      () => toolbarFolder.open
+    );
+  }
+  return toolbarFolder.querySelector("sidebar-bookmark-list");
 }
 
 /**

@@ -4,8 +4,6 @@
 
 package mozilla.components.feature.summarize
 
-import mozilla.components.concept.llm.ErrorCode
-import mozilla.components.concept.llm.Llm
 import mozilla.components.ui.richtext.ir.RichDocument
 
 /**
@@ -23,7 +21,7 @@ fun summarizationReducer(state: SummarizationState, action: SummarizationAction)
     ErrorAction.ErrorDismissed -> SummarizationState.Finished.ErrorDismissed
     is SummarizationRequested -> SummarizationState.Loading(action.info)
     is SummarizationCompleted -> state.complete()
-    is SummarizationFailed -> SummarizationState.Error(action.throwable.summarizationError())
+    is SummarizationFailed -> SummarizationState.Error(SummarizationError.SummarizationFailed(action.exception))
     is ReceivedParsedDocument -> state.updateDocument(action.document)
     is SettingsClicked -> when (state) {
         is SummarizationState.Summarized -> SummarizationState.Settings(info = state.info, document = state.document)
@@ -33,24 +31,12 @@ fun summarizationReducer(state: SummarizationState, action: SummarizationAction)
         is SummarizationState.Settings -> SummarizationState.Summarized(info = state.info, document = state.document)
         else -> state
     }
-    is LlmProviderAction.ProviderFailed -> SummarizationState.Error(
-        SummarizationError.SummarizationFailed(action.exception),
-    )
     else -> state
 }
 
 private fun SummarizationState.complete(): SummarizationState {
     if (this !is SummarizationState.Summarizing) return this
     return SummarizationState.Summarized(info, document)
-}
-
-private fun Throwable.summarizationError(): SummarizationError {
-    val exception = (this as? Llm.Exception) ?: Llm.Exception.unknown(message)
-    val contentTooLong = 1005
-    return when (exception.errorCode) {
-        ErrorCode(contentTooLong) -> SummarizationError.ContentTooLong
-        else -> SummarizationError.SummarizationFailed(exception)
-    }
 }
 
 internal fun SummarizationState.updateDocument(document: RichDocument): SummarizationState {

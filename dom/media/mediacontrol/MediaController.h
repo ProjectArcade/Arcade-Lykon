@@ -5,11 +5,14 @@
 #ifndef DOM_MEDIA_MEDIACONTROL_MEDIACONTROLLER_H_
 #define DOM_MEDIA_MEDIACONTROL_MEDIACONTROLLER_H_
 
+#include "AudioSessionManager.h"
+#include "AudioSessionRecord.h"
 #include "MediaEventSource.h"
 #include "MediaPlaybackStatus.h"
 #include "MediaStatusManager.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/LinkedList.h"
+#include "mozilla/dom/AudioSessionBinding.h"
 #include "mozilla/dom/MediaControllerBinding.h"
 #include "mozilla/dom/MediaSession.h"
 #include "nsISupportsImpl.h"
@@ -93,6 +96,8 @@ class MediaController final : public DOMEventTargetHelper,
   void GetMetadata(MediaMetadataInit& aMetadata, ErrorResult& aRv);
   IMPL_EVENT_HANDLER(activated);
   IMPL_EVENT_HANDLER(deactivated);
+  IMPL_EVENT_HANDLER(audiblechange);
+  IMPL_EVENT_HANDLER(effectiveaudiosessiontypechange);
   IMPL_EVENT_HANDLER(metadatachange);
   IMPL_EVENT_HANDLER(supportedkeyschange);
   IMPL_EVENT_HANDLER(playbackstatechange);
@@ -117,12 +122,16 @@ class MediaController final : public DOMEventTargetHelper,
   bool IsAudible() const override;
   bool IsPlaying() const override;
   bool IsActive() const override;
+  bool IsMuted() const;
 
   // IMediaInfoUpdater's methods
   void NotifyMediaPlaybackChanged(uint64_t aBrowsingContextId,
                                   MediaPlaybackState aState) override;
-  void NotifyMediaAudibleChanged(uint64_t aBrowsingContextId,
-                                 MediaAudibleState aState) override;
+  void NotifyMediaAudibleChanged(
+      uint64_t aBrowsingContextId, MediaAudibleState aState,
+      ControlType aType = ControlType::eControllable,
+      AudioSessionType aSessionType = AudioSessionType::Playback) override;
+  void NotifyBrowsingContextDiscarded(uint64_t aBrowsingContextId) override;
   void SetIsInPictureInPictureMode(uint64_t aBrowsingContextId,
                                    bool aIsInPictureInPictureMode) override;
   void NotifyMediaFullScreenState(uint64_t aBrowsingContextId,
@@ -155,7 +164,30 @@ class MediaController final : public DOMEventTargetHelper,
   void Select() const;
   void Unselect() const;
 
+  // Record the override the user set on the given browsing context.
+  // `Auto` means the user wants no explicit override.
+  void SetAudioSessionTypeOverride(uint64_t aBrowsingContextId,
+                                   AudioSessionType aType);
+
+  // Forget any per-AudioSession state stored for the given browsing context.
+  void ClearAudioSessionFor(uint64_t aBrowsingContextId);
+
+  // The audio-session type the tab is currently exposing to chrome
+  // consumers. Returns Auto when the tab is producing no audio.
+  AudioSessionType GetEffectiveAudioSessionType() const;
+
+  // Test-only accessor for the per-browsing-context AudioSession record.
+  // Returns nullptr when no record exists.
+  const AudioSessionRecord* GetAudioSessionRecordForTesting(
+      uint64_t aBrowsingContextId) const;
+
+  // Test-only accessor for the AudioSessionManager that owns this tab's
+  // parent-side AudioSession spec state.
+  const AudioSessionManager* GetAudioSessionManagerForTesting() const;
+
  private:
+  friend class AudioSessionManager;
+
   ~MediaController();
   void HandleActualPlaybackStateChanged();
   void UpdateMediaControlActionToContentMediaIfNeeded(
@@ -191,6 +223,7 @@ class MediaController final : public DOMEventTargetHelper,
 
   bool mIsActive = false;
   bool mShutdown = false;
+  bool mIsMuted = false;
   bool mIsInPictureInPictureMode = false;
   bool mIsInFullScreenMode = false;
 
@@ -211,6 +244,9 @@ class MediaController final : public DOMEventTargetHelper,
   // Timer to deactivate the controller if the time of being paused exceeds the
   // threshold of time.
   nsCOMPtr<nsITimer> mDeactivationTimer;
+
+  // Owns parent-side AudioSession spec state and algorithms for this tab.
+  AudioSessionManager mAudioSessionManager;
 };
 
 }  // namespace mozilla::dom

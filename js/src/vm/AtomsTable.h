@@ -37,12 +37,12 @@ struct js::AtomHasher::Lookup {
     const char* utf8Bytes;
   };
   enum { TwoByteChar, Latin1, UTF8 } type;
-  size_t length;
-  size_t byteLength;
-  const JSAtom* atom; /* Optional. */
+  size_t length = 0;
+  size_t byteLength = 0;
+  const JSAtom* atom = nullptr; /* Optional. */
   JS::AutoCheckCannotGC nogc;
 
-  HashNumber hash;
+  HashNumber hash = 0;
 
   MOZ_ALWAYS_INLINE Lookup(const char* utf8Bytes, size_t byteLen, size_t length,
                            HashNumber hash)
@@ -65,7 +65,7 @@ struct js::AtomHasher::Lookup {
         type(Latin1),
         length(length),
         atom(nullptr),
-        hash(mozilla::HashString(chars, length)) {}
+        hash(mozilla::HashLatin1AsUTF16(chars, length)) {}
 
   MOZ_ALWAYS_INLINE Lookup(HashNumber hash, const char16_t* chars,
                            size_t length)
@@ -84,7 +84,7 @@ struct js::AtomHasher::Lookup {
         length(length),
         atom(nullptr),
         hash(hash) {
-    MOZ_ASSERT(hash == mozilla::HashString(chars, length));
+    MOZ_ASSERT(hash == mozilla::HashLatin1AsUTF16(chars, length));
   }
 
   inline explicit Lookup(const JSAtom* atom)
@@ -94,7 +94,7 @@ struct js::AtomHasher::Lookup {
         hash(atom->hash()) {
     if (type == Latin1) {
       latin1Chars = atom->latin1Chars(nogc);
-      MOZ_ASSERT(mozilla::HashString(latin1Chars, length) == hash);
+      MOZ_ASSERT(mozilla::HashLatin1AsUTF16(latin1Chars, length) == hash);
     } else {
       MOZ_ASSERT(type == TwoByteChar);
       twoByteChars = atom->twoByteChars(nogc);

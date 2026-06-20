@@ -38,12 +38,14 @@ const JSPROCESSACTORS = {
         "PeerConnection:request",
       ],
     },
+    safeForUntrustedWebProcess: true,
   },
   GeckoViewPush: {
     parent: {
       esModuleURI: "resource:///actors/GeckoViewPushParent.sys.mjs",
     },
     includeParent: true,
+    safeForUntrustedWebProcess: true,
   },
 };
 
@@ -56,6 +58,7 @@ const JSWINDOWACTORS = {
       esModuleURI: "resource:///actors/LoadURIDelegateChild.sys.mjs",
     },
     messageManagerGroups: ["browsers"],
+    safeForUntrustedWebProcess: true,
   },
   GeckoViewPermission: {
     parent: {
@@ -66,13 +69,16 @@ const JSWINDOWACTORS = {
     },
     allFrames: true,
     includeChrome: true,
+    safeForUntrustedWebProcess: true,
   },
   GeckoViewPrompt: {
+    parent: {
+      esModuleURI: "resource:///actors/GeckoViewPromptParent.sys.mjs",
+    },
     child: {
       esModuleURI: "resource:///actors/GeckoViewPromptChild.sys.mjs",
       events: {
         click: { capture: false, mozSystemGroup: true },
-        contextmenu: { capture: false, mozSystemGroup: true },
         mozshowdropdown: {},
         "mozshowdropdown-sourcetouch": {},
         MozOpenDateTimePicker: {},
@@ -82,6 +88,7 @@ const JSWINDOWACTORS = {
     },
     allFrames: true,
     messageManagerGroups: ["browsers"],
+    safeForUntrustedWebProcess: true,
   },
   GeckoViewFormValidation: {
     child: {
@@ -92,6 +99,7 @@ const JSWINDOWACTORS = {
     },
     allFrames: true,
     messageManagerGroups: ["browsers"],
+    safeForUntrustedWebProcess: true,
   },
   GeckoViewPdfjs: {
     parent: {
@@ -101,6 +109,7 @@ const JSWINDOWACTORS = {
       esModuleURI: "resource://pdf.js/GeckoViewPdfjsChild.sys.mjs",
     },
     allFrames: true,
+    safeForUntrustedWebProcess: true,
   },
 };
 
@@ -129,6 +138,16 @@ export class GeckoViewStartup {
             "GeckoView:GetCookieBannerModeForDomain",
             "GeckoView:SetCookieBannerModeForDomain",
             "GeckoView:RemoveCookieBannerModeForDomain",
+          ],
+        });
+
+        GeckoViewUtils.addLazyGetter(this, "GeckoViewTrackingDB", {
+          module: "resource://gre/modules/GeckoViewTrackingDB.sys.mjs",
+          ged: [
+            "GeckoView:TrackingDB:GetEventsByDateRange",
+            "GeckoView:TrackingDB:SumAllEvents",
+            "GeckoView:TrackingDB:GetEarliestRecordedDate",
+            "GeckoView:TrackingDB:ClearAll",
           ],
         });
 
@@ -204,6 +223,7 @@ export class GeckoViewStartup {
               "GeckoView:IPProtection:IPPProxyManager:GetState",
               "GeckoView:IPProtection:Activate",
               "GeckoView:IPProtection:Deactivate",
+              "GeckoView:IPProtection:Enroll",
             ],
           });
 

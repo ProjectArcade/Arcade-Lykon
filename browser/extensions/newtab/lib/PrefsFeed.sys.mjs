@@ -22,6 +22,7 @@ import {
   PREF_DEFAULT_VALUE_TOPSTORIES_ENABLED,
   PREF_DEFAULT_VALUE_TOPSITES_ENABLED,
 } from "resource://newtab/lib/ActivityStream.sys.mjs";
+import { WIDGET_REGISTRY } from "resource://newtab/common/WidgetsRegistry.mjs";
 
 // eslint-disable-next-line mozilla/use-static-import
 const { AppConstants } = ChromeUtils.importESModule(
@@ -257,6 +258,18 @@ export class PrefsFeed {
         .setStringPref("weather.display", valueObj.weather.display);
     }
 
+    // Write widgets.weather.size to the default branch so trainhop overrides
+    // the migration default computed by getWeatherWidgetSize() while a user's
+    // explicit size pick (user branch) still wins.
+    if (
+      typeof valueObj.widgets?.weatherSize === "string" &&
+      valueObj.widgets.weatherSize
+    ) {
+      Services.prefs
+        .getDefaultBranch(this._prefs._branchStr)
+        .setStringPref("widgets.weather.size", valueObj.widgets.weatherSize);
+    }
+
     // Write topSitesRows to the default branch to enable experiments with
     // the default row count without overriding an explicit user choice.
     if (valueObj.topSites?.topSitesRows) {
@@ -276,6 +289,24 @@ export class PrefsFeed {
         "newtabWallpapers.initialWallpaper",
         valueObj.wallpaper.initialWallpaper
       );
+    }
+
+    // Override per-widget default enabled values from widgetsSettings. Writing
+    // to the default branch lets a trainhop flip a widget's default (e.g. ship
+    // it off) while an explicit user toggle (user branch) still wins. Toggle
+    // VISIBILITY is handled separately by the widgetsSettings.*Visible terms in
+    // WidgetsRegistry — this only affects the on/off default value.
+    if (valueObj.widgetsSettings) {
+      const defaultBranch = Services.prefs.getDefaultBranch(
+        this._prefs._branchStr
+      );
+      for (const widget of WIDGET_REGISTRY) {
+        const value =
+          valueObj.widgetsSettings[widget.widgetsSettingsEnabledKey];
+        if (typeof value === "boolean") {
+          defaultBranch.setBoolPref(widget.enabledPref, value);
+        }
+      }
     }
 
     return valueObj;

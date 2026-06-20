@@ -45,13 +45,15 @@ void nsPartChannel::InitializeByteRange(int64_t aStart, int64_t aEnd) {
 }
 
 nsresult nsPartChannel::SendOnStartRequest(nsISupports* aContext) {
-  return mListener->OnStartRequest(this);
+  nsCOMPtr<nsIStreamListener> listener = mListener;
+  return listener->OnStartRequest(this);
 }
 
 nsresult nsPartChannel::SendOnDataAvailable(nsISupports* aContext,
                                             nsIInputStream* aStream,
                                             uint64_t aOffset, uint32_t aLen) {
-  return mListener->OnDataAvailable(this, aStream, aOffset, aLen);
+  nsCOMPtr<nsIStreamListener> listener = mListener;
+  return listener->OnDataAvailable(this, aStream, aOffset, aLen);
 }
 
 nsresult nsPartChannel::SendOnStopRequest(nsISupports* aContext,
@@ -260,6 +262,18 @@ NS_IMETHODIMP
 nsPartChannel::SetLoadInfo(nsILoadInfo* aLoadInfo) {
   MOZ_RELEASE_ASSERT(aLoadInfo, "loadinfo can't be null");
   return mMultipartChannel->SetLoadInfo(aLoadInfo);
+}
+
+NS_IMETHODIMP
+nsPartChannel::GetParentProcessChannelHandle(
+    mozilla::dom::ParentProcessChannelHandle** aValue) {
+  return mMultipartChannel->GetParentProcessChannelHandle(aValue);
+}
+
+NS_IMETHODIMP
+nsPartChannel::SetParentProcessChannelHandle(
+    mozilla::dom::ParentProcessChannelHandle* aValue) {
+  return mMultipartChannel->SetParentProcessChannelHandle(aValue);
 }
 
 NS_IMETHODIMP
@@ -596,8 +610,9 @@ nsMultiMixedConv::OnStopRequest(nsIRequest* request, nsresult aStatus) {
     // the middle of sending data. if we were, mPartChannel,
     // above, would have been non-null.
 
-    (void)mFinalListener->OnStartRequest(request);
-    (void)mFinalListener->OnStopRequest(request, aStatus);
+    nsCOMPtr<nsIStreamListener> finalListener = mFinalListener;
+    (void)finalListener->OnStartRequest(request);
+    (void)finalListener->OnStopRequest(request, aStatus);
   }
 
   nsCOMPtr<nsIMultiPartChannelListener> multiListener =

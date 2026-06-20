@@ -186,7 +186,6 @@ button:disabled {
 }
 
 /* Felt Privacy v1 LARGER SCREEN! */
-/* stylelint-disable-next-line media-query-no-invalid */
 @media -moz-pref("security.certerrors.felt-privacy-v1") {
   .felt-privacy-body {
     justify-content: start;
@@ -212,6 +211,10 @@ button:disabled {
     width: 8.75em;
     margin-block-start: 2em;
     margin-inline-end: 2.5em;
+
+    &.no-connection {
+      width: 13em;
+    }
   }
 
   #viewCertificate {

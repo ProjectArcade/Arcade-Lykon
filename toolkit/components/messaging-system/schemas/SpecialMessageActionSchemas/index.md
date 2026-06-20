@@ -267,6 +267,10 @@ Windows only.
   // Only set Firefox as the default PDF handler if the current PDF handler is a
   // known browser.
   onlyIfKnownBrowser?: boolean;
+  // If the OS hands the stub PDF back to Firefox after the user picks Firefox
+  // in the open-with dialog, open a follow-up PDF in a new tab instead of
+  // suppressing the launch.
+  openInFirefox?: boolean;
 }
 ```
 
@@ -309,6 +313,52 @@ with `messaging-system-action.`, it will be created and prepended with
   pref: {
     name: string;
     value: string | boolean | number;
+  }
+}
+```
+
+#### Special `value` options
+
+**`{ timestamp: true }`** — Instead of setting a literal value, sets the pref to the current time as a Unix millisecond timestamp string (i.e. `Date.now().toString()`).
+
+Example:
+```json
+"action": {
+  "type": "SET_PREF",
+  "data": {
+    "pref": {
+      "name": "messaging-system-action.lastSeen",
+      "value": { "timestamp": true }
+    }
+  }
+}
+```
+
+**`{ copyFromPref: string }`** — Copies the value from another existing preference into the target pref. The source and target prefs must be of the same type, otherwise an error is thrown.
+
+Example:
+```json
+"action": {
+  "type": "SET_PREF",
+  "data": {
+    "pref": {
+      "name": "messaging-system-action.myCopiedPref",
+      "value": { "copyFromPref": "browser.startup.homepage" }
+    }
+  }
+}
+```
+
+**Omitted or `null` value** — Resets the pref to its default value by calling `clearUserPref`.
+
+Example:
+```json
+"action": {
+  "type": "SET_PREF",
+  "data": {
+    "pref": {
+      "name": "browser.startup.homepage"
+    }
   }
 }
 ```
@@ -486,6 +536,19 @@ Open a panel associated with a given widget.
 Creates a taskbar tab from the current URL and asks to pin it to the taskbar. Windows only.
 
 - args: (none)
+
+### `PIN_TASKBAR_TAB`
+
+Pins a specific web app to the taskbar.
+
+- args:
+```ts
+{
+  url: string;      // The HTTP/HTTPS URL of the web app to pin
+  name: string;     // Display name for the web app
+  iconUrl: string;  // URL of the icon to use (256x256 PNG recommended)
+}
+```
 
 ### `RESTORE_SESSION`
 

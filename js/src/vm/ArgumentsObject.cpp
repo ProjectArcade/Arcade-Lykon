@@ -4,7 +4,6 @@
 
 #include "vm/ArgumentsObject-inl.h"
 
-#include "mozilla/Maybe.h"
 #include "mozilla/PodOperations.h"
 
 #include <algorithm>
@@ -573,15 +572,6 @@ bool js::MappedArgSetter(JSContext* cx, HandleObject obj, HandleId id,
                          HandleValue v, ObjectOpResult& result) {
   Handle<MappedArgumentsObject*> argsobj = obj.as<MappedArgumentsObject>();
 
-  Rooted<mozilla::Maybe<PropertyDescriptor>> desc(cx);
-  if (!GetOwnPropertyDescriptor(cx, argsobj, id, &desc)) {
-    return false;
-  }
-  MOZ_ASSERT(desc.isSome());
-  MOZ_ASSERT(desc->isDataDescriptor());
-  MOZ_ASSERT(desc->writable());
-  MOZ_ASSERT(!desc->resolving());
-
   if (id.isInt()) {
     unsigned arg = unsigned(id.toInt());
     if (argsobj->isElement(arg)) {
@@ -592,19 +582,10 @@ bool js::MappedArgSetter(JSContext* cx, HandleObject obj, HandleId id,
     MOZ_ASSERT(id.isAtom(cx->names().length) || id.isAtom(cx->names().callee));
   }
 
-  /*
-   * For simplicity we use delete/define to replace the property with a
-   * simple data property. Note that we rely on ArgumentsObject::obj_delProperty
-   * to set the corresponding override-bit.
-   * Note also that we must define the property instead of setting it in case
-   * the user has changed the prototype to an object that has a setter for
-   * this id.
-   */
-  Rooted<PropertyDescriptor> desc_(cx, *desc);
-  desc_.setValue(v);
-  ObjectOpResult ignored;
-  return NativeDeleteProperty(cx, argsobj, id, ignored) &&
-         NativeDefineProperty(cx, argsobj, id, desc_, result);
+  // Use define to replace the property with a simple data property.
+  Rooted<PropertyDescriptor> desc(cx);
+  desc.setValue(v);
+  return NativeDefineProperty(cx, argsobj, id, desc, result);
 }
 
 /* static */
@@ -930,15 +911,6 @@ bool js::UnmappedArgSetter(JSContext* cx, HandleObject obj, HandleId id,
                            HandleValue v, ObjectOpResult& result) {
   Handle<UnmappedArgumentsObject*> argsobj = obj.as<UnmappedArgumentsObject>();
 
-  Rooted<mozilla::Maybe<PropertyDescriptor>> desc(cx);
-  if (!GetOwnPropertyDescriptor(cx, argsobj, id, &desc)) {
-    return false;
-  }
-  MOZ_ASSERT(desc.isSome());
-  MOZ_ASSERT(desc->isDataDescriptor());
-  MOZ_ASSERT(desc->writable());
-  MOZ_ASSERT(!desc->resolving());
-
   if (id.isInt()) {
     unsigned arg = unsigned(id.toInt());
     if (argsobj->isElement(arg)) {
@@ -949,16 +921,10 @@ bool js::UnmappedArgSetter(JSContext* cx, HandleObject obj, HandleId id,
     MOZ_ASSERT(id.isAtom(cx->names().length));
   }
 
-  /*
-   * For simplicity we use delete/define to replace the property with a
-   * simple data property. Note that we rely on ArgumentsObject::obj_delProperty
-   * to set the corresponding override-bit.
-   */
-  Rooted<PropertyDescriptor> desc_(cx, *desc);
-  desc_.setValue(v);
-  ObjectOpResult ignored;
-  return NativeDeleteProperty(cx, argsobj, id, ignored) &&
-         NativeDefineProperty(cx, argsobj, id, desc_, result);
+  // Use define to replace the property with a simple data property.
+  Rooted<PropertyDescriptor> desc(cx);
+  desc.setValue(v);
+  return NativeDefineProperty(cx, argsobj, id, desc, result);
 }
 
 /* static */
@@ -1054,9 +1020,9 @@ void ArgumentsObject::trace(JSTracer* trc, JSObject* obj) {
   ArgumentsData* buffer = argsobj.data();
   ArgumentsData* copiedBuffer = buffer;
   if (buffer) {
-    TraceBufferEdge(trc, obj, &buffer, "ArgumentsData");
+    TraceBufferEdge(trc, &buffer, "ArgumentsData");
     if (buffer->rareData) {
-      TraceBufferEdge(trc, obj, &buffer->rareData, "RareArgumentsData");
+      TraceBufferEdge(trc, &buffer->rareData, "RareArgumentsData");
     }
     if (buffer != copiedBuffer) {
       argsobj.setFixedSlot(DATA_SLOT, PrivateValue(buffer));
@@ -1125,16 +1091,11 @@ size_t ArgumentsObject::sizeOfData() const {
  * arguments object.
  */
 const JSClassOps MappedArgumentsObject::classOps_ = {
-    nullptr,                               // addProperty
-    ArgumentsObject::obj_delProperty,      // delProperty
-    MappedArgumentsObject::obj_enumerate,  // enumerate
-    nullptr,                               // newEnumerate
-    MappedArgumentsObject::obj_resolve,    // resolve
-    ArgumentsObject::obj_mayResolve,       // mayResolve
-    nullptr,                               // finalize
-    nullptr,                               // call
-    nullptr,                               // construct
-    ArgumentsObject::trace,                // trace
+    .delProperty = ArgumentsObject::obj_delProperty,
+    .enumerate = MappedArgumentsObject::obj_enumerate,
+    .resolve = MappedArgumentsObject::obj_resolve,
+    .mayResolve = ArgumentsObject::obj_mayResolve,
+    .trace = ArgumentsObject::trace,
 };
 
 const js::ClassExtension MappedArgumentsObject::classExt_ = {
@@ -1169,16 +1130,11 @@ const JSClass MappedArgumentsObject::class_ = {
  * it is represented by a different class while sharing some functionality.
  */
 const JSClassOps UnmappedArgumentsObject::classOps_ = {
-    nullptr,                                 // addProperty
-    ArgumentsObject::obj_delProperty,        // delProperty
-    UnmappedArgumentsObject::obj_enumerate,  // enumerate
-    nullptr,                                 // newEnumerate
-    UnmappedArgumentsObject::obj_resolve,    // resolve
-    ArgumentsObject::obj_mayResolve,         // mayResolve
-    nullptr,                                 // finalize
-    nullptr,                                 // call
-    nullptr,                                 // construct
-    ArgumentsObject::trace,                  // trace
+    .delProperty = ArgumentsObject::obj_delProperty,
+    .enumerate = UnmappedArgumentsObject::obj_enumerate,
+    .resolve = UnmappedArgumentsObject::obj_resolve,
+    .mayResolve = ArgumentsObject::obj_mayResolve,
+    .trace = ArgumentsObject::trace,
 };
 
 const js::ClassExtension UnmappedArgumentsObject::classExt_ = {

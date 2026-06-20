@@ -94,6 +94,7 @@
 #include "nsIWindowWatcher.h"
 #include "nsMimeTypes.h"
 #include "nsNetUtil.h"
+#include "nsPIDOMWindowInlines.h"
 #include "nsQueryObject.h"
 #include "nsReadableUtils.h"
 #include "nsSandboxFlags.h"
@@ -382,6 +383,10 @@ void XMLHttpRequestMainThread::SetClientInfoAndController(
     const Maybe<ServiceWorkerDescriptor>& aController) {
   mClientInfo.emplace(aClientInfo);
   mController = aController;
+}
+
+void XMLHttpRequestMainThread::SetAssociatedBrowsingContextID(uint64_t aId) {
+  mAssociatedBrowsingContextID = aId;
 }
 
 void XMLHttpRequestMainThread::ResetResponse() {
@@ -1532,7 +1537,7 @@ void XMLHttpRequestMainThread::Open(const nsACString& aMethod,
   // Gecko-specific
   if (!aAsync && !DontWarnAboutSyncXHR() && GetOwnerWindow() &&
       GetOwnerWindow()->GetExtantDoc()) {
-    GetOwnerWindow()->GetExtantDoc()->WarnOnceAbout(
+    GetOwnerWindow()->GetExtantDoc()->WarnOnceAndReportAbout(
         DeprecatedOperations::eSyncXMLHttpRequestDeprecated);
   }
 
@@ -1757,9 +1762,10 @@ nsresult XMLHttpRequestMainThread::StreamReaderFunc(
 
     if (NS_SUCCEEDED(rv) && xmlHttpRequest->mXMLParserStreamListener) {
       NS_ASSERTION(copyStream, "NS_NewByteInputStream lied");
-      nsresult parsingResult =
-          xmlHttpRequest->mXMLParserStreamListener->OnDataAvailable(
-              xmlHttpRequest->mChannel, copyStream, toOffset, count);
+      nsCOMPtr<nsIStreamListener> listener =
+          xmlHttpRequest->mXMLParserStreamListener;
+      nsresult parsingResult = listener->OnDataAvailable(
+          xmlHttpRequest->mChannel, copyStream, toOffset, count);
 
       // No use to continue parsing if we failed here, but we
       // should still finish reading the stream
@@ -2195,7 +2201,8 @@ XMLHttpRequestMainThread::OnStartRequest(nsIRequest* request) {
     mResponseXML->SetReferrerInfo(referrerInfo);
 
     mXMLParserStreamListener = listener;
-    rv = mXMLParserStreamListener->OnStartRequest(request);
+    nsCOMPtr<nsIStreamListener> parserListener = mXMLParserStreamListener;
+    rv = parserListener->OnStartRequest(request);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
@@ -2240,14 +2247,17 @@ XMLHttpRequestMainThread::OnStopRequest(nsIRequest* request, nsresult status) {
   // XXX in fact, why don't we do the cleanup below in this case??
   // UNSENT is for abort calls.  See OnStartRequest above.
   if (mState == XMLHttpRequest_Binding::UNSENT || mFlagTimedOut) {
-    if (mXMLParserStreamListener)
-      (void)mXMLParserStreamListener->OnStopRequest(request, status);
+    if (mXMLParserStreamListener) {
+      nsCOMPtr<nsIStreamListener> parserListener = mXMLParserStreamListener;
+      (void)parserListener->OnStopRequest(request, status);
+    }
     return NS_OK;
   }
 
   // Is this good enough here?
   if (mXMLParserStreamListener && mFlagParseBody) {
-    mXMLParserStreamListener->OnStopRequest(request, status);
+    nsCOMPtr<nsIStreamListener> parserListener = mXMLParserStreamListener;
+    parserListener->OnStopRequest(request, status);
   }
 
   mXMLParserStreamListener = nullptr;
@@ -2493,18 +2503,17 @@ void XMLHttpRequestMainThread::ChangeStateToDone(bool aWasSync) {
     // final events.
     nsLoadFlags loadFlags = 0;
     mChannel->GetLoadFlags(&loadFlags);
-    if (loadFlags & nsIRequest::LOAD_BACKGROUND) {
-      nsPIDOMWindowInner* owner = GetOwnerWindow();
-      BrowsingContext* bc = owner ? owner->GetBrowsingContext() : nullptr;
-      bc = bc ? bc->Top() : nullptr;
-      if (bc && bc->IsLoading()) {
-        MOZ_ASSERT(!mDelayedDoneNotifier);
-        RefPtr<XMLHttpRequestDoneNotifier> notifier =
-            new XMLHttpRequestDoneNotifier(this);
-        mDelayedDoneNotifier = notifier;
-        bc->AddDeprioritizedLoadRunner(notifier);
-        return;
-      }
+    MOZ_DIAGNOSTIC_ASSERT(loadFlags & nsIRequest::LOAD_BACKGROUND);
+    nsPIDOMWindowInner* owner = GetOwnerWindow();
+    BrowsingContext* bc = owner ? owner->GetBrowsingContext() : nullptr;
+    bc = bc ? bc->Top() : nullptr;
+    if (bc && bc->IsLoading()) {
+      MOZ_ASSERT(!mDelayedDoneNotifier);
+      RefPtr<XMLHttpRequestDoneNotifier> notifier =
+          new XMLHttpRequestDoneNotifier(this);
+      mDelayedDoneNotifier = notifier;
+      bc->AddDeprioritizedLoadRunner(notifier);
+      return;
     }
   }
 
@@ -2637,6 +2646,12 @@ nsresult XMLHttpRequestMainThread::CreateChannel() {
   }
   NS_ENSURE_SUCCESS(rv, rv);
 
+  if (mAssociatedBrowsingContextID) {
+    nsCOMPtr<nsILoadInfo> loadInfo = mChannel->LoadInfo();
+    rv = loadInfo->SetAssociatedBrowsingContextID(mAssociatedBrowsingContextID);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+
   mAlreadyGotStopRequest = false;
 
   if (mCSPEventListener) {
@@ -2740,19 +2755,6 @@ nsresult XMLHttpRequestMainThread::InitiateFetch(
 
       preload = nullptr;
     }
-  }
-
-  // nsIRequest::LOAD_BACKGROUND prevents throbber from becoming active, which
-  // in turn keeps STOP button from becoming active.  If the consumer passed in
-  // a progress event handler we must load with nsIRequest::LOAD_NORMAL or
-  // necko won't generate any progress notifications.
-  if (HasListenersFor(nsGkAtoms::onprogress) ||
-      (mUpload && mUpload->HasListenersFor(nsGkAtoms::onprogress))) {
-    nsLoadFlags loadFlags;
-    mChannel->GetLoadFlags(&loadFlags);
-    loadFlags &= ~nsIRequest::LOAD_BACKGROUND;
-    loadFlags |= nsIRequest::LOAD_NORMAL;
-    mChannel->SetLoadFlags(loadFlags);
   }
 
   nsCOMPtr<nsIHttpChannel> httpChannel(do_QueryInterface(mChannel));

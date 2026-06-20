@@ -20,13 +20,13 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.ui.autocomplete.InlineAutocompleteEditText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class EditToolbarTest {
@@ -146,7 +146,7 @@ class EditToolbarTest {
             assertNull(fact.value)
 
             val metadata = fact.metadata
-            assertNotNull(metadata!!)
+            assertNotNull(metadata)
             assertEquals(1, metadata.size)
             assertTrue(metadata.contains("autocomplete"))
             assertIs<Boolean>(metadata["autocomplete"])
@@ -196,7 +196,7 @@ class EditToolbarTest {
             assertNull(factCommit.value)
 
             val metadata = factCommit.metadata
-            assertNotNull(metadata!!)
+            assertNotNull(metadata)
             assertEquals(2, metadata.size)
 
             assertTrue(metadata.contains("autocomplete"))

@@ -365,21 +365,24 @@ void FontFaceSetImpl::UpdateUserFontEntry(gfxUserFontEntry* aEntry,
                                           gfxUserFontAttributes&& aAttr) {
   MOZ_ASSERT(NS_IsMainThread());
 
-  bool resetFamilyName = !aEntry->mFamilyName.IsEmpty() &&
-                         aEntry->mFamilyName != aAttr.mFamilyName;
-  // aFontFace already has a user font entry, so we update its attributes
-  // rather than creating a new one.
-  aEntry->UpdateAttributes(std::move(aAttr));
-  // If the family name has changed, remove the entry from its current family
-  // and clear the mFamilyName field so it can be reset when added to a new
-  // family.
+  nsCString familyName = aEntry->FamilyName();
+  bool resetFamilyName =
+      !familyName.IsEmpty() && familyName != aAttr.mFamilyName;
   if (resetFamilyName) {
-    RefPtr<gfxUserFontFamily> family = LookupFamily(aEntry->mFamilyName);
+    // If the family name has changed, remove the entry from its current family
+    // and clear the mFamilyName field so it can be reset when added to a new
+    // family.
+    AutoWriteLock lock(aEntry->mLock);
+    RefPtr<gfxUserFontFamily> family = LookupFamily(familyName);
     if (family) {
       family->RemoveFontEntry(aEntry);
     }
     aEntry->mFamilyName.Truncate(0);
   }
+
+  // aFontFace already has a user font entry, so we update its attributes
+  // rather than creating a new one.
+  aEntry->UpdateAttributes(std::move(aAttr));
 }
 
 class FontFaceSetImpl::UpdateUserFontEntryRunnable final
@@ -458,7 +461,7 @@ FontFaceSetImpl::FindOrCreateUserFontEntryFromFontFace(
           face->mSourceType = gfxFontFaceSrc::eSourceType_URL;
           const StyleCssUrl* url = component.AsUrl();
           nsIURI* uri = url->GetURI();
-          face->mURI = uri ? new gfxFontSrcURI(uri) : nullptr;
+          face->mURI = uri ? MakeRefPtr<gfxFontSrcURI>(uri) : nullptr;
           const URLExtraData& extraData = url->ExtraData();
           face->mReferrerInfo = extraData.ReferrerInfo();
 
@@ -469,7 +472,7 @@ FontFaceSetImpl::FindOrCreateUserFontEntryFromFontFace(
           if (aOrigin == StyleOrigin::User ||
               aOrigin == StyleOrigin::UserAgent) {
             face->mUseOriginPrincipal = true;
-            face->mOriginPrincipal = new gfxFontSrcPrincipal(
+            face->mOriginPrincipal = MakeRefPtr<gfxFontSrcPrincipal>(
                 extraData.Principal(), extraData.Principal());
           }
 
@@ -886,9 +889,8 @@ void FontFaceSetImpl::DoRebuildUserFontSet() { MarkUserFontSetDirty(); }
 already_AddRefed<gfxUserFontEntry> FontFaceSetImpl::CreateUserFontEntry(
     nsTArray<gfxFontFaceSrc>&& aFontFaceSrcList,
     gfxUserFontAttributes&& aAttr) {
-  RefPtr<gfxUserFontEntry> entry = new FontFaceImpl::Entry(
-      this, std::move(aFontFaceSrcList), std::move(aAttr));
-  return entry.forget();
+  return MakeAndAddRef<FontFaceImpl::Entry>(this, std::move(aFontFaceSrcList),
+                                            std::move(aAttr));
 }
 
 void FontFaceSetImpl::ForgetLocalFaces() {

@@ -18,6 +18,7 @@ import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.home.bookmarks.Bookmark
 import org.mozilla.fenix.home.bookmarks.controller.BookmarksController
 import org.mozilla.fenix.home.logo.LogoController
+import org.mozilla.fenix.home.logo.TrackingProtectionController
 import org.mozilla.fenix.home.pocket.PocketRecommendedStoriesCategory
 import org.mozilla.fenix.home.pocket.controller.PocketStoriesController
 import org.mozilla.fenix.home.privatebrowsing.controller.PrivateBrowsingController
@@ -32,7 +33,6 @@ import org.mozilla.fenix.home.sports.SportsController
 import org.mozilla.fenix.home.termsofuse.PrivacyNoticeBannerController
 import org.mozilla.fenix.home.toolbar.ToolbarController
 import org.mozilla.fenix.home.topsites.controller.TopSiteController
-import org.mozilla.fenix.search.toolbar.SearchSelectorController
 
 class SessionControlInteractorTest {
 
@@ -42,11 +42,11 @@ class SessionControlInteractorTest {
     private val bookmarksController: BookmarksController = mockk(relaxed = true)
     private val pocketStoriesController: PocketStoriesController = mockk(relaxed = true)
     private val privateBrowsingController: PrivateBrowsingController = mockk(relaxed = true)
-    private val searchSelectorController: SearchSelectorController = mockk(relaxed = true)
     private val toolbarController: ToolbarController = mockk(relaxed = true)
     private val homeSearchController: HomeSearchController = mockk(relaxed = true)
     private val topSiteController: TopSiteController = mockk(relaxed = true)
     private val privacyNoticeBannerController: PrivacyNoticeBannerController = mockk(relaxed = true)
+    private val trackingProtectionController: TrackingProtectionController = mockk(relaxed = true)
     private val logoController: LogoController = mockk(relaxed = true)
     private val sportsController: SportsController = mockk(relaxed = true)
 
@@ -65,11 +65,11 @@ class SessionControlInteractorTest {
             recentVisitsController,
             pocketStoriesController,
             privateBrowsingController,
-            searchSelectorController,
             toolbarController,
             homeSearchController,
             topSiteController,
             privacyNoticeBannerController,
+            trackingProtectionController,
             logoController,
             sportsController,
         )
@@ -157,12 +157,6 @@ class SessionControlInteractorTest {
     }
 
     @Test
-    fun onRemoveCollectionsPlaceholder() {
-        interactor.onRemoveCollectionsPlaceholder()
-        verify { controller.handleRemoveCollectionsPlaceholder() }
-    }
-
-    @Test
     fun onRecentTabClicked() {
         val tabId = "tabId"
         interactor.onRecentTabClicked(tabId)
@@ -232,6 +226,12 @@ class SessionControlInteractorTest {
     }
 
     @Test
+    fun `WHEN save shortcut is called THEN handle the save action in the controller`() {
+        interactor.onSaveShortcut(title = "Firefox", url = "firefox.com")
+        verify { topSiteController.handleSaveShortcut(title = "Firefox", url = "firefox.com") }
+    }
+
+    @Test
     fun `GIVEN a PocketStoriesInteractor WHEN a story is shown THEN handle it in a PocketStoriesController`() {
         val shownStory: PocketStory = mockk()
         val storyPosition = Triple(1, 2, 3)
@@ -278,12 +278,6 @@ class SessionControlInteractorTest {
     }
 
     @Test
-    fun `WHEN logo is long clicked THEN logo controller click handler is called`() {
-        interactor.onLogoLongClicked()
-        verify { logoController.handleLogoLongClicked() }
-    }
-
-    @Test
     fun `GIVEN a set of country codes WHEN countries are selected THEN sports controller handles the selection`() {
         val countryCodes = setOf("US", "JP", "BR")
         interactor.onCountriesSelected(countryCodes)
@@ -313,5 +307,24 @@ class SessionControlInteractorTest {
     fun `WHEN the countdown widget is dismissed THEN sports controller handles the dismissal`() {
         interactor.onCountdownWidgetDismissed()
         verify { sportsController.handleCountdownWidgetDismissed() }
+    }
+
+    @Test
+    fun `WHEN the get custom wallpaper menu item is clicked THEN sports controller handles the navigation`() {
+        interactor.onGetCustomWallpaperClicked()
+        verify { sportsController.handleOnGetCustomWallpaperClicked() }
+    }
+
+    @Test
+    fun `WHEN the share menu item is clicked THEN sports controller handles the share`() {
+        interactor.onSportsWidgetShareClicked()
+        verify { sportsController.handleSportsWidgetShareClicked() }
+    }
+
+    @Test
+    fun `WHEN the privacy report is tapped THEN tracking protection controller handles the action`() {
+        interactor.onPrivacyReportTapped()
+
+        verify { trackingProtectionController.handleProtectionStatusPillClicked() }
     }
 }

@@ -46,6 +46,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   RemoteRenderer: "resource://newtab/lib/RemoteRenderer.sys.mjs",
   SectionsFeed: "resource://newtab/lib/SectionsManager.sys.mjs",
   SectionsLayoutFeed: "resource://newtab/lib/SectionsLayoutFeed.sys.mjs",
+  SportsFeed: "resource://newtab/lib/Widgets/SportsFeed.sys.mjs",
   StartupCacheInit: "resource://newtab/lib/StartupCacheInit.sys.mjs",
   Store: "resource://newtab/lib/Store.sys.mjs",
   SystemTickFeed: "resource://newtab/lib/SystemTickFeed.sys.mjs",
@@ -159,18 +160,20 @@ export const WEATHER_OPTIN_REGIONS = [
   "CH", // Switzerland
 ];
 
+export function csvHasValue(csvString, value) {
+  return (csvString || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(item => item)
+    .includes(value);
+}
+
 export function csvPrefHasValue(stringPrefName, value) {
   if (typeof stringPrefName !== "string") {
     throw new Error(`The stringPrefName argument is not a string`);
   }
 
-  const pref = Services.prefs.getStringPref(stringPrefName, "") || "";
-  const prefValues = pref
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-
-  return prefValues.includes(value);
+  return csvHasValue(Services.prefs.getStringPref(stringPrefName, ""), value);
 }
 
 export function shouldInitializeFeeds(defaultValue = true) {
@@ -198,11 +201,19 @@ function useSov({ geo, locale }) {
   );
 }
 
-function useContextualAds({ geo, locale }) {
-  return (
-    csvPrefHasValue(REGION_CONTEXTUAL_AD_CONFIG, geo) &&
-    csvPrefHasValue(LOCALE_CONTEXTUAL_AD_CONFIG, locale)
-  );
+/**
+ * @backward-compat { version 154 }
+ * We are turning this on in US/en-US,en-GB,en-CA, but doing it in here so it
+ * can trainhop. Drop the `|| "US"` / `|| "en-US,en-GB,en-CA"` fallbacks once
+ * 154 hits Release.
+ */
+export function useContextualAds({ geo, locale }) {
+  const regions =
+    Services.prefs.getStringPref(REGION_CONTEXTUAL_AD_CONFIG, "") || "US";
+  const locales =
+    Services.prefs.getStringPref(LOCALE_CONTEXTUAL_AD_CONFIG, "") ||
+    "en-US,en-GB,en-CA";
+  return csvHasValue(regions, geo) && csvHasValue(locales, locale);
 }
 
 // Determine if spocs should be shown for a geo/locale
@@ -330,6 +341,13 @@ export const PREFS_CONFIG = new Map([
     {
       title:
         "Hide the top sites section's title, including the section and collapse icons",
+      value: false,
+    },
+  ],
+  [
+    "hideLogo",
+    {
+      title: "Hide the Firefox logo on new tab",
       value: false,
     },
   ],
@@ -537,6 +555,66 @@ export const PREFS_CONFIG = new Map([
         "Temporary measure for trainhopping. This adds the Merino endpoint for the hourly forecasts to display in Weather Forecast widget",
       value:
         "https://merino.services.mozilla.com/api/v1/weather/hourly-forecasts",
+    },
+  ],
+  [
+    "sports.worldCup.teamsEndpoint",
+    {
+      title: "The Merino endpoint for fetching available World Cup teams data",
+      value: "https://merino.services.mozilla.com/api/v1/wcs/teams",
+    },
+  ],
+  [
+    "sports.worldCup.matchesEndpoint",
+    {
+      title: "The Merino endpoint for fetching World Cup match data",
+      value: "https://merino.services.mozilla.com/api/v1/wcs/matches",
+    },
+  ],
+  [
+    "sports.worldCup.liveEndpoint",
+    {
+      title: "The Merino endpoint for fetching live World Cup match data",
+      value: "https://merino.services.mozilla.com/api/v1/wcs/live",
+    },
+  ],
+  [
+    "sports.worldCup.watchLiveEndpoint",
+    {
+      title:
+        "The Merino endpoint for fetching World Cup watch-live broadcaster data",
+      value: "https://merino.services.mozilla.com/api/v1/wcs/watch-links",
+    },
+  ],
+  [
+    "widgets.sportsWidget.pollIdleMs",
+    {
+      title:
+        "Sports widget: poll interval when no games are imminent (milliseconds)",
+      value: 21600000, // 6 hours
+    },
+  ],
+  [
+    "widgets.sportsWidget.pollMatchDayMs",
+    {
+      title:
+        "Sports widget: poll interval on a match day pre-kickoff (milliseconds)",
+      value: 1800000, // 30 minutes
+    },
+  ],
+  [
+    "widgets.sportsWidget.pollLiveMs",
+    {
+      title: "Sports widget: poll interval during live play (milliseconds)",
+      value: 180000, // 3 minutes
+    },
+  ],
+  [
+    "widgets.sportsWidget.pollPregameLeadMs",
+    {
+      title:
+        "Sports widget: how early to enter LIVE polling before kickoff (milliseconds)",
+      value: 600000, // 10 minutes
     },
   ],
   [
@@ -1199,6 +1277,14 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "widgets.row.expanded",
+    {
+      title:
+        "Whether the Nova widgets row is expanded beyond its first visual row. Persists the user's Show more / Show less choice across sessions.",
+      value: false,
+    },
+  ],
+  [
     "widgets.focusTimer.enabled",
     {
       title: "Enables the focus timer widget",
@@ -1271,10 +1357,24 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "widgets.clocks.enabled",
+    {
+      title: "Enables the clock widget",
+      value: true,
+    },
+  ],
+  [
+    "widgets.system.clocks.enabled",
+    {
+      title: "Enables the clock widget experiment in Nimbus",
+      value: false,
+    },
+  ],
+  [
     "widgets.defaultSize",
     {
       title: "Default size for widgets (medium or large)",
-      value: "large",
+      value: "medium",
     },
   ],
   [
@@ -1320,11 +1420,57 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "widgets.sportsWidget.celebrations.enabled",
+    {
+      title:
+        "Enables end-of-match celebration animations in the sports widget. Off by default; can also be turned on via the dedicated trainhopConfig.sportsCelebrations.enabled namespace (canonical), or the trainhopConfig.widgets.sportsWidgetCelebrationsEnabled / legacy trainhopConfig.sports.celebrationsEnabled fallbacks.",
+      value: false,
+    },
+  ],
+  [
+    "widgets.sportsWidget.celebrations.windowMs",
+    {
+      title:
+        "How recently (in ms) a match must have ended to still trigger a celebration. Default 24h; can also be set via the dedicated trainhopConfig.sportsCelebrations.windowMs namespace (canonical), or the trainhopConfig.widgets.sportsWidgetCelebrationsWindowMs / legacy trainhopConfig.sports.celebrationsWindowMs fallbacks.",
+      value: 86400000,
+    },
+  ],
+  [
+    "widgets.sports.forceLiveDataTrustable",
+    {
+      title:
+        "Dev/QA only: bypass the pre-kickoff guard and treat /live data as trustable",
+      value: false,
+    },
+  ],
+  [
     "widgets.sportsWidget.interaction",
     {
       title:
         "Boolean flag for determining if a user has interacted with the sports widget",
       value: false,
+    },
+  ],
+  [
+    "widgets.clocks.size",
+    {
+      title: "Size of the clock widget (small, medium, or large)",
+      value: "",
+    },
+  ],
+  [
+    "widgets.clocks.hourFormat",
+    {
+      title:
+        "User override for clock widget hour format ('12', '24', or empty string to use locale default)",
+      value: "",
+    },
+  ],
+  [
+    "widgets.clocks.zones",
+    {
+      title: "Saved clock widget time zones",
+      value: "",
     },
   ],
   [
@@ -1617,6 +1763,20 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "sectionsLearnMore.url",
+    {
+      title: "Link to HNT's personalization page",
+      getValue: () => {
+        // Services.urlFormatter completes the in-product SUMO page URL:
+        // https://support.mozilla.org/1/firefox/%VERSION%/%OS%/%LOCALE%/firefox-new-tab-personalization
+        const baseUrl = Services.urlFormatter.formatURLPref(
+          "app.support.baseURL"
+        );
+        return `${baseUrl}firefox-new-tab-personalization`;
+      },
+    },
+  ],
+  [
     "caretBlinkCount",
     {
       title:
@@ -1673,6 +1833,19 @@ export const PREFS_CONFIG = new Map([
       title:
         "Set to true to enable the RemoteSettings backed renderer for newtab. See RemoteRenderer.sys.mjs for more details.",
       value: false,
+    },
+  ],
+  /**
+   * @backward-compat { version 153 }
+   * Remove this pref entry after Firefox 153 hits Release — it's only
+   * needed while the 2026 World Cup logo variation is live.
+   */
+  [
+    "logo.variation",
+    {
+      title:
+        "Variant ID of a logo variation to render in place of the standard newtab logo (e.g. 'spin-ball-small'). Empty string disables. Overridden by trainhopConfig.logo.variation when set.",
+      value: "",
     },
   ],
 ]);
@@ -1860,6 +2033,12 @@ const FEEDS_DATA = [
     name: "listsfeed",
     factory: () => new lazy.ListsFeed(),
     title: "Handles the data for the Todo list widget",
+    value: true,
+  },
+  {
+    name: "sportsfeed",
+    factory: () => new lazy.SportsFeed(),
+    title: "Handles persistent state for the Sports widget",
     value: true,
   },
   {

@@ -1,38 +1,38 @@
-name: 'CI VM'
-description: 'Run main CI steps in VMs for VM-only platforms.'
+name: "Android checks"
+description: "Run Android build and test steps using the Android SDK/NDK and emulator."
 
 inputs:
   target:
-    description: 'Rust target to build for.'
+    description: "Rust target to build for."
     required: true
   working-directory:
-    description: 'Working directory.'
-    default: '.'
+    description: "Working directory."
+    default: "."
   ndk-version:
-    description: 'NDK version to install.'
+    description: "NDK version to install."
     # https://searchfox.org/mozilla-central/search?q=NDK_VERSION =&path=python/mozboot/mozboot/android.py
-    default: '27.2.12479018'
+    default: "27.2.12479018"
   api-level:
-    description: 'Android API level to use.'
+    description: "Android API level to use."
     # https://searchfox.org/mozilla-central/search?q=\bapi_level=&path=taskcluster/scripts/misc/build-llvm-common.sh&regexp=true
     # However, NSS requires an API >= 23 for a few symbols.
-    default: '23'
+    default: "23"
   minimum-nss-version:
-    description: 'If NSS is required, the minimum version required.'
-    default: ''
+    description: "If NSS is required, the minimum version required."
+    default: ""
   github-token:
-    description: 'A Github PAT'
+    description: "A Github PAT"
     required: true
 
 runs:
   using: composite
   steps:
-    - uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # v5.1.0
+    - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
       with:
         distribution: zulu
         java-version: 23
 
-    - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+    - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
       with:
         accept-android-sdk-licenses: true
         log-accepted-android-sdk-licenses: false
@@ -43,27 +43,32 @@ runs:
         WD: ${{ inputs.working-directory }}
       run: cd "$WD" && sdkmanager --install "ndk;$NDK_VERSION"
 
-    - uses: ./.github/actions/rust
+    - uses: mozilla/actions/rust@2e46408d5c495e59a21e5e125e82008fad0d9408 # v1.1.7
       with:
         version: stable
         targets: ${{ inputs.target }}
-        tools: cargo-ndk@^4
+        tools: cargo-ndk@^4, cargo-hack
         token: ${{ inputs.github-token }}
 
-    - uses: ./.github/actions/nss
+    - uses: mozilla/actions/nss@2e46408d5c495e59a21e5e125e82008fad0d9408 # v1.1.7
       if: ${{ inputs.minimum-nss-version != '' }}
       with:
         minimum-version: ${{ inputs.minimum-nss-version }}
         target: ${{ inputs.target }}
+        token: ${{ inputs.github-token }}
 
     - shell: bash
       env:
         TARGET: ${{ startsWith(inputs.target, 'arm') && 'arm64-v8a' || inputs.target }}
         API_LEVEL: ${{ inputs.api-level }}
         WD: ${{ inputs.working-directory }}
-      run: cd "$WD" && cargo ndk --platform "$API_LEVEL" --target "$TARGET" test --no-run
+      run: cd "$WD" && cargo hack --feature-powerset --exclude-features gecko,blapi ndk --platform "$API_LEVEL" --target "$TARGET" test --no-run
 
+    # FIXME: Enable emulator testing for aarch64 once Google ships Android
+    # emulator binaries for ARM64 Linux hosts.
+    # See https://issuetracker.google.com/issues/242699119
     - shell: bash
+      if: ${{ !startsWith(inputs.target, 'aarch64') }}
       env:
         TARGET: ${{ inputs.target }}
         API_LEVEL: ${{ inputs.api-level }}
@@ -84,14 +89,15 @@ runs:
           adb push "$test" "$TMP/"
           adb shell chmod +x "$TMP/$(basename "$test")"
           # See https://unix.stackexchange.com/a/451140/409256
-          adb shell "CARGO_TERM_COLOR=always RUST_BACKTRACE=1 LD_LIBRARY_PATH=$TMP/lib NSS_DB_PATH=$TMP/db API_LEVEL=$API_LEVEL $TMP/$(basename "$test") || echo _FAIL_" 2>&1 | tee output
+          adb shell "CARGO_TERM_COLOR=always RUST_BACKTRACE=1 LD_LIBRARY_PATH=$TMP/lib TEST_FIXTURE_DB=$TMP/db API_LEVEL=$API_LEVEL $TMP/$(basename "$test") || echo _FAIL_" 2>&1 | tee output
           grep _FAIL_ output > /dev/null && any_failures=1
         done
         exit $any_failures
         EOF
         chmod a+x /tmp/rust-android-run-tests-on-emulator.sh
 
-    - uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0
+    - uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
+      if: ${{ !startsWith(inputs.target, 'aarch64') }}
       with:
         api-level: ${{ inputs.api-level }}
         arch: ${{ startsWith(inputs.target, 'x86_64') && 'x86_64' || (startsWith(inputs.target, 'i686') && 'x86' || (startsWith(inputs.target, 'aarch64') && 'arm64-v8a')) }}

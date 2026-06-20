@@ -359,6 +359,7 @@ where
             /* try_tactic = */ &Default::default(),
             Some(&self.context.thread_local.rule_cache),
             &mut conditions,
+            &mut self.context.thread_local.tree_counting_caches,
         );
 
         self.context.thread_local.rule_cache.insert_if_possible(
@@ -492,9 +493,6 @@ where
             &mut applicable_declarations,
             &mut matching_context,
         );
-
-        // FIXME(emilio): This is a hack for animations, and should go away.
-        self.element.unset_dirty_style_attribute();
 
         let rule_node = stylist
             .rule_tree()

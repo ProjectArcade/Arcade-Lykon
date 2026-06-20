@@ -29,7 +29,8 @@ class PosixSerialPlatformService final : public SerialPlatformService {
   void Shutdown() override;
 
  private:
-  nsresult EnumeratePortsImpl(SerialPortList& aPorts) override;
+  nsresult EnumeratePortsImpl(SerialPortList& aPorts,
+                              bool* aLikelyAccessDenied) override;
   nsresult OpenImpl(const nsString& aPortId,
                     const IPCSerialOptions& aOptions) override;
   nsresult CloseImpl(const nsString& aPortId) override;
@@ -49,11 +50,9 @@ class PosixSerialPlatformService final : public SerialPlatformService {
   nsresult ConfigurePort(int aFd, const IPCSerialOptions& aOptions);
 
   nsresult StartMonitoring();
-  void StopMonitoring();
 
 #ifdef XP_LINUX
   nsresult InitializeUdev();
-  void ShutdownUdev();
   static gboolean OnUdevMonitor(GIOChannel* source, GIOCondition condition,
                                 gpointer data);
   void ReadUdevChange();

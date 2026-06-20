@@ -33,7 +33,7 @@ namespace mozilla::dom {
 bool Attr::sInitialized;
 
 Attr::Attr(nsDOMAttributeMap* aAttrMap,
-           already_AddRefed<dom::NodeInfo>&& aNodeInfo, const nsAString& aValue)
+           already_AddRefed<dom::NodeInfo> aNodeInfo, const nsAString& aValue)
     : nsINode(std::move(aNodeInfo)), mAttrMap(aAttrMap), mValue(aValue) {
   MOZ_ASSERT(mNodeInfo, "We must get a nodeinfo here!");
   MOZ_ASSERT(mNodeInfo->NodeType() == ATTRIBUTE_NODE, "Wrong nodeType");
@@ -177,7 +177,8 @@ void Attr::SetValueInternal(const nsAString& aValue, ErrorResult& aRv) {
 
   RefPtr<nsAtom> nameAtom = mNodeInfo->NameAtom();
   aRv = element->SetAttr(mNodeInfo->NamespaceID(), nameAtom,
-                         mNodeInfo->GetPrefixAtom(), aValue, nullptr, true);
+                         mNodeInfo->GetPrefixAtom(), aValue, nullptr, true,
+                         IsKnownNewAttr::No);
 }
 
 bool Attr::Specified() const { return true; }

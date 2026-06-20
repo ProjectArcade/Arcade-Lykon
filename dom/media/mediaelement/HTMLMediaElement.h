@@ -172,8 +172,7 @@ class HTMLMediaElement : public nsGenericHTMLElement,
 
   CORSMode GetCORSMode() { return mCORSMode; }
 
-  explicit HTMLMediaElement(
-      already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo);
+  explicit HTMLMediaElement(already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo);
   void Init();
 
   virtual HTMLVideoElement* AsHTMLVideoElement() { return nullptr; };
@@ -655,8 +654,24 @@ class HTMLMediaElement : public nsGenericHTMLElement,
 
   void SetVolume(double aVolume, ErrorResult& aRv);
 
-  bool Muted() const { return mMuted & MUTED_BY_CONTENT; }
-  void SetMuted(bool aMuted);
+  enum MutedReasons {
+    MUTED_BY_CONTENT = 0x01,
+    MUTED_BY_INVALID_PLAYBACK_RATE = 0x02,
+    MUTED_BY_AUDIO_CHANNEL = 0x04,
+    MUTED_BY_AUDIO_TRACK = 0x08,
+    MUTED_BY_MEDIA_CONTROL = 0x10
+  };
+
+  bool Muted() const {
+    // https://html.spec.whatwg.org/multipage/media.html#concept-media-muted
+    return !!(mMuted & (MUTED_BY_CONTENT | MUTED_BY_INVALID_PLAYBACK_RATE));
+  }
+  void SetMuted(bool aMuted, MutedReasons aReason = MUTED_BY_CONTENT);
+
+  // Chrome-only accessor exposing which reasons currently contribute to the
+  // muted state, so tests can verify muting that does not affect the
+  // web-visible muted attribute (e.g. mute via media control).
+  uint32_t GetMutedReasons() const { return mMuted; }
 
   bool DefaultMuted() const { return GetBoolAttr(nsGkAtoms::muted); }
 
@@ -1370,7 +1385,6 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   // content, or NS_ERROR_FAILURE if the document has no window.
   bool CanBeCaptured(StreamCaptureType aCaptureType, ErrorResult& aRv);
 
-  using nsGenericHTMLElement::DispatchEvent;
   // For nsAsyncEventRunner.
   // The event is blocked while the document is in B/F cache.
   MOZ_CAN_RUN_SCRIPT nsresult FireEvent(const nsAString& aName);
@@ -1599,14 +1613,15 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   // True if the audio track is not silent.
   bool mIsAudioTrackAudible = false;
 
-  enum MutedReasons {
-    MUTED_BY_CONTENT = 0x01,
-    MUTED_BY_INVALID_PLAYBACK_RATE = 0x02,
-    MUTED_BY_AUDIO_CHANNEL = 0x04,
-    MUTED_BY_AUDIO_TRACK = 0x08
-  };
-
   uint32_t mMuted = 0;
+
+  // The tristate "muted state". While Default, the muted content attribute is a
+  // fallback that determines whether the element is muted; once the muted
+  // setter latches the state to True or False, the content attribute no longer
+  // applies.
+  // https://html.spec.whatwg.org/multipage/media.html#concept-media-muted-state
+  enum class MutedState : uint8_t { Default, True, False };
+  MutedState mMutedState = MutedState::Default;
 
   UniquePtr<const MetadataTags> mTags;
 
@@ -1973,9 +1988,10 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   // error.
   bool IsPlayable() const;
 
-  // Return true if the media qualifies for being controlled by media control
-  // keys.
-  bool ShouldStartMediaControlKeyListener() const;
+  // Return true if the media source qualifies for full media-key control,
+  // meaning the OS media-control interface (media keys, lock-screen widget,
+  // etc.) will be activated for this element.
+  bool IsControllableMediaSource() const;
 
   // Start the listener if media fits the requirement of being able to be
   // controlled be media control keys.

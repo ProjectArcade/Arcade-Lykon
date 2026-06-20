@@ -25,9 +25,9 @@ interface HTMLElement : Element {
   [CEReactions, SetterThrows, Pure]
            attribute DOMString dir;
 
-  [CEReactions, GetterThrows, Pure]
+  [CEReactions, GetterThrows]
            attribute [LegacyNullToEmptyString] DOMString innerText;
-  [CEReactions, GetterThrows, SetterThrows, Pure]
+  [CEReactions, GetterThrows, SetterThrows]
            attribute [LegacyNullToEmptyString] DOMString outerText;
 
   // user interaction
@@ -80,6 +80,12 @@ interface HTMLElement : Element {
   [Throws] undefined showPopover(optional ShowPopoverOptions options = {});
   [Throws] undefined hidePopover();
   [Throws] boolean togglePopover(optional (TogglePopoverOptions or boolean) options = {});
+
+  [CEReactions, SetterThrows, Pref="dom.headingoffset.enabled"]
+  attribute unsigned long headingOffset;
+
+  [CEReactions, Pref="dom.headingoffset.enabled"]
+  attribute boolean headingReset;
 };
 
 dictionary ShowPopoverOptions {
@@ -122,7 +128,7 @@ interface mixin TouchEventHandlers {
 
 HTMLElement includes ElementOffsetAttributes;
 HTMLElement includes GlobalEventHandlers;
-HTMLElement includes HTMLOrForeignElement;
+HTMLElement includes HTMLOrSVGOrMathMLElement;
 HTMLElement includes ElementCSSInlineStyle;
 HTMLElement includes TouchEventHandlers;
 HTMLElement includes OnErrorEventHandlerForNodes;

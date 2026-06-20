@@ -25,12 +25,24 @@ using MathMLElementBase = nsStyledElement;
 class MathMLElement final : public MathMLElementBase, public Link {
  public:
   explicit MathMLElement(already_AddRefed<mozilla::dom::NodeInfo>& aNodeInfo);
-  explicit MathMLElement(already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo);
+  explicit MathMLElement(already_AddRefed<mozilla::dom::NodeInfo> aNodeInfo);
 
   // Implementation of nsISupports is inherited from MathMLElementBase
   NS_DECL_ISUPPORTS_INHERITED
 
   NS_IMPL_FROMNODE(MathMLElement, kNameSpaceID_MathML)
+
+  void SetNonce(const nsAString& aNonce) {
+    SetProperty(nsGkAtoms::nonce, new nsString(aNonce),
+                nsINode::DeleteProperty<nsString>, /* aTransfer = */ true);
+  }
+  void RemoveNonce() { RemoveProperty(nsGkAtoms::nonce); }
+  void GetNonce(nsAString& aNonce) const {
+    nsString* cspNonce = static_cast<nsString*>(GetProperty(nsGkAtoms::nonce));
+    if (cspNonce) {
+      aNonce = *cspNonce;
+    }
+  }
 
   nsresult BindToTree(BindContext&, nsINode& aParent) override;
   void UnbindFromTree(UnbindContext&) override;
@@ -66,6 +78,7 @@ class MathMLElement final : public MathMLElementBase, public Link {
   MOZ_CAN_RUN_SCRIPT
   nsresult PostHandleEvent(mozilla::EventChainPostVisitor& aVisitor) override;
   nsresult Clone(mozilla::dom::NodeInfo*, nsINode** aResult) const override;
+  nsresult CopyInnerTo(mozilla::dom::Element* aDest);
 
   // Set during reflow as necessary. Does a style change notification,
   // aNotify must be true.

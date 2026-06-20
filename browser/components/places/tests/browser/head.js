@@ -94,10 +94,14 @@ function promiseClipboard(aPopulateClipboardFn, aFlavor) {
   });
 }
 
-function synthesizeClickOnSelectedTreeCell(aTree, aOptions) {
+async function synthesizeClickOnSelectedTreeCell(aTree, aOptions) {
   if (aTree.view.selection.count < 1) {
     throw new Error("The test node should be successfully selected");
   }
+  await TestUtils.waitForCondition(
+    () => aTree.getBoundingClientRect().width > 0,
+    "Tree should have non-zero width before clicking"
+  );
   // Get selection rowID.
   let min = {},
     max = {};
@@ -441,6 +445,74 @@ function promisePopupHidden(popup) {
       resolve();
     };
     popup.addEventListener("popuphidden", onPopupHidden);
+  });
+}
+
+/**
+ * Boilerplate code to ensure the bookmarks toolbar is visible and contains
+ * at least one bookmark.
+ */
+async function ensureBookmarksToolbarIsVisibleAndPopulated() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.toolbars.bookmarks.visibility", "always"]],
+  });
+
+  // Necessary to avoid intermittent failures in verify-fission where default
+  // bookmarks may or may not have been imported yet.
+  await promisePlacesInitComplete();
+  await PlacesUtils.bookmarks.eraseEverything();
+
+  // Avoid the empty toolbar placeholder shifting stuff around.
+  let bm = await PlacesUtils.bookmarks.insert({
+    parentGuid: PlacesUtils.bookmarks.toolbarGuid,
+    title: "initial",
+    url: "about:robots",
+  });
+
+  let toolbar = document.getElementById("PersonalToolbar");
+  let wasCollapsed = toolbar.collapsed;
+  if (wasCollapsed) {
+    await promiseSetToolbarVisibility(toolbar, true);
+    await BrowserTestUtils.waitForEvent(
+      toolbar,
+      "BookmarksToolbarVisibilityUpdated"
+    );
+  }
+
+  registerCleanupFunction(async () => {
+    if (wasCollapsed) {
+      await promiseSetToolbarVisibility(toolbar, false);
+    }
+    try {
+      await PlacesUtils.bookmarks.remove(bm);
+    } catch (ex) {
+      // The bookmark may have been removed already.
+    }
+  });
+
+  await waitForBookmarksToolbarElements(1);
+}
+
+/**
+ * Ensure N bookmarks are visible on the Bookmarks Toolbar.
+ *
+ * @param {integer} expectedCount The number of bookmarks to wait for.
+ * @returns {Promise} resolved when the condition is satisfied.
+ */
+function waitForBookmarksToolbarElements(expectedCount) {
+  let container = document.getElementById("PlacesToolbarItems");
+  if (container.childElementCount == expectedCount) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    info("Waiting for bookmarks");
+    let mut = new MutationObserver(() => {
+      if (container.childElementCount == expectedCount) {
+        resolve();
+        mut.disconnect();
+      }
+    });
+    mut.observe(container, { childList: true });
   });
 }
 

@@ -39,7 +39,6 @@ import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.toolbar.BrowserToolbarComposable
 import org.mozilla.fenix.ext.application
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.onboarding.FenixOnboarding
 import org.mozilla.fenix.utils.Settings
 import org.robolectric.RobolectricTestRunner
@@ -85,8 +84,7 @@ class BrowserFragmentTest {
         browserFragment = spyk(BrowserFragment())
         every { browserFragment.view } returns view
         every { browserFragment.isAdded } returns true
-        every { browserFragment.browserToolbarView } returns mockk<BrowserToolbarComposable>(relaxed = true)
-        every { browserFragment.browserToolbarInteractor } returns mockk(relaxed = true)
+        every { browserFragment.browserToolbar } returns mockk<BrowserToolbarComposable>(relaxed = true)
         every { browserFragment.childFragmentManager } returns mockk(relaxed = true)
         every { browserFragment.activity } returns homeActivity
         every { browserFragment.lifecycle } returns lifecycleOwner.lifecycle
@@ -177,7 +175,7 @@ class BrowserFragmentTest {
         )
 
         val toolbar: BrowserToolbarComposable = mockk(relaxed = true)
-        every { browserFragment.browserToolbarView } returns toolbar
+        every { browserFragment.browserToolbar } returns toolbar
 
         val newSelectedTab = createTab("https://firefox.com")
         addAndSelectTab(newSelectedTab)
@@ -351,16 +349,16 @@ class BrowserFragmentTest {
 
     @Test
     fun `WHEN isPullToRefreshEnabledInBrowser is disabled THEN pull down refresh is disabled`() {
-        every { context.settings().isPullToRefreshEnabledInBrowser } returns true
+        every { context.components.settings.isPullToRefreshEnabledInBrowser } returns true
         assertTrue(browserFragment.shouldPullToRefreshBeEnabled(false))
 
-        every { context.settings().isPullToRefreshEnabledInBrowser } returns false
+        every { context.components.settings.isPullToRefreshEnabledInBrowser } returns false
         assertTrue(!browserFragment.shouldPullToRefreshBeEnabled(false))
     }
 
     @Test
     fun `WHEN in fullscreen THEN pull down refresh is disabled`() {
-        every { context.settings().isPullToRefreshEnabledInBrowser } returns true
+        every { context.components.settings.isPullToRefreshEnabledInBrowser } returns true
         assertTrue(browserFragment.shouldPullToRefreshBeEnabled(false))
         assertTrue(!browserFragment.shouldPullToRefreshBeEnabled(true))
     }
@@ -381,7 +379,7 @@ class BrowserFragmentTest {
         val settings: Settings = mockk(relaxed = true)
 
         every { browserFragment.context } returns context
-        every { context.settings() } returns settings
+        every { context.components.settings } returns settings
 
         browserFragment.updateLastBrowseActivity()
 

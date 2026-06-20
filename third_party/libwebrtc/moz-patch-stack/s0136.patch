@@ -1,27 +1,23 @@
-From: Michael Froman <mfroman@mozilla.com>
-Date: Tue, 7 Apr 2026 18:03:00 -0500
-Subject: Bug 2030139 - (fix-1ccc59d5c9) don't use
- std::make_unique_for_overwrite for now to fix build error
+From: Byron Campen <docfaraday@gmail.com>
+Date: Tue, 19 May 2026 16:37:00 -0500
+Subject: Bug 2040478 - (fix-de183fb028) Remove this include of override code
+ that is gone. r?mjf
 
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/a4e2ac07bd6f2deb8fde32b147422c3918c31eca
+It appears that this override code is no longer necessary.
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/dbd090975384251d83d3554677efcbb0e133feab
 ---
- rtc_base/copy_on_write_buffer.cc | 6 +++++-
- 1 file changed, 5 insertions(+), 1 deletion(-)
+ call/call.h | 1 -
+ 1 file changed, 1 deletion(-)
 
-diff --git a/rtc_base/copy_on_write_buffer.cc b/rtc_base/copy_on_write_buffer.cc
-index 68e98ce729..5877f323f6 100644
---- a/rtc_base/copy_on_write_buffer.cc
-+++ b/rtc_base/copy_on_write_buffer.cc
-@@ -28,7 +28,11 @@
- namespace webrtc {
- 
- CopyOnWriteBuffer::RawBuffer::RawBuffer(size_t size)
--    : size_(size), data_(std::make_unique_for_overwrite<uint8_t[]>(size)) {}
-+    : size_(size), data_(std::unique_ptr<uint8_t[]>(new uint8_t[size])) {}
-+// We should be able to use the form below, but our current compile setup
-+// doesn't find std::make_unique_for_overwrite.  See Bug 2030186 to revert
-+// this change.
-+//     : size_(size), data_(std::make_unique_for_overwrite<uint8_t[]>(size)) {}
- 
- scoped_refptr<CopyOnWriteBuffer::RefCountedBuffer>
- CopyOnWriteBuffer::CreateBuffer(size_t capacity) {
+diff --git a/call/call.h b/call/call.h
+index e97a8ee4ec..53a1cf0636 100644
+--- a/call/call.h
++++ b/call/call.h
+@@ -27,7 +27,6 @@
+ #include "api/video/video_stream_encoder_settings.h"
+ #include "call/audio_receive_stream.h"
+ #include "call/audio_send_stream.h"
+-#include "call/call_basic_stats.h"
+ #include "call/call_config.h"
+ #include "call/flexfec_receive_stream.h"
+ #include "call/packet_receiver.h"

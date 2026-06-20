@@ -133,6 +133,7 @@ EXPORTS += [
     "nsBaseParentChannel.h",
     "nsFileStreams.h",
     "nsInputStreamPump.h",
+    "nsIURIWithSizeOf.h",
     "nsMIMEInputStream.h",
     "nsNetUtil.h",
     "nsReadLine.h",
@@ -145,6 +146,7 @@ EXPORTS += [
     "nsURLHelper.h",
     "nsURLParsers.h",
     "SimpleChannel.h",
+    "URIHasher.h",
 ]
 
 EXPORTS.mozilla += [
@@ -165,6 +167,7 @@ EXPORTS.mozilla.net += [
     "InterceptionInfo.h",
     "IPv4Parser.h",
     "NetworkConnectivityService.h",
+    "NoVarySearchUtils.h",
     "PrivateBrowsingChannel.h",
     "ProtocolHandlerInfo.h",
     "RedirectChannelRegistrar.h",
@@ -192,6 +195,7 @@ UNIFIED_SOURCES += [
     "MockNetworkLayerController.cpp",
     "NetworkConnectivityService.cpp",
     "NetworkDataCountLayer.cpp",
+    "NoVarySearchUtils.cpp",
     "nsAsyncRedirectVerifyHelper.cpp",
     "nsAsyncStreamCopier.cpp",
     "nsAuthInformationHolder.cpp",

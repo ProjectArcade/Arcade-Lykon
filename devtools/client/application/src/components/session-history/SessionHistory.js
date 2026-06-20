@@ -89,27 +89,30 @@ function SessionHistoryDiagram({ current, diagrams, entriesByKey }) {
       const { rows, start, end } = diagrams[diagramIndex];
       if (rowIndex < rows.length) {
         for (const { age, key, sameDocNav } of rows[rowIndex]) {
-          const id = `entry-info-container-${start}-${ctr++}`;
-          const className = sameDocNav ? "same-document-nav" : "";
-          cells.push(
-            key
-              ? createElement(
-                  "td",
-                  { colSpan: age, className },
-                  Localized(
-                    {
-                      id: "session-history-entry-info-button-title",
-                      attrs: { title: true },
-                    },
-                    button(
-                      { popovertarget: id },
-                      `${entriesByKey[key].url.pathname}${entriesByKey[key].url.search}`
-                    )
-                  ),
-                  createElement(EntryInfo, { fields: entriesByKey[key], id })
-                )
-              : createElement("td", { colSpan: age })
-          );
+          if (key) {
+            const id = `entry-info-container-${start}-${ctr++}`;
+            const className = sameDocNav ? "same-document-nav" : "";
+            const url = URL.parse(entriesByKey[key].url);
+            cells.push(
+              createElement(
+                "td",
+                { colSpan: age, className },
+                Localized(
+                  {
+                    id: "session-history-entry-info-button-title",
+                    attrs: { title: true },
+                  },
+                  button(
+                    { popovertarget: id, style: { "--age": age } },
+                    `${url.pathname}${url.search}`
+                  )
+                ),
+                createElement(EntryInfo, { fields: entriesByKey[key], id })
+              )
+            );
+          } else {
+            cells.push(createElement("td", { colSpan: age }));
+          }
         }
       } else {
         // In the case where we have column (or columns) that lack entries we

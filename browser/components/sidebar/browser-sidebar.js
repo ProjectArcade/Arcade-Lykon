@@ -18,6 +18,7 @@ const toolsNameMap = {
   viewTabsSidebar: "syncedtabs",
   viewHistorySidebar: "history",
   viewBookmarksSidebar: "bookmarks",
+  viewOpenTabsSidebar: "opentabs",
   viewCPMSidebar: "passwords",
 };
 const EXPAND_ON_HOVER_DEBOUNCE_TIMEOUT_MS = 1000;
@@ -236,6 +237,24 @@ var SidebarController = {
     );
 
     if (this.sidebarRevampEnabled) {
+      this.registerPrefSidebar(
+        "sidebar.openTabsPanel.enabled",
+        "viewOpenTabsSidebar",
+        {
+          name: "opentabs",
+          elementId: "sidebar-switcher-opentabs",
+          url: "chrome://browser/content/sidebar/sidebar-opentabs.html",
+          menuId: "menu_openTabsSidebar",
+          keyId: "viewOpenTabsSidebarKb",
+          menuL10nId: "menu-view-open-tabs",
+          revampL10nId: "sidebar-menu-open-tabs-label",
+          iconUrl: "chrome://browser/content/firefoxview/view-opentabs.svg",
+          gleanClickEvent: Glean.sidebar.openTabsIconClick,
+        }
+      );
+    }
+
+    if (this.sidebarRevampEnabled) {
       this._sidebars.set("viewCustomizeSidebar", {
         url: "chrome://browser/content/sidebar/sidebar-customize.html",
         revampL10nId: "sidebar-menu-customize-label",
@@ -306,6 +325,7 @@ var SidebarController = {
   _localesObserverAdded: false,
   _mainResizeObserverAdded: false,
   _aiWindowObserverAdded: false,
+  _windowRestoredObserverAdded: false,
   _mainResizeObserver: null,
   _ongoingAnimations: [],
 
@@ -316,6 +336,22 @@ var SidebarController = {
 
   _initDeferred: Promise.withResolvers(),
 
+  _initialUIStateUpdated: false,
+
+  /**
+   * Latched true synchronously by SessionStore.restoreSidebar before it
+   * kicks off updateUIState. Tells startDelayedLoad that session restore is
+   * providing state for this window and it should wait for the per-window
+   * sessionstore-single-window-restored notification instead of loading
+   * backup state. Once set, stays set for the life of this controller.
+   */
+  _sessionRestoreStateReceived: false,
+
+  markSessionRestoreStateReceived() {
+    this._sessionRestoreStateReceived = true;
+  },
+
+  // A promise resolved once the Sidebar has rendered its initial state.
   get promiseInitialized() {
     return this._initDeferred.promise;
   },
@@ -337,9 +373,8 @@ var SidebarController = {
 
   get sidebarContainer() {
     if (!this._sidebarContainer) {
-      // This is the *parent* of the `sidebar-main` component.
-      // TODO: Rename this element in the markup in order to avoid confusion. (Bug 1904860)
-      this._sidebarContainer = document.getElementById("sidebar-main");
+      // This is the *parent* of the `sidebar-main` component. Its ID is "sidebar-container
+      this._sidebarContainer = document.getElementById("sidebar-container");
     }
     return this._sidebarContainer;
   },
@@ -548,25 +583,10 @@ var SidebarController = {
       Services.obs.addObserver(this, "ai-window-state-changed");
       this._aiWindowObserverAdded = true;
     }
-
-    requestIdleCallback(() => {
-      const windowPrivacyMatches =
-        !window.opener || this.windowPrivacyMatches(window.opener, window);
-      // If other sources (like session store or source window) haven't set the
-      // UI state at this point, load the backup state. (Do not load the backup
-      // state if this is a popup, or we are coming from a window of a different
-      // privacy level.)
-      if (
-        !this.uiStateInitialized &&
-        !this.inSingleTabWindow &&
-        !window.opener &&
-        (this.sidebarRevampEnabled || windowPrivacyMatches)
-      ) {
-        const backupState = this.SidebarManager.getBackupState();
-        this.updateUIState(backupState);
-      }
-    });
-    this._initDeferred.resolve();
+    if (!this._windowRestoredObserverAdded) {
+      Services.obs.addObserver(this, "sessionstore-single-window-restored");
+      this._windowRestoredObserverAdded = true;
+    }
   },
 
   uninit() {
@@ -596,8 +616,10 @@ var SidebarController = {
     Services.obs.removeObserver(this, "intl:app-locales-changed");
     Services.obs.removeObserver(this, "tabstrip-orientation-change");
     Services.obs.removeObserver(this, "ai-window-state-changed");
+    Services.obs.removeObserver(this, "sessionstore-single-window-restored");
     delete this._tabstripOrientationObserverAdded;
     delete this._aiWindowObserverAdded;
+    delete this._windowRestoredObserverAdded;
 
     CustomizableUI.removeListener(this);
 
@@ -658,10 +680,7 @@ var SidebarController = {
    *
    * @param {SidebarStateProps} state
    */
-  async updateUIState(state) {
-    if (!state) {
-      return;
-    }
+  async updateUIState(state = {}) {
     const isValidSidebar = !state.command || this.sidebars.has(state.command);
     if (!isValidSidebar) {
       state.command = "";
@@ -678,7 +697,6 @@ var SidebarController = {
       // There's a panel to show, so ignore the contradictory hidden property.
       delete state.hidden;
     }
-    await this.promiseInitialized;
     await this.waitUntilStable(); // Finish currently scheduled tasks.
     await this._state.loadCurrentState(state);
     await this.waitUntilStable(); // Finish newly scheduled tasks.
@@ -686,7 +704,7 @@ var SidebarController = {
     if (this.sidebarRevampVisibility === "expand-on-hover") {
       await this.toggleExpandOnHover(true);
     }
-    this.uiStateInitialized = true;
+    this._initialUIStateUpdated = true;
   },
 
   /**
@@ -715,6 +733,14 @@ var SidebarController = {
         }
         if (this.revampComponentsLoaded) {
           this.sidebarMain.requestUpdate();
+        }
+        break;
+      }
+      case "sessionstore-single-window-restored": {
+        // If Session restore was going to call updateUIState it would have
+        // done so by now.
+        if (subject == window) {
+          this._initDeferred.resolve();
         }
         break;
       }
@@ -854,7 +880,7 @@ var SidebarController = {
     [...browser.children].forEach((node, i, children) => {
       node.style.order = this._positionStart ? i + 1 : children.length - i;
     });
-    let sidebarContainer = document.getElementById("sidebar-main");
+    let sidebarContainer = document.getElementById("sidebar-container");
     let sidebarMain = document.querySelector("sidebar-main");
 
     // Indicate we've switched ordering to the box
@@ -929,30 +955,23 @@ var SidebarController = {
    * @returns {boolean} true if we adopted the state, or false if the caller should
    * initialize the state itself.
    */
-  async adoptFromWindow(sourceWindow) {
+  getAdoptedStateFromWindow(sourceWindow) {
     // If the opener had a sidebar, open the same sidebar in our window.
     // The opener can be the hidden window too, if we're coming from the state
     // where no windows are open, and the hidden window has no sidebar box.
     let sourceController = sourceWindow.SidebarController;
     if (!sourceController || !sourceController._box) {
       // no source UI or no _box means we also can't adopt the state.
-      return false;
+      return null;
     }
 
-    // If window is a popup, hide the sidebar
-    if (this.inSingleTabWindow && this.sidebarRevampEnabled) {
-      document.getElementById("sidebar-main").hidden = true;
-      return false;
-    }
     // Adopt the other window's UI state (it too could be a popup)
     // We get the properties directly forom the SidebarState instance as in this case
     // we need the command property even if no panel is currently open.
     const sourceState = sourceController.inPopup
       ? null
       : sourceController._state?.getProperties();
-    await this.updateUIState(sourceState);
-
-    return true;
+    return sourceState;
   },
 
   windowPrivacyMatches(w1, w2) {
@@ -968,6 +987,7 @@ var SidebarController = {
   async startDelayedLoad() {
     if (this.inSingleTabWindow) {
       this._state.launcherVisible = false;
+      this._initDeferred.resolve();
       return;
     }
 
@@ -982,39 +1002,59 @@ var SidebarController = {
         (!this.sidebarRevampEnabled &&
           !this.windowPrivacyMatches(sourceWindow, window))
       ) {
+        this._initDeferred.resolve();
         return;
       }
-      // Try to adopt the sidebar state from the source window
-      if (await this.adoptFromWindow(sourceWindow)) {
-        this.uiStateInitialized = true;
+      // Case: opened from a chrome window — adopt state from opener.
+      let stateToApply = this.getAdoptedStateFromWindow(sourceWindow);
+      if (stateToApply) {
+        await this.updateUIState(stateToApply);
+        this._initDeferred.resolve();
         return;
       }
     }
 
-    // If we're not adopting settings from a parent window, set them now.
-    let wasOpen = this._box.getAttribute("checked");
-    if (!wasOpen) {
+    // Case: SessionStore has handed us state via restoreSidebar. The
+    // sessionstore-single-window-restored observer will resolve
+    // _initDeferred once SessionStore has finished applying it.
+    if (this._sessionRestoreStateReceived) {
       return;
     }
 
-    let commandID = this._state.command;
-    if (commandID && this.sidebars.has(commandID)) {
-      this.showInitially(commandID);
-    } else {
-      this._box.removeAttribute("checked");
-      // Update the state, because the element it
-      // refers to no longer exists, so we should assume this sidebar
-      // panel has been uninstalled. (249883)
-      this._state.command = "";
-      // On a startup in which the startup cache was invalidated (e.g. app update)
-      // extensions will not be started prior to delayedLoad, thus the
-      // sidebarcommand element will not exist yet.  Store the commandID so
-      // extensions may reopen if necessary.  A startup cache invalidation
-      // can be forced (for testing) by deleting compatibility.ini from the
-      // profile.
-      this.lastOpenedId = commandID;
+    // Case: SessionStore already finished restoring us before startDelayedLoad
+    // ran (single-window startup, session restore slot-fill).
+    if (this._initialUIStateUpdated) {
+      this._initDeferred.resolve();
+      return;
     }
-    this.uiStateInitialized = true;
+
+    // Case: no upstream source. Load backup state as fallback.
+    const backupState = this.SidebarManager.getBackupState();
+
+    // If we're not adopting settings from a parent window, set them now.
+    let wasOpen = this._box.getAttribute("checked");
+    if (wasOpen) {
+      let commandID = this._state.command;
+
+      if (wasOpen && commandID && this.sidebars.has(commandID)) {
+        this.showInitially(commandID);
+      } else {
+        this._box.removeAttribute("checked");
+        // Update the state, because the element it
+        // refers to no longer exists, so we should assume this sidebar
+        // panel has been uninstalled. (249883)
+        this._state.command = "";
+        // On a startup in which the startup cache was invalidated (e.g. app update)
+        // extensions will not be started prior to delayedLoad, thus the
+        // sidebarcommand element will not exist yet.  Store the commandID so
+        // extensions may reopen if necessary.  A startup cache invalidation
+        // can be forced (for testing) by deleting compatibility.ini from the
+        // profile.
+        this.lastOpenedId = commandID;
+      }
+    }
+    await this.updateUIState(backupState);
+    this._initDeferred.resolve();
   },
 
   /**
@@ -1161,7 +1201,7 @@ var SidebarController = {
     return Promise.allSettled(tasks);
   },
 
-  async _animateSidebarMain() {
+  async _animateSidebarContainer() {
     let tabbox = document.getElementById("tabbrowser-tabbox");
     let animatingElements;
     let expandOnHoverEnabled = document.documentElement.hasAttribute(
@@ -1220,6 +1260,8 @@ var SidebarController = {
     let animations = [];
     let sidebarOnLeft = this._positionStart != RTL_UI;
     let sidebarShift = 0;
+    let novaTranslate = 0;
+    const novaMode = Services.prefs.getBoolPref("browser.nova.enabled", false);
     for (let i = 0; i < animatingElements.length; ++i) {
       const el = animatingElements[i];
       const [wasHidden, from] = fromRects[i];
@@ -1257,6 +1299,59 @@ var SidebarController = {
           "";
       if (isHidden && !wasHidden) {
         el.style.display = "flex";
+      }
+
+      // Before nova, the sidebar would "shrink" by sliding partly out of view,
+      // and only after this animation was done would the width actually
+      // change. With nova's floating chrome, this trick is visually apparent.
+      // In nova mode, we animate the sidebar's apparent width with clip-path
+      // which is a performant alternative to actually animating the width.
+      if (novaMode) {
+        if (isSidebar) {
+          novaTranslate = sidebarOnLeft
+            ? -(to.width - from.width)
+            : to.width - from.width;
+          // For collapsing, hold the sidebar at from-width so clip-path has
+          // content to clip. Negative margin keeps flex contribution at to-width.
+          if (widthGrowth < 0) {
+            el.style.minWidth = el.style.maxWidth = from.width + "px";
+            el.style["margin-" + (sidebarOnLeft ? "right" : "left")] =
+              widthGrowth + "px";
+          }
+          const clipAmount = Math.abs(widthGrowth);
+          const fromClip = sidebarOnLeft
+            ? `inset(0 ${widthGrowth > 0 ? clipAmount : 0}px 0 0)`
+            : `inset(0 0 0 ${widthGrowth > 0 ? clipAmount : 0}px)`;
+          const toClip = sidebarOnLeft
+            ? `inset(0 ${widthGrowth < 0 ? clipAmount : 0}px 0 0)`
+            : `inset(0 0 0 ${widthGrowth < 0 ? clipAmount : 0}px)`;
+          animations.push(
+            el.animate([{ clipPath: fromClip }, { clipPath: toClip }], options)
+          );
+
+          // When sidebar is on the right, content is left-aligned but the clip
+          // moves from the left. Counter-translate the inner element rightward to
+          // keep it in the visible area.
+          if (!sidebarOnLeft && clipAmount > 0) {
+            animations.push(
+              this.sidebarMain.animate(
+                [
+                  { translate: `${widthGrowth > 0 ? clipAmount : 0}px 0 0` },
+                  { translate: `${widthGrowth < 0 ? clipAmount : 0}px 0 0` },
+                ],
+                options
+              )
+            );
+          }
+        } else {
+          animations.push(
+            el.animate(
+              [{ translate: `${novaTranslate}px 0 0` }, { translate: "0" }],
+              options
+            )
+          );
+        }
+        continue;
       }
 
       if (widthGrowth < 0) {
@@ -1346,7 +1441,7 @@ var SidebarController = {
     }
 
     if (this._animationEnabled && !window.gReduceMotion) {
-      this._animateSidebarMain();
+      this._animateSidebarContainer();
     }
 
     if (expandOnToggle) {
@@ -1394,20 +1489,24 @@ var SidebarController = {
       this.handleToolBadges();
       switch (this.sidebarRevampVisibility) {
         case "always-show":
-        case "expand-on-hover":
+        case "expand-on-hover": {
           // Toolbar button controls expanded state.
-          toolbarButton.checked = this.sidebarMain.expanded;
-          toolbarButton.dataset.l10nId = toolbarButton.checked
+          const isExpanded = this.sidebarMain.expanded;
+          toolbarButton.checked = isVerticalTabs && isExpanded;
+          toolbarButton.dataset.l10nId = isExpanded
             ? "sidebar-widget-collapse-sidebar2"
             : "sidebar-widget-expand-sidebar2";
           break;
-        case "hide-sidebar":
+        }
+        case "hide-sidebar": {
           // Toolbar button controls hidden state.
-          toolbarButton.checked = !this.sidebarContainer.hidden;
-          toolbarButton.dataset.l10nId = toolbarButton.checked
+          const isVisible = !this.sidebarContainer.hidden;
+          toolbarButton.checked = isVerticalTabs && isVisible;
+          toolbarButton.dataset.l10nId = isVisible
             ? "sidebar-widget-hide-sidebar2"
             : "sidebar-widget-show-sidebar2";
           break;
+        }
       }
     }
   },
@@ -1477,7 +1576,7 @@ var SidebarController = {
       // Collapse sidebar if needed
       if (this._state.launcherExpanded && !isHovered) {
         if (this._animationEnabled && !window.gReduceMotion) {
-          this._animateSidebarMain();
+          this._animateSidebarContainer();
         }
         this._state.launcherExpanded = false;
         await this.waitUntilStable();
@@ -1691,7 +1790,6 @@ var SidebarController = {
     if (this.toolsAndExtensions.has(commandID)) {
       // Update existing extension
       let extensionToUpdate = this.toolsAndExtensions.get(commandID);
-      extensionToUpdate.icon = extension.icon;
       extensionToUpdate.iconUrl = extension.iconUrl;
       extensionToUpdate.tooltiptext = extension.label;
       window.dispatchEvent(new CustomEvent("SidebarItemChanged"));
@@ -1701,7 +1799,6 @@ var SidebarController = {
       this.toolsAndExtensions.set(commandID, {
         view: commandID,
         extensionId: extension.extensionId,
-        icon: extension.icon,
         iconUrl: extension.iconUrl,
         tooltiptext: extension.label,
         disabled: !this.sidebarTools.includes(name), // name is the extensionID
@@ -1743,7 +1840,6 @@ var SidebarController = {
       switcherMenuId: `sidebarswitcher_menu_${commandID}`,
       keyId: `ext-key-id-${commandID}`,
       label: props.title,
-      icon: props.icon,
       iconUrl: props.iconUrl,
       classAttribute: "menuitem-iconic webextension-menuitem",
       // The following properties are specific to extensions
@@ -1769,7 +1865,7 @@ var SidebarController = {
     }
     this._setExtensionAttributes(
       commandID,
-      { icon: props.icon, iconUrl: props.iconUrl, label: props.title },
+      { iconUrl: props.iconUrl, label: props.title },
       sidebar
     );
   },
@@ -1809,7 +1905,6 @@ var SidebarController = {
    *
    * @param {string} commandID
    * @param {object} attributes
-   * @param {string} attributes.icon
    * @param {string} attributes.iconUrl
    * @param {string} attributes.label
    * @param {boolean} needsRefresh
@@ -1822,18 +1917,20 @@ var SidebarController = {
 
   _setExtensionAttributes(
     commandID,
-    { icon, iconUrl, label },
+    { iconUrl, label },
     sidebar,
     needsRefresh = false
   ) {
-    sidebar.icon = icon;
     sidebar.iconUrl = iconUrl;
     sidebar.label = label;
 
     const updateAttributes = el => {
       // TODO Bug 1996762 - Add support for dark-theme sidebar icons
       // --webextension-menuitem-image-dark is used in dark themes
-      el.style.setProperty("--webextension-menuitem-image", sidebar.icon);
+      el.style.setProperty(
+        "--webextension-menuitem-image",
+        `url("${sidebar.iconUrl}")`
+      );
       el.setAttribute("label", sidebar.label);
     };
 
@@ -2315,7 +2412,7 @@ var SidebarController = {
     contentArea.toggleAttribute("sidebar-launcher-hovered", true);
     this._state.launcherHoverActive = true;
     if (this._animationEnabled && !window.gReduceMotion) {
-      this._animateSidebarMain();
+      this._animateSidebarContainer();
     }
     this._state.launcherExpanded = true;
     this._mouseEnterDeferred.resolve();
@@ -2329,7 +2426,7 @@ var SidebarController = {
     contentArea.toggleAttribute("sidebar-launcher-hovered", false);
     this._state.launcherHoverActive = false;
     if (this._animationEnabled && !window.gReduceMotion) {
-      this._animateSidebarMain();
+      this._animateSidebarContainer();
     }
     this._state.launcherExpanded = false;
   },
@@ -2396,7 +2493,7 @@ var SidebarController = {
     await this.waitUntilStable();
     let collapsedWidth = await new Promise(resolve => {
       requestAnimationFrame(() => {
-        resolve(this._getRects([this.sidebarMain])[0][1].width);
+        resolve(this._getRects([this.sidebarContainer])[0][1].width);
       });
     });
 
@@ -2657,7 +2754,7 @@ XPCOMUtils.defineLazyPreferenceGetter(
           !window.gReduceMotion &&
           newValue !== "expand-on-hover"
         ) {
-          SidebarController._animateSidebarMain();
+          SidebarController._animateSidebarContainer();
         }
 
         // launcher is always initially expanded with vertical tabs unless we're doing expand-on-hover

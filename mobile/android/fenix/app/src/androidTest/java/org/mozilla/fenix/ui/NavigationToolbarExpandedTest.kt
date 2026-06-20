@@ -7,7 +7,6 @@
 package org.mozilla.fenix.ui
 
 import android.content.pm.ActivityInfo
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import org.junit.Rule
 import org.junit.Test
 import org.mozilla.fenix.customannotations.SmokeTest
@@ -18,6 +17,7 @@ import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
 import org.mozilla.fenix.helpers.TestAssetHelper.getGenericAsset
 import org.mozilla.fenix.helpers.TestAssetHelper.refreshAsset
+import org.mozilla.fenix.helpers.TestHelper.exitMenu
 import org.mozilla.fenix.helpers.TestHelper.verifySnackBarText
 import org.mozilla.fenix.helpers.TestHelper.waitUntilSnackbarGone
 import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
@@ -25,6 +25,7 @@ import org.mozilla.fenix.ui.robots.browserScreen
 import org.mozilla.fenix.ui.robots.composeBookmarksMenu
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.navigationToolbar
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 /**
  *  Tests for verifying basic functionality of browser navigation in expanded toolbar layout and page related interactions
@@ -42,9 +43,9 @@ class NavigationToolbarExpandedTest {
 
     private val mockWebServer get() = fenixTestRule.mockWebServer
 
-    @get:Rule
+    @get:Rule(order = 1)
     val composeTestRule =
-        AndroidComposeTestRule(
+        AndroidComposeTestRuleV2(
             HomeActivityIntentTestRule(
                 isPWAsPromptEnabled = false,
                 isWallpaperOnboardingEnabled = false,
@@ -55,8 +56,8 @@ class NavigationToolbarExpandedTest {
             ),
         ) { it.activity }
 
-    @get:Rule
-    val memoryLeaksRule = DetectMemoryLeaksRule()
+    @get:Rule(order = 2)
+    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3333205
     @Test
@@ -556,5 +557,39 @@ class NavigationToolbarExpandedTest {
             verifyTheMainMenuButton()
         }
         setScreenOrientation(composeTestRule, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3911787
+    @Test
+    fun verifyTheExpandedToolbarHomepageItemsWithEdgeToEdgeTest() {
+        homeScreen(composeTestRule) {
+            verifyEdgeToEdgeWallpaperApplied(composeTestRule)
+            verifyHomeWordmark()
+            verifyToolbarPosition(bottomPosition = false)
+        }
+        navigationToolbar(composeTestRule) {
+            verifyNavBarPositionForEdgeToEdge()
+            verifyTheNavigationBarAddBookmarkButton()
+            verifyTheNavigationBarShareButton()
+            verifyTheNewTabButton()
+            verifyTheTabCounter("0")
+            verifyTheMainMenuButton()
+        }
+        homeScreen(composeTestRule) {
+        }.openThreeDotMenu {
+        }.clickSettingsButton {
+        }.openCustomizeSubMenu {
+            clickBottomToolbarToggle()
+            verifyAddressBarPositionPreference("Bottom")
+            exitMenu()
+        }
+        navigationToolbar(composeTestRule) {
+            verifyNavBarPositionForEdgeToEdge()
+            verifyTheNavigationBarAddBookmarkButton()
+            verifyTheNavigationBarShareButton()
+            verifyTheNewTabButton()
+            verifyTheTabCounter("0")
+            verifyTheMainMenuButton()
+        }
     }
 }

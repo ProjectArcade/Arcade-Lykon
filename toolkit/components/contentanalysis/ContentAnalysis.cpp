@@ -841,16 +841,14 @@ namespace {
 // We don't want this overload to be called for string parameters, so
 // use std::enable_if
 template <typename T>
-typename std::enable_if_t<!std::is_same<std::string, std::decay_t<T>>::value,
-                          void>
+typename std::enable_if_t<!std::is_same_v<std::string, std::decay_t<T>>, void>
 LogWithMaxLength(std::stringstream& ss, T value, size_t maxLength) {
   ss << value;
 }
 
 // 0 indicates no max length
 template <typename T>
-typename std::enable_if_t<std::is_same<std::string, std::decay_t<T>>::value,
-                          void>
+typename std::enable_if_t<std::is_same_v<std::string, std::decay_t<T>>, void>
 LogWithMaxLength(std::stringstream& ss, T value, size_t maxLength) {
   if (!maxLength || value.length() < maxLength) {
     ss << value;
@@ -2140,8 +2138,8 @@ nsresult ContentAnalysis::RunAnalyzeRequestTask(
 
   CallClientWithRetry<std::nullptr_t>(
       __func__,
-      [userActionId, pbRequest = std::move(pbRequest), aAutoAcknowledge,
-       ignoreCanceled](
+      [userActionId = userActionId, pbRequest = std::move(pbRequest),
+       aAutoAcknowledge, ignoreCanceled](
           std::shared_ptr<content_analysis::sdk::Client> client) mutable {
         MOZ_ASSERT(!NS_IsMainThread());
         return DoAnalyzeRequest(std::move(userActionId), std::move(pbRequest),
@@ -2149,7 +2147,8 @@ nsresult ContentAnalysis::RunAnalyzeRequestTask(
       })
       ->Then(
           GetMainThreadSerialEventTarget(), __func__, []() { /* do nothing */ },
-          [userActionId, requestToken](nsresult rv) mutable {
+          [userActionId = std::move(userActionId),
+           requestToken = std::move(requestToken)](nsresult rv) mutable {
             LOGD(
                 "RunAnalyzeRequestTask failed to get client a second time for "
                 "requestToken=%s, userActionId=%s",

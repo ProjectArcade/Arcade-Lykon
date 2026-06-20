@@ -45,16 +45,7 @@ using namespace js;
 using namespace js::intl;
 
 const JSClassOps SegmenterObject::classOps_ = {
-    nullptr,                    // addProperty
-    nullptr,                    // delProperty
-    nullptr,                    // enumerate
-    nullptr,                    // newEnumerate
-    nullptr,                    // resolve
-    nullptr,                    // mayResolve
-    SegmenterObject::finalize,  // finalize
-    nullptr,                    // call
-    nullptr,                    // construct
-    nullptr,                    // trace
+    .finalize = SegmenterObject::finalize,
 };
 
 const JSClass SegmenterObject::class_ = {
@@ -211,16 +202,7 @@ static bool Segmenter(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 const JSClassOps SegmentsObject::classOps_ = {
-    nullptr,                   // addProperty
-    nullptr,                   // delProperty
-    nullptr,                   // enumerate
-    nullptr,                   // newEnumerate
-    nullptr,                   // resolve
-    nullptr,                   // mayResolve
-    SegmentsObject::finalize,  // finalize
-    nullptr,                   // call
-    nullptr,                   // construct
-    nullptr,                   // trace
+    .finalize = SegmentsObject::finalize,
 };
 
 const JSClass SegmentsObject::class_ = {
@@ -253,16 +235,7 @@ bool GlobalObject::initSegmentsProto(JSContext* cx,
 }
 
 const JSClassOps SegmentIteratorObject::classOps_ = {
-    nullptr,                          // addProperty
-    nullptr,                          // delProperty
-    nullptr,                          // enumerate
-    nullptr,                          // newEnumerate
-    nullptr,                          // resolve
-    nullptr,                          // mayResolve
-    SegmentIteratorObject::finalize,  // finalize
-    nullptr,                          // call
-    nullptr,                          // construct
-    nullptr,                          // trace
+    .finalize = SegmentIteratorObject::finalize,
 };
 
 const JSClass SegmentIteratorObject::class_ = {

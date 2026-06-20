@@ -24,8 +24,10 @@ class ContentCompositorBridgeParent final : public CompositorBridgeParentBase {
   friend class CompositorBridgeParent;
 
  public:
-  explicit ContentCompositorBridgeParent(CompositorManagerParent* aManager)
-      : CompositorBridgeParentBase(aManager), mDestroyCalled(false) {}
+  explicit ContentCompositorBridgeParent(CompositorManagerParent* aManager,
+                                         uint32_t aNamespace)
+      : CompositorBridgeParentBase(aManager, aNamespace),
+        mDestroyCalled(false) {}
 
   void ActorDestroy(ActorDestroyReason aWhy) override;
 
@@ -123,18 +125,17 @@ class ContentCompositorBridgeParent final : public CompositorBridgeParentBase {
       PWebRenderBridgeParent::EndWheelTransactionResolver&& aResolve) override;
 
   // Use DidCompositeLocked if you already hold a lock on
-  // sIndirectLayerTreesLock; Otherwise use DidComposite, which would request
-  // the lock automatically.
+  // sIndirectLayerTreesLock (pass the proof token); otherwise use DidComposite,
+  // which would request the lock automatically.
   void DidCompositeLocked(LayersId aId, const VsyncId& aVsyncId,
-                          TimeStamp& aCompositeStart, TimeStamp& aCompositeEnd);
+                          TimeStamp& aCompositeStart, TimeStamp& aCompositeEnd,
+                          const StaticMonitorAutoLock& aProofOfLock);
 
-  PTextureParent* AllocPTextureParent(
+  already_AddRefed<PTextureParent> AllocPTextureParent(
       const SurfaceDescriptor& aSharedData, ReadLockDescriptor& aReadLock,
       const LayersBackend& aLayersBackend, const TextureFlags& aFlags,
       const uint64_t& aSerial,
       const wr::MaybeExternalImageId& aExternalImageId) override;
-
-  bool DeallocPTextureParent(PTextureParent* actor) override;
 
   bool IsSameProcess() const override;
 
@@ -144,12 +145,11 @@ class ContentCompositorBridgeParent final : public CompositorBridgeParentBase {
     return nullptr;
   }
 
-  PAPZCTreeManagerParent* AllocPAPZCTreeManagerParent(
+  already_AddRefed<PAPZCTreeManagerParent> AllocPAPZCTreeManagerParent(
       const LayersId& aLayersId) override;
-  bool DeallocPAPZCTreeManagerParent(PAPZCTreeManagerParent* aActor) override;
 
-  PAPZParent* AllocPAPZParent(const LayersId& aLayersId) override;
-  bool DeallocPAPZParent(PAPZParent* aActor) override;
+  already_AddRefed<PAPZParent> AllocPAPZParent(
+      const LayersId& aLayersId) override;
 
   already_AddRefed<PWebRenderBridgeParent> AllocPWebRenderBridgeParent(
       const wr::PipelineId& aPipelineId, const LayoutDeviceIntSize& aSize,

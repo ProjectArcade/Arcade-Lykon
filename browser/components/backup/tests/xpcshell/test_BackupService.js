@@ -41,6 +41,7 @@ const APP_VERSION = "test-app-version";
 const BUILD_ID = "test-build-id";
 const OS_NAME = "test-os-name";
 const OS_VERSION = "test-os-version";
+const OS_BUILD_NUMBER = "test-os-build-number";
 const TELEMETRY_ENABLED = true;
 const LEGACY_CLIENT_ID = "legacy-client-id";
 const PROFILE_NAME = "test-profile-name";
@@ -66,21 +67,7 @@ add_setup(function () {
  * @returns {Promise<undefined>}
  */
 async function testCreateBackupHelper(sandbox, taskFn) {
-  Services.telemetry.clearEvents();
   Services.fog.testResetFOG();
-
-  // Handle for the metric for total byte size of staging folder
-  let totalBackupSizeHistogram = TelemetryTestUtils.getAndClearHistogram(
-    "BROWSER_BACKUP_TOTAL_BACKUP_SIZE"
-  );
-  // Handle for the metric for total byte size of single-file archive
-  let compressedArchiveSizeHistogram = TelemetryTestUtils.getAndClearHistogram(
-    "BROWSER_BACKUP_COMPRESSED_ARCHIVE_SIZE"
-  );
-  // Handle for the metric for total time taking by profile backup
-  let backupTimerHistogram = TelemetryTestUtils.getAndClearHistogram(
-    "BROWSER_BACKUP_TOTAL_BACKUP_TIME_MS"
-  );
 
   const EXPECTED_CLIENT_ID = await ClientID.getClientID();
   const EXPECTED_PROFILE_GROUP_ID = await ClientID.getProfileGroupID();
@@ -135,22 +122,12 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     "The backup date was recorded."
   );
 
-  let legacyEvents = TelemetryTestUtils.getEvents(
-    { category: "browser.backup", method: "created", object: "BackupService" },
-    { process: "parent" }
-  );
-  Assert.equal(legacyEvents.length, 1, "Found the created legacy event.");
   let events = Glean.browserBackup.created.testGetValue();
   Assert.equal(events.length, 1, "Found the created Glean event.");
 
   // Validate total backup time metrics were recorded
   assertSingleTimeMeasurement(
     Glean.browserBackup.totalBackupTime.testGetValue()
-  );
-  assertHistogramMeasurementQuantity(
-    backupTimerHistogram,
-    1,
-    "Should have collected a single measurement for total backup time"
   );
 
   Assert.ok(await IOUtils.exists(backupFilePath), "The backup file exists");
@@ -198,7 +175,6 @@ async function testCreateBackupHelper(sandbox, taskFn) {
   // 1 mebibyte minimum recorded value if total data size is under 1 mebibyte
   // This assumes that these BackupService tests do not create sizable fake files
   const SMALLEST_BACKUP_SIZE_BYTES = 1048576;
-  const SMALLEST_BACKUP_SIZE_MEBIBYTES = 1;
 
   // Validate total (uncompressed profile data) size
   let totalBackupSize = Glean.browserBackup.totalBackupSize.testGetValue();
@@ -211,11 +187,6 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     totalBackupSize.sum,
     SMALLEST_BACKUP_SIZE_BYTES,
     "Should have collected the right value for the total backup size"
-  );
-  TelemetryTestUtils.assertHistogram(
-    totalBackupSizeHistogram,
-    SMALLEST_BACKUP_SIZE_MEBIBYTES,
-    1
   );
 
   // Validate final archive (compressed/encrypted profile data + HTML) size
@@ -230,11 +201,6 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     compressedArchiveSize.sum,
     SMALLEST_BACKUP_SIZE_BYTES,
     "Should have collected the right value for the backup compressed archive size"
-  );
-  TelemetryTestUtils.assertHistogram(
-    compressedArchiveSizeHistogram,
-    SMALLEST_BACKUP_SIZE_MEBIBYTES,
-    1
   );
 
   // Check that resources were called from highest to lowest backup priority.
@@ -341,13 +307,15 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     1,
     "Should be a single restore start event after we start restoring a profile"
   );
-  Assert.deepEqual(
-    restoreStartedEvents[0].extra,
-    {
-      restore_id: restoreID,
-      replace: "true",
-    },
-    "Restore start event should have the right data"
+  Assert.equal(
+    restoreStartedEvents[0].extra.restore_id,
+    restoreID,
+    "Restore started event should have the right restore_id"
+  );
+  Assert.equal(
+    restoreStartedEvents[0].extra.replace,
+    "true",
+    "Restore started event should have replace=true"
   );
 
   Assert.equal(
@@ -355,10 +323,10 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     1,
     "Should be a single restore complete event after we start restoring a profile"
   );
-  Assert.deepEqual(
-    restoreCompleteEvents[0].extra,
-    { restore_id: restoreID },
-    "Restore complete event should have the right data"
+  Assert.equal(
+    restoreCompleteEvents[0].extra.restore_id,
+    restoreID,
+    "Restore complete event should have the right restore_id"
   );
 
   // Check that resources were recovered from highest to lowest backup priority.
@@ -557,6 +525,29 @@ add_task(async function test_createBackup_signed_in() {
 });
 
 /**
+ * Tests that createBackup calls maybeAddToEnabledListPref after a successful
+ * backup so that legacy-to-selectable profile transitions are tracked.
+ */
+add_task(async function test_createBackup_calls_maybeAddToEnabledListPref() {
+  let sandbox = sinon.createSandbox();
+
+  sandbox
+    .stub(UIState, "get")
+    .returns({ status: UIState.STATUS_NOT_CONFIGURED });
+
+  let spy = sandbox.spy(BackupService, "maybeAddToEnabledListPref");
+
+  await testCreateBackupHelper(sandbox, () => {
+    Assert.ok(
+      spy.calledOnce,
+      "maybeAddToEnabledListPref should be called once during createBackup"
+    );
+  });
+
+  sandbox.restore();
+});
+
+/**
  * Makes a folder readonly.  Windows does not support read-only folders, so
  * this creates a file inside the folder and makes that read-only.
  *
@@ -604,10 +595,6 @@ add_task(
   async function test_createBackup_robustToFileSystemErrors() {
     let sandbox = sinon.createSandbox();
     Services.fog.testResetFOG();
-    // Handle for the metric for total time taking by profile backup
-    let backupTimerHistogram = TelemetryTestUtils.getAndClearHistogram(
-      "BROWSER_BACKUP_TOTAL_BACKUP_TIME_MS"
-    );
 
     const TEST_UID = "ThisIsMyTestUID";
     const TEST_EMAIL = "foxy@mozilla.org";
@@ -641,7 +628,6 @@ add_task(
           null,
           "Should not have measured total backup time for failed backup"
         );
-        assertHistogramMeasurementQuantity(backupTimerHistogram, 0);
       })
       .catch(() => {
         // Failure bubbles up an error for handling by the caller
@@ -1127,6 +1113,7 @@ add_task(async function test_getBackupFileInfo() {
         buildID: BUILD_ID,
         osName: OS_NAME,
         osVersion: OS_VERSION,
+        osBuildNumber: OS_BUILD_NUMBER,
         healthTelemetryEnabled: TELEMETRY_ENABLED,
         legacyClientID: LEGACY_CLIENT_ID,
         profileName: PROFILE_NAME,
@@ -1159,6 +1146,7 @@ add_task(async function test_getBackupFileInfo() {
       buildID: BUILD_ID,
       osName: OS_NAME,
       osVersion: OS_VERSION,
+      osBuildNumber: OS_BUILD_NUMBER,
       healthTelemetryEnabled: TELEMETRY_ENABLED,
       legacyClientID: LEGACY_CLIENT_ID,
       profileName: PROFILE_NAME,
@@ -1224,6 +1212,7 @@ add_task(async function test_getBackupFileInfo_error_handling() {
           buildID: BUILD_ID,
           osName: OS_NAME,
           osVersion: OS_VERSION,
+          osBuildNumber: OS_BUILD_NUMBER,
           healthTelemetryEnabled: TELEMETRY_ENABLED,
           legacyClientID: LEGACY_CLIENT_ID,
           profileName: PROFILE_NAME,
@@ -1249,6 +1238,7 @@ add_task(async function test_getBackupFileInfo_error_handling() {
         buildID: BUILD_ID,
         osName: OS_NAME,
         osVersion: OS_VERSION,
+        osBuildNumber: OS_BUILD_NUMBER,
         healthTelemetryEnabled: TELEMETRY_ENABLED,
         legacyClientID: LEGACY_CLIENT_ID,
         profileName: PROFILE_NAME,

@@ -24,6 +24,7 @@
 struct SelectionDetails;
 class nsBlockFrame;
 class nsTextPaintStyle;
+class nsLineLayout;
 
 namespace mozilla {
 class SVGContextPaint;
@@ -223,6 +224,12 @@ class nsTextFrame : public nsIFrame {
     void SetStartOfLine(const gfxSkipCharsIterator& aPosition) {
       mStartOfLineOffset = aPosition.GetSkippedOffset();
     }
+
+    bool HasSpacing() const {
+      return mLetterSpacing || mWordSpacing || mTextAutospace;
+    }
+
+    nscoord LetterSpacing() const { return mLetterSpacing; }
 
    protected:
     void SetupJustificationSpacing(bool aPostReflow);

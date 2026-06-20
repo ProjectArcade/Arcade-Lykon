@@ -283,13 +283,13 @@ nsAVIFDecoder::DecodeResult AVIFParser::GetImage(AVIFImage& aImage) {
     return AsVariant(nsAVIFDecoder::NonDecoderResult::NoSamples);
   }
 
-  RefPtr<MediaRawData> colorImage =
-      new MediaRawData(image.primary_image.data, image.primary_image.length);
+  auto colorImage = MakeRefPtr<MediaRawData>(image.primary_image.data,
+                                             image.primary_image.length);
   RefPtr<MediaRawData> alphaImage = nullptr;
 
   if (image.alpha_image.length) {
-    alphaImage =
-        new MediaRawData(image.alpha_image.data, image.alpha_image.length);
+    alphaImage = MakeRefPtr<MediaRawData>(image.alpha_image.data,
+                                          image.alpha_image.length);
   }
 
   aImage.mFrameNum = 0;
@@ -318,8 +318,8 @@ static Mp4parseStatus CreateSampleIterator(
   }
 
   UniquePtr<IndiceWrapper> wrapper = MakeUnique<IndiceWrapper>(data);
-  RefPtr<MP4SampleIndex> index = new MP4SampleIndex(
-      *wrapper, aBuffer, trackID, false, AssertedCast<uint32_t>(timescale));
+  auto index = MakeRefPtr<MP4SampleIndex>(*wrapper, aBuffer, trackID, false,
+                                          AssertedCast<uint32_t>(timescale));
   aIteratorOut = MakeUnique<SampleIterator>(index);
   return MP4PARSE_STATUS_OK;
 }
@@ -611,15 +611,14 @@ class Dav1dDecoder final : AVIFDecoderInterface {
     return 0;
   }
 
-  static Dav1dResult GetPicture(Dav1dContext& aContext,
-                                const MediaRawData& aBytes,
+  static Dav1dResult GetPicture(Dav1dContext& aContext, MediaRawData& aBytes,
                                 Dav1dPicture* aPicture,
                                 bool aShouldSendTelemetry) {
     MOZ_ASSERT(aPicture);
 
     Dav1dData dav1dData;
     Dav1dResult r = dav1d_data_wrap(&dav1dData, aBytes.Data(), aBytes.Size(),
-                                    Dav1dFreeCallback_s, nullptr);
+                                    Dav1dFreeCallback_s, &aBytes);
 
     MOZ_LOG(
         sAVIFLog, r == 0 ? LogLevel::Verbose : LogLevel::Error,
@@ -629,12 +628,22 @@ class Dav1dDecoder final : AVIFDecoderInterface {
       return r;
     }
 
+    // After a successful dav1d_data_wrap call, dav1d effectively owns a
+    // reference to the buffer that aBytes holds until dav1d calls the passed in
+    // free callback Dav1dFreeCallback_s. We handle this with an AddRef here and
+    // a Release in Dav1dFreeCallback_s.
+    aBytes.AddRef();
+
     r = dav1d_send_data(&aContext, &dav1dData);
 
     MOZ_LOG(sAVIFLog, r == 0 ? LogLevel::Debug : LogLevel::Error,
             ("dav1d_send_data -> %d", r));
 
     if (r != 0) {
+      // On failure dav1d leaves the caller's reference to the data intact;
+      // drop it (this invokes Dav1dFreeCallback_s once dav1d holds no other
+      // references).
+      dav1d_data_unref(&dav1dData);
       return r;
     }
 
@@ -658,10 +667,9 @@ class Dav1dDecoder final : AVIFDecoderInterface {
     return r;
   }
 
-  // A dummy callback for dav1d_data_wrap
   static void Dav1dFreeCallback_s(const uint8_t* aBuf, void* aCookie) {
-    // The buf is managed by the mParser inside Dav1dDecoder itself. Do
-    // nothing here.
+    MOZ_ASSERT(aCookie);
+    static_cast<MediaRawData*>(aCookie)->Release();
   }
 
   static UniquePtr<AVIFDecodedData> Dav1dPictureToDecodedData(
@@ -999,8 +1007,8 @@ UniquePtr<AVIFDecodedData> Dav1dDecoder::Dav1dPictureToDecodedData(
     OwnedDav1dPicture aAlphaPlane, bool aPremultipliedAlpha) {
   MOZ_ASSERT(aPicture);
 
-  static_assert(std::is_same<int, decltype(aPicture->p.w)>::value);
-  static_assert(std::is_same<int, decltype(aPicture->p.h)>::value);
+  static_assert(std::is_same_v<int, decltype(aPicture->p.w)>);
+  static_assert(std::is_same_v<int, decltype(aPicture->p.h)>);
 
   UniquePtr<AVIFDecodedData> data = MakeUnique<AVIFDecodedData>();
 

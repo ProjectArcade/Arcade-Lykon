@@ -9,8 +9,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   CustomizableUI:
     "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs",
-  IPPEnrollAndEntitleManager:
-    "moz-src:///toolkit/components/ipprotection/fxa/IPPEnrollAndEntitleManager.sys.mjs",
   IPPExceptionsManager:
     "moz-src:///toolkit/components/ipprotection/IPPExceptionsManager.sys.mjs",
   IPPOnboardingMessage:
@@ -30,8 +28,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/ipprotection/IPProtection.sys.mjs",
   IPProtectionInfobarManager:
     "moz-src:///browser/components/ipprotection/IPProtectionInfobarManager.sys.mjs",
-  IPPSignInWatcher:
-    "moz-src:///toolkit/components/ipprotection/fxa/IPPSignInWatcher.sys.mjs",
   IPProtectionStates:
     "moz-src:///toolkit/components/ipprotection/IPProtectionService.sys.mjs",
   PanelMultiView:
@@ -58,12 +54,13 @@ const OPENED_WITH_LOCATION_PREF =
   "browser.ipProtection.openedPanelWithLocation";
 const LOCATION_BADGE_DISMISSED_PREF =
   "browser.ipProtection.locationButtonBadgeDismissed";
+const UPGRADE_NOT_AVAILABLE_PREF = "browser.ipProtection.upgradeNotAvailable";
 
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
   "BANDWIDTH_USAGE_ENABLED",
   "browser.ipProtection.bandwidth.enabled",
-  false
+  true
 );
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -71,6 +68,13 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "EGRESS_LOCATION",
   EGRESS_LOCATION_PREF,
   ""
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "UPGRADE_NOT_AVAILABLE",
+  UPGRADE_NOT_AVAILABLE_PREF,
+  false
 );
 
 let hasCustomElements = new WeakSet();
@@ -118,8 +122,6 @@ export class IPProtectionPanel {
    * @typedef {object} State
    * @property {boolean} isProtectionEnabled
    *  The timestamp in milliseconds since IP Protection was enabled
-   * @property {boolean} isSignedOut
-   *  True if not signed in to account
    * @property {string} location
    *  The location country code
    * @property {Array<{code: string, available: boolean}>} locationsList
@@ -128,6 +130,8 @@ export class IPProtectionPanel {
    *  The error type as a string if an error occurred, or empty string if there are no errors.
    * @property {boolean} hasUpgraded
    *  True if a Mozilla VPN subscription is linked to the user's Mozilla account.
+   * @property {boolean} upgradeNotAvailable
+   *  True if upgrade-related messaging should be suppressed regardless of subscription state.
    * @property {string} onboardingMessage
    * Continuous onboarding message to display in-panel, empty string if none applicable
    * @property {boolean} paused
@@ -154,8 +158,18 @@ export class IPProtectionPanel {
   #window = null;
   #panelView = null;
   #headerButtons = [];
+  #locationsClosedByKeyboard = false;
   #locationsKeyListener = e => {
-    if (e.code !== "Tab" && e.code !== "ArrowDown" && e.code !== "ArrowUp") {
+    if (
+      e.code !== "Tab" &&
+      e.code !== "ArrowDown" &&
+      e.code !== "ArrowUp" &&
+      e.code !== "ArrowLeft" &&
+      e.code !== "ArrowRight" &&
+      e.code !== "Enter" &&
+      e.code !== "NumpadEnter" &&
+      e.code !== "Space"
+    ) {
       return;
     }
 
@@ -165,7 +179,6 @@ export class IPProtectionPanel {
     }
 
     const backButton = view.querySelector(".subviewbutton-back");
-    const infoButton = view.querySelector(".panel-info-button");
     const locationsList = view.querySelector("locations-list");
     const listItems = locationsList
       ? Array.from(
@@ -175,44 +188,73 @@ export class IPProtectionPanel {
     const promoButton = view.querySelector("moz-promo moz-button");
     const focused = view.ownerDocument.activeElement;
 
-    if (!view.contains(focused)) {
+    const isRTL = Services.locale.isAppLocaleRTL;
+    const isBackArrow = isRTL
+      ? e.code === "ArrowRight"
+      : e.code === "ArrowLeft";
+
+    if (e.code === "ArrowRight" || e.code === "ArrowLeft") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isBackArrow) {
+        this.#locationsClosedByKeyboard = true;
+        this.panelMultiView?.goBack();
+      }
       return;
     }
 
-    const isOnListItem = listItems.includes(focused);
-
-    // Arrow key handling. Make it only work for the locations list
+    // Make up/down arrow keys only work for the locations list
     if (e.code === "ArrowDown" || e.code === "ArrowUp") {
       e.preventDefault();
       e.stopPropagation();
 
-      if (!isOnListItem) {
+      if (!view.contains(focused)) {
         return;
       }
-      const focusedIndex = listItems.indexOf(focused);
+
+      const isOnListItemForArrows = listItems.includes(focused);
+      if (!isOnListItemForArrows) {
+        return;
+      }
+      const arrowFocusedIndex = listItems.indexOf(focused);
       const nextListItem =
         e.code === "ArrowDown"
-          ? listItems[(focusedIndex + 1) % listItems.length]
-          : listItems[(focusedIndex - 1 + listItems.length) % listItems.length];
+          ? listItems[(arrowFocusedIndex + 1) % listItems.length]
+          : listItems[
+              (arrowFocusedIndex - 1 + listItems.length) % listItems.length
+            ];
       nextListItem?.focus();
       return;
     }
 
+    if (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Space") {
+      if (view.contains(focused) && focused === backButton) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.#locationsClosedByKeyboard = true;
+        this.panelMultiView?.goBack();
+      }
+      return;
+    }
+
+    if (!view.contains(focused)) {
+      return;
+    }
+
+    const isOnListItemForFocus = listItems.includes(focused);
+
     // Tab key handling
-    const tabOnlyElements = [
-      backButton,
-      infoButton,
-      listItems[0],
-      promoButton,
-    ].filter(el => el != null);
+    const tabOnlyElements = [backButton, listItems[0], promoButton].filter(
+      el => el != null
+    );
 
     e.preventDefault();
     e.stopPropagation();
 
     // Force focus out of locations list if on a list item
-    if (isOnListItem) {
+    if (isOnListItemForFocus) {
       if (e.shiftKey) {
-        infoButton?.focus();
+        backButton?.focus();
       } else {
         (promoButton ?? backButton)?.focus();
       }
@@ -324,7 +366,6 @@ export class IPProtectionPanel {
     this.handlePrefChange = this.#handlePrefChange.bind(this);
 
     this.state = {
-      isSignedOut: !lazy.IPPSignInWatcher.isSignedIn,
       unauthenticated:
         lazy.IPProtectionService.state ===
         lazy.IPProtectionStates.UNAUTHENTICATED,
@@ -333,7 +374,8 @@ export class IPProtectionPanel {
       location: lazy.EGRESS_LOCATION || null,
       locationsList: lazy.IPProtectionServerlist.countries,
       error: "",
-      hasUpgraded: lazy.IPPEnrollAndEntitleManager.hasUpgraded,
+      hasUpgraded: lazy.IPProtectionService.authProvider.hasUpgraded,
+      upgradeNotAvailable: lazy.UPGRADE_NOT_AVAILABLE,
       onboardingMessage: "",
       bandwidthWarning: false,
       paused: lazy.IPPProxyManager.state === lazy.IPPProxyStates.PAUSED,
@@ -342,9 +384,7 @@ export class IPProtectionPanel {
       bandwidthUsage: this.#getBandwidthUsage(),
       isActivating:
         lazy.IPPProxyManager.state === lazy.IPPProxyStates.ACTIVATING,
-      isCheckingEntitlement:
-        lazy.IPPEnrollAndEntitleManager.isEnrolling ||
-        lazy.IPPEnrollAndEntitleManager.isCheckingEntitlement,
+      isEnrolling: lazy.IPProtectionService.authProvider.isEnrolling,
       showLocationButtonBadge: !Services.prefs.getBoolPref(
         LOCATION_BADGE_DISMISSED_PREF,
         false
@@ -507,11 +547,18 @@ export class IPProtectionPanel {
    */
   showing(panelView) {
     if (this.initiatedUpgrade) {
-      lazy.IPPEnrollAndEntitleManager.refetchEntitlement();
+      lazy.IPProtectionService.authProvider.checkForUpgrade();
       this.initiatedUpgrade = false;
     }
 
     this.#updateSiteData();
+
+    if (this.state.paused) {
+      this.setState({ isEnrolling: true });
+      lazy.IPPProxyManager.refreshUsage().finally(() => {
+        this.setState({ isEnrolling: false });
+      });
+    }
 
     this.setState({
       isSiteExceptionsEnabled: this.isExceptionsFeatureEnabled,
@@ -519,7 +566,7 @@ export class IPProtectionPanel {
     });
 
     if (this.state.bandwidthWarning) {
-      lazy.IPProtectionInfobarManager.hideInfobars();
+      lazy.IPProtectionInfobarManager.hideInfobars({ triggeredByPanel: true });
     }
 
     if (this.panel) {
@@ -596,11 +643,16 @@ export class IPProtectionPanel {
     }
 
     let headerButton = panelView.querySelector(".panel-info-button");
-    headerButton.addEventListener("click", IPProtectionPanel.showHelpPage);
-    headerButton.addEventListener("keypress", this.#handleHeaderButtonKeypress);
-    // Reset the tab index to ensure it is focusable.
-    headerButton.setAttribute("tabindex", "0");
-    this.#headerButtons.push(headerButton);
+    if (headerButton) {
+      headerButton.addEventListener("click", IPProtectionPanel.showHelpPage);
+      headerButton.addEventListener(
+        "keypress",
+        this.#handleHeaderButtonKeypress
+      );
+      // Reset the tab index to ensure it is focusable.
+      headerButton.setAttribute("tabindex", "0");
+      this.#headerButtons.push(headerButton);
+    }
 
     let contentEl = ownerDocument.createElement(contentTagName);
     contentArea.appendChild(contentEl);
@@ -680,8 +732,13 @@ export class IPProtectionPanel {
 
     // Asynchronously enroll and entitle the user.
     // It will only need to finish before the proxy can start.
-    const enrolling = lazy.IPPEnrollAndEntitleManager.maybeEnrollAndEntitle();
-    if (!this.active) {
+    const enrolling = lazy.IPProtectionService.authProvider.enroll();
+    // Only auto-open the panel if the toolbar widget is placed in a visible
+    // area.
+    let placement = lazy.CustomizableUI.getPlacementOfWidget(
+      IPProtectionPanel.WIDGET_ID
+    );
+    if (placement && !this.active) {
       await this.open();
     }
     const result = await enrolling;
@@ -692,12 +749,18 @@ export class IPProtectionPanel {
 
   /**
    * Show the Locations subview and create its components if necessary.
+   *
+   * @param {boolean} [keyboardActivated]
+   *   True if the subview was opened via keyboard, false if via mouse.
+   * @param {HTMLElement|null} [locationButton]
+   *   The button that opened the subview, to restore focus when the subview closes.
    */
-  async showLocationSelector() {
+  async showLocationSelector(keyboardActivated = false, locationButton = null) {
     let view = this.locationsView;
     if (!view) {
       return;
     }
+
     let viewShown = new Promise(resolve => {
       view.addEventListener("ViewShown", resolve, { once: true });
     });
@@ -708,6 +771,10 @@ export class IPProtectionPanel {
         view.removeEventListener("keydown", this.#locationsKeyListener, {
           capture: true,
         });
+        if (this.#locationsClosedByKeyboard) {
+          this.#locationsClosedByKeyboard = false;
+          locationButton?.focus();
+        }
       },
       { once: true }
     );
@@ -717,11 +784,17 @@ export class IPProtectionPanel {
 
     await viewShown;
 
-    // Allow back button and list items to manage focus and override the PanelMultiView keydown listener
+    // Allow back button, list items and promo button to manage focus and override
+    // the PanelMultiView keydown listener.
     for (let el of view.querySelectorAll(
       ".subviewbutton-back, .location-item, moz-promo moz-button"
     )) {
       el.dataset.capturesFocus = "true";
+    }
+
+    // On keyboard activation, focus the first list item
+    if (keyboardActivated) {
+      view.querySelector(".location-item:not([disabled])")?.focus();
     }
 
     view.addEventListener("keydown", this.#locationsKeyListener, {
@@ -837,8 +910,8 @@ export class IPProtectionPanel {
       "IPPUsageHelper:StateChanged",
       this.handleEvent
     );
-    lazy.IPPEnrollAndEntitleManager.addEventListener(
-      "IPPEnrollAndEntitleManager:StateChanged",
+    lazy.IPProtectionService.authProvider.addEventListener(
+      "IPPAuthProvider:StateChanged",
       this.handleEvent
     );
     lazy.IPPExceptionsManager.addEventListener(
@@ -852,8 +925,8 @@ export class IPProtectionPanel {
   }
 
   #removeProxyListeners() {
-    lazy.IPPEnrollAndEntitleManager.removeEventListener(
-      "IPPEnrollAndEntitleManager:StateChanged",
+    lazy.IPProtectionService.authProvider.removeEventListener(
+      "IPPAuthProvider:StateChanged",
       this.handleEvent
     );
     lazy.IPPProxyManager.removeEventListener(
@@ -980,14 +1053,12 @@ export class IPProtectionPanel {
       };
     } else if (
       lazy.BANDWIDTH_USAGE_ENABLED &&
-      lazy.IPPEnrollAndEntitleManager.entitlement?.maxBytes != null
+      lazy.IPProtectionService.authProvider.maxBytes != null
     ) {
       // Usage info doesn't exist yet. Check the entitlement
       return {
-        max: Number(lazy.IPPEnrollAndEntitleManager.entitlement?.maxBytes),
-        remaining: Number(
-          lazy.IPPEnrollAndEntitleManager.entitlement?.maxBytes
-        ),
+        max: Number(lazy.IPProtectionService.authProvider.maxBytes),
+        remaining: Number(lazy.IPProtectionService.authProvider.maxBytes),
         reset: null,
       };
     }
@@ -1050,7 +1121,7 @@ export class IPProtectionPanel {
     } else if (
       event.type == "IPPProxyManager:StateChanged" ||
       event.type == "IPProtectionService:StateChanged" ||
-      event.type === "IPPEnrollAndEntitleManager:StateChanged"
+      event.type === "IPPAuthProvider:StateChanged"
     ) {
       let errorType = "";
       if (lazy.IPPProxyManager.state === lazy.IPPProxyStates.ERROR) {
@@ -1058,19 +1129,16 @@ export class IPProtectionPanel {
       }
 
       this.setState({
-        isSignedOut: !lazy.IPPSignInWatcher.isSignedIn,
         unauthenticated:
           lazy.IPProtectionService.state ===
           lazy.IPProtectionStates.UNAUTHENTICATED,
         isProtectionEnabled:
           lazy.IPPProxyManager.state === lazy.IPPProxyStates.ACTIVE,
-        hasUpgraded: lazy.IPPEnrollAndEntitleManager.hasUpgraded,
+        hasUpgraded: lazy.IPProtectionService.authProvider.hasUpgraded,
         error: errorType,
         isActivating:
           lazy.IPPProxyManager.state === lazy.IPPProxyStates.ACTIVATING,
-        isCheckingEntitlement:
-          lazy.IPPEnrollAndEntitleManager.isEnrolling ||
-          lazy.IPPEnrollAndEntitleManager.isCheckingEntitlement,
+        isEnrolling: lazy.IPProtectionService.authProvider.isEnrolling,
         bandwidthUsage: this.#getBandwidthUsage(),
         bandwidthWarning:
           lazy.IPProtectionService.state === lazy.IPProtectionStates.READY
@@ -1116,12 +1184,18 @@ export class IPProtectionPanel {
       this.setState({ bandwidthWarning: false });
     } else if (event.type == "IPPProxyManager:UsageChanged") {
       const usage = event.detail.usage;
-      if (
-        !usage ||
-        usage.max == null ||
-        usage.remaining == null ||
-        !usage.reset
-      ) {
+      if (!usage) {
+        return;
+      }
+
+      if (usage.unlimited) {
+        Services.prefs.clearUserPref(BANDWIDTH_THRESHOLD_PREF);
+        Services.prefs.clearUserPref(BANDWIDTH_RESET_DATE_PREF);
+        this.setState({ bandwidthUsage: null, bandwidthWarning: false });
+        return;
+      }
+
+      if (usage.max == null || usage.remaining == null || !usage.reset) {
         return;
       }
 
@@ -1171,15 +1245,13 @@ export class IPProtectionPanel {
         this.#sendBandwidthResetTrigger();
       }
 
-      if (lazy.BANDWIDTH_USAGE_ENABLED) {
-        this.setState({
-          bandwidthUsage: {
-            remaining: Number(usage.remaining),
-            max: Number(usage.max),
-            reset: usage.reset,
-          },
-        });
-      }
+      this.setState({
+        bandwidthUsage: {
+          remaining: Number(usage.remaining),
+          max: Number(usage.max),
+          reset: usage.reset,
+        },
+      });
     } else if (event.type == "IPPUsageHelper:StateChanged") {
       this.setState({ bandwidthWarning: this.#shouldShowBandwidthWarning() });
     } else if (event.type == "IPProtection:UserShowLocations") {
@@ -1188,7 +1260,10 @@ export class IPProtectionPanel {
         this.setState({ showLocationButtonBadge: false });
       }
       Glean.ipprotection.locationSelectorButtonClicked.record();
-      this.showLocationSelector();
+      this.showLocationSelector(
+        event.detail?.keyboardActivated,
+        event.detail?.locationButton
+      );
     } else if (event.type == "IPProtection:UserSelectLocation") {
       const { code } = event.detail;
       Glean.ipprotection.locationChanged.record({ location: code });

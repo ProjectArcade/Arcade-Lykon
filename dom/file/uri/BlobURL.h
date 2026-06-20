@@ -41,7 +41,7 @@ class BlobURL final : public mozilla::net::nsSimpleURI {
   // Override EqualsInternal()
   nsresult EqualsInternal(nsIURI* aOther, RefHandlingEnum aRefHandlingMode,
                           bool* aResult) override;
-  NS_IMETHOD_(void) Serialize(mozilla::ipc::URIParams& aParams) override;
+  virtual void Serialize(mozilla::ipc::URIParams& aParams) override;
 
   // Override StartClone to hand back a BlobURL with mRevoked set.
   already_AddRefed<mozilla::net::nsSimpleURI> StartClone() override {

@@ -48,6 +48,8 @@
   skin/classic/browser/urlbar/sports-hockey.svg                (../shared/urlbar/icons/sports-hockey.svg)
   skin/classic/browser/urlbar/sports-racing.svg                (../shared/urlbar/icons/sports-racing.svg)
   skin/classic/browser/urlbar/sports-soccer.svg                (../shared/urlbar/icons/sports-soccer.svg)
+  skin/classic/browser/urlbar/urlbar.tokens.css                (../shared/urlbar/urlbar.tokens.css)
+  skin/classic/browser/urlbar/urlbarview.tokens.css            (../shared/urlbar/urlbarview.tokens.css)
   skin/classic/browser/urlbar/tokens.css                       (../shared/urlbar/tokens.css)
   skin/classic/browser/urlbar/variables.css                    (../shared/urlbar/variables.css)
   skin/classic/browser/urlbar/view.css                         (../shared/urlbar/view.css)
@@ -62,7 +64,6 @@
   skin/classic/browser/addons/addon-install-installed.svg      (../shared/addons/addon-install-installed.svg)
   skin/classic/browser/addons/extension-controlled.css         (../shared/addons/extension-controlled.css)
   skin/classic/browser/addons/extensions-panel-empty-illustration.svg (../shared/addons/extensions-panel-empty-illustration.svg)
-  skin/classic/browser/addons/puzzle-fox.svg                   (../../extensions/newtab/data/content/assets/puzzle-fox.svg)
   skin/classic/browser/addons/unified-extensions.css           (../shared/addons/unified-extensions.css)
   skin/classic/browser/controlcenter/3rdpartycookies.svg       (../shared/controlcenter/3rdpartycookies.svg)
   skin/classic/browser/controlcenter/cryptominers.svg          (../shared/controlcenter/cryptominers.svg)
@@ -144,8 +145,6 @@
   skin/classic/browser/tracking-protection-active.svg                 (../shared/identity-block/tracking-protection-active.svg)
 
   skin/classic/browser/toolbar-drag-indicator.svg                     (../shared/toolbar-drag-indicator.svg)
-  skin/classic/browser/icons/adblocker-icon.svg                       (../shared/icons/adblocker-icon.svg)
-  skin/classic/browser/icons/lock.svg                                 (../shared/icons/lock.svg)
 
   skin/classic/browser/protections/resolved-breach.svg         (../shared/protections/resolved-breach.svg)
   skin/classic/browser/protections/resolved-breach-gray.svg    (../shared/protections/resolved-breach-gray.svg)
@@ -158,17 +157,9 @@
   skin/classic/browser/preferences/category-privacy-security.svg    (../shared/preferences/category-privacy-security.svg)
   skin/classic/browser/preferences/category-search.svg         (../shared/preferences/category-search.svg)
   skin/classic/browser/preferences/category-sync.svg           (../shared/preferences/category-sync.svg)
-  skin/classic/browser/preferences/containers.css              (../shared/preferences/containers.css)
   skin/classic/browser/preferences/containers-dialog.css       (../shared/preferences/containers-dialog.css)
   skin/classic/browser/preferences/dialog.css                  (../shared/preferences/dialog.css)
   skin/classic/browser/preferences/fox-ai.svg                  (../shared/preferences/fox-ai.svg)
-
-  
-  skin/classic/browser/preferences/Adblocker-on.png            (../shared/preferences/Adblocker-on.png)
-  skin/classic/browser/preferences/Adblocker-off-concern.png   (../shared/preferences/Adblocker-off-concern.png)
-  skin/classic/browser/preferences/Adblocker-off-concer.png    (../shared/preferences/Adblocker-off-concern.png)
-
-  
   skin/classic/browser/preferences/fxaPairDevice.css           (../shared/preferences/fxaPairDevice.css)
   skin/classic/browser/preferences/ios-menu.svg                (../shared/preferences/ios-menu.svg)
   skin/classic/browser/preferences/monitor-logo.svg            (../shared/preferences/monitor-logo.svg)
@@ -188,7 +179,7 @@
   skin/classic/browser/fxa/send-to-device.svg                  (../shared/fxa/send-to-device.svg)
   skin/classic/browser/preferences/solo-ai-logo.svg            (../shared/preferences/solo-ai-logo.svg)
   skin/classic/browser/preferences/mdn-logo.svg                (../shared/preferences/mdn-logo.svg)
-  skin/classic/browser/preferences/thunderbird-16.svg          (../shared/preferences/thunderbird-16.svg)
+  skin/classic/browser/preferences/thunderbird-color-16.svg    (../shared/preferences/thunderbird-color-16.svg)
   skin/classic/browser/preferences/mozilla-16.svg              (../shared/preferences/mozilla-16.svg)
 
   skin/classic/browser/fxa/avatar.svg                          (../shared/fxa/avatar.svg)
@@ -232,6 +223,7 @@
   skin/classic/browser/fullscreen.svg                 (../shared/icons/fullscreen.svg)
   skin/classic/browser/fullscreen-exit.svg            (../shared/icons/fullscreen-exit.svg)
   skin/classic/browser/history.svg                    (../shared/icons/history.svg)
+  skin/classic/browser/history-20.svg                 (../shared/icons/history-20.svg)
   skin/classic/browser/home.svg                       (../shared/icons/home.svg)
   skin/classic/browser/import.svg                     (../shared/icons/import.svg)
   skin/classic/browser/labs-16.svg                    (../shared/icons/labs-16.svg)
@@ -249,6 +241,7 @@
   skin/classic/browser/pin-12.svg                     (../shared/icons/pin-12.svg)
   skin/classic/browser/pin.svg                        (../shared/icons/pin.svg)
   skin/classic/browser/privateBrowsing.svg            (../shared/icons/privateBrowsing.svg)
+  skin/classic/browser/qrcode.svg                     (../shared/icons/qrcode.svg)
   skin/classic/browser/quickactions.svg               (../shared/icons/quickactions.svg)
   skin/classic/browser/reader-mode.svg                (../shared/icons/reader-mode.svg)
   skin/classic/browser/taskbar-tabs-add-tab.svg       (../shared/icons/taskbar-tabs-add-tab.svg)
@@ -262,8 +255,11 @@
   skin/classic/browser/sidebar-expanded.svg           (../shared/icons/sidebar-expanded.svg)
   skin/classic/browser/sidebar-expanded-right.svg     (../shared/icons/sidebar-expanded-right.svg)
   skin/classic/browser/smart-window.svg               (../shared/icons/smart-window.svg)
+  skin/classic/browser/smart-window-dot.svg           (../shared/icons/smart-window-dot.svg)
+  skin/classic/browser/smart-window-filled.svg        (../shared/icons/smart-window-filled.svg)
   skin/classic/browser/smart-window-mono.svg          (../shared/icons/smart-window-mono.svg)
   skin/classic/browser/smart-window-simplified.svg    (../shared/icons/smart-window-simplified.svg)
+  skin/classic/browser/smart-window-nova.svg          (../shared/icons/smart-window-nova.svg)
   skin/classic/browser/sort.svg                       (../shared/icons/sort.svg)
   skin/classic/browser/split-view-left-16.svg         (../shared/icons/split-view-left-16.svg)
   skin/classic/browser/split-view-right-16.svg        (../shared/icons/split-view-right-16.svg)
@@ -273,6 +269,7 @@
   skin/classic/browser/sync.svg                       (../shared/icons/sync.svg)
   skin/classic/browser/sync-off.svg                   (../shared/icons/sync-off.svg)
   skin/classic/browser/synced-tabs.svg                (../shared/icons/synced-tabs.svg)
+  skin/classic/browser/send-tab-20.svg                (../shared/icons/send-tab-20.svg)
   skin/classic/browser/tab.svg                        (../shared/icons/tab.svg)
   skin/classic/browser/tabs.svg                       (../shared/icons/tabs.svg)
   skin/classic/browser/translations.svg               (../shared/icons/translations.svg)
@@ -307,6 +304,7 @@
   skin/classic/browser/tabbrowser/tab-groups-list.css          (../shared/tabbrowser/tab-groups-list.css)
   skin/classic/browser/tabbrowser/tab-hover-preview.css        (../shared/tabbrowser/tab-hover-preview.css)
   skin/classic/browser/tabbrowser/tab.tokens.css               (../shared/tabbrowser/tab.tokens.css)
+  skin/classic/browser/tabbrowser/tabs-navbar.tokens.css       (../shared/tabbrowser/tabs-navbar.tokens.css)
   skin/classic/browser/tabbrowser/tabs.css                     (../shared/tabbrowser/tabs.css)
 
   skin/classic/browser/update-badge.svg                        (../shared/update-badge.svg)
@@ -327,6 +325,8 @@
   skin/classic/browser/places/tree-icons.css                   (../shared/places/tree-icons.css)
   skin/classic/browser/privatebrowsing/aboutPrivateBrowsing.css (../shared/privatebrowsing/aboutPrivateBrowsing.css)
   skin/classic/browser/privatebrowsing/favicon.svg             (../shared/privatebrowsing/favicon.svg)
+  skin/classic/browser/privatebrowsing/fox-tail.svg            (../shared/privatebrowsing/fox-tail.svg)
+  skin/classic/browser/privatebrowsing/pbm-logo.svg            (../shared/privatebrowsing/pbm-logo.svg)
 
   skin/classic/browser/syncedtabs/sidebar.css                  (../shared/syncedtabs/sidebar.css)
 
@@ -356,4 +356,5 @@
   skin/classic/browser/weather/night-mostly-cloudy-with-flurries.svg (../shared/weather/night-mostly-cloudy-with-flurries.svg)
 
   skin/classic/browser/illustrations/market-opt-in.svg         (../shared/illustrations/market-opt-in.svg)
+  skin/classic/browser/illustrations/tab-groups.svg            (../shared/illustrations/tab-groups.svg)
   skin/classic/browser/illustrations/yelpRealtime-opt-in.svg   (../shared/illustrations/yelpRealtime-opt-in.svg)

@@ -19,6 +19,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.state.SessionState
@@ -37,6 +39,8 @@ import mozilla.components.lib.shake.detectShakes
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.ktx.kotlin.isContentUrl
+import mozilla.components.support.utils.DefaultDateTimeProvider
+import org.mozilla.fenix.GleanMetrics.Translations
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.store.BrowserScreenAction.ReaderModeStatusUpdated
 import org.mozilla.fenix.components.Components
@@ -46,6 +50,7 @@ import org.mozilla.fenix.components.TabCollectionStorage
 import org.mozilla.fenix.components.VoiceSearchFeature
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.components.appstate.AppAction
+import org.mozilla.fenix.components.appstate.AppAction.SnackbarAction
 import org.mozilla.fenix.components.metrics.installSourcePackage
 import org.mozilla.fenix.components.toolbar.gestures.ToolbarHorizontalGesturesHandler
 import org.mozilla.fenix.components.toolbar.gestures.ToolbarVerticalGesturesHandler
@@ -59,8 +64,8 @@ import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.navigateSafe
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.runIfFragmentIsAttached
-import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.home.HomeFragment
+import org.mozilla.fenix.ipprotection.store.IPProtectionOnboardingPrompt
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.onboarding.OnboardingFragmentDirections
 import org.mozilla.fenix.onboarding.OnboardingReason
@@ -72,6 +77,7 @@ import org.mozilla.fenix.settings.quicksettings.protections.cookiebanners.getCoo
 import org.mozilla.fenix.shortcut.PwaOnboardingObserver
 import org.mozilla.fenix.termsofuse.store.Surface
 import org.mozilla.fenix.utils.Settings
+import org.mozilla.fenix.ipprotection.store.Surface as IPProtectionSurface
 
 /**
  * Fragment used for browsing the web within the main app.
@@ -82,7 +88,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
     private val openInAppOnboardingObserver = ViewBoundFeatureWrapper<OpenInAppOnboardingObserver>()
     private val translationsBinding = ViewBoundFeatureWrapper<TranslationsBinding>()
     private val translationsBannerIntegration = ViewBoundFeatureWrapper<TranslationsBannerIntegration>()
-
+    private val ipProtectionOnboardingPrompt = ViewBoundFeatureWrapper<IPProtectionOnboardingPrompt>()
     private var qrScanFenixFeature: ViewBoundFeatureWrapper<QrScanFenixFeature>? =
         ViewBoundFeatureWrapper<QrScanFenixFeature>()
     private val qrScanLauncher: ActivityResultLauncher<Intent> =
@@ -99,7 +105,11 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         ViewBoundFeatureWrapper<LensFeature>()
     private val lensLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            lensFeature?.get()?.handleImageResult(result.resultCode, result.data)
+            lensFeature?.get()?.handleCameraActivityResult(
+                result.resultCode,
+                result.data,
+                qrScanFenixFeature?.get(),
+            )
         }
     private val lensCameraPermissionLauncher: ActivityResultLauncher<String> =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -129,7 +139,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
     }
 
     private val continuousOnboardingFeature by lazy {
-        val settings = requireContext().settings()
+        val settings = requireComponents.settings
         ContinuousOnboardingFeatureDefault(
             settings = settings,
             telemetryRecorder = telemetryRecorder,
@@ -152,12 +162,13 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
 
         val context = requireContext()
         val components = context.components
-        val settings = context.settings()
+        val settings = components.settings
 
         setupToolbarSwipeBehavior(settings, components)
 
         initBrowserToolbarComposableUpdates(view)
         initTranslationsUpdates(context = context, rootView = view)
+        initIPProtectionOnboarding(context, view)
 
         thumbnailsFeature.set(
             feature = BrowserThumbnails(context, binding.engineView, components.core.store),
@@ -206,7 +217,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
                     activity = requireActivity(),
                     contentLayout = binding.browserLayout,
                     tabPreview = binding.tabPreview,
-                    toolbarLayout = browserToolbarView.layout,
+                    toolbarLayout = browserToolbar.layout,
                     navBarLayout = browserNavigationBar?.layout,
                     store = components.core.store,
                     selectTabUseCase = components.useCases.tabsUseCases.selectTab,
@@ -221,7 +232,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
             binding.gestureLayout.addGestureListener(
                 ToolbarVerticalGesturesHandler(
                     appStore = components.appStore,
-                    toolbarLayout = browserToolbarView.layout,
+                    toolbarLayout = browserToolbar.layout,
                     navBarLayout = browserNavigationBar?.layout,
                     toolbarPosition = settings.toolbarPosition,
                     navController = findNavController(),
@@ -230,6 +241,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun setupShakeDetection() {
         val shouldSetupShake = requireComponents.core.summarizeFeatureSettings.canShowFeature &&
                 requireComponents.core.summarizationSettings.isGestureEnabled.value
@@ -243,7 +255,10 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
             lifecycle.addObserver(accelerometer)
             lifecycleScope.launch {
                 viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    accelerometer.detectShakes()
+                    requireComponents.core.summarizationSettings.shakeSensitivity
+                        .flatMapLatest { sensitivity ->
+                            accelerometer.detectShakes(sensitivity = sensitivity)
+                        }
                         .collect {
                             summarizeToolbarCfrBinding.get()?.maybeDismissCfr()
                             navigateToSummarizationIfEligible()
@@ -255,9 +270,12 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
 
     private suspend fun navigateToSummarizationIfEligible() {
         findNavController().apply {
-            // If the shake gesture was disabled in the bottom sheet hosted settings but the fragment
-            // has not been recreated yet, we need to check if it's still active before proceeding.
-            val shakeEnabled = requireComponents.core.summarizationSettings.isGestureEnabled.value
+            // If the shake gesture or the parent feature was disabled in the bottom sheet hosted
+            // settings but the fragment has not been recreated yet, we need to check both are still
+            // active before proceeding.
+            val summarizationSettings = requireComponents.core.summarizationSettings
+            val shakeEnabled = summarizationSettings.isFeatureEnabled.value &&
+                summarizationSettings.isGestureEnabled.value
 
             if (!shakeEnabled) {
                 return
@@ -331,6 +349,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
     private fun initTranslationsUpdates(context: Context, rootView: View) {
         translationsBannerIntegration.set(
             feature = TranslationsBannerIntegration(
+                settings = context.components.settings,
                 browserStore = context.components.core.store,
                 browserScreenStore = browserScreenStore,
                 binding = binding,
@@ -351,7 +370,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
                     browserScreenStore = browserScreenStore,
                     appStore = rootView.context.components.appStore,
                     onTranslationStatusUpdate = {},
-                    onShowTranslationsDialog = browserToolbarInteractor::onTranslationsButtonClicked,
+                    onShowTranslationsDialog = ::openTranslationsDialogFromToolbar,
                     navController = findNavController(),
                 ),
                 owner = this,
@@ -360,10 +379,40 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         }
     }
 
+    private fun initIPProtectionOnboarding(context: Context, rootView: View) {
+        ipProtectionOnboardingPrompt.set(
+            feature = IPProtectionOnboardingPrompt(
+                repository = context.components.ipProtectionPromptRepository,
+                timeProvider = DefaultDateTimeProvider(),
+                store = context.components.ipProtection.store,
+                onShowOnboarding = {
+                    findNavController().navigate(
+                        BrowserFragmentDirections.actionGlobalIpProtectionDialog(IPProtectionSurface.BROWSER),
+                    )
+                },
+            ),
+            owner = this,
+            view = rootView,
+        )
+    }
+
+    private fun openTranslationsDialogFromToolbar() {
+        Translations.action.record(Translations.ActionExtra("main_flow_toolbar"))
+        requireComponents.appStore.dispatch(SnackbarAction.SnackbarDismissed)
+        findNavController().navigateSafe(
+            R.id.browserFragment,
+            BrowserFragmentDirections.actionBrowserFragmentToTranslationsDialogFragment(),
+        )
+    }
+
     override fun onStart() {
         super.onStart()
         val context = requireContext()
-        val settings = context.settings()
+        val settings = context.components.settings
+
+        if (context.components.appStore.state.longfoxEntryPointReady) {
+            context.components.appStore.dispatch(AppAction.UpdateShowFoxPeekAnimation(false))
+        }
 
         if (!settings.userKnowsAboutPwas) {
             pwaOnboardingObserver = PwaOnboardingObserver(
@@ -428,14 +477,14 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
                 val cookieBannersStorage = requireComponents.core.cookieBannersStorage
                 val cookieBannerUIMode = cookieBannersStorage.getCookieBannerUIMode(
                     tab = tab,
-                    isFeatureEnabledInPrivateMode = requireContext().settings().shouldUseCookieBannerPrivateMode,
+                    isFeatureEnabledInPrivateMode = requireComponents.settings.shouldUseCookieBannerPrivateMode,
                     publicSuffixList = requireComponents.publicSuffixList,
                 )
                 withContext(Dispatchers.Main) {
                     runIfFragmentIsAttached {
                         val isTrackingProtectionEnabled =
                             tab.trackingProtection.enabled && !hasTrackingProtectionException
-                        val directions = if (requireContext().settings().enableUnifiedTrustPanel) {
+                        val directions = if (requireComponents.settings.enableUnifiedTrustPanel) {
                             BrowserFragmentDirections.actionBrowserFragmentToTrustPanelFragment(
                                 sessionId = tab.id,
                                 url = tab.content.url,
@@ -520,7 +569,10 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
             snackBarParentView = view,
             snackbarDelegate = ContextMenuSnackbarDelegate(),
             downloadsLocation = {
-                DownloadLocationManager(requireContext()).defaultLocation
+                DownloadLocationManager(
+                    requireComponents.settings,
+                    requireContext().contentResolver,
+                ).defaultLocation
             },
         ) + ContextMenuCandidate.createOpenInExternalAppCandidate(
             requireContext(),
@@ -534,9 +586,11 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         showFor = { _, hitResult ->
             val isImage = hitResult is HitResult.IMAGE || hitResult is HitResult.IMAGE_SRC
             val selectedEngine = context.components.core.store.state.search.selectedOrDefaultSearchEngine
+            val settings = context.components.settings
             isImage &&
                 hitResult.src.isHttpUrl() &&
-                context.settings().googleLensIntegrationEnabled &&
+                settings.googleLensIntegrationEnabled &&
+                settings.googleLensIntegrationUserEnabled &&
                 selectedEngine.isGoogleSearchEngine()
         },
         action = { _, hitResult ->
@@ -556,10 +610,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
      */
     @VisibleForTesting
     internal fun updateLastBrowseActivity() {
-        requireContext().settings().lastBrowseActivity = System.currentTimeMillis()
-    }
-
-    companion object {
-        const val SHARE_WEIGHT = 4
+        requireComponents.settings.lastBrowseActivity = System.currentTimeMillis()
     }
 }

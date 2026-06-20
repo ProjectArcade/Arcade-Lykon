@@ -51,7 +51,7 @@ static EGLSurface CreatePBufferSurface(EglDisplay* egl, EGLConfig config,
     EGLint err = egl->mLib->fGetError();
     gfxCriticalError() << "Failed to create Pbuffer surface error: "
                        << gfx::hexa(err) << " Size : " << size;
-    return 0;
+    return nullptr;
   }
 
   return surface;
@@ -235,8 +235,8 @@ SharedSurface_ANGLEShareHandle::ToSurfaceDescriptor() {
   return Some(layers::SurfaceDescriptorD3D10(
       mSharedHandle, /* gpuProcessTextureId */ Nothing(),
       /* arrayIndex */ 0, format, mDesc.size, mDesc.colorSpace,
-      gfx::ColorRange::FULL, mDesc.transferFunction, !!mKeyedMutex,
-      mFencesHolderId));
+      gfx::ColorRange::FULL, mDesc.transferFunction,
+      /* hdrMetadata */ Nothing(), !!mKeyedMutex, mFencesHolderId));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

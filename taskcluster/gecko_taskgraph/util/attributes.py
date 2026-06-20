@@ -102,7 +102,6 @@ _COPYABLE_ATTRIBUTES = (
     "mar-channel-id",
     "maven_packages",
     "nightly",
-    "required_signoffs",
     "shippable",
     "shipping_phase",
     "shipping_product",
@@ -172,14 +171,6 @@ def release_level(params):
             return "production"
 
     return "staging"
-
-
-def is_try(params):
-    """
-    Determine whether this graph is being built on a try project or for
-    `mach try fuzzy`.
-    """
-    return "try" in params["project"] or params["try_mode"] == "try_select"
 
 
 def task_name(task):

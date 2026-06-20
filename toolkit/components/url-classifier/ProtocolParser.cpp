@@ -781,7 +781,7 @@ nsresult ProtocolParserProtobuf::ProcessOneResponse(
   // per provider and return the first one. See bug 1287059."
   nsTArray<nsCString> possibleListNameArray;
   Classifier::SplitTables(possibleListNames, possibleListNameArray);
-  for (auto possibleName : possibleListNameArray) {
+  for (const auto& possibleName : possibleListNameArray) {
     if (mRequestedTables.Contains(possibleName)) {
       aListName = possibleName;
       break;

@@ -31,8 +31,26 @@ sealed interface InteractionType {
     data class RightGutter(val rect: Rect) : InteractionType
 
     /**
+     * The closest point represents a gutter area to the top of a target item.
+     * @property rect A [Rect] representing the gutter indicated for interaction.
+     */
+    data class TopGutter(val rect: Rect) : InteractionType
+
+    /**
+     * The closest point represents a gutter area to the bottom of a target item.
+     * @property rect A [Rect] representing the gutter indicated for interaction.
+     */
+    data class BottomGutter(val rect: Rect) : InteractionType
+
+    /**
      * The closest point represents a scroll area spanning the top/bottom of the viewport.
      * @property scroll A [Float] value representing the scroll amount indicated.
      */
     data class Scroll(val scroll: Float) : InteractionType
+
+    /**
+     * The closest point represents an interaction where nothing should happen, like if a dragged item
+     * is hovered over its existing location.
+     */
+    data object None : InteractionType
 }

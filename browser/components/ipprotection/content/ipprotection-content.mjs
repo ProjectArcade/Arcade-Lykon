@@ -39,6 +39,7 @@ export default class IPProtectionContentElement extends MozLitElement {
     statusBoxEl: "ipprotection-status-box",
     siteExclusionControlEl: "#site-exclusion-control",
     siteExclusionToggleEl: "#site-exclusion-toggle",
+    siteExclusionDescriptionEl: '#site-exclusion-toggle > [slot="description"]',
     settingsButtonEl: "#vpn-settings-button",
   };
 
@@ -288,7 +289,7 @@ export default class IPProtectionContentElement extends MozLitElement {
   }
 
   upgradeTemplate() {
-    if (this.state.hasUpgraded) {
+    if (this.state.hasUpgraded || this.state.upgradeNotAvailable) {
       return null;
     }
 
@@ -323,21 +324,21 @@ export default class IPProtectionContentElement extends MozLitElement {
     const isNetworkError = this.state.error === ERRORS.NETWORK;
     const isCatastrophicError = this.state.error === ERRORS.CATASTROPHIC;
 
-    let headerL10nId = "ipprotection-connection-status-generic-error-title";
+    let headerL10nId = "ipprotection-connection-status-generic-error-title-1";
     let descriptionL10nId =
       "ipprotection-connection-status-generic-error-description";
     let errorType = ERRORS.GENERIC;
     let imageSrc = null;
 
     if (isNetworkError) {
-      headerL10nId = "ipprotection-connection-status-network-error-title";
+      headerL10nId = "ipprotection-connection-status-network-error-title-1";
       descriptionL10nId =
         "ipprotection-connection-status-network-error-description";
       errorType = ERRORS.NETWORK;
       imageSrc =
         "chrome://browser/content/ipprotection/assets/states/ipprotection-info.svg";
     } else if (isCatastrophicError) {
-      headerL10nId = "ipprotection-connection-status-blocked-error-title";
+      headerL10nId = "ipprotection-connection-status-blocked-error-title-1";
       descriptionL10nId =
         "ipprotection-connection-status-generic-error-try-again";
       errorType = ERRORS.CATASTROPHIC;
@@ -368,7 +369,7 @@ export default class IPProtectionContentElement extends MozLitElement {
   pausedTemplate() {
     return html`
       <ipprotection-status-box
-        headerL10nId="ipprotection-connection-status-paused-title-1"
+        headerL10nId="ipprotection-connection-status-paused-title-2"
         descriptionL10nId="ipprotection-connection-status-paused-description-1"
         .descriptionL10nArgs=${JSON.stringify({
           maxUsage: this.state.bandwidthUsage.max / BANDWIDTH.BYTES_IN_GB,
@@ -409,7 +410,12 @@ export default class IPProtectionContentElement extends MozLitElement {
           inputlayout="inline-end"
           ?pressed=${!hasExclusion}
           @toggle=${this.handleToggleUseVPN}
-        >
+          >${!hasExclusion
+            ? html`<span
+                slot="description"
+                data-l10n-id="site-exclusion-toggle-description"
+              ></span>`
+            : null}
         </moz-toggle>
       </div>
       <hr role="separator" />`;
@@ -439,10 +445,7 @@ export default class IPProtectionContentElement extends MozLitElement {
             <div class="skeleton skeleton-title"></div>
             <div class="skeleton skeleton-line"></div>
           </span>
-          <img
-            role="presentation"
-            src="chrome://browser/content/ipprotection/assets/states/ipprotection-loading.svg"
-          />
+          <div class="skeleton skeleton-image"></div>
         </span>
         <div class="skeleton skeleton-line-thick"></div>
         <div class="skeleton skeleton-line-thick"></div>
@@ -451,7 +454,7 @@ export default class IPProtectionContentElement extends MozLitElement {
   }
 
   mainContentTemplate() {
-    if (this.state.isCheckingEntitlement) {
+    if (this.state.isEnrolling) {
       return html`${this.enrollingTemplate()} ${this.footerTemplate()}`;
     }
 

@@ -40,7 +40,6 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.utils.toSafeIntent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -52,6 +51,7 @@ import org.mockito.Mockito.spy
 import org.mockito.Mockito.`when`
 import org.robolectric.annotation.Config
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 @RunWith(AndroidJUnit4::class)
 class CustomTabConfigHelperTest {

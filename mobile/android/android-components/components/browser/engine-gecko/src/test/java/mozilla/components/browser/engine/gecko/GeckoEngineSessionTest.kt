@@ -16,7 +16,6 @@ import mozilla.components.browser.engine.gecko.ext.geckoTrackingProtectionPermis
 import mozilla.components.browser.engine.gecko.ext.isExcludedForTrackingProtection
 import mozilla.components.browser.engine.gecko.permission.geckoContentPermission
 import mozilla.components.browser.engine.gecko.translate.GeckoTranslationUtils.intoTranslationError
-import mozilla.components.browser.engine.gecko.util.EngineDownloadDelegate
 import mozilla.components.browser.engine.gecko.util.FakeEngineDownloadDelegate
 import mozilla.components.browser.errorpages.ErrorType
 import mozilla.components.concept.engine.DefaultSettings
@@ -53,13 +52,11 @@ import mozilla.components.support.test.expectException
 import mozilla.components.support.test.mock
 import mozilla.components.support.test.whenever
 import mozilla.components.support.utils.DownloadUtils.RESPONSE_CODE_SUCCESS
-import mozilla.components.support.utils.FakeDownloadFileUtils
 import mozilla.components.support.utils.ThreadUtils
 import mozilla.components.test.ReflectionUtils
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -108,6 +105,7 @@ import java.io.IOException
 import java.security.Principal
 import java.security.cert.X509Certificate
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 typealias GeckoAntiTracking = ContentBlocking.AntiTracking
 typealias GeckoSafeBrowsing = ContentBlocking.SafeBrowsing
@@ -4171,9 +4169,9 @@ class GeckoEngineSessionTest {
         assertNull(observedFallbackUrl)
         assertNull(observedAppName)
         assertNotNull(observedTriggeredByRedirect)
-        assertTrue(observedTriggeredByRedirect!!)
+        assertTrue(observedTriggeredByRedirect)
         assertNotNull(observedTriggeredByWebContent)
-        assertFalse(observedTriggeredByWebContent!!)
+        assertFalse(observedTriggeredByWebContent)
         assertEquals("sample:about", observedOnLoadRequestUrl)
 
         navigationDelegate.value.onLoadRequest(
@@ -4384,7 +4382,7 @@ class GeckoEngineSessionTest {
         navigationDelegate.value.onNewSession(mock(), "mozilla.org")
 
         assertNotNull(receivedWindowRequest)
-        assertEquals("mozilla.org", receivedWindowRequest!!.url)
+        assertEquals("mozilla.org", receivedWindowRequest.url)
         assertEquals(WindowRequest.Type.OPEN, receivedWindowRequest.type)
     }
 
@@ -4407,7 +4405,7 @@ class GeckoEngineSessionTest {
         contentDelegate.value.onCloseRequest(geckoSession)
 
         assertNotNull(receivedWindowRequest)
-        assertSame(engineSession, receivedWindowRequest!!.prepare())
+        assertSame(engineSession, receivedWindowRequest.prepare())
         assertEquals(WindowRequest.Type.CLOSE, receivedWindowRequest.type)
     }
 

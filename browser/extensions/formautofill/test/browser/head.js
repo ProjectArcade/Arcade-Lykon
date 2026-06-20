@@ -62,7 +62,16 @@ const EDIT_ADDRESS_DIALOG_URL =
   "chrome://formautofill/content/editAddress.xhtml";
 const EDIT_CREDIT_CARD_DIALOG_URL =
   "chrome://formautofill/content/editCreditCard.xhtml";
-const PRIVACY_PREF_URL = "about:preferences#privacy";
+// FormAutofill's autocomplete footer + prompts open
+// openPreferences("privacy-payment-methods-autofill"/"privacy-address-autofill"),
+// which the Settings Redesign LegacyPaneMappings shim routes to the
+// passwordsAutofill pane. Pick the matching URL for the active mode.
+const PRIVACY_PREF_URL = Services.prefs.getBoolPref(
+  "browser.settings-redesign.enabled",
+  false
+)
+  ? "about:preferences#passwordsAutofill"
+  : "about:preferences#privacy";
 
 const HTTP_TEST_PATH = "/browser/browser/extensions/formautofill/test/browser/";
 const BASE_URL = "http://mochi.test:8888" + HTTP_TEST_PATH;
@@ -870,7 +879,7 @@ async function clickDoorhangerButton(buttonType, index = 0) {
   } else if (buttonType == MENU_BUTTON) {
     // Click the dropmarker arrow and wait for the menu to show up.
     info("expecting notification menu button present");
-    await BrowserTestUtils.waitForCondition(() => getNotification().menubutton);
+    await TestUtils.waitForCondition(() => getNotification().menubutton);
     await sleep(2000); // menubutton needs extra time for binding
     let notification = getNotification();
 
@@ -880,7 +889,7 @@ async function clickDoorhangerButton(buttonType, index = 0) {
       "popupshown"
     );
 
-    notification.menubutton.click();
+    notification.menubutton.chevronButtonEl.click();
     info("expecting notification popup show up");
     await dropdownPromise;
 
@@ -900,7 +909,7 @@ async function clickAddressDoorhangerButton(buttonType, subType) {
   const notification = getNotification();
   let button;
   if (buttonType == EDIT_ADDRESS_BUTTON) {
-    button = AddressSaveDoorhanger.editButton(notification);
+    button = notification.querySelector(`#${AddressSaveDoorhanger.editLinkId}`);
   } else if (buttonType == ADDRESS_MENU_BUTTON) {
     const menu = AutofillDoorhanger.menuButton(notification);
     const menupopup = AutofillDoorhanger.menuPopup(notification);
@@ -1060,7 +1069,9 @@ function fillEditDoorhanger(record) {
   for (const [key, value] of Object.entries(record)) {
     const id = AddressEditDoorhanger.getInputId(key);
     const element = notification.querySelector(`#${id}`);
-    element.value = value;
+    if (element) {
+      element.value = value;
+    }
   }
 }
 
@@ -1677,7 +1688,7 @@ async function add_heuristic_tests(
       info(`Waiting for expected section count`);
       const actor =
         browser.browsingContext.currentWindowGlobal.getActor("FormAutofill");
-      await BrowserTestUtils.waitForCondition(() => {
+      await TestUtils.waitForCondition(() => {
         const sections = Array.from(actor.sectionsByRootId.values()).flat();
         return sections.length == testPattern.expectedResult.length;
       }, "Expected section count.");

@@ -2,10 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-const { CustomKeys } = ChromeUtils.importESModule(
-  "moz-src:///browser/components/customkeys/CustomKeys.sys.mjs"
-);
-
 var gSerialDeviceObserver = {
   _activePortCounts: new WeakMap(),
 
@@ -194,10 +190,13 @@ var gBrowserInit = {
       let extraOptions = window.arguments[1];
       if (extraOptions.hasKey("taskbartab")) {
         let taskbarTabId = extraOptions.getPropertyAsAString("taskbartab");
-        window.document.documentElement.setAttribute(
-          "windowclass",
-          "org.mozilla.firefox.webapp-" + taskbarTabId
-        );
+        let taskbarTabClass = extraOptions.get("taskbartabclass");
+        if (taskbarTabClass) {
+          window.document.documentElement.setAttribute(
+            "windowclass",
+            taskbarTabClass
+          );
+        }
         window.document.documentElement.setAttribute(
           "taskbartab",
           taskbarTabId
@@ -259,19 +258,26 @@ var gBrowserInit = {
       window
     );
 
-    gBrowser = new window.Tabbrowser();
-    gBrowser.init();
+    // This adds gBrowser to the global scope.
+    BrowserUtils.callModulesFromCategory(
+      {
+        categoryName: "browser-window-domcontentloaded-tabbrowser",
+        jsGlobal: globalThis,
+      },
+      window
+    );
     gURLBar.addGBrowserListeners();
     if (Services.prefs.getBoolPref("browser.search.widget.new", false)) {
       document.getElementById("searchbar-new")?.addGBrowserListeners();
     }
 
     BrowserUtils.callModulesFromCategory(
-      { categoryName: "browser-window-domcontentloaded" },
+      {
+        categoryName: "browser-window-domcontentloaded",
+        jsGlobal: globalThis,
+      },
       window
     );
-
-    FirefoxViewHandler.init();
 
     gURLBar.initPlaceHolder();
 
@@ -291,8 +297,6 @@ var gBrowserInit = {
     updateFxaToolbarMenu(gFxaToolbarEnabled, true);
 
     updatePrintCommands(gPrintEnabled);
-
-    gUnifiedExtensions.init();
 
     // Setting the focus will cause a style flush, it's preferable to call anything
     // that will modify the DOM from within this function before this call.
@@ -323,13 +327,6 @@ var gBrowserInit = {
 
     window.addEventListener("AppCommand", HandleAppCommandEvent, true);
 
-    // These routines add message listeners. They must run before
-    // loading the frame script to ensure that we don't miss any
-    // message sent between when the frame script is loaded and when
-    // the listener is registered.
-    CaptivePortalWatcher.init();
-    ZoomUI.init(window);
-
     if (!gMultiProcessBrowser) {
       // There is a Content:Click message manually sent from content.
       gBrowser.tabpanels.addEventListener("click", contentAreaClick, {
@@ -342,11 +339,15 @@ var gBrowserInit = {
     gBrowser.addProgressListener(window.XULBrowserWindow);
     gBrowser.addTabsProgressListener(window.TabsProgressListener);
 
-    SidebarController.init();
-
-    // We do this in onload because we want to ensure the button's state
-    // doesn't flicker as the window is being shown.
-    DownloadsButton.init();
+    // TODO bug 2038578: audit these consumers and move any that don't need
+    // to run before SessionStore's per-window init to 'browser-window-load'.
+    BrowserUtils.callModulesFromCategory(
+      {
+        categoryName: "browser-window-load-before-sessionstore-init",
+        jsGlobal: globalThis,
+      },
+      window
+    );
 
     // Certain kinds of automigration rely on this notification to complete
     // their tasks BEFORE the browser window is shown. SessionStore uses it to
@@ -362,20 +363,10 @@ var gBrowserInit = {
       gURLBar.readOnly = true;
     }
 
-    // Misc. inits.
-    gUIDensity.init();
-    Win10TabletModeUpdater.init();
-    CombinedStopReload.ensureInitialized();
-    // Initialize private browsing UI only if window is private
-    if (PrivateBrowsingUtils.isWindowPrivate(window)) {
-      PrivateBrowsingUI.init(window);
-    }
-    TaskbarTabsChrome.init(window);
-    BrowserPageActions.init();
-    if (gToolbarKeyNavEnabled) {
-      ToolbarKeyboardNavigator.init();
-    }
-    CustomKeys.initWindow(window);
+    BrowserUtils.callModulesFromCategory(
+      { categoryName: "browser-window-load", jsGlobal: globalThis },
+      window
+    );
 
     // Update UI if browser is under remote control.
     gRemoteControl.updateVisualCue();
@@ -655,6 +646,22 @@ var gBrowserInit = {
     window.addEventListener("mouseout", MousePosTracker);
     window.addEventListener("dragover", MousePosTracker);
 
+    // aHTMLTooltip is used for both the browser UI and in-process <browser>s.
+    // Set an attribute for in-process pages such as about:preferences, so we
+    // can adjust the tooltip style (e.g. follow content's preferred color
+    // scheme) for that case. We only do this for tabbrowser <browser>s, since
+    // other in-process <browser>s (e.g. the sidebar) follow the chrome's style.
+    let htmlTooltip = document.getElementById("aHTMLTooltip");
+    htmlTooltip.addEventListener("popupshowing", () => {
+      let browser =
+        htmlTooltip.triggerNode?.documentGlobal.browsingContext.top
+          .embedderElement;
+      htmlTooltip.toggleAttribute(
+        "contenttooltip",
+        browser?.getTabBrowser() == gBrowser
+      );
+    });
+
     gNavToolbox.addEventListener("customizationstarting", CustomizationHandler);
     gNavToolbox.addEventListener("aftercustomization", CustomizationHandler);
 
@@ -684,6 +691,9 @@ var gBrowserInit = {
         document
           .getElementById("toolbar-menubar")
           .removeAttribute("toolbarname");
+      }
+      if (!Services.policies.isAllowed("profileImport")) {
+        document.documentElement.setAttribute("disableprofileimport", "true");
       }
       if (!Services.policies.isAllowed("filepickers")) {
         let savePageCommand = document.getElementById("Browser:SavePage");
@@ -1170,8 +1180,6 @@ var gBrowserInit = {
   },
 
   onUnload() {
-    gUIDensity.uninit();
-
     BrowserUtils.callModulesFromCategory(
       { categoryName: "browser-window-unload-begin", jsGlobal: globalThis },
       window
@@ -1184,11 +1192,6 @@ var gBrowserInit = {
       return;
     }
 
-    // First clean up services initialized in gBrowserInit.onLoad (or those whose
-    // uninit methods don't depend on the services having been initialized).
-
-    CombinedStopReload.uninit();
-
     gGestureSupport.init(false);
 
     gHistorySwipeAnimation.uninit();
@@ -1198,7 +1201,6 @@ var gBrowserInit = {
     gSync.uninit();
 
     gExtensionsNotifications.uninit();
-    gUnifiedExtensions.uninit();
 
     try {
       gBrowser.removeProgressListener(window.XULBrowserWindow);
@@ -1209,25 +1211,15 @@ var gBrowserInit = {
 
     BookmarkingUI.uninit();
 
-    Win10TabletModeUpdater.uninit();
-
-    CaptivePortalWatcher.uninit();
-
-    SidebarController.uninit();
-
-    DownloadsButton.uninit();
-
-    if (gToolbarKeyNavEnabled) {
-      ToolbarKeyboardNavigator.uninit();
-    }
-    CustomKeys.uninitWindow(window);
-
     // Bug 1952900 to allow switching to unload category without leaking
     ChromeUtils.importESModule(
       "moz-src:///browser/components/genai/LinkPreview.sys.mjs"
     ).LinkPreview.teardown(window);
 
-    FirefoxViewHandler.uninit();
+    BrowserUtils.callModulesFromCategory(
+      { categoryName: "browser-window-unload", jsGlobal: globalThis },
+      window
+    );
 
     // Now either cancel delayedStartup, or clean up the services initialized from
     // it.
@@ -1298,15 +1290,20 @@ var gBrowserInit = {
       PanelUI.uninit();
     }
 
-    // Final window teardown, do this last.
-    gBrowser.destroy();
+    BrowserUtils.callModulesFromCategory(
+      {
+        categoryName: "browser-window-unload-tabbrowser",
+        jsGlobal: globalThis,
+      },
+      window
+    );
     window.XULBrowserWindow = null;
     window.docShell.treeOwner
       .QueryInterface(Ci.nsIInterfaceRequestor)
       .getInterface(Ci.nsIAppWindow).XULBrowserWindow = null;
 
     BrowserUtils.callModulesFromCategory(
-      { categoryName: "browser-window-unload" },
+      { categoryName: "browser-window-final-unload", jsGlobal: globalThis },
       window
     );
   },

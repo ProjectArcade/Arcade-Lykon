@@ -6,6 +6,7 @@ interface Principal;
 interface URI;
 interface nsIDocShell;
 interface RemoteTab;
+interface MozChannel;
 interface nsIDOMProcessParent;
 interface nsIRFPTargetSetIDL;
 
@@ -86,6 +87,9 @@ interface WindowGlobalParent : WindowContext {
 
   readonly attribute long osPid;
 
+  // The remote type of `this.domProcess`.
+  readonly attribute UTF8String? remoteType;
+
   // A WindowGlobalParent is the root in its process if it has no parent, or its
   // embedder is in a different process.
   readonly attribute boolean isProcessRoot;
@@ -125,6 +129,15 @@ interface WindowGlobalParent : WindowContext {
   readonly attribute DOMString documentTitle;
   readonly attribute nsICookieJarSettings? cookieJarSettings;
 
+  // The bare nsIChannel instances which were created in the parent process by
+  // DocumentLoadListener to load this document.
+  //
+  // NOTE: These will not reflect content-process-only changes to the channel,
+  // such as the PDF.js & JSON stream converters, initial about:blank, and
+  // javascript: URI documents.
+  readonly attribute MozChannel? documentChannel;
+  readonly attribute MozChannel? failedChannel;
+
   // True if the the currently loaded document is in fullscreen.
   attribute boolean fullscreen;
 
@@ -141,6 +154,13 @@ interface WindowGlobalParent : WindowContext {
   readonly attribute nsIDOMProcessParent? domProcess;
 
   static WindowGlobalParent? getByInnerWindowId(unsigned long long innerWindowId);
+
+  // Flush each live top-level WindowGlobalParent's in-memory ContentBlockingLog
+  // to the tracking database. Used by TrackingDBService to force ingestion of
+  // pending events from long-lived tabs before a read query. Applies the same
+  // gates as the existing on-destruction flush (out-of-process, non-private,
+  // top-level content).
+  static undefined flushAllContentBlockingLogs();
 
   /**
    * Get or create the JSWindowActor with the given name.

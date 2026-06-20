@@ -9,7 +9,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
-import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
@@ -29,10 +28,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.RendererCapabilities;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
-import androidx.media3.exoplayer.source.LoadEventInfo;
-import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.source.MediaSource;
-import androidx.media3.exoplayer.source.MediaSourceEventListener;
 import androidx.media3.exoplayer.source.TrackGroupArray;
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
@@ -46,13 +42,16 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.mozilla.gecko.GeckoAppShell;
 import org.mozilla.gecko.annotation.ReflectionTarget;
-import org.mozilla.gecko.util.GeckoHttpDataSource;
 import org.mozilla.geckoview.BuildConfig;
+import org.mozilla.geckoview.GeckoResult;
 import org.mozilla.geckoview.GeckoSession;
+import org.mozilla.geckoview.WebRequest;
+import org.mozilla.geckoview.WebResponse;
 
 @ReflectionTarget
 @OptIn(markerClass = UnstableApi.class)
-public class GeckoHlsPlayer implements BaseHlsPlayer, ExoPlayer.Listener {
+public class GeckoHlsPlayer
+    implements BaseHlsPlayer, ExoPlayer.Listener, HttpChannelDataSource.ChannelProvider {
   private static final String LOGTAG = "GeckoHlsPlayer";
   private static final int MAX_TIMELINE_ITEM_LINES = 3;
   private static final boolean DEBUG = !BuildConfig.MOZILLA_OFFICIAL;
@@ -230,34 +229,6 @@ public class GeckoHlsPlayer implements BaseHlsPlayer, ExoPlayer.Listener {
     }
   }
 
-  @UnstableApi
-  private final class SourceEventListener implements MediaSourceEventListener {
-    @Override
-    public void onLoadStarted(
-        final int windowIndex,
-        @Nullable final MediaSource.MediaPeriodId mediaPeriodId,
-        final LoadEventInfo loadEventInfo,
-        final MediaLoadData mediaLoadData,
-        final int retryCount) {
-      assertTrue(isPlayerThread());
-
-      synchronized (GeckoHlsPlayer.this) {
-        if (mediaLoadData.dataType != C.DATA_TYPE_MEDIA) {
-          // Don't report non-media URLs.
-          return;
-        }
-        if (mResourceCallbacks == null || loadEventInfo.uri == null || mReleasing) {
-          return;
-        }
-
-        if (DEBUG) {
-          Log.d(LOGTAG, "on-load: url=" + loadEventInfo.uri);
-        }
-        mResourceCallbacks.onLoad(loadEventInfo.uri.toString());
-      }
-    }
-  }
-
   public final class ComponentEventDispatcher {
     // Called from GeckoHls{Audio,Video}Renderer/ExoPlayer internal playback thread
     // or GeckoHlsPlayerThread.
@@ -356,9 +327,8 @@ public class GeckoHlsPlayer implements BaseHlsPlayer, ExoPlayer.Listener {
     return new HlsMediaSource.Factory(
         new DefaultDataSource.Factory(
             ctx,
-            new GeckoHttpDataSource.Factory()
-                .setUserAgent(GeckoSession.getDefaultUserAgent())
-                .setAllowCrossProtocolRedirects(true)));
+            new HttpChannelDataSource.Factory(this)
+                .setUserAgent(GeckoSession.getDefaultUserAgent())));
   }
 
   private long getDuration() {
@@ -786,7 +756,6 @@ public class GeckoHlsPlayer implements BaseHlsPlayer, ExoPlayer.Listener {
     final Uri uri = Uri.parse(url);
     final MediaSource mediaSource =
         buildDataSourceFactory(ctx).createMediaSource(MediaItem.fromUri(uri));
-    mediaSource.addEventListener(mMainHandler, new SourceEventListener());
     if (DEBUG) {
       Log.d(LOGTAG, "Uri is " + uri + ", ContentType is " + Util.inferContentType(uri));
     }
@@ -1159,5 +1128,11 @@ public class GeckoHlsPlayer implements BaseHlsPlayer, ExoPlayer.Listener {
     } catch (final Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  // Called by ExoPlayer when opening HttpChannelDataSource.
+  @Override
+  public GeckoResult<WebResponse> openChannel(final WebRequest request) {
+    return mResourceCallbacks.onOpenChannel(request);
   }
 }

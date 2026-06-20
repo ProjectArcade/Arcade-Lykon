@@ -9,6 +9,8 @@ import android.os.Build
 import androidx.annotation.VisibleForTesting
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.utils.ext.PackageManagerWrapper
+import mozilla.telemetry.glean.Glean
+import mozilla.telemetry.glean.internal.DistributionMetrics
 import org.mozilla.fenix.Config
 import org.mozilla.fenix.GleanMetrics.Metrics
 import org.mozilla.fenix.GleanMetrics.Partnerships
@@ -90,6 +92,16 @@ class DistributionIdManager(
         setDistribution(distribution)
 
         return distribution.id
+    }
+
+    /**
+     * Gets the distribution type that is used to specify which distribution deal this install
+     * is associated with.
+     *
+     * @return the distribution type.
+     */
+    suspend fun getDistribution(): Distribution {
+        return Distribution.fromId(getDistributionId())
     }
 
     /**
@@ -200,8 +212,7 @@ class DistributionIdManager(
     /**
      * This enum represents distribution IDs that are used in glean metrics.
      */
-    @VisibleForTesting
-    internal enum class Distribution(val id: String) {
+    enum class Distribution(val id: String) {
         DEFAULT(id = "Mozilla"),
         VIVO_001(id = "vivo-001"),
         DT_001(id = "dt-001"),
@@ -212,6 +223,9 @@ class DistributionIdManager(
         ;
 
         companion object {
+            /**
+             * Get the distribution from a distribution ID string.
+             */
             fun fromId(id: String): Distribution {
                 return entries.find { it.id == id } ?: DEFAULT
             }
@@ -223,6 +237,7 @@ class DistributionIdManager(
         this.distribution = distribution
         browserStoreProvider.updateDistributionId(distribution.id)
         distributionSettings.saveDistributionId(distribution.id)
+        Glean.updateDistribution(DistributionMetrics(name = distribution.id))
     }
 }
 
@@ -274,7 +289,7 @@ private fun isDtUsaInstalled(packageManager: PackageManagerWrapper): Boolean {
     return packages.any {
         val packageName = it.packageName.lowercase()
         packageName == DT_VERIZON_PACKAGE ||
-                packageName == DT_CRICKET_PACKAGE ||
-                packageName == DT_TRACFONE_PACKAGE
+            packageName == DT_CRICKET_PACKAGE ||
+            packageName == DT_TRACFONE_PACKAGE
     }
 }

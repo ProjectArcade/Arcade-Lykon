@@ -318,9 +318,14 @@ export class PlacesFeed {
    *   An array of the objects structured as `{ url }`
    */
   addToBlockedTopSitesSponsors(urls) {
-    const blockedPref = JSON.parse(
-      Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "[]")
-    );
+    let blockedPref;
+    try {
+      blockedPref = JSON.parse(
+        Services.prefs.getStringPref(TOP_SITES_BLOCKED_SPONSORS_PREF, "[]")
+      );
+    } catch (e) {
+      blockedPref = [];
+    }
     const merged = new Set([
       ...blockedPref,
       ...urls.map(url => lazy.NewTabUtils.shortURL(url)),

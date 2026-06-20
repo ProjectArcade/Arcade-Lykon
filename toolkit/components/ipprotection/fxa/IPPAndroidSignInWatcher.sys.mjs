@@ -26,9 +26,7 @@ class IPPAndroidSignInWatcherSingleton extends EventTarget {
     return this.#signedIn;
   }
 
-  init() {}
-
-  async initOnStartupCompleted() {
+  init() {
     this.#listener = {
       onEvent: (_event, data, callback) => {
         try {
@@ -43,6 +41,8 @@ class IPPAndroidSignInWatcherSingleton extends EventTarget {
       "GeckoView:IPProtection:AuthStateChanged",
     ]);
   }
+
+  async initOnStartupCompleted() {}
 
   uninit() {
     if (this.#listener) {

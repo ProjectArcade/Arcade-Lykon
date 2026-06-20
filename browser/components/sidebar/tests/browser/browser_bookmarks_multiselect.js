@@ -25,7 +25,7 @@ async function showBookmarksSidebar() {
     await SidebarTestUtils.showPanel(window, "viewBookmarksSidebar");
   }
   const { contentDocument, contentWindow } = SidebarController.browser;
-  await BrowserTestUtils.waitForCondition(
+  await TestUtils.waitForCondition(
     () => contentDocument.querySelector("sidebar-bookmarks"),
     "Wait for sidebar-bookmarks element"
   );
@@ -408,6 +408,231 @@ add_task(async function test_plain_arrow_clears_selection() {
     getSelectedRows(nestedList).length,
     0,
     "Selection cleared after plain ArrowDown."
+  );
+
+  component.treeView.resetSelection();
+  SidebarController.hide();
+  await PlacesUtils.bookmarks.eraseEverything();
+});
+
+add_task(async function test_shift_click_across_nested_folders() {
+  // Tests that we can multiselect rows in the following structure:
+  // V Bookmarks Toolbar
+  //   V Folder
+  //     - Inner 1
+  //     - Inner 2
+  //   - Outer 1
+  //   - Outer 2
+  const folder = await PlacesUtils.bookmarks.insert({
+    type: PlacesUtils.bookmarks.TYPE_FOLDER,
+    title: "Folder",
+    parentGuid: PlacesUtils.bookmarks.toolbarGuid,
+  });
+  await addBookmark({
+    url: "https://example.com/inner-1",
+    title: "Inner 1",
+    parentGuid: folder.guid,
+  });
+  await addBookmark({
+    url: "https://example.com/inner-2",
+    title: "Inner 2",
+    parentGuid: folder.guid,
+  });
+  await addBookmark({ url: "https://example.com/outer-1", title: "Outer 1" });
+  await addBookmark({ url: "https://example.com/outer-2", title: "Outer 2" });
+
+  const { component, contentWindow } = await showBookmarksSidebar();
+  const tabList = component.bookmarkList;
+  const toolbarFolder = await openToolbarFolder(tabList);
+  const toolbarList = await getNestedList(toolbarFolder);
+
+  const folderEl = [...toolbarList.folderEls].find(
+    el => el.guid === folder.guid
+  );
+  Assert.ok(folderEl, "Inner folder rendered.");
+  if (!folderEl.open) {
+    folderEl.open = true;
+    await TestUtils.waitForCondition(
+      () => toolbarList.expandedFolderGuids.has(folder.guid),
+      "Folder open propagated to expandedFolderGuids."
+    );
+  }
+  const innerList = await getNestedList(folderEl);
+
+  const innerRows = [...innerList.rowEls];
+  const outerRows = [...toolbarList.rowEls];
+
+  info("Click first inner row.");
+  await clickRow(innerRows[0], { accelKey: true }, contentWindow);
+  await BrowserTestUtils.waitForMutationCondition(
+    innerRows[0],
+    { attributes: true },
+    () => innerRows[0].selected
+  );
+
+  const lastOuter = outerRows.at(-1);
+  info("Shift + Click last outer row.");
+  await clickRow(lastOuter, { shiftKey: true }, contentWindow);
+  await Promise.all(
+    [...innerRows, ...outerRows].map(row =>
+      BrowserTestUtils.waitForMutationCondition(
+        row,
+        { attributes: true },
+        () => row.selected
+      )
+    )
+  );
+
+  component.treeView.resetSelection();
+  SidebarController.hide();
+  await PlacesUtils.bookmarks.eraseEverything();
+});
+
+add_task(async function test_multiselect_context_menu_items() {
+  await addBookmark({ url: "https://example.com/1", title: "Bookmark 1" });
+  await addBookmark({ url: "https://example.com/2", title: "Bookmark 2" });
+  await addBookmark({ url: "https://example.com/3", title: "Bookmark 3" });
+
+  const { component, contentWindow } = await showBookmarksSidebar();
+  const tabList = component.bookmarkList;
+  const toolbarDetails = await openToolbarFolder(tabList);
+  const nestedList = await getNestedList(toolbarDetails);
+  const rows = [...nestedList.rowEls];
+
+  info("Accel + Click first and second rows to multiselect.");
+  await clickRow(rows[0], { accelKey: true }, contentWindow);
+  await BrowserTestUtils.waitForMutationCondition(
+    rows[0],
+    { attributes: true },
+    () => rows[0].selected
+  );
+  await clickRow(rows[1], { accelKey: true }, contentWindow);
+  await BrowserTestUtils.waitForMutationCondition(
+    rows[1],
+    { attributes: true },
+    () => rows[1].selected
+  );
+
+  const contextMenu = SidebarController.currentContextMenu;
+  await openAndWaitForContextMenu(contextMenu, rows[0].mainEl, () => {});
+
+  const getItem = id => document.getElementById(id);
+
+  ok(
+    !getItem("sidebar-bookmarks-context-open-all-bookmarks").hidden,
+    "Open all bookmarks is visible for multi-selected bookmarks."
+  );
+  ok(
+    getItem("sidebar-bookmarks-context-open-in-tab").hidden,
+    "Open in tab is hidden for multi-selected bookmarks."
+  );
+  ok(
+    getItem("sidebar-bookmarks-context-open-in-window").hidden,
+    "Open in window is hidden for multi-selected bookmarks."
+  );
+  ok(
+    getItem("sidebar-bookmarks-context-open-in-private-window").hidden,
+    "Open in private window is hidden for multi-selected bookmarks."
+  );
+  ok(
+    getItem("sidebar-bookmarks-context-open-in-container-tab").hidden,
+    "Open in container tab is hidden for multi-selected bookmarks."
+  );
+  ok(
+    getItem("sidebar-bookmarks-context-copy-link").hidden,
+    "Copy link is hidden for multi-selected bookmarks."
+  );
+  ok(
+    getItem("sidebar-bookmarks-context-sort-by-name").hidden,
+    "Sort by name is hidden for multi-selected bookmarks."
+  );
+
+  const editItem = getItem("sidebar-bookmarks-context-edit-bookmark");
+  ok(
+    !editItem.hidden,
+    "Edit bookmark is visible for multi-selected bookmarks."
+  );
+  ok(
+    editItem.disabled,
+    "Edit bookmark is disabled for multi-selected bookmarks."
+  );
+
+  const deleteItem = getItem("sidebar-bookmarks-context-delete-bookmark");
+  ok(
+    !deleteItem.hidden,
+    "Delete bookmark is visible for multi-selected bookmarks."
+  );
+  Assert.equal(
+    deleteItem.getAttribute("data-l10n-args"),
+    JSON.stringify({ count: 2 }),
+    "Delete bookmark label uses plural count for multi-selected bookmarks."
+  );
+
+  ok(!getItem("sidebar-bookmarks-context-cut").hidden, "Cut is visible.");
+  ok(!getItem("sidebar-bookmarks-context-copy").hidden, "Copy is visible.");
+  ok(
+    !getItem("sidebar-bookmarks-context-add-bookmark").hidden,
+    "Add bookmark is visible."
+  );
+  ok(
+    !getItem("sidebar-bookmarks-context-add-folder").hidden,
+    "Add folder is visible."
+  );
+  ok(
+    !getItem("sidebar-bookmarks-context-add-separator").hidden,
+    "Add separator is visible."
+  );
+
+  contextMenu.hidePopup();
+  component.treeView.resetSelection();
+  SidebarController.hide();
+  await PlacesUtils.bookmarks.eraseEverything();
+});
+
+add_task(async function test_multiselect_context_menu_delete() {
+  await addBookmark({ url: "https://example.com/1", title: "Bookmark 1" });
+  await addBookmark({ url: "https://example.com/2", title: "Bookmark 2" });
+  await addBookmark({ url: "https://example.com/3", title: "Bookmark 3" });
+
+  const { component, contentWindow } = await showBookmarksSidebar();
+  const tabList = component.bookmarkList;
+  const toolbarDetails = await openToolbarFolder(tabList);
+  const nestedList = await getNestedList(toolbarDetails);
+  const rows = [...nestedList.rowEls];
+
+  info("Multi-select first two rows.");
+  await clickRow(rows[0], { accelKey: true }, contentWindow);
+  await BrowserTestUtils.waitForMutationCondition(
+    rows[0],
+    { attributes: true },
+    () => rows[0].selected
+  );
+  await clickRow(rows[1], { accelKey: true }, contentWindow);
+  await BrowserTestUtils.waitForMutationCondition(
+    rows[1],
+    { attributes: true },
+    () => rows[1].selected
+  );
+
+  const contextMenu = SidebarController.currentContextMenu;
+  const promiseRemoved =
+    PlacesTestUtils.waitForNotification("bookmark-removed");
+  await openAndWaitForContextMenu(contextMenu, rows[0].mainEl, () =>
+    contextMenu.activateItem(
+      document.getElementById("sidebar-bookmarks-context-delete-bookmark")
+    )
+  );
+  await promiseRemoved;
+
+  await BrowserTestUtils.waitForMutationCondition(
+    nestedList.shadowRoot,
+    { childList: true, subtree: true },
+    () => nestedList.rowEls.length === 1
+  );
+  Assert.equal(
+    nestedList.rowEls[0].title,
+    "Bookmark 3",
+    "Only the unselected bookmark remains."
   );
 
   component.treeView.resetSelection();

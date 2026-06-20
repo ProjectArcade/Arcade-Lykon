@@ -25,6 +25,7 @@
 #include "nsIAppWindow.h"
 #include "nsIBaseWindow.h"
 #include "nsITransferable.h"
+#include "nsMenuPopupFrame.h"
 #include "nsMenuUtilsX.h"
 #include "nsNetUtil.h"
 #include "nsPrimitiveHelpers.h"
@@ -323,93 +324,6 @@ BOOL nsCocoaUtils::ShouldRestoreStateDueToLaunchAtLogin() {
   return NO;
 }
 
-static bool sIsActivelyShowingAppModalDialog = false;
-
-bool nsCocoaUtils::PrepareForNativeAppModalDialog() {
-  NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
-
-  MOZ_ASSERT(NS_IsMainThread());
-
-  if (sIsActivelyShowingAppModalDialog) {
-    return false;
-  }
-  sIsActivelyShowingAppModalDialog = true;
-
-  if (!NSApp.active) {
-    // Early exit if the app isn't active. This is because we can't safely
-    // set the NSApp.mainMenu property in such a case. We early exit so we
-    // also don't invoke any side effects.
-    return true;
-  }
-
-  // Don't do anything if this is embedding. We'll assume that if there is no
-  // hidden window we shouldn't do anything, and that should cover the embedding
-  // case.
-  nsMenuBarX* hiddenWindowMenuBar = nsMenuUtilsX::GetHiddenWindowMenuBar();
-  if (!hiddenWindowMenuBar) {
-    return true;
-  }
-
-  // First put up the hidden window menu bar so that app menu event handling is
-  // correct.
-  hiddenWindowMenuBar->Paint();
-
-  NSMenu* mainMenu = [NSApp mainMenu];
-  NS_ASSERTION(
-      [mainMenu numberOfItems] > 0,
-      "Main menu does not have any items, something is terribly wrong!");
-
-  // Create new menu bar for use with modal dialog
-  NSMenu* newMenuBar = [[GeckoNSMenu alloc] initWithTitle:@""];
-
-  // Swap in our app menu. Note that the event target is whatever window is up
-  // when the app modal dialog goes up.
-  NSMenuItem* firstMenuItem = [[mainMenu itemAtIndex:0] retain];
-  [mainMenu removeItemAtIndex:0];
-  [newMenuBar insertItem:firstMenuItem atIndex:0];
-  [firstMenuItem release];
-
-  // Add standard edit menu
-  [newMenuBar addItem:nsMenuUtilsX::GetStandardEditMenuItem()];
-
-  // Show the new menu bar
-  [NSApp setMainMenu:newMenuBar];
-  [newMenuBar release];
-
-  return true;
-
-  NS_OBJC_END_TRY_BLOCK_RETURN(sIsActivelyShowingAppModalDialog = false);
-}
-
-void nsCocoaUtils::CleanUpAfterNativeAppModalDialog() {
-  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
-
-  MOZ_ASSERT(NS_IsMainThread());
-
-  if (!sIsActivelyShowingAppModalDialog) {
-    return;
-  }
-
-  // Don't do anything if this is embedding. We'll assume that if there is no
-  // hidden window we shouldn't do anything, and that should cover the embedding
-  // case.
-  nsMenuBarX* hiddenWindowMenuBar = nsMenuUtilsX::GetHiddenWindowMenuBar();
-  if (!hiddenWindowMenuBar) return;
-
-  NSWindow* mainWindow = [NSApp mainWindow];
-  if (!mainWindow) {
-    // We do an async paint in order to prevent crashes when macOS is actively
-    // enumerating the menu items in `NSApp.mainMenu`.
-    hiddenWindowMenuBar->PaintAsyncIfNeeded();
-  } else {
-    [WindowDelegate paintMenubarForWindow:mainWindow];
-  }
-
-  sIsActivelyShowingAppModalDialog = false;
-
-  NS_OBJC_END_TRY_IGNORE_BLOCK;
-}
-
 static void data_ss_release_callback(void* aDataSourceSurface, const void* data,
                                      size_t size) {
   if (aDataSourceSurface) {
@@ -476,7 +390,7 @@ nsresult nsCocoaUtils::CreateCGImageFromSurface(SourceSurface* aSurface,
   *aResult = ::CGImageCreate(
       width, height, 8, 32, map.mStride, colorSpace,
       kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst, dataProvider,
-      NULL, 0, kCGRenderingIntentDefault);
+      nullptr, 0, kCGRenderingIntentDefault);
   ::CGColorSpaceRelease(colorSpace);
   ::CGDataProviderRelease(dataProvider);
   return *aResult ? NS_OK : NS_ERROR_FAILURE;
@@ -506,7 +420,7 @@ nsresult nsCocoaUtils::CreateNSImageFromCGImage(CGImageRef aInputImage,
   NSRect imageRect = ::NSMakeRect(0.0, 0.0, width, height);
 
   NSBitmapImageRep* offscreenRep = [[NSBitmapImageRep alloc]
-      initWithBitmapDataPlanes:NULL
+      initWithBitmapDataPlanes:nullptr
                     pixelsWide:width
                     pixelsHigh:height
                  bitsPerSample:8
@@ -601,7 +515,7 @@ nsresult nsCocoaUtils::CreateNSImageFromImageContainer(
 
   NS_ENSURE_TRUE(surface, NS_ERROR_FAILURE);
 
-  CGImageRef imageRef = NULL;
+  CGImageRef imageRef = nullptr;
   nsresult rv = nsCocoaUtils::CreateCGImageFromSurface(surface, &imageRef,
                                                        aIsEntirelyBlack);
   if (NS_FAILED(rv) || !imageRef) {
@@ -1137,31 +1051,35 @@ uint32_t nsCocoaUtils::ConvertGeckoKeyCodeToMacCharCode(uint32_t aKeyCode) {
 }
 
 NSEventModifierFlags nsCocoaUtils::ConvertWidgetModifiersToMacModifierFlags(
-    nsIWidget::Modifiers aNativeModifiers) {
-  if (!aNativeModifiers) {
+    nsIWidget::NativeModifiers aNativeModifiers) {
+  if (aNativeModifiers == nsIWidget::NativeModifiers::NO_MODIFIERS) {
     return 0;
   }
   struct ModifierFlagMapEntry {
-    nsIWidget::Modifiers mWidgetModifier;
+    nsIWidget::NativeModifiers mWidgetModifier;
     NSEventModifierFlags mModifierFlags;
   };
   static constexpr ModifierFlagMapEntry sModifierFlagMap[] = {
-      {nsIWidget::CAPS_LOCK, NSEventModifierFlagCapsLock},
-      {nsIWidget::SHIFT_L, NSEventModifierFlagShift | 0x0002},
-      {nsIWidget::SHIFT_R, NSEventModifierFlagShift | 0x0004},
-      {nsIWidget::CTRL_L, NSEventModifierFlagControl | 0x0001},
-      {nsIWidget::CTRL_R, NSEventModifierFlagControl | 0x2000},
-      {nsIWidget::ALT_L, NSEventModifierFlagOption | 0x0020},
-      {nsIWidget::ALT_R, NSEventModifierFlagOption | 0x0040},
-      {nsIWidget::COMMAND_L, NSEventModifierFlagCommand | 0x0008},
-      {nsIWidget::COMMAND_R, NSEventModifierFlagCommand | 0x0010},
-      {nsIWidget::NUMERIC_KEY_PAD, NSEventModifierFlagNumericPad},
-      {nsIWidget::HELP, NSEventModifierFlagHelp},
-      {nsIWidget::FUNCTION, NSEventModifierFlagFunction}};
+      {nsIWidget::NativeModifiers::CAPS_LOCK, NSEventModifierFlagCapsLock},
+      {nsIWidget::NativeModifiers::SHIFT_L, NSEventModifierFlagShift | 0x0002},
+      {nsIWidget::NativeModifiers::SHIFT_R, NSEventModifierFlagShift | 0x0004},
+      {nsIWidget::NativeModifiers::CTRL_L, NSEventModifierFlagControl | 0x0001},
+      {nsIWidget::NativeModifiers::CTRL_R, NSEventModifierFlagControl | 0x2000},
+      {nsIWidget::NativeModifiers::ALT_L, NSEventModifierFlagOption | 0x0020},
+      {nsIWidget::NativeModifiers::ALT_R, NSEventModifierFlagOption | 0x0040},
+      {nsIWidget::NativeModifiers::COMMAND_L,
+       NSEventModifierFlagCommand | 0x0008},
+      {nsIWidget::NativeModifiers::COMMAND_R,
+       NSEventModifierFlagCommand | 0x0010},
+      {nsIWidget::NativeModifiers::NUMERIC_KEY_PAD,
+       NSEventModifierFlagNumericPad},
+      {nsIWidget::NativeModifiers::HELP, NSEventModifierFlagHelp},
+      {nsIWidget::NativeModifiers::FUNCTION, NSEventModifierFlagFunction}};
 
   NSEventModifierFlags modifierFlags = 0;
   for (const ModifierFlagMapEntry& entry : sModifierFlagMap) {
-    if (aNativeModifiers & entry.mWidgetModifier) {
+    if ((aNativeModifiers & entry.mWidgetModifier) !=
+        nsIWidget::NativeModifiers::NO_MODIFIERS) {
       modifierFlags |= entry.mModifierFlags;
     }
   }
@@ -1921,4 +1839,23 @@ void nsCocoaUtils::SetTransferDataForTypeFromPasteboardItem(
   }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+NSRectEdge nsCocoaUtils::PopupPositionToNSRectEdge(int8_t aPosition) {
+  // XUL accepts many more anchor popup alignments than Cocoa. Map to the best
+  // approximate edge setting. Due to Cocoa's flipped Y-axis, NSRectEdgeMinY
+  // represents the bottom edge.
+  switch (aPosition) {
+    case POPUPPOSITION_BEFORESTART:
+    case POPUPPOSITION_BEFOREEND:
+      return NSRectEdgeMaxY;
+    case POPUPPOSITION_STARTBEFORE:
+    case POPUPPOSITION_STARTAFTER:
+      return NSRectEdgeMinX;
+    case POPUPPOSITION_ENDBEFORE:
+    case POPUPPOSITION_ENDAFTER:
+      return NSRectEdgeMaxX;
+    default:
+      return NSRectEdgeMinY;
+  }
 }

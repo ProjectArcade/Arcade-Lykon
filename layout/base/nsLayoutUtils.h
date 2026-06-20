@@ -297,6 +297,24 @@ class nsLayoutUtils {
   static mozilla::dom::Element* GetBackdropPseudo(const nsIContent* aContent);
   static nsIFrame* GetBackdropFrame(const nsIContent* aContent);
 
+  /**
+   * Returns the ::checkmark pseudo-element for aContent, if any.
+   */
+  static mozilla::dom::Element* GetCheckmarkPseudo(const nsIContent* aContent);
+  static nsIFrame* GetCheckmarkFrame(const nsIContent* aContent);
+
+  /**
+   * Returns the ::picker-icon pseudo-element for aContent, if any.
+   */
+  static mozilla::dom::Element* GetPickerIconPseudo(const nsIContent* aContent);
+  static nsIFrame* GetPickerIconFrame(const nsIContent* aContent);
+
+  /**
+   * Stores generated content pseudos such as ::after into aPseudos.
+   */
+  static void AppendGeneratedContentPseudos(
+      const mozilla::dom::Element* aElement, nsTArray<nsIContent*>& aPseudos);
+
 #ifdef ACCESSIBILITY
   /**
    * Set aText to the spoken text for the given ::marker content (aContent)
@@ -1011,8 +1029,15 @@ class nsLayoutUtils {
    * Whether the frame should snap to grid. This will end up being passed
    * as the aRounded parameter in PostTranslate above. SVG frames should
    * not have their translation rounded.
+   *
+   * When aBuilder is supplied and is painting for WebRender, reference-frame
+   * origin snapping is left to WebRender (so it can remove the fractional
+   * external scroll offset reliably) and this returns false under the
+   * layout.disable-pixel-alignment pref. The drawSnapshot / non-WebRender path
+   * (no aBuilder, or not painting for WebRender) keeps snapping.
    */
-  static bool ShouldSnapToGrid(const nsIFrame* aFrame);
+  static bool ShouldSnapToGrid(const nsIFrame* aFrame,
+                               const nsDisplayListBuilder* aBuilder = nullptr);
 
   /**
    * Get the border-box of aElement's primary frame, transformed it to be
@@ -1389,7 +1414,8 @@ class nsLayoutUtils {
   static already_AddRefed<nsFontMetrics> GetFontMetricsForComputedStyle(
       const ComputedStyle* aComputedStyle, nsPresContext* aPresContext,
       float aSizeInflation = 1.0f,
-      uint8_t aVariantWidth = NS_FONT_VARIANT_WIDTH_NORMAL);
+      uint8_t aVariantWidth = NS_FONT_VARIANT_WIDTH_NORMAL,
+      bool aForceHorizontalMetrics = false);
 
   /**
    * Get the font metrics of emphasis marks corresponding to the given
@@ -2631,7 +2657,7 @@ class nsLayoutUtils {
    */
   static bool InvalidationDebuggingIsEnabled() {
     return mozilla::StaticPrefs::nglayout_debug_invalidation() ||
-           getenv("MOZ_DUMP_INVALIDATION") != 0;
+           getenv("MOZ_DUMP_INVALIDATION") != nullptr;
   }
 
   static void Initialize();

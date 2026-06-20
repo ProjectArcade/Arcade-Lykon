@@ -334,6 +334,7 @@ export class UserCharacteristicsPageService {
           DOMContentLoaded: {},
         },
       },
+      safeForUntrustedWebProcess: true,
     });
 
     for (const { success, actor, error } of this.getActorFromTabsOrWindows(
@@ -700,6 +701,7 @@ export class UserCharacteristicsPageService {
         esModuleURI:
           "resource://gre/actors/UserCharacteristicsCanvasRenderingChild.sys.mjs",
       },
+      safeForUntrustedWebProcess: true,
     });
 
     let data = new Map();
@@ -1054,7 +1056,6 @@ export class UserCharacteristicsPageService {
         "mathml8",
         "mathml9",
         "mathml10",
-        "mathmlDiagFontFamily",
         "monochrome",
         "cssSystemColors",
         "cssSystemFonts",
@@ -1138,7 +1139,15 @@ export class UserCharacteristicsPageService {
 
     for (const type in metrics) {
       for (const metric of metrics[type]) {
-        Glean.characteristics[metric][type](data.get(metric));
+        const value = data.get(metric);
+        // Populators may omit a field when no valid value is available
+        // (e.g. populateVoiceList omits all voices_* fields when the 5s
+        // populate timeout wins, so timed-out runs are absent rather than
+        // collapsed to sha1("") / count=0).
+        if (value === undefined) {
+          continue;
+        }
+        Glean.characteristics[metric][type](value);
       }
     }
   }
@@ -1478,19 +1487,16 @@ export class UserCharacteristicsPageService {
     }
 
     const mozDebugExt = gl.getExtension("MOZ_debug");
-
-    const versionRaw = mozDebugExt.getParameter(gl.VERSION);
-    const vendorRaw = mozDebugExt.getParameter(gl.VENDOR);
-    const rendererRaw = mozDebugExt.getParameter(gl.RENDERER);
+    const debugExt = gl.getExtension("WEBGL_debug_renderer_info");
 
     results.debugParams = {
-      versionRaw,
-      vendorRaw,
-      rendererRaw,
+      versionRaw: mozDebugExt.getParameter(gl.VERSION),
+      vendorRaw: mozDebugExt.getParameter(gl.VENDOR),
+      rendererRaw: mozDebugExt.getParameter(gl.RENDERER),
       extensions: gl.getSupportedExtensions().join(" "),
       extensionsRaw: mozDebugExt.getParameter(mozDebugExt.EXTENSIONS),
-      vendorDebugInfo: vendorRaw,
-      rendererDebugInfo: rendererRaw,
+      vendorDebugInfo: gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL),
+      rendererDebugInfo: gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL),
       contextType: mozDebugExt.getParameter(mozDebugExt.CONTEXT_TYPE),
     };
 

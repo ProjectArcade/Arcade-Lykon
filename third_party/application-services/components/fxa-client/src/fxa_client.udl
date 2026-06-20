@@ -168,12 +168,25 @@ interface FirefoxAccount {
   ///
   [Throws=FxaError]
   string to_json();
-  
-  /// Sets the users information based on the web content's login information
-  /// This is intended to only be used by user agents (eg: Firefox) to set the users
-  /// session token and tie it to the refresh token that will be issued at the end of the
-  /// oauth flow.
-  void set_user_data(UserData user_data);
+
+  /// Stores anything necessary from a WebChannel login JSON payload. This includes the session
+  /// token, but that is abstracted because the consuming apps should not be aware of the
+  /// specific payload format returned, nor should they get access to the session token
+  /// directly if possible.
+  /// The [json_payload] is the `data` object from the `fxaccounts:login` WebChannel command.
+  [Throws=FxaError]
+  void handle_web_channel_login(string json_payload);
+
+  /// Handle a WebChannel password-change notification by exchanging the new session token
+  /// for a new refresh token via a network call.
+  /// The [json_payload] is the `data` object from the `fxaccounts:change_password` WebChannel command.
+  [Throws=FxaError]
+  void handle_web_channel_password_change(string json_payload);
+
+  /// Returns a complete signedInUser JSON object for a WebChannel fxaccounts:fxa_status response,
+  /// embedding the session token privately. Email and uid come from the cached profile in internal
+  /// state. Returns null if no session token is set.
+  string? get_signed_in_user_for_web_channel();
 
   /// Initiate a web-based OAuth sign-in flow.
   ///
@@ -195,12 +208,10 @@ interface FirefoxAccount {
   ///       - This parameter is used for metrics purposes, to identify the
   ///         UX entrypoint from which the user triggered the signin request.
   ///         For example, the application toolbar, on the onboarding flow.
-  ///   - `metrics` - optionally, additional metrics tracking parameters.
-  ///       - These will be included as query parameters in the resulting URL.
-  ///
+  ///   - `service` - The service being signed up for.
+  //        - The combination of service and entrypoint may impact the UI shown.  
   [Throws=FxaError]
-  string begin_oauth_flow([ByRef] sequence<string> scopes, [ByRef] string entrypoint);
-  
+  string begin_oauth_flow([ByRef] sequence<string> scopes, [ByRef] string entrypoint, [ByRef] optional string service = "");
 
   /// Get the URL at which to begin a device-pairing signin flow.
   ///
@@ -234,11 +245,10 @@ interface FirefoxAccount {
   ///       - This parameter is used for metrics purposes, to identify the
   ///         UX entrypoint from which the user triggered the signin request.
   ///         For example, the application toolbar, on the onboarding flow.
-  ///   - `metrics` - optionally, additional metrics tracking parameters.
-  ///       - These will be included as query parameters in the resulting URL.
-  ///
+  ///   - `service` - The service being signed up for.
+  //        - The combination of service and entrypoint may impact the UI shown.  
   [Throws=FxaError]
-  string begin_pairing_flow([ByRef] string pairing_url, [ByRef] sequence<string> scopes, [ByRef] string entrypoint);
+  string begin_pairing_flow([ByRef] string pairing_url, [ByRef] sequence<string> scopes, [ByRef] string entrypoint, [ByRef] optional string service = "");
   
 
   /// Complete an OAuth flow.
@@ -258,7 +268,6 @@ interface FirefoxAccount {
   [Throws=FxaError]
   void complete_oauth_flow([ByRef] string code, [ByRef] string state );
   
-
   /// Check authorization status for this application.
   ///
   /// **💾 This method alters the persisted account state.**
@@ -639,9 +648,13 @@ interface FirefoxAccount {
   ///
   /// # Arguments
   ///
-  ///    - `scope` - the OAuth scope to be granted by the token.
-  ///        - This must be one of the scopes requested during the signin flow.
-  ///        - Only a single scope is supported; for multiple scopes request multiple tokens.
+  ///    - `scope` - space-separated list of OAuth scopes to be granted by the token.
+  ///        - Each scope must have been requested during the signin flow, or be a scope
+  ///          which the server might offer automatically in some account-specific cases.
+  ///        - Scope order is not significant; `"a b"` and `"b a"` are equivalent.
+  ///        - When a single scope is requested and it has an associated scoped key
+  ///          (e.g. `https://identity.mozilla.com/apps/oldsync`), the returned
+  ///          `AccessTokenInfo.key` will be populated; for multi-scope requests it is `null`.
   ///    - `use_cache` - optionally set to false to force a new token request.  The fetched
   ///       token will still be cached for later `get_access_token` calls.
   ///
@@ -653,43 +666,6 @@ interface FirefoxAccount {
   ///
   [Throws=FxaError]
   AccessTokenInfo get_access_token([ByRef] string scope, optional boolean use_cache = true);
-
-  /// Get the session token for the user's account, if one is available.
-  ///
-  /// **💾 This method alters the persisted account state.**
-  ///
-  /// Applications that function as a web browser may need to hold on to a session token
-  /// on behalf of Firefox Accounts web content. This method exists so that they can retrieve
-  /// it an pass it back to said web content when required.
-  ///
-  /// # Notes
-  ///
-  ///    - Please do not attempt to use the resulting token to directly make calls to the
-  ///      Firefox Accounts servers! All account management functionality should be performed
-  ///      in web content.
-  ///    - A session token is only available to applications that have requested the
-  ///      `https:///identity.mozilla.com/tokens/session` scope.
-  ///
-  [Throws=FxaError]
-  string get_session_token();
-  
-
-  /// Update the stored session token for the user's account.
-  ///
-  /// **💾 This method alters the persisted account state.**
-  ///
-  /// Applications that function as a web browser may need to hold on to a session token
-  /// on behalf of Firefox Accounts web content. This method exists so that said web content
-  /// signals that it has generated a new session token, the stored value can be updated
-  /// to match.
-  ///
-  /// # Arguments
-  ///
-  ///    - `session_token` - the new session token value provided from web content.
-  ///
-  [Throws=FxaError]
-  void handle_session_token_change([ByRef] string session_token );
-  
 
   /// Create a new OAuth authorization code using the stored session token.
   ///
@@ -1003,7 +979,7 @@ dictionary Profile {
 interface FxaState {
   Uninitialized();
   Disconnected();
-  Authenticating(string oauth_url);
+  Authenticating(string oauth_url, FxaRustAuthState initial_state);
   Connected();
   AuthIssues();
 };
@@ -1011,8 +987,8 @@ interface FxaState {
 [Enum]
 interface FxaEvent {
   Initialize(DeviceConfig device_config);
-  BeginOAuthFlow(sequence<string> scopes, string entrypoint);
-  BeginPairingFlow(string pairing_url, sequence<string> scopes, string entrypoint);
+  BeginOAuthFlow(string service, sequence<string> scopes, string entrypoint);
+  BeginPairingFlow(string pairing_url, string service, sequence<string> scopes, string entrypoint);
   CompleteOAuthFlow(string code, string state);
   CancelOAuthFlow();
   CheckAuthorizationStatus();
@@ -1113,11 +1089,4 @@ interface IncomingDeviceCommand {
 
   /// Indicates that the sender wants to close one or more tabs on this device.
   TabsClosed(Device? sender, CloseTabsPayload payload);
-};
-
-dictionary UserData {
-  string session_token;
-  string uid;
-  string email;
-  boolean verified;
 };

@@ -403,7 +403,7 @@ RefPtr<SyncReadFile> IOUtils::OpenFileForSyncReading(GlobalObject& aGlobal,
     return nullptr;
   }
 
-  RefPtr<nsFileRandomAccessStream> stream = new nsFileRandomAccessStream();
+  RefPtr stream = MakeRefPtr<nsFileRandomAccessStream>();
   if (nsresult rv =
           stream->Init(file, PR_RDONLY | nsIFile::OS_READAHEAD, 0666, 0);
       NS_FAILED(rv)) {
@@ -589,11 +589,17 @@ already_AddRefed<Promise> IOUtils::WriteUTF8(GlobalObject& aGlobal,
       });
 }
 
+static bool AppendJSON(const char16_t* aBuf, uint32_t aLen, void* aStr) {
+  nsAString* str = static_cast<nsAString*>(aStr);
+
+  return str->Append(aBuf, aLen, fallible);
+}
+
 /* static */
 already_AddRefed<Promise> IOUtils::WriteJSON(GlobalObject& aGlobal,
                                              const nsAString& aPath,
                                              JS::Handle<JS::Value> aValue,
-                                             const WriteOptions& aOptions,
+                                             const WriteJSONOptions& aOptions,
                                              ErrorResult& aError) {
   return WithPromiseAndState(
       aGlobal, aError, [&](Promise* promise, auto& state) {
@@ -623,10 +629,11 @@ already_AddRefed<Promise> IOUtils::WriteJSON(GlobalObject& aGlobal,
         }
 
         JSContext* cx = aGlobal.Context();
-        JS::Rooted<JS::Value> rootedValue(cx, aValue);
+        JS::Rooted<JS::Value> value(cx, aValue);
         nsString string;
-        if (!nsContentUtils::StringifyJSON(cx, aValue, string,
-                                           UndefinedIsNullStringLiteral)) {
+        if (!JS_StringifyWithLengthHint(cx, &value, nullptr,
+                                        JS::NullHandleValue, AppendJSON,
+                                        &string, opts.mLengthHint)) {
           JS::Rooted<JS::Value> exn(cx, JS::UndefinedValue());
           if (JS_GetPendingException(cx, &exn)) {
             JS_ClearPendingException(cx);
@@ -639,10 +646,10 @@ already_AddRefed<Promise> IOUtils::WriteJSON(GlobalObject& aGlobal,
           return;
         }
 
-        DispatchAndResolve<uint32_t>(
+        DispatchAndResolve<dom::WriteJSONResult>(
             state->mEventQueue, promise,
             [file = std::move(file), string = std::move(string),
-             opts = std::move(opts)]() -> Result<uint32_t, IOError> {
+             opts = std::move(opts)]() -> Result<WriteJSONResult, IOError> {
               nsAutoCString utf8Str;
               if (!CopyUTF16toUTF8(string, utf8Str, fallible)) {
                 return Err(IOError(
@@ -650,7 +657,14 @@ already_AddRefed<Promise> IOUtils::WriteJSON(GlobalObject& aGlobal,
                     "Failed to write to `%s': could not allocate buffer",
                     file->HumanReadablePath().get()));
               }
-              return WriteSync(file, AsBytes(Span(utf8Str)), opts);
+
+              uint32_t size =
+                  MOZ_TRY(WriteSync(file, AsBytes(Span(utf8Str)), opts));
+
+              dom::WriteJSONResult result;
+              result.mSize = size;
+              result.mJsonLength = static_cast<uint32_t>(string.Length());
+              return result;
             });
       });
 }
@@ -1271,7 +1285,7 @@ Result<IOUtils::JsBuffer, IOUtils::IOError> IOUtils::ReadSync(
 
   const int64_t offset = static_cast<int64_t>(aOffset);
 
-  RefPtr<nsFileRandomAccessStream> stream = new nsFileRandomAccessStream();
+  RefPtr stream = MakeRefPtr<nsFileRandomAccessStream>();
   if (nsresult rv =
           stream->Init(aFile, PR_RDONLY | nsIFile::OS_READAHEAD, 0666, 0);
       NS_FAILED(rv)) {
@@ -1508,7 +1522,7 @@ Result<uint32_t, IOUtils::IOError> IOUtils::WriteSync(
                    aByteArray.Length());
     }
 
-    RefPtr<nsFileOutputStream> stream = new nsFileOutputStream();
+    RefPtr stream = MakeRefPtr<nsFileOutputStream>();
     if (nsresult rv = stream->Init(writeFile, flags, 0666, 0); NS_FAILED(rv)) {
       // Normalize platform-specific errors for opening a directory to an access
       // denied error.
@@ -2837,6 +2851,16 @@ IOUtils::InternalWriteOpts::FromBinding(const WriteOptions& aOptions) {
   }
 
   opts.mCompress = aOptions.mCompress;
+  return opts;
+}
+
+Result<IOUtils::InternalWriteOpts, IOUtils::IOError>
+IOUtils::InternalWriteOpts::FromBinding(const WriteJSONOptions& aOptions) {
+  InternalWriteOpts opts =
+      MOZ_TRY(FromBinding(static_cast<const WriteOptions&>(aOptions)));
+
+  opts.mLengthHint = aOptions.mLengthHint;
+
   return opts;
 }
 

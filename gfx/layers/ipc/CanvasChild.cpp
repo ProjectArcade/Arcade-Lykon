@@ -135,7 +135,17 @@ class SourceSurfaceCanvasRecording final : public gfx::SourceSurface {
         });
   }
 
-  gfx::SurfaceType GetType() const final { return mRecordedSurface->GetType(); }
+  gfx::SurfaceType GetType() const final {
+    return gfx::SurfaceType::CANVAS_RECORDING;
+  }
+
+  gfx::SurfaceType GetUnderlyingType() const final {
+    return mRecordedSurface->GetType();
+  }
+
+  already_AddRefed<SourceSurface> GetUnderlyingSurface() final {
+    return do_AddRef(mRecordedSurface);
+  }
 
   gfx::IntSize GetSize() const final { return mRecordedSurface->GetSize(); }
 
@@ -282,7 +292,7 @@ class CanvasDataShmemHolder {
     }
 
     MutexAutoLock lock(mMutex);
-    mWorkerRef = new dom::ThreadSafeWorkerRef(workerRef);
+    mWorkerRef = MakeRefPtr<dom::ThreadSafeWorkerRef>(workerRef);
     return true;
   }
 
@@ -645,12 +655,19 @@ already_AddRefed<gfx::DataSourceSurface> CanvasChild::GetDataSurface(
     return nullptr;
   }
 
+  size_t sizeRequired = SizeOfDataSurfaceShmem(ssSize, ssFormat);
+  if (!sizeRequired) {
+    return nullptr;
+  }
+
   // Shmem is only valid if the surface is the latest snapshot (not detached).
   if (!aDetached) {
     // If there is a shmem associated with this snapshot id, then we want to try
-    // use that directly without having to allocate a new shmem for retrieval.
+    // to use that directly instead of allocating a new shmem for retrieval.
+    // Also check that it meets the size required.
     auto it = mTextureInfo.find(aTextureOwnerId);
-    if (it != mTextureInfo.end() && it->second.mSnapshotShmem) {
+    if (it != mTextureInfo.end() && it->second.mSnapshotShmem &&
+        !NS_WARN_IF(sizeRequired > it->second.mSnapshotShmem->Size())) {
       const auto* shmemPtr = it->second.mSnapshotShmem->DataAs<uint8_t>();
       MOZ_ASSERT(shmemPtr);
       mRecorder->RecordEvent(RecordedPrepareShmem(aTextureOwnerId));
@@ -673,11 +690,6 @@ already_AddRefed<gfx::DataSourceSurface> CanvasChild::GetDataSurface(
       aMayInvalidate = true;
       return dataSurface.forget();
     }
-  }
-
-  size_t sizeRequired = SizeOfDataSurfaceShmem(ssSize, ssFormat);
-  if (!sizeRequired) {
-    return nullptr;
   }
 
   RecordEvent(RecordedCacheDataSurface(aSurface));

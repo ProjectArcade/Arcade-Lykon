@@ -29,6 +29,8 @@ async function cleanupTest() {
     Services.prefs.getBoolPref("signon.rustMirror.migrationNeeded", false)
   ) {
     await migrationMayRun;
+  } else {
+    migrationMayRun.catch(() => {});
   }
 }
 
@@ -280,7 +282,7 @@ add_task(async function test_migration_is_idempotent() {
   await SpecialPowers.pushPrefEnv({
     set: [["signon.rustMirror.enabled", true]],
   });
-  await BrowserTestUtils.waitForCondition(async () => {
+  await TestUtils.waitForCondition(async () => {
     const logins = await rustStorage.getAllLogins();
     return logins.length === 1;
   }, "Login migrated to Rust after first migration");
@@ -328,17 +330,23 @@ add_task(async function test_migration_partial_failure() {
   });
 
   const rustStorage = new LoginManagerRustStorage();
-  const originalAddLoginsAsync =
-    LoginManagerRustStorage.prototype.addLoginsAsync;
-  // Save the first (valid) login into Rust for real, then simulate results
+  const origAddLoginsAsync = LoginManagerRustStorage.prototype.addLoginsAsync;
   sinon
     .stub(LoginManagerRustStorage.prototype, "addLoginsAsync")
-    .callsFake(async function (logins, _cont) {
-      await originalAddLoginsAsync.call(this, [logins[0]], true);
-      return [
-        { login: {}, error: null }, // row 0 success
-        { login: null, error: { message: "row failed" } }, // row 1 failure
-      ];
+    .callsFake(async function (logins, cont) {
+      if (!cont) {
+        return origAddLoginsAsync.call(this, logins, cont);
+      }
+      // Bulk migration pass: insert good logins for real, inject error for bad ones.
+      const goodLogins = logins.filter(l => l.username !== "test-user-bad");
+      if (goodLogins.length) {
+        await origAddLoginsAsync.call(this, goodLogins, true);
+      }
+      return logins.map(login =>
+        login.username === "test-user-bad"
+          ? { error: { message: "row failed" } }
+          : { login }
+      );
     });
 
   const login_ok = LoginTestUtils.testData.formLogin({
@@ -376,6 +384,100 @@ add_task(async function test_migration_partial_failure() {
 });
 
 /**
+ * Verify that when two JSON logins collapse onto the same Rust dedup key
+ * after origin normalization, both are preserved: the winner keeps its
+ * original origin and the loser is re-keyed under moz-pwmngr-fixed://.
+ * The winner is chosen by highest timePasswordChanged.
+ */
+add_task(async function test_migration_merges_dupes() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["signon.rustMirror.enabled", false],
+      ["signon.rustMirror.poisoned", false],
+    ],
+  });
+  Services.fog.testResetFOG();
+
+  // timeLastUsed and timePasswordChanged are ordered opposite to verify
+  // timePasswordChanged is the selection criterion.
+  const stalePasswordLogin = LoginTestUtils.testData.formLogin({
+    origin: "https://example.com/stale-pw",
+    formActionOrigin: "https://example.com",
+    username: "alice",
+    password: "stale-password",
+    timeCreated: 1000,
+    timeLastUsed: 9000,
+    timePasswordChanged: 1000,
+    timesUsed: 50,
+    timeLastBreachAlertDismissed: 1500,
+  });
+  const freshPasswordLogin = LoginTestUtils.testData.formLogin({
+    origin: "https://example.com/fresh-pw",
+    formActionOrigin: "https://example.com",
+    username: "alice",
+    password: "fresh-password",
+    timeCreated: 5000,
+    timeLastUsed: 6000,
+    timePasswordChanged: 8000,
+    timesUsed: 5,
+    timeLastBreachAlertDismissed: 7000,
+  });
+
+  await Services.logins.addLoginAsync(stalePasswordLogin);
+  await Services.logins.addLoginAsync(freshPasswordLogin);
+
+  Services.prefs.setBoolPref("signon.rustMirror.migrationNeeded", true);
+  const migrationFinishedPromise = TestUtils.topicObserved(
+    "rust-mirror.migration.finished"
+  );
+  await SpecialPowers.pushPrefEnv({
+    set: [["signon.rustMirror.enabled", true]],
+  });
+  await migrationFinishedPromise;
+
+  const rustStorage = new LoginManagerRustStorage();
+  const rustLogins = await rustStorage.getAllLogins();
+  Assert.equal(rustLogins.length, 2, "both logins persisted in Rust");
+
+  const winner = rustLogins.find(l => l.origin === "https://example.com");
+  const rescued = rustLogins.find(l =>
+    l.origin.startsWith("moz-pwmngr-fixed-")
+  );
+  Assert.ok(winner, "winner kept its original-scheme origin");
+  Assert.ok(
+    rescued,
+    "duplicate origin rewritten to moz-pwmngr-fixed-<guid>:// scheme"
+  );
+
+  Assert.equal(
+    winner.password,
+    "fresh-password",
+    "winner has most recent timePasswordChanged"
+  );
+  Assert.equal(winner.timeCreated, 5000);
+  Assert.equal(winner.timeLastUsed, 6000);
+  Assert.equal(winner.timePasswordChanged, 8000);
+  Assert.equal(winner.timesUsed, 5);
+  Assert.equal(winner.timeLastBreachAlertDismissed, 7000);
+
+  Assert.equal(rescued.password, "stale-password");
+  Assert.equal(rescued.timeCreated, 1000);
+  Assert.equal(rescued.timeLastUsed, 9000);
+  Assert.equal(rescued.timePasswordChanged, 1000);
+  Assert.equal(rescued.timesUsed, 50);
+  Assert.equal(rescued.timeLastBreachAlertDismissed, 1500);
+
+  const [evt] = Glean.pwmgr.rustMigrationStatus.testGetValue();
+  Assert.equal(evt.extra?.number_of_logins_to_migrate, "2");
+  Assert.equal(evt.extra?.number_of_logins_migrated, "2");
+  Assert.equal(evt.extra?.number_of_logins_quarantined, "1");
+
+  LoginTestUtils.clearData();
+  await rustStorage.removeAllLoginsAsync();
+  await SpecialPowers.flushPrefEnv();
+});
+
+/**
  * Verify that when the bulk add operation rejects (hard failure),
  * the migration itself rejects.
  */
@@ -389,7 +491,6 @@ add_task(async function test_migration_rejects_when_bulk_add_rejects() {
   });
 
   const rustStorage = new LoginManagerRustStorage();
-  // force the bulk add to fail
   sinon.stub(rustStorage, "addLoginsAsync").rejects(new Error("bulk failed"));
 
   const login = LoginTestUtils.testData.formLogin({
@@ -441,14 +542,23 @@ add_task(async function test_rust_migration_failure_event() {
 
   const rustStorage = new LoginManagerRustStorage();
 
-  // Stub addLoginsAsync to simulate a failure for one entry
+  const origAddLoginsAsync = LoginManagerRustStorage.prototype.addLoginsAsync;
   sinon
     .stub(rustStorage, "addLoginsAsync")
-    .callsFake(async (_logins, _cont) => {
-      return [
-        { login: {}, error: null }, // success
-        { login: null, error: { message: "simulated migration failure" } }, // failure
-      ];
+    .callsFake(async function (logins, cont) {
+      if (!cont) {
+        return origAddLoginsAsync.call(this, logins, cont);
+      }
+      // Bulk migration pass: insert good logins for real, inject error for bad ones.
+      const goodLogins = logins.filter(l => l.username !== "bad-user");
+      if (goodLogins.length) {
+        await origAddLoginsAsync.call(this, goodLogins, true);
+      }
+      return logins.map(login =>
+        login.username === "bad-user"
+          ? { error: { message: "simulated migration failure" } }
+          : { login }
+      );
     });
 
   // Add two logins to JSON so migration has something to work on
@@ -465,7 +575,7 @@ add_task(async function test_rust_migration_failure_event() {
   await Services.logins.addLoginAsync(login_bad);
 
   Services.prefs.setBoolPref("signon.rustMirror.migrationNeeded", true);
-  const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustWriteFailure.testGetValue()?.length == 1,
     "event has been emitted"
   );
@@ -544,7 +654,7 @@ add_task(async function test_rust_mirror_addLogin_failure() {
     ],
   });
   Services.fog.testResetFOG();
-  const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
     "rust_mirror_status event has been emitted"
   );
@@ -598,7 +708,7 @@ add_task(async function test_rust_mirror_addLogin_failure() {
   );
 
   // produce another failure
-  const waitForSecondGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForSecondGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 2,
     "two events have been emitted"
   );
@@ -641,7 +751,7 @@ add_task(async function test_punycode_origin_metric() {
     password: "pass1",
   });
 
-  const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
     "event has been emitted"
   );
@@ -683,7 +793,7 @@ add_task(async function test_punycode_formActionOrigin_metric() {
     password: "pass1",
   });
 
-  const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
     "event has been emitted"
   );
@@ -706,6 +816,64 @@ add_task(async function test_punycode_formActionOrigin_metric() {
 });
 
 /*
+ * Tests that origins accepted by JSON but rejected by Rust cause the mirror
+ * to record a failure event and leave no login in Rust storage.
+ */
+const originsToTest = [
+  "//example.com",
+  "//example.com/path",
+  "example.com/path",
+  "hptts//example.com",
+  "htp//example.com",
+  "htpps//example.com",
+  "http//example.com",
+  "http//example.com/path",
+  "https//example.com",
+  "https//example.com:abc",
+  "https:// example.com",
+  "https:///",
+  "https://exa mple.com",
+  "htttp//example.com",
+];
+for (const origin of originsToTest) {
+  add_task(async function () {
+    await SpecialPowers.pushPrefEnv({
+      set: [["signon.rustMirror.enabled", true]],
+    });
+    Services.fog.testResetFOG();
+
+    const login = LoginTestUtils.testData.formLogin({
+      origin,
+      formActionOrigin: "https://example.com",
+      username: "user1",
+      password: "pass1",
+    });
+
+    const waitForGleanEvent = TestUtils.waitForCondition(
+      () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
+      "rust_mirror_status event has been emitted"
+    );
+    await Services.logins.addLoginAsync(login);
+    await waitForGleanEvent;
+
+    const [statusEvt] = Glean.pwmgr.rustMirrorStatus.testGetValue();
+    Assert.equal(
+      statusEvt.extra?.status,
+      "failure",
+      `${origin}: rust mirror reports failure`
+    );
+
+    const rustStorage = new LoginManagerRustStorage();
+    const allLoginsRust = await rustStorage.getAllLogins();
+    Assert.equal(allLoginsRust.length, 0, `${origin}: not stored in Rust`);
+
+    LoginTestUtils.clearData();
+    await rustStorage.removeAllLoginsAsync();
+    await SpecialPowers.flushPrefEnv();
+  });
+}
+
+/*
  * Tests that origins repaired by perform_additional_origin_fixups are accepted
  * and stored with the fixed-up origin value.
  */
@@ -715,6 +883,10 @@ const fixedUpOriginsToTest = {
   https: "moz-pwmngr-fixed://https",
   "https:": "https://moz.pwmngr.fixed",
   "https://": "https://moz.pwmngr.fixed",
+  "1.2.3.4": "moz-pwmngr-fixed://1.2.3.4",
+  "ftp.example.com": "ftp://ftp.example.com",
+  "ftp.1.2.3.4": "ftp://1.2.3.4",
+  "http://ftp.1.2.3.4": "ftp://1.2.3.4", // eslint-disable-line @microsoft/sdl/no-insecure-url
 };
 for (const origin in fixedUpOriginsToTest) {
   add_task(async function () {
@@ -731,7 +903,7 @@ for (const origin in fixedUpOriginsToTest) {
       password: "pass1",
     });
 
-    const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+    const waitForGleanEvent = TestUtils.waitForCondition(
       () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
       "event has been emitted"
     );
@@ -771,7 +943,7 @@ add_task(async function test_username_linebreak_metric() {
     password: "pass1",
   });
 
-  const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
     "event has been emitted"
   );
@@ -802,7 +974,7 @@ add_task(async function test_rust_mirror_addLogin_failure_with_time_metrics() {
   });
   Services.fog.testResetFOG();
 
-  const waitForGleanEvent = BrowserTestUtils.waitForCondition(
+  const waitForGleanEvent = TestUtils.waitForCondition(
     () => Glean.pwmgr.rustMirrorStatus.testGetValue()?.length == 1,
     "rust_mirror_status event has been emitted"
   );
@@ -1048,6 +1220,57 @@ add_task(async function test_mirror_clearAllPotentiallyVulnerablePasswords() {
   await cleanupTest();
 });
 
+// Tests that the Rust store correctly prompts for the primary password when
+// decrypting logins. The mirror is disabled for primary password users
+// (see LoginManagerRustMirror.#maybeEnable), so we operate on the Rust
+// store directly: add a login without PP set, then lock the NSS token,
+// then call getAllLogins() which must decrypt and therefore triggers
+// getPrimaryPassword() on the RustLoginStorageAuthenticator.
+add_task(async function test_rust_store_primary_password_authentication() {
+  registerCleanupFunction(() => LoginTestUtils.primaryPassword.disable());
+
+  // Add a login via the mirror while PP is not set, so Rust has encrypted data.
+  await SpecialPowers.pushPrefEnv({
+    set: [["signon.rustMirror.enabled", true]],
+  });
+  const loginInfo = LoginTestUtils.testData.formLogin({
+    username: "primary-pass-user",
+    password: "secure-password",
+  });
+  const addLoginFinishedPromise = TestUtils.topicObserved(
+    "rust-mirror.event.addLogin.finished"
+  );
+  await Services.logins.addLoginAsync(loginInfo);
+  await addLoginFinishedPromise;
+
+  // Enable PP and lock the NSS token. The mirror will now disable itself,
+  // but the Rust store still holds the encrypted login.
+  LoginTestUtils.primaryPassword.enable();
+
+  const rustStorage = new LoginManagerRustStorage();
+
+  // Set up observer before triggering the operation that needs decryption.
+  const dialogPromise = TestUtils.topicObserved("common-dialog-loaded");
+
+  // getAllLogins() decrypts each entry → get_key() → NSS token locked →
+  // RustLoginStorageAuthenticator.getPrimaryPassword() → dialog.
+  const getAllLoginsPromise = rustStorage.getAllLogins();
+
+  const [subject] = await dialogPromise;
+  const dialog = subject.Dialog;
+  SpecialPowers.wrap(dialog.ui.password1Textbox).setUserInput(
+    LoginTestUtils.primaryPassword.primaryPassword
+  );
+  dialog.ui.button0.click();
+
+  const rustLogins = await getAllLoginsPromise;
+  const [storedLogin] = await Services.logins.getAllLogins();
+  LoginTestUtils.assertLoginListsEqual([storedLogin], rustLogins);
+
+  LoginTestUtils.primaryPassword.disable();
+  await cleanupTest();
+});
+
 /**
  * Tests that vulnerable passwords are migrated to Rust during migration
  */
@@ -1080,6 +1303,172 @@ add_task(async function test_migration_includes_vulnerable_passwords() {
   Assert.ok(
     await rustStorage.isPotentiallyVulnerablePassword(storedLogin),
     "vulnerable password should be migrated to Rust storage"
+  );
+
+  await cleanupTest();
+});
+
+/**
+ * Tests that removeLoginAsync throws when no login with the given GUID exists.
+ */
+add_task(async function test_removeLoginAsync_no_matching_logins() {
+  const rustStorage = new LoginManagerRustStorage();
+
+  const loginInfo = LoginTestUtils.testData.formLogin({
+    username: "nonexistent",
+    password: "password",
+  });
+  loginInfo.QueryInterface(Ci.nsILoginMetaInfo);
+  loginInfo.guid = Services.uuid.generateUUID().toString();
+
+  await Assert.rejects(
+    rustStorage.removeLoginAsync(loginInfo),
+    /No matching logins/,
+    "removeLoginAsync should throw for a GUID not present in Rust storage"
+  );
+});
+
+/**
+ * Tests that mirror removeLogin operates on the quarantined login (by GUID),
+ * not the winner, when two JSON logins share a normalized origin.
+ */
+add_task(async function test_mirror_removeLogin_quarantined_uses_guid() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["signon.rustMirror.enabled", false],
+      ["signon.rustMirror.poisoned", false],
+    ],
+  });
+
+  const staleLogin = LoginTestUtils.testData.formLogin({
+    origin: "https://example.com/stale",
+    formActionOrigin: "https://example.com",
+    username: "alice",
+    password: "stale-password",
+    timePasswordChanged: 1000,
+  });
+  const freshLogin = LoginTestUtils.testData.formLogin({
+    origin: "https://example.com/fresh",
+    formActionOrigin: "https://example.com",
+    username: "alice",
+    password: "fresh-password",
+    timePasswordChanged: 8000,
+  });
+
+  await Services.logins.addLoginAsync(staleLogin);
+  await Services.logins.addLoginAsync(freshLogin);
+
+  Services.prefs.setBoolPref("signon.rustMirror.migrationNeeded", true);
+  const migrationFinishedPromise = TestUtils.topicObserved(
+    "rust-mirror.migration.finished"
+  );
+  await SpecialPowers.pushPrefEnv({
+    set: [["signon.rustMirror.enabled", true]],
+  });
+  await migrationFinishedPromise;
+
+  const rustStorage = new LoginManagerRustStorage();
+  Assert.equal(
+    (await rustStorage.getAllLogins()).length,
+    2,
+    "both logins in Rust before removal"
+  );
+
+  const jsonLogins = await Services.logins.getAllLogins();
+  const staleJsonLogin = jsonLogins.find(l => l.password === "stale-password");
+
+  const removeLoginFinishedPromise = TestUtils.topicObserved(
+    "rust-mirror.event.removeLogin.finished"
+  );
+  await Services.logins.removeLoginAsync(staleJsonLogin);
+  await removeLoginFinishedPromise;
+
+  const rustLoginsAfter = await rustStorage.getAllLogins();
+  Assert.equal(
+    rustLoginsAfter.length,
+    1,
+    "quarantined login removed from Rust"
+  );
+  Assert.equal(
+    rustLoginsAfter[0].password,
+    "fresh-password",
+    "winner is still present in Rust"
+  );
+
+  await cleanupTest();
+});
+
+/**
+ * Tests that mirror modifyLogin operates on the quarantined login (by GUID),
+ * not the winner, when two JSON logins share a normalized origin.
+ */
+add_task(async function test_mirror_modifyLogin_quarantined_uses_guid() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["signon.rustMirror.enabled", false],
+      ["signon.rustMirror.poisoned", false],
+    ],
+  });
+
+  const staleLogin = LoginTestUtils.testData.formLogin({
+    origin: "https://example.com/stale",
+    formActionOrigin: "https://example.com",
+    username: "alice",
+    password: "stale-password",
+    timePasswordChanged: 1000,
+  });
+  const freshLogin = LoginTestUtils.testData.formLogin({
+    origin: "https://example.com/fresh",
+    formActionOrigin: "https://example.com",
+    username: "alice",
+    password: "fresh-password",
+    timePasswordChanged: 8000,
+  });
+
+  await Services.logins.addLoginAsync(staleLogin);
+  await Services.logins.addLoginAsync(freshLogin);
+
+  Services.prefs.setBoolPref("signon.rustMirror.migrationNeeded", true);
+  const migrationFinishedPromise = TestUtils.topicObserved(
+    "rust-mirror.migration.finished"
+  );
+  await SpecialPowers.pushPrefEnv({
+    set: [["signon.rustMirror.enabled", true]],
+  });
+  await migrationFinishedPromise;
+
+  const jsonLogins = await Services.logins.getAllLogins();
+  const staleJsonLogin = jsonLogins.find(l => l.password === "stale-password");
+  const freshJsonLogin = jsonLogins.find(l => l.password === "fresh-password");
+
+  const modifiedStaleLogin = LoginTestUtils.testData.formLogin({
+    origin: staleJsonLogin.origin,
+    formActionOrigin: staleJsonLogin.formActionOrigin,
+    username: staleJsonLogin.username,
+    password: "updated-password",
+  });
+
+  const modifyLoginFinishedPromise = TestUtils.topicObserved(
+    "rust-mirror.event.modifyLogin.finished"
+  );
+  await Services.logins.modifyLoginAsync(staleJsonLogin, modifiedStaleLogin);
+  await modifyLoginFinishedPromise;
+
+  const rustStorage = new LoginManagerRustStorage();
+  const rustLogins = await rustStorage.getAllLogins();
+  Assert.equal(rustLogins.length, 2, "both logins still in Rust after modify");
+
+  const winner = rustLogins.find(l => l.guid === freshJsonLogin.guid);
+  const updated = rustLogins.find(l => l.guid === staleJsonLogin.guid);
+  Assert.equal(
+    winner.password,
+    "fresh-password",
+    "winner password is unchanged"
+  );
+  Assert.equal(
+    updated.password,
+    "updated-password",
+    "stale login was updated by GUID, not the winner"
   );
 
   await cleanupTest();

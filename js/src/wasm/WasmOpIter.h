@@ -438,7 +438,7 @@ class MOZ_STACK_CLASS OpIter : private Policy {
   ControlStack controlStack_;
   UnsetLocalsState unsetLocals_;
   FeatureUsage featureUsage_;
-  uint32_t lastBranchHintIndex_;
+  uint32_t lastBranchHintIndex_ = 0;
   BranchHintVector* branchHintVector_;
 
 #ifdef DEBUG
@@ -4730,11 +4730,6 @@ inline bool OpIter<Policy>::readCallBuiltinModuleFunc(
   }
 
   *builtinModuleFunc = &BuiltinModuleFuncs::getFromId(BuiltinModuleFuncId(id));
-
-  if ((*builtinModuleFunc)->usesMemory() && codeMeta_.numMemories() == 0) {
-    return fail("can't touch memory without memory");
-  }
-
   const FuncType& funcType = *(*builtinModuleFunc)->funcType();
   if (!popCallArgs(funcType.args(), params)) {
     return false;
@@ -4746,18 +4741,18 @@ inline bool OpIter<Policy>::readCallBuiltinModuleFunc(
 }  // namespace wasm
 }  // namespace js
 
-static_assert(std::is_trivially_copyable<
-                  js::wasm::TypeAndValueT<mozilla::Nothing>>::value,
-              "Must be trivially copyable");
-static_assert(std::is_trivially_destructible<
-                  js::wasm::TypeAndValueT<mozilla::Nothing>>::value,
-              "Must be trivially destructible");
+static_assert(
+    std::is_trivially_copyable_v<js::wasm::TypeAndValueT<mozilla::Nothing>>,
+    "Must be trivially copyable");
+static_assert(
+    std::is_trivially_destructible_v<js::wasm::TypeAndValueT<mozilla::Nothing>>,
+    "Must be trivially destructible");
 
-static_assert(std::is_trivially_copyable<
-                  js::wasm::ControlStackEntry<mozilla::Nothing>>::value,
-              "Must be trivially copyable");
-static_assert(std::is_trivially_destructible<
-                  js::wasm::ControlStackEntry<mozilla::Nothing>>::value,
+static_assert(
+    std::is_trivially_copyable_v<js::wasm::ControlStackEntry<mozilla::Nothing>>,
+    "Must be trivially copyable");
+static_assert(std::is_trivially_destructible_v<
+                  js::wasm::ControlStackEntry<mozilla::Nothing>>,
               "Must be trivially destructible");
 
 #endif  // wasm_op_iter_h

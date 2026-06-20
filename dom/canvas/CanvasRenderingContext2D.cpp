@@ -40,6 +40,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/PresShellInlines.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/RestyleManager.h"
 #include "mozilla/SVGContentUtils.h"
 #include "mozilla/SVGImageContext.h"
@@ -1907,7 +1908,7 @@ void CanvasRenderingContext2D::RegisterAllocation() {
   // FIXME: Disable the reporter for now, see bug 1241865
   if (!registered && false) {
     registered = true;
-    RegisterStrongMemoryReporter(new Canvas2dPixelsReporter());
+    RegisterStrongMemoryReporter(MakeAndAddRef<Canvas2dPixelsReporter>());
   }
 }
 
@@ -2376,7 +2377,7 @@ Matrix CanvasRenderingContext2D::GetCurrentTransform() const {
 }
 
 void CanvasRenderingContext2D::Save() {
-  if (MOZ_UNLIKELY(HasErrorState() || mStyleStack.IsEmpty())) {
+  if (HasErrorState() || mStyleStack.IsEmpty()) [[unlikely]] {
     SetErrorState();
     return;
   }
@@ -2392,7 +2393,7 @@ void CanvasRenderingContext2D::Save() {
 }
 
 void CanvasRenderingContext2D::Restore() {
-  if (MOZ_UNLIKELY(mStyleStack.Length() < 2 || HasErrorState())) {
+  if (mStyleStack.Length() < 2 || HasErrorState()) [[unlikely]] {
     return;
   }
 
@@ -3256,7 +3257,7 @@ void CanvasRenderingContext2D::UpdateFilter(bool aFlushIfNeeded) {
       presShell->FlushPendingNotifications(FlushType::Frames);
     }
 
-    if (MOZ_UNLIKELY(presShell->IsDestroying())) {
+    if (presShell->IsDestroying()) [[unlikely]] {
       return;
     }
 
@@ -4545,12 +4546,14 @@ bool CanvasRenderingContext2D::SetFontInternalDisconnected(
 }
 
 void CanvasRenderingContext2D::UpdateSpacing() {
-  auto state = CurrentState();
-  if (!state.letterSpacingStr.IsEmpty()) {
-    SetLetterSpacing(state.letterSpacingStr);
+  // Make local copies because the calls that follow can flush.
+  auto letterSpacingStr = CurrentState().letterSpacingStr;
+  auto wordSpacingStr = CurrentState().wordSpacingStr;
+  if (!letterSpacingStr.IsEmpty()) {
+    SetLetterSpacing(letterSpacingStr);
   }
-  if (!state.wordSpacingStr.IsEmpty()) {
-    SetWordSpacing(state.wordSpacingStr);
+  if (!wordSpacingStr.IsEmpty()) {
+    SetWordSpacing(wordSpacingStr);
   }
 }
 
@@ -4683,7 +4686,7 @@ struct MOZ_STACK_CLASS CanvasBidiProcessor final
     }
   }
 
-  class PropertyProvider : public gfxTextRun::PropertyProvider {
+  class PropertyProvider final : public gfxTextRun::PropertyProvider {
    public:
     explicit PropertyProvider(const CanvasBidiProcessor& aProcessor)
         : mProcessor(aProcessor) {}
@@ -4723,6 +4726,10 @@ struct MOZ_STACK_CLASS CanvasBidiProcessor final
 
     mozilla::StyleHyphens GetHyphensOption() const {
       return mozilla::StyleHyphens::None;
+    }
+
+    nscoord LetterSpacing() const {
+      return NSToCoordRound(mProcessor.mLetterSpacing);
     }
 
     // Methods only used when hyphenation is active, not relevant to canvas2d:
@@ -4961,7 +4968,7 @@ struct MOZ_STACK_CLASS CanvasBidiProcessor final
       strokeOpts.mMiterLimit = state.miterLimit;
       strokeOpts.mDashLength = state.dash.Length();
       strokeOpts.mDashPattern =
-          (strokeOpts.mDashLength > 0) ? state.dash.Elements() : 0;
+          (strokeOpts.mDashLength > 0) ? state.dash.Elements() : nullptr;
       strokeOpts.mDashOffset = state.dashOffset;
 
       params.drawMode = DrawMode::GLYPH_STROKE;
@@ -5168,13 +5175,20 @@ UniquePtr<TextMetrics> CanvasRenderingContext2D::DrawOrMeasureText(
     }
   }
 
+  gfx::ShapedTextFlags runOrientation =
+      (processor.mTextRunFlags & gfx::ShapedTextFlags::TEXT_ORIENT_MASK);
+  nsFontMetrics::FontOrientation fontOrientation =
+      (runOrientation == gfx::ShapedTextFlags::TEXT_ORIENT_VERTICAL_MIXED ||
+       runOrientation == gfx::ShapedTextFlags::TEXT_ORIENT_VERTICAL_UPRIGHT)
+          ? nsFontMetrics::eVertical
+          : nsFontMetrics::eHorizontal;
+
   nscoord totalWidthCoord;
 
   processor.mFontgrp
       ->UpdateUserFonts();  // ensure user font generation is current
   RefPtr<gfxFont> font = processor.mFontgrp->GetFirstValidFont();
-  const gfxFont::Metrics& fontMetrics =
-      font->GetMetrics(nsFontMetrics::eHorizontal);
+  const gfxFont::Metrics& fontMetrics = font->GetMetrics(fontOrientation);
 
   // calls bidi algo twice since it needs the full text width and the
   // bounding boxes before rendering anything
@@ -5212,14 +5226,6 @@ UniquePtr<TextMetrics> CanvasRenderingContext2D::DrawOrMeasureText(
   float offsetX = anchorX * totalWidth;
   processor.mPt.x -= offsetX;
 
-  gfx::ShapedTextFlags runOrientation =
-      (processor.mTextRunFlags & gfx::ShapedTextFlags::TEXT_ORIENT_MASK);
-  nsFontMetrics::FontOrientation fontOrientation =
-      (runOrientation == gfx::ShapedTextFlags::TEXT_ORIENT_VERTICAL_MIXED ||
-       runOrientation == gfx::ShapedTextFlags::TEXT_ORIENT_VERTICAL_UPRIGHT)
-          ? nsFontMetrics::eVertical
-          : nsFontMetrics::eHorizontal;
-
   // offset pt.y (or pt.x, for vertical text) based on text baseline
   gfxFloat baselineAnchor;
 
@@ -5250,11 +5256,6 @@ UniquePtr<TextMetrics> CanvasRenderingContext2D::DrawOrMeasureText(
   // We can't query the textRun directly, as it may not have been created yet;
   // so instead we check the flags that will be used to initialize it.
   if (runOrientation != gfx::ShapedTextFlags::TEXT_ORIENT_HORIZONTAL) {
-    if (fontOrientation == nsFontMetrics::eVertical) {
-      // Adjust to account for mTextRun being shaped using center baseline
-      // rather than alphabetic.
-      baselineAnchor -= (fontMetrics.emAscent - fontMetrics.emDescent) * .5f;
-    }
     processor.mPt.x -= baselineAnchor;
   } else {
     processor.mPt.y += baselineAnchor;

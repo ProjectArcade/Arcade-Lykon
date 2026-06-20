@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use nserror::{NS_ERROR_NULL_POINTER, nsresult};
+use nserror::{nsresult, NS_ERROR_NULL_POINTER};
 
 /// The xpcom_method macro generates a Rust XPCOM method stub that converts
 /// raw pointer arguments to references, calls a Rustic implementation

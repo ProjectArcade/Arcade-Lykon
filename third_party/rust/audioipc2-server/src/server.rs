@@ -9,7 +9,7 @@ use audioipc::messages::SerializableHandle;
 use audioipc::messages::{
     CallbackReq, CallbackResp, ClientMessage, Device, DeviceCollectionReq, DeviceCollectionResp,
     DeviceInfo, RegisterDeviceCollectionChanged, ServerMessage, StreamCreate, StreamCreateParams,
-    StreamInitParams, StreamParams,
+    StreamParams,
 };
 use audioipc::shm::SharedMem;
 use audioipc::{ipccore, rpccore, sys, PlatformHandle};
@@ -271,6 +271,13 @@ impl ServerStreamCallbacks {
 
         match r {
             Ok(CallbackResp::Data(frames)) => {
+                if frames < 0 || frames > nframes {
+                    debug!(
+                        "bad callback response: frames={} nframes={}",
+                        frames, nframes
+                    );
+                    return cubeb::ffi::CUBEB_ERROR.try_into().unwrap();
+                }
                 if let (Ok(frames), Some(output_frame_size)) =
                     (usize::try_from(frames), self.output_frame_size)
                 {
@@ -349,10 +356,61 @@ fn get_shm_id() -> String {
     )
 }
 
+fn validate_stream_params(p: &StreamParams) -> cubeb::Result<()> {
+    const MAX_CHANNELS: u32 = u8::MAX as u32;
+    const MIN_RATE: u32 = 1_000;
+    const MAX_RATE: u32 = 768_000;
+
+    let valid_format = matches!(
+        p.format,
+        ffi::CUBEB_SAMPLE_S16LE
+            | ffi::CUBEB_SAMPLE_S16BE
+            | ffi::CUBEB_SAMPLE_FLOAT32LE
+            | ffi::CUBEB_SAMPLE_FLOAT32BE
+    );
+
+    if valid_format
+        && p.channels >= 1
+        && p.channels <= MAX_CHANNELS
+        && p.rate >= MIN_RATE
+        && p.rate <= MAX_RATE
+    {
+        Ok(())
+    } else {
+        Err(cubeb::Error::InvalidParameter)
+    }
+}
+
+fn validate_stream_create_params(params: &StreamCreateParams) -> cubeb::Result<()> {
+    if params.input_stream_params.is_none() && params.output_stream_params.is_none() {
+        return Err(cubeb::Error::InvalidParameter);
+    }
+
+    if let Some(input_params) = &params.input_stream_params {
+        validate_stream_params(input_params)?;
+    }
+
+    if let Some(output_params) = &params.output_stream_params {
+        validate_stream_params(output_params)?;
+    }
+
+    // Rate and sample format must match for input and output of a duplex stream.
+    if let (Some(input_params), Some(output_params)) =
+        (&params.input_stream_params, &params.output_stream_params)
+    {
+        if input_params.rate != output_params.rate || input_params.format != output_params.format {
+            return Err(cubeb::Error::InvalidParameter);
+        }
+    }
+
+    Ok(())
+}
+
 struct ServerStream {
     stream: Option<cubeb::Stream>,
     cbs: Box<ServerStreamCallbacks>,
     client_pipe: Option<PlatformHandle>,
+    params: Option<StreamCreateParams>,
 }
 
 impl Drop for ServerStream {
@@ -423,9 +481,6 @@ impl rpccore::Server for CubebServer {
     type ClientMessage = ClientMessage;
 
     fn process(&mut self, req: Self::ServerMessage) -> Self::ClientMessage {
-        if let ServerMessage::ClientConnect(pid) = req {
-            self.remote_pid = Some(pid);
-        }
         with_local_context(|context, manager| match *context {
             Err(_) => error(cubeb::Error::Error),
             Ok(ref context) => self.process_msg(context, manager, &req),
@@ -458,13 +513,14 @@ impl CubebServer {
     pub fn new(
         callback_thread: ipccore::EventLoopHandle,
         device_collection_thread: ipccore::EventLoopHandle,
+        remote_pid: u32,
         shm_area_size: usize,
     ) -> Self {
         CubebServer {
             callback_thread,
             device_collection_thread,
             streams: slab::Slab::<ServerStream>::new(),
-            remote_pid: None,
+            remote_pid: Some(remote_pid),
             device_collection_change_callbacks: None,
             devidmap: DevIdMap::new(),
             shm_area_size,
@@ -479,8 +535,7 @@ impl CubebServer {
         msg: &ServerMessage,
     ) -> ClientMessage {
         let resp: ClientMessage = match *msg {
-            ServerMessage::ClientConnect(_) => {
-                // remote_pid is set before cubeb initialization, just verify here.
+            ServerMessage::ClientConnect => {
                 assert!(self.remote_pid.is_some());
                 ClientMessage::ClientConnected
             }
@@ -547,8 +602,8 @@ impl CubebServer {
                 .process_stream_create(params)
                 .unwrap_or_else(|_| error(cubeb::Error::Error)),
 
-            ServerMessage::StreamInit(stm_tok, ref params) => self
-                .process_stream_init(context, stm_tok, params)
+            ServerMessage::StreamInit(stm_tok) => self
+                .process_stream_init(context, stm_tok)
                 .unwrap_or_else(|_| error(cubeb::Error::Error)),
 
             ServerMessage::StreamDestroy(stm_tok) => {
@@ -673,12 +728,20 @@ impl CubebServer {
             #[cfg(target_os = "linux")]
             ServerMessage::PromoteThreadToRealTime(thread_info) => {
                 let info = RtPriorityThreadInfo::deserialize(thread_info);
-                match promote_thread_to_real_time(info, 0, 48000) {
-                    Ok(_) => {
-                        info!("Promotion of content process thread to real-time OK");
-                    }
-                    Err(_) => {
-                        warn!("Promotion of content process thread to real-time error");
+                if info.pid() as u32 != self.remote_pid.unwrap() {
+                    warn!(
+                        "PromoteThreadToRealTime: client supplied pid {} doesn't match trusted pid {}",
+                        info.pid(),
+                        self.remote_pid.unwrap()
+                    );
+                } else {
+                    match promote_thread_to_real_time(info, 0, 48000) {
+                        Ok(_) => {
+                            info!("Promotion of content process thread to real-time OK");
+                        }
+                        Err(_) => {
+                            warn!("Promotion of content process thread to real-time error");
+                        }
                     }
                 }
                 ClientMessage::ThreadPromoted
@@ -714,6 +777,8 @@ impl CubebServer {
 
     // Stream create is special, so it's been separated from process_msg.
     fn process_stream_create(&mut self, params: &StreamCreateParams) -> Result<ClientMessage> {
+        validate_stream_create_params(params)?;
+
         // Create the callback handling struct which is attached the cubeb stream.
         let input_frame_size = params
             .input_stream_params
@@ -771,6 +836,7 @@ impl CubebServer {
             stream: None,
             cbs,
             client_pipe: Some(client_pipe),
+            params: Some(params.clone()),
         });
 
         Ok(ClientMessage::StreamCreated(StreamCreate {
@@ -785,9 +851,24 @@ impl CubebServer {
         &mut self,
         context: &cubeb::Context,
         stm_tok: usize,
-        params: &StreamInitParams,
     ) -> Result<ClientMessage> {
-        // Create cubeb stream from params
+        if !self.streams.contains(stm_tok) {
+            return Err(cubeb::Error::InvalidParameter.into());
+        }
+
+        let params = {
+            let server_stream = &mut self.streams[stm_tok];
+            if server_stream.stream.is_some() {
+                error!("StreamInit({stm_tok}): stream already initialized");
+                return Err(cubeb::Error::InvalidParameter.into());
+            }
+            server_stream.params.take().ok_or_else(|| {
+                error!("StreamInit({stm_tok}): missing stream params");
+                cubeb::Error::InvalidParameter
+            })?
+        };
+
+        // Create cubeb stream from the stored params.
         let stream_name = params
             .stream_name
             .as_ref()
@@ -826,7 +907,7 @@ impl CubebServer {
             latency
         );
 
-        let server_stream = &mut self.streams[stm_tok];
+        let server_stream = &self.streams[stm_tok];
         assert!(size_of::<Box<ServerStreamCallbacks>>() == size_of::<usize>());
         let user_ptr = server_stream.cbs.as_ref() as *const ServerStreamCallbacks as *mut c_void;
 
@@ -852,6 +933,7 @@ impl CubebServer {
             }
         };
 
+        let server_stream = &mut self.streams[stm_tok];
         server_stream.stream = Some(stream);
 
         let client_pipe = server_stream

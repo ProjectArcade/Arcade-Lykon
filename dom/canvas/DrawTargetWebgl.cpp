@@ -80,7 +80,8 @@ class AcceleratedCanvas2DMemoryReporter final : public nsIMemoryReporter {
     static bool registered = false;
     if (!registered) {
       registered = true;
-      RegisterStrongMemoryReporter(new AcceleratedCanvas2DMemoryReporter);
+      RegisterStrongMemoryReporter(
+          MakeAndAddRef<AcceleratedCanvas2DMemoryReporter>());
     }
   }
 };
@@ -216,6 +217,10 @@ DrawTargetWebgl::~DrawTargetWebgl() {
 SharedContextWebgl::SharedContextWebgl() = default;
 
 SharedContextWebgl::~SharedContextWebgl() {
+  // Detach weak references first so that no cleanup below can promote a
+  // WeakPtr to this object while it is being destroyed, which would AddRef
+  // an object with a zero refcount and recursively delete it on Release.
+  DetachWeakPtr();
   // Detect context loss before deletion.
   if (mWebgl) {
     ExitTlsScope();
@@ -1248,7 +1253,7 @@ bool SharedContextWebgl::ReadInto(uint8_t* aDstData, int32_t aDstStride,
   if (aBuffer) {
     mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, aBuffer);
     mWebgl->ReadPixelsPbo(desc, 0);
-    mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, 0);
+    mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, nullptr);
   } else {
     Range<uint8_t> range = {aDstData, size_t(aDstStride) * aBounds.height};
     mWebgl->ReadPixelsInto(desc, range);
@@ -1338,7 +1343,7 @@ already_AddRefed<WebGLBuffer> SharedContextWebgl::ReadSnapshotIntoPBO(
   mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, pbo);
   mWebgl->UninitializedBufferData_SizeOnly(LOCAL_GL_PIXEL_PACK_BUFFER, bufSize,
                                            LOCAL_GL_STREAM_READ);
-  mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, 0);
+  mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, nullptr);
   if (!ReadInto(nullptr, pboStride.value(), format, bounds, aHandle, pbo)) {
     return nullptr;
   }
@@ -1386,7 +1391,7 @@ already_AddRefed<DataSourceSurface> SharedContextWebgl::ReadSnapshotFromPBO(
       LOCAL_GL_PIXEL_PACK_BUFFER, 0, range, aSize.height,
       BytesPerPixel(aFormat) * aSize.width, pboStride.value(),
       dstMap.GetStride());
-  mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, 0);
+  mWebgl->BindBuffer(LOCAL_GL_PIXEL_PACK_BUFFER, nullptr);
   if (success) {
     return surface.forget();
   }
@@ -2665,7 +2670,7 @@ bool SharedContextWebgl::UploadSurface(DataSourceSurface* aData,
     mWebgl->BindTexture(LOCAL_GL_TEXTURE_2D, mLastTexture);
   }
   if (!aData && aZero) {
-    mWebgl->BindBuffer(LOCAL_GL_PIXEL_UNPACK_BUFFER, 0);
+    mWebgl->BindBuffer(LOCAL_GL_PIXEL_UNPACK_BUFFER, nullptr);
   }
   return true;
 }
@@ -4383,8 +4388,7 @@ void DrawTargetWebgl::FillRect(const Rect& aRect, const Pattern& aPattern,
   } else {
     // If the pattern is unsupported, then transform the rect to a path so it
     // can be cached.
-    SkPath skiaPath;
-    skiaPath.addRect(RectToSkRect(aRect));
+    SkPath skiaPath = SkPath::Rect(RectToSkRect(aRect));
     RefPtr<PathSkia> path = new PathSkia(skiaPath, FillRule::FILL_WINDING);
     DrawPath(path, aPattern, aOptions);
   }
@@ -5604,8 +5608,8 @@ void DrawTargetWebgl::DrawSurfaceWithShadow(SourceSurface* aSurface,
   if (ShouldAccelPath(options, nullptr)) {
     SurfacePattern pattern(aSurface, ExtendMode::CLAMP,
                            Matrix::Translation(aDest));
-    SkPath skiaPath;
-    skiaPath.addRect(RectToSkRect(Rect(aSurface->GetRect()) + aDest));
+    SkPath skiaPath =
+        SkPath::Rect(RectToSkRect(Rect(aSurface->GetRect()) + aDest));
     RefPtr<PathSkia> path = new PathSkia(skiaPath, FillRule::FILL_WINDING);
     AutoRestoreTransform restore(this);
     SetTransform(Matrix());
@@ -5639,8 +5643,7 @@ void DrawTargetWebgl::StrokeRect(const Rect& aRect, const Pattern& aPattern,
   } else {
     // If the stroke options are unsupported, then transform the rect to a path
     // so it can be cached.
-    SkPath skiaPath;
-    skiaPath.addRect(RectToSkRect(aRect));
+    SkPath skiaPath = SkPath::Rect(RectToSkRect(aRect));
     RefPtr<PathSkia> path = new PathSkia(skiaPath, FillRule::FILL_WINDING);
     DrawPath(path, aPattern, aOptions, &aStrokeOptions, true);
   }
@@ -5731,9 +5734,8 @@ void DrawTargetWebgl::StrokeLine(const Point& aStart, const Point& aEnd,
                               aOptions)) {
     // If the stroke options are unsupported, then transform the line to a path
     // so it can be cached.
-    SkPath skiaPath;
-    skiaPath.moveTo(PointToSkPoint(aStart));
-    skiaPath.lineTo(PointToSkPoint(aEnd));
+    SkPath skiaPath =
+        SkPath::Line(PointToSkPoint(aStart), PointToSkPoint(aEnd));
     RefPtr<PathSkia> path = new PathSkia(skiaPath, FillRule::FILL_WINDING);
     DrawPath(path, aPattern, aOptions, &aStrokeOptions, true);
   }

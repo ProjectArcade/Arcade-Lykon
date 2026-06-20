@@ -244,7 +244,12 @@ import org.mozilla.gecko.gfx.GeckoSurface;
 
   private class OutputProcessor {
     private final boolean mRenderToSurface;
-    private boolean mHasOutputCapacitySet;
+    // Tracks the largest output frame size observed so far. MediaCodec's
+    // getOutputBuffer(idx).capacity() is not reliable as a max-buffer hint
+    // on modern Android (it reports the valid data range of the current
+    // frame, e.g. ~28 bytes for the first SPS/PPS), so we grow the
+    // SamplePool's default monotonically from observed info.size instead.
+    private int mMaxObservedOutputSize;
     private Queue<Output> mSentOutputs = new LinkedList<>();
     private boolean mStopped;
 
@@ -285,6 +290,14 @@ import org.mozilla.gecko.gfx.GeckoSurface;
     }
 
     private Sample obtainOutputSample(final int index, final MediaCodec.BufferInfo info) {
+      // Grow the pool's minimum-useful capacity ahead of allocation so
+      // setDefaultBufferSize sweeps any now-stranded recycled samples
+      // before obtainOutput could hand one back.
+      if (!mRenderToSurface && info.size > mMaxObservedOutputSize) {
+        mMaxObservedOutputSize = info.size;
+        mSamplePool.setOutputBufferSize(mMaxObservedOutputSize);
+      }
+
       final Sample sample = mSamplePool.obtainOutput(info);
 
       if (mRenderToSurface) {
@@ -292,14 +305,6 @@ import org.mozilla.gecko.gfx.GeckoSurface;
       }
 
       final ByteBuffer output = mCodec.getOutputBuffer(index);
-      if (!mHasOutputCapacitySet) {
-        final int capacity = output.capacity();
-        if (capacity > 0) {
-          mSamplePool.setOutputBufferSize(capacity);
-          mHasOutputCapacitySet = true;
-        }
-      }
-
       if (info.size > 0) {
         try {
           mSamplePool

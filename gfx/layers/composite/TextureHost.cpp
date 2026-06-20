@@ -22,6 +22,7 @@
 #include "mozilla/layers/ImageDataSerializer.h"
 #include "mozilla/layers/TextureClient.h"
 #include "mozilla/layers/GPUVideoTextureHost.h"
+#include "mozilla/layers/VideoBridgeParent.h"
 #include "mozilla/layers/WebRenderTextureHost.h"
 #include "mozilla/StaticPrefs_layers.h"
 #include "mozilla/StaticPrefs_gfx.h"
@@ -37,7 +38,6 @@
 #include "../opengl/CompositorOGL.h"
 
 #include "gfxUtils.h"
-#include "IPDLActor.h"
 
 #ifdef XP_MACOSX
 #  include "../opengl/MacIOSurfaceTextureHostOGL.h"
@@ -67,13 +67,13 @@ namespace layers {
  * TextureHost. It is an IPDL actor just like LayerParent, CompositableParent,
  * etc.
  */
-class TextureParent : public ParentActor<PTextureParent> {
+class TextureParent final : public PTextureParent {
  public:
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(TextureParent, final)
+
   TextureParent(HostIPCAllocator* aAllocator,
                 const dom::ContentParentId& aContentId, uint64_t aSerial,
                 const wr::MaybeExternalImageId& aExternalImageId);
-
-  virtual ~TextureParent();
 
   bool Init(const SurfaceDescriptor& aSharedData,
             ReadLockDescriptor&& aReadLock, const LayersBackend& aLayersBackend,
@@ -84,9 +84,16 @@ class TextureParent : public ParentActor<PTextureParent> {
   mozilla::ipc::IPCResult RecvRecycleTexture(
       const TextureFlags& aTextureFlags) final;
 
+  mozilla::ipc::IPCResult RecvDestroy() final {
+    (void)Send__delete__(this);
+    return IPC_OK();
+  }
+
+  void ActorDestroy(ActorDestroyReason aWhy) override;
+
   TextureHost* GetTextureHost() { return mTextureHost; }
 
-  void Destroy() override;
+  void Destroy();
 
   const dom::ContentParentId& GetContentId() const { return mContentId; }
 
@@ -98,6 +105,9 @@ class TextureParent : public ParentActor<PTextureParent> {
   // mSerial is unique in TextureClient's process.
   const uint64_t mSerial;
   wr::MaybeExternalImageId mExternalImageId;
+
+ private:
+  virtual ~TextureParent();
 };
 
 static bool WrapWithWebRenderTextureHost(ISurfaceAllocator* aDeallocator,
@@ -115,7 +125,7 @@ static bool WrapWithWebRenderTextureHost(ISurfaceAllocator* aDeallocator,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-PTextureParent* TextureHost::CreateIPDLActor(
+already_AddRefed<PTextureParent> TextureHost::CreateIPDLActor(
     HostIPCAllocator* aAllocator, const SurfaceDescriptor& aSharedData,
     ReadLockDescriptor&& aReadLock, LayersBackend aLayersBackend,
     TextureFlags aFlags, const dom::ContentParentId& aContentId,
@@ -123,25 +133,12 @@ PTextureParent* TextureHost::CreateIPDLActor(
   MOZ_ASSERT(!(aFlags & TextureFlags::DEALLOCATE_CLIENT));
 
   TextureFlags flags = aFlags & ~TextureFlags::DEALLOCATE_CLIENT;
-  TextureParent* actor =
-      new TextureParent(aAllocator, aContentId, aSerial, aExternalImageId);
+  auto actor = MakeRefPtr<TextureParent>(aAllocator, aContentId, aSerial,
+                                         aExternalImageId);
   if (!actor->Init(aSharedData, std::move(aReadLock), aLayersBackend, flags)) {
-    actor->ActorDestroy(ipc::IProtocol::ActorDestroyReason::FailedConstructor);
-    delete actor;
     return nullptr;
   }
-  return actor;
-}
-
-// static
-bool TextureHost::DestroyIPDLActor(PTextureParent* actor) {
-  delete actor;
-  return true;
-}
-
-// static
-bool TextureHost::SendDeleteIPDLActor(PTextureParent* actor) {
-  return PTextureParent::Send__delete__(actor);
+  return actor.forget();
 }
 
 // static
@@ -190,9 +187,9 @@ already_AddRefed<TextureHost> CreateDummyBufferTextureHost(
   const SurfaceDescriptorBuffer& bufferDesc =
       surfDesc.get_SurfaceDescriptorBuffer();
   const MemoryOrShmem& data = bufferDesc.data();
-  RefPtr<TextureHost> host =
-      new MemoryTextureHost(reinterpret_cast<uint8_t*>(data.get_uintptr_t()),
-                            bufferDesc.desc(), aFlags);
+  RefPtr host = MakeRefPtr<MemoryTextureHost>(
+      reinterpret_cast<uint8_t*>(data.get_uintptr_t()), bufferDesc.desc(),
+      aFlags);
   return host.forget();
 }
 
@@ -212,6 +209,7 @@ already_AddRefed<TextureHost> TextureHost::Create(
     case SurfaceDescriptor::TEGLImageDescriptor:
     case SurfaceDescriptor::TSurfaceTextureDescriptor:
     case SurfaceDescriptor::TSurfaceDescriptorAndroidHardwareBuffer:
+    case SurfaceDescriptor::TAndroidImageReaderImageDescriptor:
     case SurfaceDescriptor::TSurfaceDescriptorSharedGLTexture:
     case SurfaceDescriptor::TSurfaceDescriptorDMABuf:
       result = CreateTextureHostOGL(aDesc, aDeallocator, aBackend, aFlags);
@@ -243,7 +241,8 @@ already_AddRefed<TextureHost> TextureHost::Create(
 
   if (result && WrapWithWebRenderTextureHost(aDeallocator, aBackend, aFlags)) {
     MOZ_ASSERT(aExternalImageId.isSome());
-    result = new WebRenderTextureHost(aFlags, result, aExternalImageId.ref());
+    result = MakeRefPtr<WebRenderTextureHost>(aFlags, result,
+                                              aExternalImageId.ref());
   }
 
   if (result) {
@@ -307,7 +306,8 @@ already_AddRefed<TextureHost> CreateBackendIndependentTextureHost(
             return nullptr;
           }
 
-          result = new ShmemTextureHost(shmem, desc, aDeallocator, aFlags);
+          result =
+              MakeRefPtr<ShmemTextureHost>(shmem, desc, aDeallocator, aFlags);
           break;
         }
         case MemoryOrShmem::Tuintptr_t: {
@@ -318,7 +318,7 @@ already_AddRefed<TextureHost> CreateBackendIndependentTextureHost(
             return nullptr;
           }
 
-          result = new MemoryTextureHost(
+          result = MakeRefPtr<MemoryTextureHost>(
               reinterpret_cast<uint8_t*>(data.get_uintptr_t()),
               bufferDesc.desc(), aFlags);
           break;
@@ -408,14 +408,14 @@ void TextureHost::NotifyNotUsed() {
     return;
   }
 
-  static_cast<TextureParent*>(mActor)->NotifyNotUsed(mFwdTransactionId);
+  mActor->NotifyNotUsed(mFwdTransactionId);
 }
 
 void TextureHost::CallNotifyNotUsed() {
   if (!mActor) {
     return;
   }
-  static_cast<TextureParent*>(mActor)->NotifyNotUsed(mFwdTransactionId);
+  mActor->NotifyNotUsed(mFwdTransactionId);
 }
 
 void TextureHost::MaybeDestroyRenderTexture() {
@@ -518,11 +518,11 @@ void BufferTextureHost::CreateRenderTexture(
   RefPtr<wr::RenderTextureHost> texture;
 
   if (UseExternalTextures()) {
-    texture =
-        new wr::RenderExternalTextureHost(GetBuffer(), GetBufferDescriptor());
+    texture = MakeRefPtr<wr::RenderExternalTextureHost>(GetBuffer(),
+                                                        GetBufferDescriptor());
   } else {
-    texture =
-        new wr::RenderBufferTextureHost(GetBuffer(), GetBufferDescriptor());
+    texture = MakeRefPtr<wr::RenderBufferTextureHost>(GetBuffer(),
+                                                      GetBufferDescriptor());
 
     if (auto* shmemTextureHost = AsShmemTextureHost()) {
       shmemTextureHost->OnRenderTextureCreated(texture);
@@ -836,7 +836,7 @@ ShmemTextureHost::ShmemTextureHost(const ipc::Shmem& aShmem,
   if (aShmem.IsReadable()) {
     UniquePtr<mozilla::ipc::Shmem> shmem = MakeUnique<ipc::Shmem>(aShmem);
     mShmemDeallocRunnable =
-        new ShmemDeallocRunnable(mDeallocator, std::move(shmem));
+        MakeRefPtr<ShmemDeallocRunnable>(mDeallocator, std::move(shmem));
   } else {
     // This can happen if we failed to map the shmem on this process, perhaps
     // because it was big and we didn't have enough contiguous address space
@@ -1024,6 +1024,14 @@ mozilla::ipc::IPCResult TextureParent::RecvRecycleTexture(
   }
   mTextureHost->RecycleTexture(aTextureFlags);
   return IPC_OK();
+}
+
+void TextureParent::ActorDestroy(ActorDestroyReason aWhy) {
+  auto* manager = Manager();
+  if (manager->GetProtocolId() == ipc::ProtocolId::PVideoBridgeMsgStart) {
+    static_cast<VideoBridgeParent*>(manager)->RemoveTexture(mSerial);
+  }
+  Destroy();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

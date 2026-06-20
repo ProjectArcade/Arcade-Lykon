@@ -22,8 +22,8 @@ smart_window:
       - https://phabricator.services.mozilla.com/D282873
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: &emails
+      - firefox-ai-and-ml@mozilla.com
     expires: never
     extra_keys:
       chat_id: &chat_id
@@ -60,12 +60,21 @@ smart_window:
       submit_type: &submit_type
         type: string
         description: >
-          How the request was submitted: button, enter, follow-up, starter, or suggestion
+          How the request was submitted: button, enter, follow-up, shortcuts, starter, or suggestion
       tabs:
         type: quantity
         unit: count
         description: >
           Number of tabs selected
+      turn_number: &turn_number
+        type: quantity
+        unit: count
+        description: >
+          Current chat turn number
+      chat_version: &chat_version
+        type: string
+        description: >
+          Version of chat prompt used for this request
 
   search_submit:
     type: event
@@ -77,8 +86,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -103,8 +111,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -126,8 +133,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       tabs:
@@ -146,8 +152,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -173,8 +178,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -197,8 +201,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -220,8 +223,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D282482
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -243,8 +245,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D282482
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -265,8 +266,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -293,8 +293,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -311,8 +310,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       memories:
@@ -340,8 +338,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -358,8 +355,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -376,8 +372,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -394,8 +389,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287197
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -421,8 +415,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287975
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -437,6 +430,40 @@ smart_window:
         description: >
           Model selected by the user
 
+  tool_call:
+    type: event
+    description: |
+      The assistant invokes a tool. The tool_name extra identifies which tool;
+      the prompt_version extra captures the Remote Settings configuration
+      version for the chat feature so tool-call behavior can be correlated
+      with prompt revisions during debugging.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2041835
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D302170
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      tool_name:
+        type: string
+        description: >
+          Name of the invoked tool, e.g. "run_search", "get_open_tabs",
+          "search_browsing_history", "get_user_memories"
+      model: *model
+      prompt_version:
+        type: string
+        description: >
+          Remote Settings prompt configuration version, or empty if unavailable
+      error:
+        type: string
+        description: >
+          Canonical tool-call error code, or empty on success
+
   model_request:
     type: event
     description: |
@@ -447,8 +474,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D287710
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -480,12 +506,13 @@ smart_window:
       A response is received from the backend model
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2021947
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2035241
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2040801
     data_reviews:
       - https://phabricator.services.mozilla.com/D287710
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       location: *location
@@ -512,8 +539,18 @@ smart_window:
       error: &error
         type: string
         description: >
-          Error code if it's not a successful response
+          Canonical chat error name, or empty on success
+      http_status:
+        type: quantity
+        unit: count
+        description: >
+          HTTP status from the inference back-end, or 0 if no response
       model: *model
+      is_retry:
+        type: boolean
+        description: >
+          True when this response (success or failure) was produced by a
+          user-initiated retry of a previous turn
 
   chat_storage:
     type: quantity
@@ -526,8 +563,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288707
     data_sensitivity:
       - technical
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
 
   memories_count:
@@ -540,8 +576,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288707
     data_sensitivity:
       - technical
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     labels:
       - history
@@ -557,30 +592,28 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288707
     data_sensitivity:
       - technical
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
 
   onboarding_screen_impression:
-      type: event
-      description: |
-        Recorded when onboarding screen is displayed in smart window mode
-      bugs:
-        - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
-      data_reviews:
-        - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
-      data_sensitivity:
-        - interaction
-      notification_emails:
-        - pdahiya@mozilla.com
-      extra_keys:
-        message_id:
-          description: >
-            Identifier for the onboarding screen that is displayed, for example
-            'AI_WINDOW_WELCOME_0_AI_WINDOW_INTRO_WW' for the welcome screen,
-            'AI_WINDOW_WELCOME_1_AI_WINDOW_CHOOSE_MODEL_WW' for the model selection screen
-          type: string
-      expires: never
+    type: event
+    description: |
+      Recorded when onboarding screen is displayed in smart window mode
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    extra_keys:
+      message_id:
+        description: >
+          Identifier for the onboarding screen that is displayed, for example
+          'AI_WINDOW_WELCOME_0_AI_WINDOW_INTRO_WW' for the welcome screen,
+          'AI_WINDOW_WELCOME_1_AI_WINDOW_CHOOSE_MODEL_WW' for the model selection screen
+        type: string
+    expires: never
 
   onboarding_model_selected:
     type: event
@@ -592,8 +625,7 @@ smart_window:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
     data_sensitivity:
       - interaction
-    notification_emails:
-      - pdahiya@mozilla.com
+    notification_emails: *emails
     extra_keys:
       model:
         description: >
@@ -612,8 +644,7 @@ smart_window:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
     data_sensitivity:
       - interaction
-    notification_emails:
-      - pdahiya@mozilla.com
+    notification_emails: *emails
     extra_keys:
       model:
         description: >
@@ -625,15 +656,23 @@ smart_window:
   onboarding_memories_navigate:
     type: event
     description: |
-      Recorded when user clicks done on the memories onboarding screen
+      Recorded when user clicks next on the memories onboarding screen
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2032998
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2044126
     data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=2032998
+      - https://phabricator.services.mozilla.com/D296747
+      - https://phabricator.services.mozilla.com/D304658
     data_sensitivity:
       - interaction
-    notification_emails:
-      - pdahiya@mozilla.com
+    notification_emails: *emails
+    extra_keys:
+      source:
+        description: >
+          Comma-separated list of memory checkbox ids the user had selected
+          when clicking next, for example: 'memories-chats,memories-browsing'.
+          Empty string if the user deselects all options
+        type: string
     expires: never
 
   onboarding_memories_settings:
@@ -646,8 +685,7 @@ smart_window:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2032998
     data_sensitivity:
       - interaction
-    notification_emails:
-      - pdahiya@mozilla.com
+    notification_emails: *emails
     extra_keys:
       source:
         description: >
@@ -657,18 +695,98 @@ smart_window:
         type: string
     expires: never
 
+  onboarding_setdefault_navigate:
+    type: event
+    description: |
+      Recorded when user clicks done on the set default onboarding screen
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037220
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2044126
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D300448
+      - https://phabricator.services.mozilla.com/D304658
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    extra_keys:
+      source:
+        description: >
+          Comma-separated list of set default checkbox ids the user had selected
+          when clicking done, for example: 'set-default-window'.
+          Empty string if the user deselects all options
+        type: string
+    expires: never
+
+  onboarding_setdefault_settings:
+    type: event
+    description: |
+      Records set default checklist selections made by user on the set default onboarding screen
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037220
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037220
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    extra_keys:
+      source:
+        description: >
+          Comma-separated list of set default checkbox ids the user had selected
+          when clicking done, for example: 'set-default-window'.
+          Empty string if the user deselects all options
+        type: string
+    expires: never
+
+  onboarding_back_navigate:
+    type: event
+    description: |
+      Recorded when user clicks back on an onboarding screen
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037220
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037220
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    extra_keys:
+      message_id:
+        description: >
+          Identifier of the onboarding screen the user navigated back from
+        type: string
+    expires: never
+
   onboarding_complete:
     type: event
     description: |
       Indicates if user completed onboarding successfully
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2044126
     data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=2009613
+      - https://phabricator.services.mozilla.com/D287028
+      - https://phabricator.services.mozilla.com/D304658
     data_sensitivity:
       - interaction
-    notification_emails:
-      - pdahiya@mozilla.com
+    notification_emails: *emails
+    extra_keys:
+      model:
+        description: >
+          Final model selected on the model onboarding screen,
+          for example: '1', '2', '3'
+        type: string
+      memory_source:
+        description: >
+          Final value from the last memories navigate, a comma-separated list
+          of memory checkbox ids the user had selected, for example:
+          'memories-chats,memories-browsing'. Empty string if the user
+          deselects all options
+        type: string
+      setdefault_source:
+        description: >
+          Final value from the last set default navigate, a comma-separated
+          list of set default checkbox ids the user had selected, for example:
+          'set-default-window'. Empty string if the user deselects all options
+        type: string
     expires: never
 
   open_window:
@@ -677,17 +795,18 @@ smart_window:
       Recorded when a Smart Window is opened
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2009610
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037980
     data_reviews:
       - https://phabricator.services.mozilla.com/D285902
+      - https://phabricator.services.mozilla.com/D299196
     data_sensitivity:
       - interaction
-    notification_emails:
-      - mlucks@mozilla.com
+    notification_emails: *emails
     extra_keys:
       trigger:
         type: string
         description: >
-          The reason the Smart Window was opened. One of: switch, menu, new_window, open_browser, or undo_close
+          The reason the Smart Window was opened. One of: switch, menu, new_window, open_browser, undo_close, or keyboard_shortcut
       fxa:
         type: boolean
         description: >
@@ -696,6 +815,11 @@ smart_window:
         type: boolean
         description: >
           Whether the user saw firstrun onboarding when opening Smart Window. True if onboarding has not yet been completed.
+      opened_tabs:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs the user had opened when they switched to Smart window if the switch was used
     expires: never
 
   classic_switch:
@@ -704,12 +828,44 @@ smart_window:
       The user switches from Smart Window to classic mode
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=2024069
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037980
     data_reviews:
       - https://phabricator.services.mozilla.com/D290316
+      - https://phabricator.services.mozilla.com/D299196
     data_sensitivity:
       - interaction
-    notification_emails:
-      - yjamora@mozilla.com
+    notification_emails: *emails
+    extra_keys:
+      duration_ms: &opened_duration_ms
+        type: quantity
+        unit: ms
+        description: >
+          The amount of time in Ms since the user opened the SmartWindow
+      opened_tabs:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs the user had opened when they switched to Classic window
+    expires: never
+
+  close_window:
+    type: event
+    description: |
+      Recorded when an active Smart Window is closed
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037980
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D299196
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    extra_keys:
+      duration_ms: *opened_duration_ms
+      opened_tabs:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs the user had opened when they closed the window
     expires: never
 
   uri_load:
@@ -722,8 +878,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D285902
     data_sensitivity:
       - interaction
-    notification_emails:
-      - mlucks@mozilla.com
+    notification_emails: *emails
     extra_keys:
       model:
         type: string
@@ -743,8 +898,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D285902
     data_sensitivity:
       - interaction
-    notification_emails:
-      - mlucks@mozilla.com
+    notification_emails: *emails
     extra_keys:
       chat_id: *chat_id
       message_seq: &sidebar_message_seq
@@ -764,8 +918,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D285902
     data_sensitivity:
       - interaction
-    notification_emails:
-      - mlucks@mozilla.com
+    notification_emails: *emails
     extra_keys:
       chat_id: *chat_id
       message_seq: *sidebar_message_seq
@@ -781,8 +934,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D285902
     data_sensitivity:
       - interaction
-    notification_emails:
-      - mlucks@mozilla.com
+    notification_emails: *emails
     expires: never
 
   memories_nuke:
@@ -795,8 +947,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288768
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
 
   settings_memories:
@@ -809,8 +960,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288768
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       type:
@@ -832,8 +982,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288768
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       previous_model:
@@ -855,8 +1004,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288768
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       source:
@@ -879,8 +1027,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288768
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
 
   intent_change_preview:
@@ -893,8 +1040,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -915,8 +1061,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -938,8 +1083,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -966,8 +1110,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -989,8 +1132,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -1017,8 +1159,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -1042,8 +1183,7 @@ smart_window:
       - https://phabricator.services.mozilla.com/D288855
     data_sensitivity:
       - interaction
-    notification_emails:
-      - npodgurski@mozilla.com
+    notification_emails: *emails
     expires: never
     extra_keys:
       chat_id: *chat_id
@@ -1064,6 +1204,268 @@ smart_window:
       - https://phabricator.services.mozilla.com/D291280
     data_sensitivity:
       - interaction
-    notification_emails:
-      - gcardieri@mozilla.com
+    notification_emails: *emails
     expires: never
+
+  set_default_optin:
+    type: boolean
+    description: |
+      Records if the user currently has the Smart Window set as the default window.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2044126
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D304658
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+
+  llmaj_based_telemetry:
+    type: event
+    description: |
+      Privacy preserving LLM as judge-based chat telemetry for Smart Window.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2035338
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D297374
+    data_sensitivity:
+      - interaction
+    notification_emails:
+      - firefox-ai-and-ml@mozilla.com
+    expires: never
+    extra_keys:
+      chat_id: *chat_id
+      model: *model
+      turn_number: *turn_number
+      chat_version: *chat_version
+      telemetry_version:
+        type: string
+        description: >
+          Version of telemetry
+      telemetry_name:
+        type: string
+        description: >
+          Name of telemetry
+      record_type:
+        type: string
+        description: >
+          Type of telemetry record: state or terminal.
+      uniform_sampled:
+        type: boolean
+        description: >
+          Whether this record was included by uniform sampling.
+      uniform_sampling_probability:
+        type: quantity
+        unit: permille
+        description: >
+          Sampling probability scaled by 1,000. For example, 0.25 is recorded as 250.
+      trigger_sampled:
+        type: boolean
+        description: >
+          Whether this record was included by triggers.
+      trigger_sampling_probability:
+        type: quantity
+        unit: permille
+        description: >
+          Sampling probability scaled by 1,000. For example, 0.25 is recorded as 250.
+      triggers:
+        type: string
+        description: >
+          List of trigger objects in a json string
+      attribute_name:
+        type: string
+        description: >
+          Attribute names including was_successful, conversation_topic, memory_referenced, etc.
+      attribute_value:
+        type: string
+        description: >
+          Value of the attribute, note that original boolean value would be stored as string (true/false)
+
+  browser_action_prompt:
+    type: event
+    description: |
+      Displays a disambiguation picker, batch preview, or safety confirmation before acting.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      action_type:
+        type: string
+        description: Type of browser action requested
+      prompt_type:
+        type: string
+        description: Type of prompt shown - disambiguation, batch_preview, or safety_confirmation
+      reason:
+        type: string
+        description: Why the prompt was shown - multiple_matches, low_confidence, batch_action, pinned_tab, active_tab, last_tab
+      candidates:
+        type: quantity
+        unit: count
+        description: Number of candidate tabs shown
+      preselected:
+        type: quantity
+        unit: count
+        description: Number of tabs preselected
+
+  browser_action_prompt_response:
+    type: event
+    description: |
+      User responds to a disambiguation picker, batch preview, or safety confirmation.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      action_type:
+        type: string
+        description: >
+          Type of browser action requested
+      prompt_type:
+        type: string
+        description: >
+          Type of prompt shown: disambiguation, batch_preview, or safety_confirmation
+      response:
+        type: string
+        description: >
+          User response: select, confirm, cancel, or dismiss
+      selected:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs selected or confirmed
+      reason:
+        type: string
+        description: >
+          Reason the original prompt was shown
+
+  browser_action_undo:
+    type: event
+    description: |
+      User clicks Undo after a successful tab-close action.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      action_type:
+        type: string
+        description: >
+          Type of browser action that was undone
+      tabs_restored:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs restored
+      time_delta:
+        type: quantity
+        unit: ms
+        description: >
+          Time in ms between action completion and Undo click
+      result:
+        type: string
+        description: >
+          Undo result: success, partial_success, or error
+      error:
+        type: string
+        description: >
+          Error code if Undo was not successful
+
+  browser_action_submit:
+    type: event
+    description: |
+      Recorded when the model invokes a browser action tool (e.g., manage_tabs).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      model: *model
+      prompt_version: &prompt_version
+        type: string
+        description: >
+          Major version of the chat prompt used for this request.
+      submit_type: *submit_type
+      action_type:
+        type: string
+        description: >
+          How the action was triggered: tab_mention, description, or unsupported.
+      tabs_open:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs open at submit time.
+      mentions:
+        type: quantity
+        unit: count
+        description: >
+          Number of tab mentions in the request.
+
+  browser_action_complete:
+    type: event
+    description: |
+      Recorded when a browser action initiated by the model has completed, errored, or been cancelled.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2037203
+    data_sensitivity:
+      - interaction
+    notification_emails: *emails
+    expires: never
+    extra_keys:
+      location: *location
+      chat_id: *chat_id
+      message_seq: *message_seq
+      model: *model
+      prompt_version: *prompt_version
+      action_type:
+        type: string
+        description: >
+          How the action was triggered: tab_mention, description, or unsupported.
+      result:
+        type: string
+        description: >
+          Outcome of the action: success, partial_success, no_match,
+          unclear_target, blocked, cancelled, or error.
+      tabs_affected:
+        type: quantity
+        unit: count
+        description: >
+          Number of tabs actually closed.
+      undo_available:
+        type: boolean
+        description: >
+          Whether an undo path was available after the action completed.
+      error:
+        type: string
+        description: >
+          Error code if the action was unsuccessful.

@@ -36,6 +36,10 @@ void APZCTreeManagerParent::ChildAdopted(
   mUpdater = std::move(aAPZUpdater);
 }
 
+void APZCTreeManagerParent::ActorDestroy(ActorDestroyReason aWhy) {
+  CompositorBridgeParent::DisconnectApzcTreeManager(this);
+}
+
 mozilla::ipc::IPCResult APZCTreeManagerParent::RecvSetKeyboardMap(
     const KeyboardMap& aKeyboardMap) {
   mUpdater->RunOnUpdaterThread(
@@ -182,6 +186,15 @@ mozilla::ipc::IPCResult APZCTreeManagerParent::RecvSetLongTapEnabled(
           "layers::IAPZCTreeManager::SetLongTapEnabled", mTreeManager,
           &IAPZCTreeManager::SetLongTapEnabled, aLongTapEnabled));
 
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult APZCTreeManagerParent::RecvNotifyApzAwareListenerAdded(
+    const ScrollableLayerGuid& aGuid) {
+  if (!IsGuidValid(aGuid)) {
+    return IPC_FAIL_NO_REASON(this);
+  }
+  mTreeManager->NotifyApzAwareListenerAdded(aGuid);
   return IPC_OK();
 }
 

@@ -30,19 +30,12 @@
 #ifdef ACCESSIBILITY
 #  include "mozilla/a11y/LocalAccessible.h"
 #endif
-
 #ifdef MOZ_X11
 #  include <gdk/gdkx.h>
 #  include "X11UndefineNone.h"
 #endif
-#ifdef MOZ_WAYLAND
-#  include <gdk/gdkwayland.h>
-#  include "base/thread.h"
-#  include "nsClipboardWayland.h"
-#endif
 
 #ifdef MOZ_LOGGING
-
 #  undef LOG
 #  undef LOGVERBOSE
 
@@ -276,7 +269,7 @@ class nsWindow : public nsIWidget {
   void PerformFullscreenTransition(FullscreenTransitionStage aStage,
                                    uint16_t aDuration, nsISupports* aData,
                                    nsIRunnable* aCallback) override;
-  already_AddRefed<Screen> GetWidgetScreen() override;
+  already_AddRefed<mozilla::widget::Screen> GetWidgetScreen() override;
   nsresult MakeFullScreen(bool aFullScreen) override;
   void HideWindowChrome(bool aShouldHide) override;
 
@@ -317,10 +310,6 @@ class nsWindow : public nsIWidget {
 
   void OnVisibilityNotifyEvent(GdkVisibilityState aState);
   void OnWindowStateEvent(GtkWidget* aWidget, GdkEventWindowState* aEvent);
-  void OnDragDataReceivedEvent(GtkWidget* aWidget, GdkDragContext* aDragContext,
-                               gint aX, gint aY,
-                               GtkSelectionData* aSelectionData, guint aInfo,
-                               guint aTime, gpointer aData);
   gboolean OnPropertyNotifyEvent(GtkWidget* aWidget, GdkEventProperty* aEvent);
   gboolean OnTouchEvent(GdkEventTouch* aEvent);
   gboolean OnTouchpadPinchEvent(GdkEventTouchpadPinch* aEvent);
@@ -414,7 +403,7 @@ class nsWindow : public nsIWidget {
 
   nsresult SynthesizeNativeMouseEvent(
       LayoutDeviceIntPoint aPoint, NativeMouseMessage aNativeMessage,
-      mozilla::MouseButton aButton, nsIWidget::Modifiers aModifierFlags,
+      mozilla::MouseButton aButton, nsIWidget::NativeModifiers aModifierFlags,
       nsISynthesizedEventCallback* aCallback) override;
 
   nsresult SynthesizeNativeMouseMove(
@@ -422,12 +411,12 @@ class nsWindow : public nsIWidget {
       nsISynthesizedEventCallback* aCallback) override {
     return SynthesizeNativeMouseEvent(
         aPoint, NativeMouseMessage::Move, mozilla::MouseButton::eNotPressed,
-        nsIWidget::Modifiers::NO_MODIFIERS, aCallback);
+        nsIWidget::NativeModifiers::NO_MODIFIERS, aCallback);
   }
 
   nsresult SynthesizeNativeMouseScrollEvent(
       LayoutDeviceIntPoint aPoint, uint32_t aNativeMessage, double aDeltaX,
-      double aDeltaY, double aDeltaZ, uint32_t aModifierFlags,
+      double aDeltaY, double aDeltaZ, nsIWidget::NativeModifiers aModifierFlags,
       uint32_t aAdditionalFlags,
       nsISynthesizedEventCallback* aCallback) override;
 
@@ -540,11 +529,16 @@ class nsWindow : public nsIWidget {
   void UnlockCursor() { mWidgetCursorLocked = false; };
   void InsertEmoji(RefPtr<nsWindow> aToplevelWindow = nullptr);
 
+  static void SessionRestoreFinished();
+
  protected:
   virtual ~nsWindow();
 
   virtual void CreateNative() = 0;
   virtual void DestroyNative() = 0;
+
+  void ConfigureToplevelWindow();
+  virtual void ConfigureToplevelWindowNative() {};
 
   virtual void EnableVSyncSource() {};
   virtual void DisableVSyncSource() {};
@@ -765,6 +759,10 @@ class nsWindow : public nsIWidget {
 
   // Popup is hidden only as a part of hierarchy tree update.
   bool mPopupTemporaryHidden : 1;
+
+  // If we're waiting for session restore, don't fiddle with window
+  // size/focus etc.
+  bool mWaitingToSessionRestore : 1;
 
   // all of our DND stuff
   void InitDragEvent(mozilla::WidgetDragEvent& aEvent);

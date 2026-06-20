@@ -1612,6 +1612,18 @@ static void ReportZoneStats(const JS::ZoneStats& zStats,
         "is refreshed.");
   }
 
+  if (zStats.stringsDeduplicationTruncated) {
+    MOZ_ASSERT(!zStats.isTotals);
+    nsAutoCString desc;
+    desc.AppendPrintf(
+        "Number of JS strings seen in zones where notable string detection was "
+        "cut off before it could finish.");
+    handleReport->Callback(""_ns, "js-notable-truncated-strings-count"_ns,
+                           nsIMemoryReporter::KIND_OTHER,
+                           nsIMemoryReporter::UNITS_COUNT,
+                           zStats.stringsTotalCount, desc, data);
+  }
+
   const JS::ShapeInfo& shapeInfo = zStats.shapeInfo;
   if (shapeInfo.shapesGCHeapShared > 0) {
     REPORT_GC_BYTES(pathPrefix + "shapes/gc-heap/shared"_ns,
@@ -2167,6 +2179,7 @@ class XPCJSRuntimeStats : public JS::RuntimeStats {
                                   const JS::AutoRequireNoGC& nogc) override {
     xpc::ZoneStatsExtras* extras = new xpc::ZoneStatsExtras;
     extras->pathPrefix.AssignLiteral("explicit/js-non-window/zones/");
+    extras->zoneName = nsPrintfCString("zone(0x%p)/", (void*)zone);
 
     // Get some global in this zone.
     Rooted<Realm*> realm(dom::RootingCx(), js::GetAnyRealmInZone(zone));
@@ -2184,7 +2197,7 @@ class XPCJSRuntimeStats : public JS::RuntimeStats {
       }
     }
 
-    extras->pathPrefix += nsPrintfCString("zone(0x%p)/", (void*)zone);
+    extras->pathPrefix += extras->zoneName;
 
     MOZ_ASSERT(StartsWithExplicit(extras->pathPrefix));
 
@@ -2342,6 +2355,13 @@ void JSReporter::CollectReports(WindowPaths* windowPaths,
         " to RSS, only vsize.");
   }
 
+  if (rtStats.runtime.wasmContStacks > 0) {
+    REPORT_BYTES(
+        "wasm-cont-stacks"_ns, KIND_OTHER, rtStats.runtime.wasmContStacks,
+        "Memory mapped for wasm continuation stacks (JS Promise Integration "
+        "and stack-switching), including guard pages.");
+  }
+
   // Report the numbers for memory outside of realms.
 
   REPORT_BYTES("js-main-runtime/gc-heap/unused-chunks"_ns, KIND_OTHER,
@@ -2489,17 +2509,32 @@ void JSReporter::CollectReports(WindowPaths* windowPaths,
 
   // Report totals from per-zone GC buffer allocators.
 
-  MREPORT_BYTES("js-main-runtime-gc-buffers/used"_ns, KIND_OTHER,
-                rtStats.zTotals.gcBuffers.usedBytes,
-                "Bookeeping information and padding within GC buffer memeory.");
+  for (const auto& zStats : rtStats.zoneStatsVector) {
+    const xpc::ZoneStatsExtras* extras =
+        static_cast<const xpc::ZoneStatsExtras*>(zStats.extra);
 
-  MREPORT_BYTES("js-main-runtime-gc-buffers/free"_ns, KIND_OTHER,
-                rtStats.zTotals.gcBuffers.freeBytes,
-                "Free space within GC buffer memeory.");
+    nsCString pathPrefix;
+    pathPrefix.AssignLiteral("js-main-runtime-gc-buffers/");
+    pathPrefix += extras->zoneName;
 
-  MREPORT_BYTES("js-main-runtime-gc-buffers/admin"_ns, KIND_OTHER,
-                rtStats.zTotals.gcBuffers.adminBytes,
-                "Bookeeping information and padding within GC buffer memeory.");
+    nsCString usedPath =
+        pathPrefix +
+        nsPrintfCString("used (in %zu chunks and %zu large allocs)",
+                        zStats.gcBuffers.totalChunks,
+                        zStats.gcBuffers.largeAllocs);
+    MREPORT_BYTES(usedPath, KIND_OTHER, zStats.gcBuffers.usedBytes,
+                  "Allocated memory within GC buffer memeory.");
+
+    nsCString freePath =
+        pathPrefix +
+        nsPrintfCString("free (in %zu regions)", zStats.gcBuffers.freeRegions);
+    MREPORT_BYTES(freePath, KIND_OTHER, zStats.gcBuffers.freeBytes,
+                  "Free space within GC buffer memeory.");
+
+    MREPORT_BYTES(
+        pathPrefix + "admin"_ns, KIND_OTHER, zStats.gcBuffers.adminBytes,
+        "Bookeeping information and padding within GC buffer memeory.");
+  }
 
   REPORT("js-main-runtime-zone-count"_ns, KIND_OTHER, UNITS_COUNT,
          rtStats.zoneStatsVector.length(), "Count of GC zones in the runtime.");
@@ -2895,6 +2930,19 @@ static void SetUseCounterCallback(JSObject* obj, JSUseCounter counter) {
     case JSUseCounter::DATEPARSE_IMPL_DEF:
       SetUseCounter(obj, eUseCounter_custom_JS_dateparse_impl_def);
       return;
+    case JSUseCounter::GENERATOR_FUNCTION_CREATED:
+      SetUseCounter(obj, eUseCounter_custom_JS_generatorFunctionCreated);
+      return;
+    case JSUseCounter::ASYNC_GENERATOR_FUNCTION_CREATED:
+      SetUseCounter(obj, eUseCounter_custom_JS_asyncGeneratorFunctionCreated);
+      return;
+    case JSUseCounter::GENERATOR_FUNCTION_ION_ELIGIBLE:
+      SetUseCounter(obj, eUseCounter_custom_JS_generatorFunctionIonEligible);
+      return;
+    case JSUseCounter::ASYNC_GENERATOR_FUNCTION_ION_ELIGIBLE:
+      SetUseCounter(obj,
+                    eUseCounter_custom_JS_asyncGeneratorFunctionIonEligible);
+      return;
     case JSUseCounter::COUNT:
       break;
   }
@@ -3003,7 +3051,7 @@ static nsresult ReadSourceFromFilename(JSContext* cx, const char* filename,
   // Allocate a buffer the size of the file to initially fill with the UTF-8
   // contents of the file.  Use the JS allocator so that if UTF-8 source was
   // requested, we can return this memory directly.
-  JS::UniqueChars buf(js_pod_malloc<char>(rawLen));
+  JS::UniqueChars buf(js_pod_malloc<char>(static_cast<size_t>(rawLen)));
   if (!buf) {
     return NS_ERROR_OUT_OF_MEMORY;
   }
@@ -3225,8 +3273,9 @@ void XPCJSRuntime::Initialize(JSContext* cx) {
   js::SetSourceHook(cx, std::move(hook));
 
   // Register memory reporters and distinguished amount functions.
-  RegisterStrongMemoryReporter(new JSMainRuntimeRealmsReporter());
-  RegisterStrongMemoryReporter(new JSMainRuntimeTemporaryPeakReporter());
+  RegisterStrongMemoryReporter(MakeAndAddRef<JSMainRuntimeRealmsReporter>());
+  RegisterStrongMemoryReporter(
+      MakeAndAddRef<JSMainRuntimeTemporaryPeakReporter>());
   RegisterJSMainRuntimeGCHeapDistinguishedAmount(
       JSMainRuntimeGCHeapDistinguishedAmount);
   RegisterJSMainRuntimeTemporaryPeakDistinguishedAmount(

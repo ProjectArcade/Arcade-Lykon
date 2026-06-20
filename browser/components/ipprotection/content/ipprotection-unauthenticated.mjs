@@ -4,10 +4,7 @@
 
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 import { html } from "chrome://global/content/vendor/lit.all.mjs";
-import {
-  BANDWIDTH,
-  LINKS,
-} from "chrome://browser/content/ipprotection/ipprotection-constants.mjs";
+import { LINKS } from "chrome://browser/content/ipprotection/ipprotection-constants.mjs";
 
 /**
  * A custom element that handles the signed out status of IP Protection.
@@ -26,6 +23,20 @@ export default class IPProtectionUnauthenticatedContentElement extends MozLitEle
     this.dispatchEvent(
       new CustomEvent("IPProtection:OptIn", { bubbles: true, composed: true })
     );
+  }
+
+  handleTosClick(event) {
+    event.preventDefault();
+    if (
+      event.target.id === "vpn-terms-of-service" ||
+      event.target.id === "vpn-privacy-notice"
+    ) {
+      const win = event.target.documentGlobal;
+      win.openWebLinkIn(event.target.href, "tab");
+      this.dispatchEvent(
+        new CustomEvent("IPProtection:Close", { bubbles: true, composed: true })
+      );
+    }
   }
 
   handleLearnMoreClick(event) {
@@ -48,7 +59,7 @@ export default class IPProtectionUnauthenticatedContentElement extends MozLitEle
       <div id="unauthenticated-vpn-content">
         <img
           id="unauthenticated-vpn-img"
-          src="chrome://browser/content/ipprotection/assets/vpn-panel-get-started-light.svg"
+          src="chrome://browser/content/ipprotection/assets/ipprotection-unauthenticated.svg"
           alt=""
         />
         <h2
@@ -58,21 +69,25 @@ export default class IPProtectionUnauthenticatedContentElement extends MozLitEle
         ></h2>
         <ul id="unauthenticated-vpn-message" class="vpn-description">
           <li
-            data-l10n-id="unauthenticated-hide-location-message-3"
+            id="unauthenticated-private-location"
             @click=${this.handleLearnMoreClick}
+            class="with-icon"
           >
-            <a
-              class="learn-more-vpn"
-              data-l10n-name="learn-more-vpn"
-              href=${Services.urlFormatter.formatURLPref(
-                "app.support.baseURL"
-              ) + LINKS.SUPPORT_SLUG}
-            ></a>
+            <span data-l10n-id="unauthenticated-private-location-message">
+              <a
+                class="learn-more-vpn"
+                data-l10n-name="learn-more-vpn"
+                href=${Services.urlFormatter.formatURLPref(
+                  "app.support.baseURL"
+                ) + LINKS.SUPPORT_SLUG}
+              ></a>
+            </span>
           </li>
-          <li
-            data-l10n-id="unauthenticated-bandwidth-limit-message"
-            data-l10n-args=${JSON.stringify({ maxUsage: BANDWIDTH.MAX_IN_GB })}
-          ></li>
+          <li id="unauthenticated-choose-location" class="with-icon">
+            <span
+              data-l10n-id="unauthenticated-choose-location-message-1"
+            ></span>
+          </li>
         </ul>
         <moz-button
           id="unauthenticated-get-started"
@@ -81,6 +96,22 @@ export default class IPProtectionUnauthenticatedContentElement extends MozLitEle
           type="primary"
           @click=${this.handleOptIn}
         ></moz-button>
+        <span
+          id="unauthenticated-footer"
+          data-l10n-id="unauthenticated-terms-of-service-privacy-notice"
+          @click=${this.handleTosClick}
+        >
+          <a
+            id="vpn-terms-of-service"
+            href=${LINKS.TERMS_OF_SERVICE_URL}
+            data-l10n-name="vpn-terms-of-service"
+          ></a>
+          <a
+            id="vpn-privacy-notice"
+            href=${LINKS.PRIVACY_NOTICE_URL}
+            data-l10n-name="vpn-privacy-notice"
+          ></a>
+        </span>
       </div>
     `;
   }

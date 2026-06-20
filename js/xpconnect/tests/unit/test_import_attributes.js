@@ -136,3 +136,28 @@ add_task(async function testCssImportAttributeSyncThenAsyncCurrentGlobal() {
   Assert.ok(win.eval(`ns2.sheet instanceof CSSStyleSheet`));
   Assert.equal(win.eval(`ns2.sheet.cssRules.length`), 1);
 });
+
+add_task(async function testTextImportAttributeSync() {
+  const win = createChromeWindow();
+  const ns = win.eval(
+    `ChromeUtils.importESModule("resource://test/import_attributes_text.mjs", { global: "current" })`
+  );
+
+  Assert.equal(typeof ns.text, "string");
+  Assert.ok(ns.text.startsWith("Hello"));
+});
+
+add_task(async function testTextImportAttributeAsync() {
+  const win = createChromeWindow();
+  win.eval(`
+    var ns = null;
+    import("resource://test/import_attributes_text.mjs").then(v => { ns = v; });
+  `);
+  Services.tm.spinEventLoopUntil(
+    "Wait until dynamic import finishes",
+    () => win.eval(`ns !== null`)
+  );
+
+  Assert.equal(win.eval(`typeof ns.text`), "string");
+  Assert.ok(win.eval(`ns.text.startsWith("Hello")`));
+});

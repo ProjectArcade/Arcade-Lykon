@@ -34,9 +34,13 @@ impl FirefoxAccount {
     ///
     /// # Arguments
     ///
-    ///    - `scope` - the OAuth scope to be granted by the token.
-    ///        - This must be one of the scopes requested during the signin flow.
-    ///        - Only a single scope is supported; for multiple scopes request multiple tokens.
+    ///    - `scope` - space-separated list of OAuth scopes to be granted by the token.
+    ///        - Each scope must have been requested during the signin flow, or be a scope
+    ///          which the server might offer automatically in some account-specific cases.
+    ///        - Scope order is not significant; `"a b"` and `"b a"` are equivalent.
+    ///        - When a single scope is requested and it has an associated scoped key
+    ///          (e.g. `https://identity.mozilla.com/apps/oldsync`), the returned
+    ///          `AccessTokenInfo::key` will be populated; for multi-scope requests it is `None`.
     ///    - `use_cache` - optionally set to false to force a new token request.  The fetched
     ///       token will still be cached for later `get_access_token` calls.
     ///
@@ -51,6 +55,25 @@ impl FirefoxAccount {
             .lock()
             .get_access_token(scope, use_cache)?
             .try_into()
+    }
+
+    /// Builds a complete `signedInUser` JSON object for a WebChannel `fxaccounts:fxa_status`
+    /// response, embedding the session token without exposing it to the browser layer. Email and
+    /// uid are read from the cached profile in internal state. Returns `None` if no session token
+    /// is available.
+    pub fn get_signed_in_user_for_web_channel(&self) -> Option<String> {
+        self.internal.lock().get_signed_in_user_for_web_channel()
+    }
+
+    /// Handle a WebChannel password-change notification by exchanging the new session token
+    /// for a new refresh token.
+    ///
+    /// **💾 This method alters the persisted account state.**
+    #[handle_error(Error)]
+    pub fn handle_web_channel_password_change(&self, json_payload: String) -> ApiResult<()> {
+        self.internal
+            .lock()
+            .handle_web_channel_password_change(&json_payload)
     }
 
     /// Get the session token for the user's account, if one is available.

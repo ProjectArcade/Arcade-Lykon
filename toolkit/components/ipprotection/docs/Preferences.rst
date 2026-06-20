@@ -55,6 +55,12 @@ Startup and caching
 ``browser.ipProtection.hasUpgraded`` (boolean, default: ``false``)
   Cached flag indicating the user has a paid subscription.
 
+``browser.ipProtection.upgradeNotAvailable`` (boolean, default: ``false``)
+  When ``true``, suppresses all upgrade-related messaging (settings link, feature
+  callouts, locations subview promo) regardless of the user's subscription state.
+  Intended to be flipped via Nimbus in regions or configurations where the VPN
+  upgrade path is not offered.
+
 ``browser.ipProtection.cacheDisabled`` (boolean, default: ``false``)
   Turns off all startup caches. Used primarily by xpcshell tests.
 
@@ -70,11 +76,15 @@ Networking and routing
 ``browser.ipProtection.mode`` (integer, default: ``0``)
   Selects which requests are proxied by ``IPPChannelFilter``:
   ``0`` routes all traffic (``MODE_FULL``), ``1`` only private browsing windows
-  (``MODE_PB``), ``2`` only requests classified as tracking (``MODE_TRACKER``).
+  (``MODE_PB``), ``2`` only requests classified as tracking (``MODE_TRACKER``),
+  (``MODE_INCLUSION``), ``3`` routes no traffic unless matching ``browser.ipProtection.inclusion.match_patterns``.
 
 ``browser.ipProtection.inclusion.match_patterns`` (string, default: ``""``)
   JSON array of URL match patterns restricting which requests are proxied.
   When empty, all traffic is proxied according to ``mode``.
+
+  .. seealso::
+     `Match Patterns Documentation <https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns>`_
 
 ``browser.ipProtection.override.serverlist`` (string)
   A JSON payload that overrides the server list. Follows the Remote Settings schema.
@@ -82,8 +92,14 @@ Networking and routing
 UI Features
 ~~~~~~~~~~~
 
-``browser.ipProtection.bandwidth.enabled`` (boolean, default: ``false``)
-  Controls whether bandwidth usage information is displayed in the status panel.
+``browser.ipProtection.bandwidth.enabled`` (boolean, default: ``true``)
+  Controls whether bandwidth usage information is displayed in the status panel
+  and in ``about:preferences``. ``IPPUsageHelper`` keeps this pref in sync with
+  the entitlement's ``limitedBandwidth`` field.
+
+``browser.ipProtection.bandwidth.maxInGb`` (integer, default: ``50``)
+  Maximum bandwidth in GB used for messaging. Can be controlled by Nimbus via
+  the ``ipProtection.bandwidthMax`` variable.
 
 ``browser.ipProtection.bandwidthThreshold`` (integer)
   Last recorded bandwidth usage threshold percentage, used for telemetry.

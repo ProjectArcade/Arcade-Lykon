@@ -5,8 +5,10 @@
 #ifndef SubstitutingJARURI_h
 #define SubstitutingJARURI_h
 
+#include "nsIIPCSerializableURI.h"
 #include "nsIStandardURL.h"
 #include "nsIURL.h"
+#include "nsIURIWithSizeOf.h"
 #include "nsJARURI.h"
 #include "nsISerializable.h"
 
@@ -24,7 +26,10 @@ namespace net {
 // allows consumers to access the underlying jar resource.
 class SubstitutingJARURI : public nsIJARURI,
                            public nsIStandardURL,
-                           public nsISerializable {
+                           public nsISerializable,
+                           public nsIIPCSerializableURI,
+                           public nsIURIWithSizeOf,
+                           public URIHasher {
  protected:
   // Contains the resource://-like URI to be mapped. nsIURI and nsIURL will
   // forward to this.
@@ -41,6 +46,8 @@ class SubstitutingJARURI : public nsIJARURI,
 
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSISERIALIZABLE
+  NS_DECL_NSIIPCSERIALIZABLEURI
+  NS_DECL_NSIURIWITHSIZEOF
 
   NS_INLINE_DECL_STATIC_IID(NS_SUBSTITUTINGJARURI_IMPL_CID)
 
@@ -62,6 +69,11 @@ class SubstitutingJARURI : public nsIJARURI,
   // Forward the rest of nsIURI to mSource
   NS_IMETHOD GetSpec(nsACString& aSpec) override {
     return !mSource ? NS_ERROR_NULL_POINTER : mSource->GetSpec(aSpec);
+  }
+  uint32_t SpecHash() override {
+    nsAutoCString spec;
+    (void)GetSpec(spec);
+    return CachedSpecHash(spec);
   }
   NS_IMETHOD GetPrePath(nsACString& aPrePath) override {
     return !mSource ? NS_ERROR_NULL_POINTER : mSource->GetPrePath(aPrePath);
@@ -150,8 +162,6 @@ class SubstitutingJARURI : public nsIJARURI,
                     : mSource->GetDisplayPrePath(aDisplayPrePath);
   }
   NS_IMETHOD Mutate(nsIURIMutator** _retval) override;
-  NS_IMETHOD_(void) Serialize(mozilla::ipc::URIParams& aParams) override;
-  virtual size_t SizeOfIncludingThis(MallocSizeOf aMallocSizeOf) override;
 
  private:
   nsresult Clone(nsIURI** aURI);

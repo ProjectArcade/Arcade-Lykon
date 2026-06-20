@@ -729,6 +729,15 @@ export const listing = [
       "validation",
       "capability_checks",
       "features",
+      "subgroup_size_control"
+    ]
+  },
+  {
+    "file": [
+      "api",
+      "validation",
+      "capability_checks",
+      "features",
       "texture_component_swizzle"
     ]
   },
@@ -2641,6 +2650,28 @@ export const listing = [
       "call",
       "builtin",
       "atomics",
+      "atomicStoreMax"
+    ]
+  },
+  {
+    "file": [
+      "shader",
+      "execution",
+      "expression",
+      "call",
+      "builtin",
+      "atomics",
+      "atomicStoreMin"
+    ]
+  },
+  {
+    "file": [
+      "shader",
+      "execution",
+      "expression",
+      "call",
+      "builtin",
+      "atomics",
       "atomicSub"
     ]
   },
@@ -4541,6 +4572,16 @@ export const listing = [
       "expression",
       "call",
       "builtin",
+      "atomicStoreMinMax"
+    ]
+  },
+  {
+    "file": [
+      "shader",
+      "validation",
+      "expression",
+      "call",
+      "builtin",
       "atomics"
     ]
   },
@@ -5708,6 +5749,14 @@ export const listing = [
       "validation",
       "extension",
       "readonly_and_readwrite_storage_textures"
+    ]
+  },
+  {
+    "file": [
+      "shader",
+      "validation",
+      "extension",
+      "subgroup_size_control"
     ]
   },
   {

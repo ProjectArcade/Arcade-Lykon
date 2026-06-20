@@ -14,7 +14,6 @@ import mozilla.components.concept.awesomebar.optimizedsuggestions.FlightSuggesti
 import mozilla.components.feature.session.SessionUseCases.LoadUrlUseCase
 import mozilla.components.support.test.mock
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -22,6 +21,7 @@ import org.junit.Test
 import org.mockito.Mockito.verify
 import java.time.ZoneId
 import java.util.Locale
+import kotlin.test.assertNotNull
 
 private const val ARTIFICIAL_DELAY = 350L
 
@@ -220,10 +220,10 @@ class FlightsOnlineSuggestionProviderTest {
         )
 
         assertNotNull(result)
-        assertEquals("LAX", result?.airportCode)
-        assertEquals("Los Angeles", result?.airportCity)
-        assertEquals("3:05 PM", result?.time)
-        assertEquals("Oct 5", result?.date)
+        assertEquals("LAX", result.airportCode)
+        assertEquals("Los Angeles", result.airportCity)
+        assertEquals("3:05 PM", result.time)
+        assertEquals("Oct 5", result.date)
     }
 
     @Test
@@ -242,10 +242,10 @@ class FlightsOnlineSuggestionProviderTest {
         )
 
         assertNotNull(result)
-        assertEquals("JFK", result?.airportCode)
-        assertEquals("New York", result?.airportCity)
-        assertEquals("1:05 PM", result?.time)
-        assertEquals("Oct 5", result?.date)
+        assertEquals("JFK", result.airportCode)
+        assertEquals("New York", result.airportCity)
+        assertEquals("1:05 PM", result.time)
+        assertEquals("Oct 5", result.date)
     }
 
     @Test
@@ -288,8 +288,8 @@ class FlightsOnlineSuggestionProviderTest {
 
         assertNotNull(resultPST)
         assertNotNull(resultEST)
-        assertEquals("1:05 PM", resultPST?.time)
-        assertEquals("4:05 PM", resultEST?.time)
+        assertEquals("1:05 PM", resultPST.time)
+        assertEquals("4:05 PM", resultEST.time)
     }
 
     @Test
@@ -316,8 +316,8 @@ class FlightsOnlineSuggestionProviderTest {
 
         assertNotNull(resultUS)
         assertNotNull(resultFrance)
-        assertEquals("Oct 5", resultUS?.date)
-        assertEquals("oct. 5", resultFrance?.date)
+        assertEquals("Oct 5", resultUS.date)
+        assertEquals("oct. 5", resultFrance.date)
     }
 }
 

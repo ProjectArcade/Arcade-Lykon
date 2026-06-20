@@ -27,7 +27,7 @@
 #include "debugger/Object.h"        // for DebuggerObject
 #include "ds/TraceableFifo.h"       // for TraceableFifo
 #include "gc/Barrier.h"             //
-#include "gc/Tracer.h"              // for TraceNullableEdge, TraceEdge
+#include "gc/Tracer.h"              // for TraceEdge, TraceEdge
 #include "gc/WeakMap.h"             // for WeakMap
 #include "gc/ZoneAllocator.h"       // for ZoneAllocPolicy
 #include "js/Debug.h"               // JS_DefineDebuggerObject
@@ -629,7 +629,7 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
     bool inNursery;
 
     void trace(JSTracer* trc) {
-      TraceNullableEdge(trc, &frame, "Debugger::AllocationsLogEntry::frame");
+      TraceEdge(trc, &frame, "Debugger::AllocationsLogEntry::frame");
     }
   };
 
@@ -798,6 +798,22 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
   using GeneratorWeakMap =
       DebuggerWeakMap<AbstractGeneratorObject, DebuggerFrame>;
   GeneratorWeakMap generatorFrames;
+
+#ifdef ENABLE_WASM_JSPI
+  // Secondary index of entries in `frames` that are wasm continuation frames
+  // (i.e., have WASM_CONT_FRAME_PTR_SLOT set). Note this only means the frame
+  // is on a continuation, not that it is currently suspended. Maintained
+  // so that sweepAll can iterate just these frames without scanning all of
+  // `frames`. An entry exists here if and only if an entry with the same
+  // AbstractFramePtr key exists in `frames` with WASM_CONT_FRAME_PTR_SLOT set.
+  //
+  // This holds because every `frames` removal reaching a wasm cont frame goes
+  // through terminateDebuggerFrame, which erases the entry here. The other
+  // removals (replaceFrameGuts, suspendGeneratorDebuggerFrames) never apply to
+  // wasm cont frames; wiring them in would need to update this index too.
+  using WasmContFrameKeys = Vector<AbstractFramePtr, 0, ZoneAllocPolicy>;
+  WasmContFrameKeys wasmContFrames;
+#endif
 
   // An ephemeral map from BaseScript* to Debugger.Script instances.
   using ScriptWeakMap = DebuggerWeakMap<BaseScript, DebuggerScript>;
@@ -986,7 +1002,7 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
                                           const JS::AutoRequireNoGC& nogc,
                                           FrameFn fn);
   template <typename FrameFn /* void (Debugger*, DebuggerFrame*) */>
-  static void forEachOnStackOrSuspendedDebuggerFrame(
+  static void forEachOnStackOrSuspendedGeneratorDebuggerFrame(
       JSContext* cx, AbstractFramePtr frame, const JS::AutoRequireNoGC& nogc,
       FrameFn fn);
 
@@ -1163,6 +1179,9 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
   Debugger(JSContext* cx, NativeObject* dbg);
   ~Debugger();
 
+  Debugger(const Debugger&) = delete;
+  Debugger& operator=(const Debugger&) = delete;
+
   inline const js::HeapPtr<NativeObject*>& toJSObject() const;
   inline js::HeapPtr<NativeObject*>& toJSObjectRef();
   static inline Debugger* fromJSObject(const JSObject* obj);
@@ -1319,10 +1338,6 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
                                  Handle<WasmInstanceObject*> wasmInstance);
 
   DebuggerDebuggeeLink* getDebuggeeLink();
-
- private:
-  Debugger(const Debugger&) = delete;
-  Debugger& operator=(const Debugger&) = delete;
 };
 
 // Specialize InternalBarrierMethods so we can have WeakHeapPtr<Debugger*>.

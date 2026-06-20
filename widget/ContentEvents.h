@@ -6,8 +6,6 @@
 #define mozilla_ContentEvents_h_
 
 #include "mozilla/BasicEvents.h"
-#include "mozilla/dom/CSSAnimation.h"
-#include "mozilla/dom/CSSTransition.h"
 #include "mozilla/dom/DataTransfer.h"
 #include "mozilla/dom/EventTarget.h"
 #include "nsCOMPtr.h"
@@ -17,6 +15,11 @@
 class nsIContent;
 
 namespace mozilla {
+
+namespace dom {
+class CSSAnimation;
+class CSSTransition;
+}  // namespace dom
 
 /******************************************************************************
  * mozilla::InternalScrollPortEvent
@@ -221,30 +224,16 @@ class InternalTransitionEvent final : public WidgetEvent {
   NS_DEFINE_AS_EVENT_OVERRIDE(Internal, TransitionEvent);
 
   InternalTransitionEvent(bool aIsTrusted, EventMessage aMessage,
-                          const WidgetEventTime* aTime = nullptr)
-      : WidgetEvent(aIsTrusted, aMessage, eTransitionEventClass, aTime),
-        mElapsedTime(0.0) {}
+                          const WidgetEventTime* aTime = nullptr);
 
-  InternalTransitionEvent(const InternalTransitionEvent& aOther) = delete;
-  InternalTransitionEvent& operator=(const InternalTransitionEvent& aOther) =
-      delete;
-  InternalTransitionEvent(InternalTransitionEvent&& aOther) = default;
-  InternalTransitionEvent& operator=(InternalTransitionEvent&& aOther) =
-      default;
+  InternalTransitionEvent(const InternalTransitionEvent&) = delete;
+  InternalTransitionEvent& operator=(const InternalTransitionEvent&) = delete;
+  InternalTransitionEvent(InternalTransitionEvent&&);
+  InternalTransitionEvent& operator=(InternalTransitionEvent&&);
 
-  NS_DEFINE_VIRTUAL_DESTRUCTOR_CHECKING_CLASS_VALUE(InternalTransitionEvent,
-                                                    eTransitionEventClass,
-                                                    eBasicEventClass)
+  ~InternalTransitionEvent();
 
-  virtual WidgetEvent* Duplicate() const override {
-    MOZ_ASSERT(mClass == eTransitionEventClass,
-               "Duplicate() must be overridden by sub class");
-    InternalTransitionEvent* result =
-        new InternalTransitionEvent(false, mMessage, this);
-    result->AssignTransitionEventData(*this, true);
-    result->mFlags = mFlags;
-    return result;
-  }
+  WidgetEvent* Duplicate() const override;
 
   nsString mPropertyName;
   nsString mPseudoElement;
@@ -252,14 +241,7 @@ class InternalTransitionEvent final : public WidgetEvent {
   RefPtr<dom::CSSTransition> mAnimation;
 
   void AssignTransitionEventData(const InternalTransitionEvent& aEvent,
-                                 bool aCopyTargets) {
-    AssignEventData(aEvent, aCopyTargets);
-
-    mPropertyName = aEvent.mPropertyName;
-    mElapsedTime = aEvent.mElapsedTime;
-    mPseudoElement = aEvent.mPseudoElement;
-    mAnimation = aEvent.mAnimation;
-  }
+                                 bool aCopyTargets);
 };
 
 /******************************************************************************
@@ -271,29 +253,16 @@ class InternalAnimationEvent final : public WidgetEvent {
   NS_DEFINE_AS_EVENT_OVERRIDE(Internal, AnimationEvent);
 
   InternalAnimationEvent(bool aIsTrusted, EventMessage aMessage,
-                         const WidgetEventTime* aTime = nullptr)
-      : WidgetEvent(aIsTrusted, aMessage, eAnimationEventClass, aTime),
-        mElapsedTime(0.0) {}
+                         const WidgetEventTime* aTime = nullptr);
 
-  InternalAnimationEvent(const InternalAnimationEvent& aOther) = delete;
-  InternalAnimationEvent& operator=(const InternalAnimationEvent& aOther) =
-      delete;
-  InternalAnimationEvent(InternalAnimationEvent&& aOther) = default;
-  InternalAnimationEvent& operator=(InternalAnimationEvent&& aOther) = default;
+  InternalAnimationEvent(const InternalAnimationEvent&) = delete;
+  InternalAnimationEvent& operator=(const InternalAnimationEvent&) = delete;
+  InternalAnimationEvent(InternalAnimationEvent&&);
+  InternalAnimationEvent& operator=(InternalAnimationEvent&&);
 
-  NS_DEFINE_VIRTUAL_DESTRUCTOR_CHECKING_CLASS_VALUE(InternalAnimationEvent,
-                                                    eAnimationEventClass,
-                                                    eBasicEventClass)
+  virtual ~InternalAnimationEvent();
 
-  virtual WidgetEvent* Duplicate() const override {
-    MOZ_ASSERT(mClass == eAnimationEventClass,
-               "Duplicate() must be overridden by sub class");
-    InternalAnimationEvent* result =
-        new InternalAnimationEvent(false, mMessage, this);
-    result->AssignAnimationEventData(*this, true);
-    result->mFlags = mFlags;
-    return result;
-  }
+  WidgetEvent* Duplicate() const override;
 
   nsString mAnimationName;
   nsString mPseudoElement;
@@ -301,14 +270,7 @@ class InternalAnimationEvent final : public WidgetEvent {
   RefPtr<dom::CSSAnimation> mAnimation;
 
   void AssignAnimationEventData(const InternalAnimationEvent& aEvent,
-                                bool aCopyTargets) {
-    AssignEventData(aEvent, aCopyTargets);
-
-    mAnimationName = aEvent.mAnimationName;
-    mElapsedTime = aEvent.mElapsedTime;
-    mPseudoElement = aEvent.mPseudoElement;
-    mAnimation = aEvent.mAnimation;
-  }
+                                bool aCopyTargets);
 };
 
 /******************************************************************************

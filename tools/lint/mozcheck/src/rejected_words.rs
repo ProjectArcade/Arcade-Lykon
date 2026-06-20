@@ -119,8 +119,7 @@ mod tests {
     fn test_check_reject_words_missing_file() {
         let re = RegexBuilder::new(r"te.t").build().unwrap();
 
-        let issues =
-            check_reject_words("/nonexistent/path.txt", &re, "test-linter", "msg", "rule");
+        let issues = check_reject_words("/nonexistent/path.txt", &re, "test-linter", "msg", "rule");
 
         assert!(issues.is_empty());
     }

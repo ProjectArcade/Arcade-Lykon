@@ -77,11 +77,11 @@ SingleTouchData::SingleTouchData()
 already_AddRefed<Touch> SingleTouchData::ToNewDOMTouch() const {
   MOZ_ASSERT(NS_IsMainThread(),
              "Can only create dom::Touch instances on main thread");
-  RefPtr<Touch> touch =
-      new Touch(mIdentifier,
-                LayoutDeviceIntPoint::Truncate(mScreenPoint.x, mScreenPoint.y),
-                LayoutDeviceIntPoint::Truncate(mRadius.width, mRadius.height),
-                mRotationAngle, mForce);
+  auto touch = MakeRefPtr<Touch>(
+      mIdentifier,
+      LayoutDeviceIntPoint::Truncate(mScreenPoint.x, mScreenPoint.y),
+      LayoutDeviceIntPoint::Truncate(mRadius.width, mRadius.height),
+      mRotationAngle, mForce);
   touch->mTilt.emplace(mTiltX, mTiltY);
   touch->twist = mTwist;
   return touch.forget();
@@ -380,11 +380,11 @@ WidgetMouseOrPointerEvent MouseInput::ToWidgetEvent(nsIWidget* aWidget) const {
              "Can only convert To WidgetTouchEvent on main thread");
 
   const DebugOnly<bool> isPointerEvent =
-      std::is_same<WidgetMouseOrPointerEvent, WidgetPointerEvent>::value;
+      std::is_same_v<WidgetMouseOrPointerEvent, WidgetPointerEvent>;
   const DebugOnly<bool> isMouseEvent =
-      std::is_same<WidgetMouseOrPointerEvent, WidgetMouseEvent>::value;
+      std::is_same_v<WidgetMouseOrPointerEvent, WidgetMouseEvent>;
   const DebugOnly<bool> isDragEvent =
-      std::is_same<WidgetMouseOrPointerEvent, WidgetDragEvent>::value;
+      std::is_same_v<WidgetMouseOrPointerEvent, WidgetDragEvent>;
   MOZ_ASSERT(!IsPointerEventType() || isPointerEvent,
              "Please use ToWidgetEvent<WidgetPointerEvent>() for the instance");
   MOZ_ASSERT(IsPointerEventType() || isMouseEvent || isDragEvent,

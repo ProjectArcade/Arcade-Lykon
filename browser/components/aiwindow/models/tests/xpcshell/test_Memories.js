@@ -21,18 +21,17 @@ const {
 const { getRecentChats } = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/models/memories/MemoriesChatSource.sys.mjs"
 );
-const {
-  DEFAULT_ENGINE_ID,
-  MODEL_FEATURES,
-  openAIEngine,
-  SERVICE_TYPES,
-  PURPOSES,
-} = ChromeUtils.importESModule(
+const { MODEL_FEATURES, SERVICE_TYPES, PURPOSES } = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/models/Utils.sys.mjs"
+);
+const { Conversation } = ChromeUtils.importESModule(
+  "moz-src:///browser/components/aiwindow/models/Conversation.sys.mjs"
 );
 const { sinon } = ChromeUtils.importESModule(
   "resource://testing-common/Sinon.sys.mjs"
 );
+
+const TEST_MODEL = "test-model";
 
 const {
   renderRecentHistoryForPrompt,
@@ -40,7 +39,7 @@ const {
   mapFilteredMemoriesToInitialList,
   generateInitialMemoriesList,
   deduplicateMemories,
-  filterSensitiveMemories,
+  applyQualityAndSensitivityFilter,
 } = ChromeUtils.importESModule(
   "moz-src:///browser/components/aiwindow/models/memories/Memories.sys.mjs"
 );
@@ -187,6 +186,9 @@ add_task(async function test_buildRecentHistoryCSV_only_browsing_history() {
   ];
   await PlacesUtils.history.clear();
   await PlacesUtils.history.insertMany(seeded);
+  for (const { url, visits } of seeded) {
+    await insertPlacesMetadata(url, visits[0].date.getTime());
+  }
 
   const [domainItems, titleItems, searchItems] =
     await getBrowserHistoryAggregates();
@@ -253,9 +255,6 @@ Tell me a joke about my favorite animals.`.trim(),
 
     // Test generateInitialMemoriesList with conversation sources
     const fakeEngine = {
-      loadPrompt() {
-        return "fake prompt";
-      },
       run() {
         return {
           finalOutput: `[
@@ -272,21 +271,21 @@ Tell me a joke about my favorite animals.`.trim(),
       },
     };
 
-    const engineStub = sb
-      .stub(openAIEngine, "_createEngine")
-      .resolves(fakeEngine);
-
-    const engine = await openAIEngine.build(
-      MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-      DEFAULT_ENGINE_ID,
-      SERVICE_TYPES.MEMORIES,
-      PURPOSES.MEMORY_GENERATION
-    );
-
-    Assert.ok(engineStub.calledOnce, "_createEngine should be called once");
+    const conversation = new Conversation({
+      feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+      model: TEST_MODEL,
+      serviceType: SERVICE_TYPES.MEMORIES,
+      purpose: PURPOSES.MEMORY_GENERATION,
+      parameters: {},
+      flowId: null,
+      engine: fakeEngine,
+    });
 
     const sources = { conversation: recentMessages };
-    const memoriesList = await generateInitialMemoriesList(engine, sources);
+    const memoriesList = await generateInitialMemoriesList(
+      conversation,
+      sources
+    );
 
     // Verify memories were generated from conversation data
     Assert.ok(
@@ -320,9 +319,6 @@ add_task(async function test_generateInitialMemoriesList_happy_path() {
      * The main `generateInitialMemoriesList` function should modify this heavily, cutting it back to only the required fields.
      */
     const fakeEngine = {
-      loadPrompt() {
-        return "fake prompt";
-      },
       run() {
         return {
           finalOutput: `[
@@ -362,19 +358,23 @@ add_task(async function test_generateInitialMemoriesList_happy_path() {
     };
 
     // Check that the stub was called
-    const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-    const engine = await openAIEngine.build(
-      MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-      DEFAULT_ENGINE_ID,
-      SERVICE_TYPES.MEMORIES,
-      PURPOSES.MEMORY_GENERATION
-    );
-    Assert.ok(stub.calledOnce, "_createEngine should be called once");
+    const conversation = new Conversation({
+      feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+      model: TEST_MODEL,
+      serviceType: SERVICE_TYPES.MEMORIES,
+      purpose: PURPOSES.MEMORY_GENERATION,
+      parameters: {},
+      flowId: null,
+      engine: fakeEngine,
+    });
 
     const [domainItems, titleItems, searchItems] =
       await getBrowserHistoryAggregates();
     const sources = { history: [domainItems, titleItems, searchItems] };
-    const memoriesList = await generateInitialMemoriesList(engine, sources);
+    const memoriesList = await generateInitialMemoriesList(
+      conversation,
+      sources
+    );
 
     // Check top level structure
     Assert.ok(
@@ -437,9 +437,6 @@ add_task(
     try {
       // LLM returns an empty memories list
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `[]`,
@@ -448,19 +445,23 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").returns(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const [domainItems, titleItems, searchItems] =
         await getBrowserHistoryAggregates();
       const sources = { history: [domainItems, titleItems, searchItems] };
-      const memoriesList = await generateInitialMemoriesList(engine, sources);
+      const memoriesList = await generateInitialMemoriesList(
+        conversation,
+        sources
+      );
 
       Assert.equal(Array.isArray(memoriesList), true, "Should return an array");
       Assert.equal(memoriesList.length, 0, "Array should contain 0 memories");
@@ -479,9 +480,6 @@ add_task(
     try {
       // LLM doesn't return an array
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `testing`,
@@ -490,19 +488,23 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").returns(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const [domainItems, titleItems, searchItems] =
         await getBrowserHistoryAggregates();
       const sources = { history: [domainItems, titleItems, searchItems] };
-      const memoriesList = await generateInitialMemoriesList(engine, sources);
+      const memoriesList = await generateInitialMemoriesList(
+        conversation,
+        sources
+      );
 
       Assert.equal(Array.isArray(memoriesList), true, "Should return an array");
       Assert.equal(memoriesList.length, 0, "Array should contain 0 memories");
@@ -521,9 +523,6 @@ add_task(
     try {
       // LLM doesn't return an array of maps
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `["testing1", "testing2", ["testing3"]]`,
@@ -532,19 +531,23 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").returns(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const [domainItems, titleItems, searchItems] =
         await getBrowserHistoryAggregates();
       const sources = { history: [domainItems, titleItems, searchItems] };
-      const memoriesList = await generateInitialMemoriesList(engine, sources);
+      const memoriesList = await generateInitialMemoriesList(
+        conversation,
+        sources
+      );
 
       Assert.equal(Array.isArray(memoriesList), true, "Should return an array");
       Assert.equal(memoriesList.length, 0, "Array should contain 0 memories");
@@ -566,9 +569,6 @@ add_task(
       // - 1 has a memory_summary exceeding MAX_MEMORY_SUMMARY_LENGTH (100 chars), so it should be rejected
       // - 1 is fully correct and should be kept
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `[
@@ -620,19 +620,23 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").returns(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const [domainItems, titleItems, searchItems] =
         await getBrowserHistoryAggregates();
       const sources = { history: [domainItems, titleItems, searchItems] };
-      const memoriesList = await generateInitialMemoriesList(engine, sources);
+      const memoriesList = await generateInitialMemoriesList(
+        conversation,
+        sources
+      );
 
       Assert.equal(
         Array.isArray(memoriesList),
@@ -662,9 +666,6 @@ add_task(async function test_deduplicateMemoriesList_happy_path() {
      * The `deduplicateMemories` function should return an array containing only the `main_memory` values.
      */
     const fakeEngine = {
-      loadPrompt() {
-        return "fake prompt";
-      },
       run() {
         return {
           finalOutput: `{
@@ -696,17 +697,18 @@ add_task(async function test_deduplicateMemoriesList_happy_path() {
     };
 
     // Check that the stub was called
-    const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-    const engine = await openAIEngine.build(
-      MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-      DEFAULT_ENGINE_ID,
-      SERVICE_TYPES.MEMORIES,
-      PURPOSES.MEMORY_GENERATION
-    );
-    Assert.ok(stub.calledOnce, "_createEngine should be called once");
+    const conversation = new Conversation({
+      feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+      model: TEST_MODEL,
+      serviceType: SERVICE_TYPES.MEMORIES,
+      purpose: PURPOSES.MEMORY_GENERATION,
+      parameters: {},
+      flowId: null,
+      engine: fakeEngine,
+    });
 
     const dedupedMemoriesList = await deduplicateMemories(
-      engine,
+      conversation,
       EXISTING_MEMORIES,
       NEW_MEMORIES
     );
@@ -750,9 +752,6 @@ add_task(async function test_deduplicateMemoriesList_sad_path_empty_output() {
   try {
     // LLM returns the correct schema but with an empty unique_memories array
     const fakeEngine = {
-      loadPrompt() {
-        return "fake prompt";
-      },
       run() {
         return {
           finalOutput: `{
@@ -763,17 +762,18 @@ add_task(async function test_deduplicateMemoriesList_sad_path_empty_output() {
     };
 
     // Check that the stub was called
-    const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-    const engine = await openAIEngine.build(
-      MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-      DEFAULT_ENGINE_ID,
-      SERVICE_TYPES.MEMORIES,
-      PURPOSES.MEMORY_GENERATION
-    );
-    Assert.ok(stub.calledOnce, "_createEngine should be called once");
+    const conversation = new Conversation({
+      feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+      model: TEST_MODEL,
+      serviceType: SERVICE_TYPES.MEMORIES,
+      purpose: PURPOSES.MEMORY_GENERATION,
+      parameters: {},
+      flowId: null,
+      engine: fakeEngine,
+    });
 
     const dedupedMemoriesList = await deduplicateMemories(
-      engine,
+      conversation,
       EXISTING_MEMORIES,
       NEW_MEMORIES
     );
@@ -794,9 +794,6 @@ add_task(
     try {
       // LLM returns an incorrect data type
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `testing`,
@@ -805,17 +802,18 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const dedupedMemoriesList = await deduplicateMemories(
-        engine,
+        conversation,
         EXISTING_MEMORIES,
         NEW_MEMORIES
       );
@@ -841,9 +839,6 @@ add_task(
     try {
       // LLM returns a map with the right top-level key, but the inner structure is wrong
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
@@ -854,17 +849,18 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const dedupedMemoriesList = await deduplicateMemories(
-        engine,
+        conversation,
         EXISTING_MEMORIES,
         NEW_MEMORIES
       );
@@ -890,9 +886,6 @@ add_task(
     try {
       // LLM returns a map of nested arrays, but the array structure is wrong
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
@@ -903,17 +896,18 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const dedupedMemoriesList = await deduplicateMemories(
-        engine,
+        conversation,
         EXISTING_MEMORIES,
         NEW_MEMORIES
       );
@@ -939,9 +933,6 @@ add_task(
     try {
       // LLm returns correct output except that the top-level key is wrong
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
@@ -973,17 +964,18 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const dedupedMemoriesList = await deduplicateMemories(
-        engine,
+        conversation,
         EXISTING_MEMORIES,
         NEW_MEMORIES
       );
@@ -1009,9 +1001,6 @@ add_task(
     try {
       // LLm returns correct output except that 1 of the inner maps is wrong and 1 main_memory is the wrong data type
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
@@ -1035,17 +1024,18 @@ add_task(
       };
 
       // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
       const dedupedMemoriesList = await deduplicateMemories(
-        engine,
+        conversation,
         EXISTING_MEMORIES,
         NEW_MEMORIES
       );
@@ -1068,23 +1058,20 @@ add_task(
 );
 
 /**
- * Tests successful memories sensitivity filtering
+ * Tests successful memories quality + sensitivity filtering
  */
-add_task(async function test_filterSensitiveMemories_happy_path() {
+add_task(async function test_applyQualityAndSensitivityFilter_happy_path() {
   const sb = sinon.createSandbox();
   try {
     /**
-     * The fake engine that returns a canned LLM response for deduplication.
-     * The `filterSensitiveMemories` function should return the inner array from `non_sensitive_memories`.
+     * Fake engine that returns three of the four NEW_MEMORIES as kept memories.
+     * `applyQualityAndSensitivityFilter` should return those three verbatim.
      */
     const fakeEngine = {
-      loadPrompt() {
-        return "fake prompt";
-      },
       run() {
         return {
           finalOutput: `{
-  "non_sensitive_memories": [
+  "kept_memories": [
     "Loves hiking and camping",
     "Reads science fiction novels",
     "Likes both dogs and cats"
@@ -1093,39 +1080,37 @@ add_task(async function test_filterSensitiveMemories_happy_path() {
         };
       },
     };
+    const conversation = new Conversation({
+      feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+      model: TEST_MODEL,
+      serviceType: SERVICE_TYPES.MEMORIES,
+      purpose: PURPOSES.MEMORY_GENERATION,
+      parameters: {},
+      flowId: null,
+      engine: fakeEngine,
+    });
 
-    // Check that the stub was called
-    const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-    const engine = await openAIEngine.build(
-      MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-      DEFAULT_ENGINE_ID,
-      SERVICE_TYPES.MEMORIES,
-      PURPOSES.MEMORY_GENERATION
-    );
-    Assert.ok(stub.calledOnce, "_createEngine should be called once");
-
-    const nonSensitiveMemoriesList = await filterSensitiveMemories(
-      engine,
+    const keptMemoriesList = await applyQualityAndSensitivityFilter(
+      conversation,
       NEW_MEMORIES
     );
 
-    // Check that the non-sensitive memories list contains only non-sensitive memories
     Assert.equal(
-      nonSensitiveMemoriesList.length,
+      keptMemoriesList.length,
       3,
-      "Non-sensitive memories list should contain 3 memories"
+      "Kept memories list should contain 3 memories"
     );
     Assert.ok(
-      nonSensitiveMemoriesList.includes("Loves hiking and camping"),
-      "Non-sensitive memories should include 'Loves hiking and camping'"
+      keptMemoriesList.includes("Loves hiking and camping"),
+      "Kept memories should include 'Loves hiking and camping'"
     );
     Assert.ok(
-      nonSensitiveMemoriesList.includes("Reads science fiction novels"),
-      "Non-sensitive memories should include 'Reads science fiction novels'"
+      keptMemoriesList.includes("Reads science fiction novels"),
+      "Kept memories should include 'Reads science fiction novels'"
     );
     Assert.ok(
-      nonSensitiveMemoriesList.includes("Likes both dogs and cats"),
-      "Non-sensitive memories should include 'Likes both dogs and cats'"
+      keptMemoriesList.includes("Likes both dogs and cats"),
+      "Kept memories should include 'Likes both dogs and cats'"
     );
   } finally {
     sb.restore();
@@ -1133,97 +1118,75 @@ add_task(async function test_filterSensitiveMemories_happy_path() {
 });
 
 /**
- * Tests failed memories sensitivity filtering - Empty output
- */
-add_task(async function test_filterSensitiveMemories_sad_path_empty_output() {
-  const sb = sinon.createSandbox();
-  try {
-    // LLM returns an empty non_sensitive_memories array
-    const fakeEngine = {
-      loadPrompt() {
-        return "fake prompt";
-      },
-      run() {
-        return {
-          finalOutput: `{
-  "non_sensitive_memories": []
-}`,
-        };
-      },
-    };
-
-    // Check that the stub was called
-    const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-    const engine = await openAIEngine.build(
-      MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-      DEFAULT_ENGINE_ID,
-      SERVICE_TYPES.MEMORIES,
-      PURPOSES.MEMORY_GENERATION
-    );
-    Assert.ok(stub.calledOnce, "_createEngine should be called once");
-
-    const nonSensitiveMemoriesList = await filterSensitiveMemories(
-      engine,
-      NEW_MEMORIES
-    );
-
-    Assert.ok(
-      Array.isArray(nonSensitiveMemoriesList),
-      "Should return an array"
-    );
-    Assert.equal(
-      nonSensitiveMemoriesList.length,
-      0,
-      "Should return an empty array"
-    );
-  } finally {
-    sb.restore();
-  }
-});
-
-/**
- * Tests failed memories sensitivity filtering - Wrong data type
+ * Tests failed fused filter - Empty output
  */
 add_task(
-  async function test_filterSensitiveMemories_sad_path_wrong_data_type() {
+  async function test_applyQualityAndSensitivityFilter_sad_path_empty_output() {
     const sb = sinon.createSandbox();
     try {
-      // LLM returns the wrong outer data type
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
+        run() {
+          return {
+            finalOutput: `{
+  "kept_memories": []
+}`,
+          };
         },
+      };
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
+
+      const keptMemoriesList = await applyQualityAndSensitivityFilter(
+        conversation,
+        NEW_MEMORIES
+      );
+
+      Assert.ok(Array.isArray(keptMemoriesList), "Should return an array");
+      Assert.equal(keptMemoriesList.length, 0, "Should return an empty array");
+    } finally {
+      sb.restore();
+    }
+  }
+);
+
+/**
+ * Tests failed filter - Wrong outer data type (not JSON)
+ */
+add_task(
+  async function test_applyQualityAndSensitivityFilter_sad_path_wrong_data_type() {
+    const sb = sinon.createSandbox();
+    try {
+      const fakeEngine = {
         run() {
           return {
             finalOutput: `testing`,
           };
         },
       };
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
-      // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
-
-      const nonSensitiveMemoriesList = await filterSensitiveMemories(
-        engine,
+      const keptMemoriesList = await applyQualityAndSensitivityFilter(
+        conversation,
         NEW_MEMORIES
       );
 
-      Assert.ok(
-        Array.isArray(nonSensitiveMemoriesList),
-        "Should return an array"
-      );
-      Assert.equal(
-        nonSensitiveMemoriesList.length,
-        0,
-        "Should return an empty array"
-      );
+      Assert.ok(Array.isArray(keptMemoriesList), "Should return an array");
+      Assert.equal(keptMemoriesList.length, 0, "Should return an empty array");
     } finally {
       sb.restore();
     }
@@ -1231,50 +1194,38 @@ add_task(
 );
 
 /**
- * Tests failed memories sensitivity filtering - Wrong inner data type
+ * Tests failed filter - Wrong inner data type
  */
 add_task(
-  async function test_filterSensitiveMemories_sad_path_wrong_inner_data_type() {
+  async function test_applyQualityAndSensitivityFilter_sad_path_wrong_inner_data_type() {
     const sb = sinon.createSandbox();
     try {
-      // LLM returns a map with the non_sensitive_memories key, but its value's data type is wrong
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
-  "non_sensitive_memories": "testing"
+  "kept_memories": "testing"
 }`,
           };
         },
       };
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
-      // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
-
-      const nonSensitiveMemoriesList = await filterSensitiveMemories(
-        engine,
+      const keptMemoriesList = await applyQualityAndSensitivityFilter(
+        conversation,
         NEW_MEMORIES
       );
 
-      Assert.ok(
-        Array.isArray(nonSensitiveMemoriesList),
-        "Should return an array"
-      );
-      Assert.equal(
-        nonSensitiveMemoriesList.length,
-        0,
-        "Should return an empty array"
-      );
+      Assert.ok(Array.isArray(keptMemoriesList), "Should return an array");
+      Assert.equal(keptMemoriesList.length, 0, "Should return an empty array");
     } finally {
       sb.restore();
     }
@@ -1282,52 +1233,40 @@ add_task(
 );
 
 /**
- * Tests failed memories sensitivity filtering - Wrong outer schema
+ * Tests failed filter - Wrong outer schema (top-level key mismatch)
  */
 add_task(
-  async function test_filterSensitiveMemories_sad_path_wrong_outer_schema() {
+  async function test_applyQualityAndSensitivityFilter_sad_path_wrong_outer_schema() {
     const sb = sinon.createSandbox();
     try {
-      // LLM returns a map but with the wrong top-level key
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
-  "these_are_non_sensitive_memories": [
+  "these_are_kept_memories": [
     "testing1", "testing2", "testing3"
   ]
 }`,
           };
         },
       };
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
-      // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
-
-      const nonSensitiveMemoriesList = await filterSensitiveMemories(
-        engine,
+      const keptMemoriesList = await applyQualityAndSensitivityFilter(
+        conversation,
         NEW_MEMORIES
       );
 
-      Assert.ok(
-        Array.isArray(nonSensitiveMemoriesList),
-        "Should return an array"
-      );
-      Assert.equal(
-        nonSensitiveMemoriesList.length,
-        0,
-        "Should return an empty array"
-      );
+      Assert.ok(Array.isArray(keptMemoriesList), "Should return an array");
+      Assert.equal(keptMemoriesList.length, 0, "Should return an empty array");
     } finally {
       sb.restore();
     }
@@ -1335,58 +1274,49 @@ add_task(
 );
 
 /**
- * Tests failed memories sensitivity filtering - Some correct inner schema
+ * Tests that reworded memories are dropped
  */
 add_task(
-  async function test_filterSensitiveMemories_sad_path_some_correct_inner_schema() {
+  async function test_applyQualityAndSensitivityFilter_drops_reworded_memories() {
     const sb = sinon.createSandbox();
     try {
-      // LLM returns a map with the non_sensitive_memories key, but the inner schema has a mix of correct and incorrect data types
+      // LLM reworded one memory and returned a verbatim-correct one
       const fakeEngine = {
-        loadPrompt() {
-          return "fake prompt";
-        },
         run() {
           return {
             finalOutput: `{
-  "non_sensitive_memories": [
-    "correct",
-    12345,
-    {"bad": "schema"}
+  "kept_memories": [
+    "Loves hiking and camping",
+    "Reads sci-fi novels"
   ]
 }`,
           };
         },
       };
+      const conversation = new Conversation({
+        feature: MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
+        model: TEST_MODEL,
+        serviceType: SERVICE_TYPES.MEMORIES,
+        purpose: PURPOSES.MEMORY_GENERATION,
+        parameters: {},
+        flowId: null,
+        engine: fakeEngine,
+      });
 
-      // Check that the stub was called
-      const stub = sb.stub(openAIEngine, "_createEngine").resolves(fakeEngine);
-      const engine = await openAIEngine.build(
-        MODEL_FEATURES.MEMORIES_INITIAL_GENERATION_SYSTEM,
-        DEFAULT_ENGINE_ID,
-        SERVICE_TYPES.MEMORIES,
-        PURPOSES.MEMORY_GENERATION
-      );
-      Assert.ok(stub.calledOnce, "_createEngine should be called once");
-
-      const nonSensitiveMemoriesList = await filterSensitiveMemories(
-        engine,
+      const keptMemoriesList = await applyQualityAndSensitivityFilter(
+        conversation,
         NEW_MEMORIES
       );
 
-      Assert.ok(
-        Array.isArray(nonSensitiveMemoriesList),
-        "Should return an array"
-      );
       Assert.equal(
-        nonSensitiveMemoriesList.length,
+        keptMemoriesList.length,
         1,
-        "Should return an array with one valid memory"
+        "Only the verbatim memory should be kept"
       );
       Assert.equal(
-        nonSensitiveMemoriesList[0],
-        "correct",
-        "Should return the single valid memory"
+        keptMemoriesList[0],
+        "Loves hiking and camping",
+        "Reworded memory should be dropped"
       );
     } finally {
       sb.restore();

@@ -28,11 +28,7 @@ const EXCEPTION_LIST_PREF_NAME = "privacy.restrict3rdpartystorage.skip_list";
 
 async function cleanup() {
   Services.prefs.clearUserPref(EXCEPTION_LIST_PREF_NAME);
-  await new Promise(resolve => {
-    Services.clearData.deleteData(Ci.nsIClearDataService.CLEAR_ALL, () =>
-      resolve()
-    );
-  });
+  await clearSiteTestData();
 }
 
 add_setup(async function () {
@@ -41,11 +37,11 @@ add_setup(async function () {
     set: [
       [
         "network.cookie.cookieBehavior",
-        Ci.nsICookieService.BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN,
+        Ci.nsICookieService.BEHAVIOR_PARTITION_FOREIGN,
       ],
       [
         "network.cookie.cookieBehavior.pbmode",
-        Ci.nsICookieService.BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN,
+        Ci.nsICookieService.BEHAVIOR_PARTITION_FOREIGN,
       ],
       ["privacy.restrict3rdpartystorage.heuristic.redirect", false],
       ["privacy.trackingprotection.enabled", false],

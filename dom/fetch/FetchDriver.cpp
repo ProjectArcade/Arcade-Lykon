@@ -30,6 +30,7 @@
 #include "mozilla/dom/UserActivation.h"
 #include "mozilla/dom/WorkerCommon.h"
 #include "mozilla/ipc/PBackgroundSharedTypes.h"
+#include "mozilla/net/ChannelClassifierUtils.h"
 #include "mozilla/net/ContentRange.h"
 #include "mozilla/net/InterceptionInfo.h"
 #include "mozilla/net/NeckoChannelParams.h"
@@ -228,7 +229,8 @@ AlternativeDataStreamListener::OnStartRequest(nsIRequest* aRequest) {
   mStatus = AlternativeDataStreamListener::FALLBACK;
   mAlternativeDataCacheEntryId = 0;
   MOZ_ASSERT(mFetchDriver);
-  return mFetchDriver->OnStartRequest(aRequest);
+  RefPtr<FetchDriver> fetchDriver = mFetchDriver;
+  return fetchDriver->OnStartRequest(aRequest);
 }
 
 NS_IMETHODIMP
@@ -246,8 +248,9 @@ AlternativeDataStreamListener::OnDataAvailable(nsIRequest* aRequest,
   }
   if (mStatus == AlternativeDataStreamListener::FALLBACK) {
     MOZ_ASSERT(mFetchDriver);
-    return mFetchDriver->OnDataAvailable(aRequest, aInputStream, aOffset,
-                                         aCount);
+    RefPtr<FetchDriver> fetchDriver = mFetchDriver;
+    return fetchDriver->OnDataAvailable(aRequest, aInputStream, aOffset,
+                                        aCount);
   }
   return NS_OK;
 }
@@ -339,7 +342,7 @@ FetchDriver::FetchDriver(SafeRefPtr<InternalRequest> aRequest,
   MOZ_ASSERT(aPrincipal);
   MOZ_ASSERT(aMainThreadEventTarget);
 
-  mIsTrackingFetch = net::UrlClassifierCommon::IsTrackingClassificationFlag(
+  mIsTrackingFetch = net::ChannelClassifierUtils::IsTrackingClassificationFlag(
       mTrackingFlags.thirdPartyFlags, false);
 }
 
@@ -892,6 +895,7 @@ nsresult FetchDriver::HttpFetch(
           case RequestDestination::Worker:
           case RequestDestination::Xslt:
           case RequestDestination::Json:
+          case RequestDestination::Text:
             return FETCH_PRIORITY_ADJUSTMENT_FOR(link_preload_script,
                                                  fetchPriority);
           case RequestDestination::Image:
@@ -1402,7 +1406,8 @@ class DataAvailableRunnable final : public Runnable {
 
   NS_IMETHOD
   Run() override {
-    mObserver->OnDataAvailable();
+    RefPtr<FetchDriverObserver> observer = mObserver;
+    observer->OnDataAvailable();
     mObserver = nullptr;
     return NS_OK;
   }
@@ -1793,7 +1798,7 @@ void FetchDriver::SetController(
   mController = aController;
 }
 
-PerformanceTimingData* FetchDriver::GetPerformanceTimingData(
+UniquePtr<PerformanceTimingData> FetchDriver::GetPerformanceTimingData(
     nsAString& aInitiatorType, nsAString& aEntryName) {
   MOZ_ASSERT(XRE_IsParentProcess());
   if (!mChannel) {

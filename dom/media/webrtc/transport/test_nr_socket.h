@@ -148,7 +148,7 @@ class TestNat {
         block_stun_(false),
         block_tcp_(false),
         block_tls_(false),
-        error_code_for_drop_(0),
+        error_code_for_drop_(false),
         delay_stun_resp_ms_(0),
         nat_delegate_(nullptr),
         network_delay_ms_(0) {}
@@ -267,7 +267,7 @@ class TestNrSocket : public NrSocketBase {
     int send_from_queue();
     NS_INLINE_DECL_THREADSAFE_REFCOUNTING(PortMapping);
 
-    PRIntervalTime last_used_;
+    PRIntervalTime last_used_ = 0;
     RefPtr<NrSocketBase> external_socket_;
     // For non-symmetric, most of the data here doesn't matter
     nr_transport_addr remote_address_;

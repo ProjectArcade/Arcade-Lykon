@@ -158,7 +158,7 @@ bool nsWindow::OnPaint() {
     return true;
   }
 
-  WindowRenderer* renderer = GetWindowRenderer();
+  RefPtr renderer = GetWindowRenderer();
   KnowsCompositor* knowsCompositor = renderer->AsKnowsCompositor();
   WebRenderLayerManager* layerManager = renderer->AsWebRender();
   const bool isFallback =
@@ -194,7 +194,7 @@ bool nsWindow::OnPaint() {
   Maybe<FallbackPaintContext> fallback;
   if (isFallback) {
     uint32_t flags = isTransparent ? gfxWindowsSurface::FLAG_IS_TRANSPARENT : 0;
-    RefPtr<gfxASurface> targetSurface = new gfxWindowsSurface(hDC, flags);
+    auto targetSurface = MakeRefPtr<gfxWindowsSurface>(hDC, flags);
     RECT paintRect;
     ::GetClientRect(mWnd, &paintRect);
     RefPtr<DrawTarget> dt = gfxPlatform::CreateDrawTargetForSurface(

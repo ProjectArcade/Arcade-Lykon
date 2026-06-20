@@ -12,10 +12,10 @@ use super::{
     PropertyId, ShorthandId, SourcePropertyDeclaration, SourcePropertyDeclarationDrain,
     SubpropertiesVec,
 };
-use crate::context::QuirksMode;
+use crate::context::{QuirksMode, TreeCountingCaches};
 use crate::custom_properties;
 use crate::derives::*;
-use crate::dom::AttributeTracker;
+use crate::dom::{AttributeTracker, DummyElementContext};
 use crate::error_reporting::{ContextualParseError, ParseErrorReporter};
 use crate::parser::ParserContext;
 use crate::properties::{
@@ -30,6 +30,7 @@ use crate::shared_lock::Locked;
 use crate::stylesheets::container_rule::ContainerSizeQuery;
 use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
 use crate::stylist::Stylist;
+use crate::typed_om::TypedValueList;
 use crate::values::computed::Context;
 use cssparser::{
     parse_important, AtRuleParser, CowRcStr, DeclarationParser, Delimiter, ParseErrorKind, Parser,
@@ -44,9 +45,9 @@ use smallvec::SmallVec;
 use std::fmt::{self, Write};
 use std::iter::Zip;
 use std::slice::Iter;
+use std::sync::atomic::AtomicBool;
 use style_traits::{
     CssString, CssStringWriter, CssWriter, ParseError, ParsingMode, StyleParseErrorKind, ToCss,
-    TypedValueList,
 };
 use thin_vec::ThinVec;
 
@@ -230,7 +231,7 @@ impl<'a> Iterator for PropertyDeclarationIdSetIterator<'a> {
 
 /// Overridden declarations are skipped.
 #[cfg_attr(feature = "gecko", derive(MallocSizeOf))]
-#[derive(Clone, ToShmem, Default)]
+#[derive(Default)]
 pub struct PropertyDeclarationBlock {
     /// The group of declarations, along with their importance.
     ///
@@ -242,12 +243,46 @@ pub struct PropertyDeclarationBlock {
 
     /// The set of properties that are present in the block.
     property_ids: PropertyDeclarationIdSet,
+
+    /// Whether this declaration block may be mutated by CSSOM without copying.
+    /// Set when a declaration is shared across elements and needs to be copied, even when not in
+    /// the rule tree, e.g. via the style attribute or the XUL prototype caches.
+    pub immutable: AtomicBool,
+}
+
+impl to_shmem::ToShmem for PropertyDeclarationBlock {
+    fn to_shmem(&self, builder: &mut to_shmem::SharedMemoryBuilder) -> to_shmem::Result<Self> {
+        use std::mem::ManuallyDrop;
+        let declarations = self.declarations.to_shmem(builder)?;
+        let declarations_importance = self.declarations_importance.to_shmem(builder)?;
+        let property_ids = self.property_ids.to_shmem(builder)?;
+        let immutable = AtomicBool::new(true);
+
+        Ok(ManuallyDrop::new(Self {
+            declarations: ManuallyDrop::into_inner(declarations),
+            declarations_importance: ManuallyDrop::into_inner(declarations_importance),
+            property_ids: ManuallyDrop::into_inner(property_ids),
+            immutable,
+        }))
+    }
+}
+
+impl Clone for PropertyDeclarationBlock {
+    fn clone(&self) -> Self {
+        Self {
+            declarations: self.declarations.clone(),
+            declarations_importance: self.declarations_importance.clone(),
+            property_ids: self.property_ids.clone(),
+            immutable: AtomicBool::new(false),
+        }
+    }
 }
 
 impl PartialEq for PropertyDeclarationBlock {
     fn eq(&self, other: &Self) -> bool {
         // property_ids must be equal if declarations are equal, so we don't
         // need to compare them explicitly.
+        // immutable doesn't matter for equality either.
         self.declarations == other.declarations
             && self.declarations_importance == other.declarations_importance
     }
@@ -391,6 +426,7 @@ impl PropertyDeclarationBlock {
             declarations: ThinVec::new(),
             declarations_importance: SmallBitVec::new(),
             property_ids: PropertyDeclarationIdSet::default(),
+            immutable: AtomicBool::new(false),
         }
     }
 
@@ -404,6 +440,7 @@ impl PropertyDeclarationBlock {
             declarations,
             declarations_importance: SmallBitVec::from_elem(1, importance.important()),
             property_ids,
+            immutable: AtomicBool::new(false),
         }
     }
 
@@ -972,6 +1009,7 @@ impl PropertyDeclarationBlock {
         };
 
         let mut rule_cache_conditions = RuleCacheConditions::default();
+        let mut tree_counting_caches = TreeCountingCaches::default();
         let mut context = Context::new(
             StyleBuilder::new(
                 stylist.device(),
@@ -985,6 +1023,8 @@ impl PropertyDeclarationBlock {
             &mut rule_cache_conditions,
             ContainerSizeQuery::none(),
             RuleCascadeFlags::empty(),
+            &DummyElementContext {},
+            &mut tree_counting_caches,
         );
 
         if let Some(cv) = computed_values {
@@ -1030,6 +1070,7 @@ impl PropertyDeclarationBlock {
             declarations,
             property_ids,
             declarations_importance: SmallBitVec::from_elem(len, false),
+            immutable: AtomicBool::new(false),
         }
     }
 

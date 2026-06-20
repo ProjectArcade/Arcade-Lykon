@@ -31,7 +31,8 @@ std::ostream& operator<<(std::ostream& aStream, PseudoStyleType aType) {
 
 /* static */
 Maybe<PseudoStyleRequest> PseudoStyleRequest::Parse(
-    const nsAString& aPseudoElement, bool aIgnoreEnabledState) {
+    const nsAString& aPseudoElement, URLExtraData* aURLExtraData,
+    bool aIgnoreEnabledState) {
   PseudoStyleRequest result;
 
   // Not a pseudo-element, use default PseudoStyleReqeust.
@@ -40,8 +41,8 @@ Maybe<PseudoStyleRequest> PseudoStyleRequest::Parse(
   }
 
   // Parse the pseudo-element string.
-  if (!Servo_ParsePseudoElement(&aPseudoElement, aIgnoreEnabledState,
-                                &result)) {
+  if (!Servo_ParsePseudoElement(&aPseudoElement, aURLExtraData,
+                                aIgnoreEnabledState, &result)) {
     return Nothing();
   }
 
@@ -64,6 +65,10 @@ void PseudoStyleRequest::ToString(nsAString& aResult) const {
         return u"::backdrop"_ns;
       case PseudoStyleType::Marker:
         return u"::marker"_ns;
+      case PseudoStyleType::Checkmark:
+        return u"::checkmark"_ns;
+      case PseudoStyleType::PickerIcon:
+        return u"::picker-icon"_ns;
       case PseudoStyleType::ViewTransition:
         return u"::view-transition"_ns;
       case PseudoStyleType::ViewTransitionGroup:

@@ -1,4 +1,4 @@
-// |reftest| skip module -- import-text is not supported
+// |reftest| module
 // Copyright (C) 2025 Mozilla Foundation. All rights reserved.
 // This code is governed by the BSD license found in the LICENSE file.
 /*---

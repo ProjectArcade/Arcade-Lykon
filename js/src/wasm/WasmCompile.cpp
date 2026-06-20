@@ -35,6 +35,7 @@
 #include "vm/JSAtomState.h"
 #include "vm/Realm.h"
 #include "wasm/WasmBaselineCompile.h"
+#include "wasm/WasmConstants.h"
 #include "wasm/WasmFeatures.h"
 #include "wasm/WasmGenerator.h"
 #include "wasm/WasmIonCompile.h"
@@ -58,7 +59,8 @@ ScriptedCaller ScriptedCaller::selfHosted(JSContext* cx) {
   if (!selfHosted) {
     oomUnsafe.crash("ScriptedCaller::selfHosted");
   }
-  return ScriptedCaller(std::move(selfHosted), false, 0);
+  return ScriptedCaller(std::move(selfHosted), ScriptedCallerKind::SelfHosted,
+                        0);
 }
 
 uint32_t wasm::ObservedCPUFeatures() {
@@ -231,12 +233,26 @@ FeatureArgs FeatureArgs::build(JSContext* cx, const FeatureOptions& options) {
 
   features.simd = jit::JitSupportsWasmSimd();
   features.isBuiltinModule = options.isBuiltinModule;
-  features.builtinModules.jsString = options.jsStringBuiltins;
-  features.builtinModules.jsStringConstants = options.jsStringConstants;
-  features.builtinModules.jsStringConstantsNamespace =
-      options.jsStringConstantsNamespace;
-  features.builtinModules.intGemm =
-      MozIntGemmAvailable(cx) && options.mozIntGemm;
+  if (features.isBuiltinModule) {
+    // Builtin modules can use stack switching if it's available. JS-PI needs
+    // this.
+    features.stackSwitching = wasm::IonPlatformSupport();
+    // No builtin modules are available to use within a builtin module. We
+    // theoretically could allow a builtin module to import another builtin
+    // module, but we'd need to find a way to prevent cycles. For now just
+    // disable this.
+    MOZ_ASSERT(!options.jsStringBuiltins);
+    MOZ_ASSERT(!options.jsStringConstants);
+    MOZ_ASSERT(!options.mozIntGemm);
+  } else {
+    // Enable builtin modules that have been selected by the user.
+    features.builtinModules.jsString = options.jsStringBuiltins;
+    features.builtinModules.jsStringConstants = options.jsStringConstants;
+    features.builtinModules.jsStringConstantsNamespace =
+        options.jsStringConstantsNamespace;
+    features.builtinModules.intGemm =
+        MozIntGemmAvailable(cx) && options.mozIntGemm;
+  }
 
   return features;
 }
@@ -962,7 +978,7 @@ static bool DecodeCodeSection(const CodeMetadata& codeMeta, DecoderT& d,
   return mg.finishFuncDefs();
 }
 
-SharedModule wasm::CompileBuffer(const CompileArgs& args,
+SharedModule wasm::CompileModule(const CompileArgs& args,
                                  const BytecodeBufferOrSource& bytecode,
                                  UniqueChars* error,
                                  UniqueCharsVector* warnings,
@@ -1039,6 +1055,49 @@ SharedModule wasm::CompileBuffer(const CompileArgs& args,
 
   return mg.finishModule(bytecode, *moduleMeta, listener);
 }
+
+#ifdef ENABLE_WASM_COMPONENTS
+SharedComponent wasm::CompileComponent(
+    const CompileArgs& args, const BytecodeBufferOrSource& bytecode,
+    UniqueChars* error, UniqueCharsVector* warnings,
+    JS::OptimizedEncodingListener* listener) {
+  MutableComponent c = js_new<Component>();
+  if (!c) {
+    return nullptr;
+  }
+
+  const BytecodeSource& bytecodeSource = bytecode.source();
+  Decoder d(bytecodeSource.envSpan(), bytecodeSource.envRange().start, error,
+            warnings);
+
+  if (!DecodeComponent(d, c, args, listener)) {
+    return nullptr;
+  }
+
+  return c;
+}
+
+SharedModuleOrComponent wasm::CompileBuffer(
+    const CompileArgs& args, const BytecodeBufferOrSource& bytecode,
+    UniqueChars* error, UniqueCharsVector* warnings,
+    JS::OptimizedEncodingListener* listener) {
+  const BytecodeSource& bytecodeSource = bytecode.source();
+  Decoder preambleDecoder(bytecodeSource.envSpan(),
+                          bytecodeSource.envRange().start, error, warnings);
+  if (IsComponent(preambleDecoder)) {
+    // TODO(wasm-cm)
+    preambleDecoder.fail("components are not supported yet");
+    return mozilla::Nothing();
+  }
+
+  SharedModule module =
+      CompileModule(args, bytecode, error, warnings, listener);
+  if (!module) {
+    return mozilla::Nothing();
+  }
+  return SharedModuleOrComponent(std::in_place, module);
+}
+#endif  // ENABLE_WASM_COMPONENTS
 
 bool wasm::CompileCompleteTier2(const ShareableBytes* codeSection,
                                 const Module& module, UniqueChars* error,

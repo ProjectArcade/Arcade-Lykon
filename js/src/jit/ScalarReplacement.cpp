@@ -1853,6 +1853,7 @@ class ArgumentsReplacer : public MDefinitionVisitorDefaultNoop {
   void visitGuardToClass(MGuardToClass* ins);
   void visitGuardProto(MGuardProto* ins);
   void visitGuardArgumentsObjectFlags(MGuardArgumentsObjectFlags* ins);
+  void visitGuardObjectHasSameRealm(MGuardObjectHasSameRealm* ins);
   void visitUnbox(MUnbox* ins);
   void visitGetArgumentsObjectArg(MGetArgumentsObjectArg* ins);
   void visitLoadArgumentsObjectArg(MLoadArgumentsObjectArg* ins);
@@ -1940,6 +1941,14 @@ bool ArgumentsReplacer::escapes(MInstruction* ins, bool guardedForMapped) {
         break;
       }
 
+      case MDefinition::Opcode::GuardObjectHasSameRealm: {
+        if (escapes(def->toInstruction(), guardedForMapped)) {
+          JitSpewDef(JitSpew_Escape, "is indirectly escaped by\n", def);
+          return true;
+        }
+        break;
+      }
+
       case MDefinition::Opcode::Unbox: {
         if (def->type() != MIRType::Object) {
           JitSpewDef(JitSpew_Escape, "has an invalid unbox\n", def);
@@ -1965,6 +1974,11 @@ bool ArgumentsReplacer::escapes(MInstruction* ins, bool guardedForMapped) {
       }
 
       case MDefinition::Opcode::ApplyArgsObj: {
+        // Forwarded formals are read via the CallObject.
+        if (args_->block()->info().anyFormalIsForwarded()) {
+          JitSpew(JitSpew_Escape, "has forwarded formal arguments\n");
+          return true;
+        }
         if (ins == def->toApplyArgsObj()->getThis()) {
           JitSpew(JitSpew_Escape, "is escaped as |this| arg of ApplyArgsObj\n");
           return true;
@@ -1973,14 +1987,21 @@ bool ArgumentsReplacer::escapes(MInstruction* ins, bool guardedForMapped) {
         break;
       }
 
+      case MDefinition::Opcode::ArgumentsSlice:
+      case MDefinition::Opcode::ArrayFromArgumentsObject:
+      case MDefinition::Opcode::LoadArgumentsObjectArg:
+      case MDefinition::Opcode::LoadArgumentsObjectArgHole:
+        // Forwarded formals are read via the CallObject.
+        if (args_->block()->info().anyFormalIsForwarded()) {
+          JitSpew(JitSpew_Escape, "has forwarded formal arguments\n");
+          return true;
+        }
+        break;
+
       // This is a replaceable consumer.
       case MDefinition::Opcode::ArgumentsObjectLength:
       case MDefinition::Opcode::GetArgumentsObjectArg:
-      case MDefinition::Opcode::LoadArgumentsObjectArg:
-      case MDefinition::Opcode::LoadArgumentsObjectArgHole:
       case MDefinition::Opcode::InArgumentsObjectArg:
-      case MDefinition::Opcode::ArrayFromArgumentsObject:
-      case MDefinition::Opcode::ArgumentsSlice:
         break;
 
       // This instruction is a no-op used to test that scalar replacement
@@ -2086,13 +2107,10 @@ void ArgumentsReplacer::visitGuardArgumentsObjectFlags(
   // property of the args object. We have already determined that the
   // args object doesn't escape, so its properties can't be mutated.
   //
-  // FORWARDED_ARGUMENTS_BIT is set if any mapped argument is closed
-  // over, which is an immutable property of the script. Because we
-  // are replacing the args object for a known script, we can check
-  // the flag once, which is done when we first attach the CacheIR,
-  // and rely on it.  (Note that this wouldn't be true if we didn't
-  // know the origin of args_, because it could be passed in from
-  // another function.)
+  // FORWARDED_ARGUMENTS_BIT is set if any mapped formal is closed
+  // over. When that's the case, escapes() returns true for any
+  // consumer that may read a forwarded formal, so the args object
+  // isn't replaced and we don't reach this point.
   uint32_t supportedBits = ArgumentsObject::LENGTH_OVERRIDDEN_BIT |
                            ArgumentsObject::ITERATOR_OVERRIDDEN_BIT |
                            ArgumentsObject::ELEMENT_OVERRIDDEN_BIT |
@@ -2103,6 +2121,23 @@ void ArgumentsReplacer::visitGuardArgumentsObjectFlags(
   MOZ_ASSERT_IF(ins->flags() & ArgumentsObject::FORWARDED_ARGUMENTS_BIT,
                 !args_->block()->info().anyFormalIsForwarded());
 #endif
+
+  // Replace the guard with the args object.
+  ins->replaceAllUsesWith(args_);
+
+  // Remove the guard.
+  ins->block()->discard(ins);
+}
+
+void ArgumentsReplacer::visitGuardObjectHasSameRealm(
+    MGuardObjectHasSameRealm* ins) {
+  // Skip guards on other objects.
+  if (ins->object() != args_) {
+    return;
+  }
+
+  // We can eliminate this guard because the arguments object is created in the
+  // script's realm and we don't inline cross-realm calls.
 
   // Replace the guard with the args object.
   ins->replaceAllUsesWith(args_);
@@ -3847,7 +3882,7 @@ class WasmStructMemoryView : public MDefinitionVisitorDefaultNoop {
 
  private:
   TempAllocator& alloc_;
-  MInstruction* struct_;
+  MWasmNewStructObject* struct_;
   MConstant* undefinedVal_;
   MBasicBlock* startBlock_;
   BlockState* state_;
@@ -3855,7 +3890,7 @@ class WasmStructMemoryView : public MDefinitionVisitorDefaultNoop {
   bool oom_;
 
  public:
-  WasmStructMemoryView(TempAllocator& alloc, MInstruction* wasmStruct);
+  WasmStructMemoryView(TempAllocator& alloc, MWasmNewStructObject* wasmStruct);
 
   MBasicBlock* startingBlock();
   bool initStartingState(BlockState** pState);
@@ -3899,7 +3934,7 @@ bool WasmStructMemoryView::initStartingState(BlockState** pState) {
   // Create a new block state and insert at it at the location of the new
   // struct.
   BlockState* state = BlockState::New(alloc_, struct_);
-  if (!state || !state->init()) {
+  if (!state) {
     return false;
   }
 
@@ -3987,7 +4022,63 @@ void WasmStructMemoryView::visitWasmLoadField(MWasmLoadField* ins) {
 
   MDefinition* value = state_->getField(ins->structFieldIndex().value());
 
-  // Replace load by the field value.
+  // Packed fields (i8/i16) require widening. Since we're eliding the load,
+  // insert MIR to apply the equivalent widening operation.
+  MWideningOp wideningOp = ins->wideningOp();
+  if (wideningOp != MWideningOp::None) {
+    // Widening only goes to Int32.
+    MOZ_ASSERT(ins->type() == MIRType::Int32);
+
+    MBasicBlock* block = ins->block();
+    switch (wideningOp) {
+      case MWideningOp::FromU8:
+      case MWideningOp::FromU16: {
+        int32_t maskVal = wideningOp == MWideningOp::FromU8 ? 0xFF : 0xFFFF;
+        auto* mask = MConstant::NewInt32(alloc_, maskVal);
+        if (!mask) {
+          oom_ = true;
+          return;
+        }
+        block->insertBefore(ins, mask);
+        auto* widened = MBitAnd::New(alloc_, value, mask, MIRType::Int32);
+        if (!widened) {
+          oom_ = true;
+          return;
+        }
+        block->insertBefore(ins, widened);
+        value = widened;
+        break;
+      }
+      case MWideningOp::FromS8:
+      case MWideningOp::FromS16: {
+        int32_t shiftAmount = wideningOp == MWideningOp::FromS8 ? 24 : 16;
+        auto* shift = MConstant::NewInt32(alloc_, shiftAmount);
+        if (!shift) {
+          oom_ = true;
+          return;
+        }
+        block->insertBefore(ins, shift);
+        auto* lsh = MLsh::New(alloc_, value, shift, MIRType::Int32);
+        if (!lsh) {
+          oom_ = true;
+          return;
+        }
+        block->insertBefore(ins, lsh);
+        auto* widened = MRsh::New(alloc_, lsh, shift, MIRType::Int32);
+        if (!widened) {
+          oom_ = true;
+          return;
+        }
+        block->insertBefore(ins, widened);
+        value = widened;
+        break;
+      }
+      default:
+        MOZ_CRASH("Unexpected widening op");
+    }
+  }
+
+  // Replace load by the (possibly widened) field value.
   ins->replaceAllUsesWith(value);
 
   // Remove original instruction.
@@ -4110,13 +4201,6 @@ static bool IsWasmStructEscaped(MDefinition* ins, MInstruction* newStruct) {
     }
   }
 
-  // We don't support defaultable structs for now.
-  if (newStruct->isWasmNewStructObject() &&
-      newStruct->toWasmNewStructObject()->zeroFields()) {
-    JitSpew(JitSpew_Escape, "Struct is created with new_default\n");
-    return true;
-  }
-
   // Check if the struct is escaped. If the object is not the first argument
   // of either a known Store / Load, then we consider it as escaped. This is a
   // cheap and conservative escape analysis.
@@ -4180,7 +4264,7 @@ static bool IsWasmStructEscaped(MDefinition* ins, MInstruction* newStruct) {
     "Scalar Replacement of wasm structs";
 
 WasmStructMemoryView::WasmStructMemoryView(TempAllocator& alloc,
-                                           MInstruction* wasmStruct)
+                                           MWasmNewStructObject* wasmStruct)
     : alloc_(alloc),
       struct_(wasmStruct),
       undefinedVal_(nullptr),
@@ -4372,6 +4456,7 @@ bool ObjectKeysReplacer::run(MInstructionIterator& outerIterator) {
 
   objToIter_ = MObjectToIterator::New(alloc_, objectKeys()->object(), nullptr);
   objToIter_->setSkipRegistration(true);
+  objToIter_->stealResumePoint(arr_);
   arr_->block()->insertBefore(arr_, objToIter_);
 
   // Iterate over each basic block.
@@ -4406,7 +4491,6 @@ bool ObjectKeysReplacer::run(MInstructionIterator& outerIterator) {
 
   auto* forRecovery = MObjectKeysFromIterator::New(alloc_, objToIter_);
   arr_->block()->insertBefore(arr_, forRecovery);
-  forRecovery->stealResumePoint(arr_);
   arr_->replaceAllUsesWith(forRecovery);
 
   // We need to explicitly discard the instruction since it's marked as
@@ -4545,7 +4629,7 @@ bool ScalarReplacement(const MIRGenerator* mir, MIRGraph& graph) {
 
       if (IsOptimizableWasmStructInstruction(*ins) &&
           !IsWasmStructEscaped(*ins, *ins)) {
-        WasmStructMemoryView view(graph.alloc(), *ins);
+        WasmStructMemoryView view(graph.alloc(), ins->toWasmNewStructObject());
         if (!replaceWasmStructs.run(view)) {
           return false;
         }

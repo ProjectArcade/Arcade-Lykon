@@ -49,6 +49,10 @@ impl TimeZero {
     /// To avoid that, we make sure that this sets the base time using the first value
     /// it sees if it is in the past.  If it is not, then use `Instant::now()` instead.
     pub fn baseline(t: Instant) -> Self {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "Special handling for NSPR time conversion"
+        )]
         let now = Instant::now();
         let prnow = unsafe { PR_Now() };
 
@@ -75,6 +79,10 @@ static BASE_TIME: OnceCell<TimeZero> = OnceCell::new();
 
 fn get_base() -> &'static TimeZero {
     BASE_TIME.get_or_init(|| TimeZero {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "Special handling for NSPR time conversion"
+        )]
         instant: Instant::now(),
         prtime: unsafe { PR_Now() },
     })
@@ -256,6 +264,7 @@ mod test {
     }
 
     #[test]
+    #[expect(clippy::disallowed_methods, reason = "Test for special time handling")]
     fn timezero_baseline_future() {
         let tz = TimeZero::baseline(Instant::now() + Duration::from_secs(10));
         let now = Instant::now();
@@ -263,6 +272,7 @@ mod test {
     }
 
     #[test]
+    #[expect(clippy::disallowed_methods, reason = "Test for special time handling")]
     fn timezero_baseline_past() {
         let past = Instant::now().checked_sub(Duration::from_secs(5)).unwrap();
         assert_eq!(TimeZero::baseline(past).instant, past);

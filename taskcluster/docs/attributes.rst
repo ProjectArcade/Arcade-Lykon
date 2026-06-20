@@ -400,14 +400,6 @@ want to exist in the index before they even run/complete. Our current use is to 
 unfinished cached task in future pushes. This avoids extra overhead from multiple tasks running, and
 can allow us to have our results in just a bit earlier.
 
-required_signoffs
-=================
-A list of release signoffs that this kind requires, should the release also
-require these signoffs. For example, ``mar-signing`` signoffs may be required
-by some releases in the future; for any releases that require ``mar-signing``
-signoffs, the kinds that also require that signoff are marked with this
-attribute.
-
 update-channel
 ==============
 The update channel the build is configured to use.

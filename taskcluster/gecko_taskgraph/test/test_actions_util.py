@@ -15,11 +15,9 @@ from taskgraph.util.taskcluster import _task_definitions_cache
 
 from gecko_taskgraph import actions
 from gecko_taskgraph.actions.util import (
-    _lower_priority,
     combine_task_graph_files,
     get_pushes_in_gap,
     relativize_datestamps,
-    update_priority,
 )
 from gecko_taskgraph.decision import read_artifact
 
@@ -274,106 +272,6 @@ def test_get_pushes_in_gap_boundary_at_first_push(mocker):
 
     # boundary found first searched push at push 124, gap should be empty
     assert result == []
-
-
-@pytest.mark.parametrize(
-    "current,new_priority,expected",
-    [
-        ("high", "very-low", "very-low"),
-        ("low", "very-low", "very-low"),
-        ("very-low", "very-low", "very-low"),
-        ("lowest", "very-low", "lowest"),
-        (None, "very-low", "very-low"),
-        ("high", "unknown", "high"),
-    ],
-)
-def test_lower_priority(current, new_priority, expected):
-    assert _lower_priority(current, new_priority) == expected
-
-
-@pytest.mark.parametrize(
-    "initial_priority",
-    ["highest", "very-high", "high", "medium", "low"],
-)
-def test_update_priority_lowers_to_very_low(initial_priority):
-    task = unittest.mock.MagicMock()
-    task.task = {"priority": initial_priority}
-    update_priority(task, graph=None, max_priority="very-low")
-    assert task.task["priority"] == "very-low"
-
-
-def test_update_priority_does_not_raise_when_already_lowest():
-    task = unittest.mock.MagicMock()
-    task.task = {"priority": "lowest"}
-    update_priority(task, graph=None, max_priority="very-low")
-    assert task.task["priority"] == "lowest"
-
-
-def test_update_priority_sets_very_low_when_no_priority():
-    task = unittest.mock.MagicMock()
-    task.task = {}
-    update_priority(task, graph=None, max_priority="very-low")
-    assert task.task["priority"] == "very-low"
-
-
-def test_update_priority_not_applied_by_default_in_create_task_from_def(monkeypatch):
-    """Release-critical actions that don't pass priority= keep their priority."""
-    created = []
-    monkeypatch.setattr("gecko_taskgraph.actions.util.get_session", lambda: None)
-    monkeypatch.setattr(
-        "gecko_taskgraph.actions.util.create.create_task",
-        lambda session, task_id, label, task_def: created.append(task_def.copy()),
-    )
-    from gecko_taskgraph.actions.util import create_task_from_def
-
-    task_def = {
-        "priority": "high",
-        "schedulerId": "",
-        "metadata": {"name": "test-task"},
-        "tags": {},
-    }
-    create_task_from_def(task_def, level=1)
-    assert created[0]["priority"] == "high"
-
-
-def test_update_priority_applied_when_opted_in_in_create_task_from_def(monkeypatch):
-    """Backfill/retrigger actions that pass priority= get very-low."""
-    created = []
-    monkeypatch.setattr("gecko_taskgraph.actions.util.get_session", lambda: None)
-    monkeypatch.setattr(
-        "gecko_taskgraph.actions.util.create.create_task",
-        lambda session, task_id, label, task_def: created.append(task_def.copy()),
-    )
-    from gecko_taskgraph.actions.util import create_task_from_def
-
-    task_def = {
-        "priority": "high",
-        "schedulerId": "",
-        "metadata": {"name": "test-task"},
-        "tags": {},
-    }
-    create_task_from_def(task_def, level=1, max_priority="very-low")
-    assert created[0]["priority"] == "very-low"
-
-
-def test_update_priority_does_not_raise_lowest_in_create_task_from_def(monkeypatch):
-    """priority= must not bump a task that is already lowest."""
-    created = []
-    monkeypatch.setattr("gecko_taskgraph.actions.util.get_session", lambda: None)
-    monkeypatch.setattr(
-        "gecko_taskgraph.actions.util.create.create_task",
-        lambda session, task_id, label, task_def: created.append(task_def.copy()),
-    )
-    from gecko_taskgraph.actions.util import create_task_from_def
-
-    task_def = {
-        "priority": "lowest",
-        "schedulerId": "",
-        "metadata": {"name": "test-task"},
-        "tags": {},
-    }
-    create_task_from_def(task_def, level=1, max_priority="very-low")
-    assert created[0]["priority"] == "lowest"
 
 
 if __name__ == "__main__":

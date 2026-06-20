@@ -4460,8 +4460,8 @@ JS_PUBLIC_API bool JS_ReadTypedArray(JSStructuredCloneReader* r,
   return false;
 }
 
-JS_PUBLIC_API bool JS_WriteUint32Pair(JSStructuredCloneWriter* w, uint32_t tag,
-                                      uint32_t data) {
+JS_PUBLIC_API bool JS_WriteUint32PairUnchecked(JSStructuredCloneWriter* w,
+                                               uint32_t tag, uint32_t data) {
   return w->output().writePair(tag, data);
 }
 

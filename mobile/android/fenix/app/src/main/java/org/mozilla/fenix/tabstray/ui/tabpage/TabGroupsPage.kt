@@ -7,6 +7,7 @@ package org.mozilla.fenix.tabstray.ui.tabpage
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
@@ -24,6 +25,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
 import mozilla.components.compose.base.annotation.FlexibleWindowLightDarkPreview
 import org.mozilla.fenix.R
+import org.mozilla.fenix.compose.BetaLabel
 import org.mozilla.fenix.tabstray.TabsTrayTestTag
 import org.mozilla.fenix.tabstray.data.TabGroupTheme
 import org.mozilla.fenix.tabstray.data.TabsTrayItem
@@ -44,12 +46,21 @@ internal fun TabGroupsPage(
     onEditTabGroupClick: (TabsTrayItem.TabGroup) -> Unit,
 ) {
     if (groups.isNotEmpty()) {
-        TabGroupList(
-            groups = groups,
-            onTabGroupClick = onTabGroupClick,
-            onDeleteTabGroupClick = onDeleteTabGroupClick,
-            onEditTabGroupClick = onEditTabGroupClick,
-        )
+        Column {
+            BetaLabel(
+                modifier = Modifier.padding(
+                    start = FirefoxTheme.layout.space.dynamic200,
+                    top = FirefoxTheme.layout.space.static200,
+                ),
+            )
+
+            TabGroupList(
+                groups = groups,
+                onTabGroupClick = onTabGroupClick,
+                onDeleteTabGroupClick = onDeleteTabGroupClick,
+                onEditTabGroupClick = onEditTabGroupClick,
+            )
+        }
     } else {
         EmptyTabGroupsPage()
     }
@@ -71,6 +82,8 @@ private fun EmptyTabGroupsPage(
             modifier = Modifier.width(EmptyPageWidth),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            BetaLabel()
+
             Icon(
                 painter = painterResource(id = iconsR.drawable.mozac_ic_tab_group_24),
                 contentDescription = null,

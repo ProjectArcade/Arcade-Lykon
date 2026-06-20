@@ -235,10 +235,10 @@ struct MOZ_STACK_CLASS SavedFrame::Lookup {
 
   void trace(JSTracer* trc) {
     TraceRoot(trc, &source, "SavedFrame::Lookup::source");
-    TraceNullableRoot(trc, &functionDisplayName,
-                      "SavedFrame::Lookup::functionDisplayName");
-    TraceNullableRoot(trc, &asyncCause, "SavedFrame::Lookup::asyncCause");
-    TraceNullableRoot(trc, &parent, "SavedFrame::Lookup::parent");
+    TraceRoot(trc, &functionDisplayName,
+              "SavedFrame::Lookup::functionDisplayName");
+    TraceRoot(trc, &asyncCause, "SavedFrame::Lookup::asyncCause");
+    TraceRoot(trc, &parent, "SavedFrame::Lookup::parent");
   }
 };
 
@@ -372,16 +372,7 @@ bool SavedFrame::finishSavedFrameInit(JSContext* cx, HandleObject ctor,
 }
 
 static const JSClassOps SavedFrameClassOps = {
-    nullptr,               // addProperty
-    nullptr,               // delProperty
-    nullptr,               // enumerate
-    nullptr,               // newEnumerate
-    nullptr,               // resolve
-    nullptr,               // mayResolve
-    SavedFrame::finalize,  // finalize
-    nullptr,               // call
-    nullptr,               // construct
-    nullptr,               // trace
+    .finalize = SavedFrame::finalize,
 };
 
 const ClassSpec SavedFrame::classSpec_ = {
@@ -1482,6 +1473,7 @@ bool SavedStacks::insertFrames(JSContext* cx, MutableHandle<SavedFrame*> frame,
                                        ? &startAtObj->as<JSFunction>()
                                        : nullptr);
   bool seenStartAt = !startAt;
+  bool framePushed = false;
   RootedField<LocationValue, 1> location(roots);
   RootedField<JSAtom*, 2> displayAtom(roots);
   RootedField<JSAtom*, 3> causeAtom(roots);
@@ -1565,6 +1557,7 @@ bool SavedStacks::insertFrames(JSContext* cx, MutableHandle<SavedFrame*> frame,
     // If we haven't yet seen the start, then don't add anything to the stack
     // chain.
     if (seenStartAt) {
+      framePushed = true;
       if (!stackChain.emplaceBack(location.source(), location.sourceId(),
                                   location.line(), location.column(),
                                   displayAtom,
@@ -1576,7 +1569,8 @@ bool SavedStacks::insertFrames(JSContext* cx, MutableHandle<SavedFrame*> frame,
       }
     }
 
-    if (captureIsSatisfied(cx, principals, location.source(), capture)) {
+    if (framePushed &&
+        captureIsSatisfied(cx, principals, location.source(), capture)) {
       break;
     }
 
@@ -1667,7 +1661,7 @@ bool SavedStacks::insertFrames(JSContext* cx, MutableHandle<SavedFrame*> frame,
       seenCached = false;
     }
 
-    if (capture.is<JS::MaxFrames>()) {
+    if (framePushed && capture.is<JS::MaxFrames>()) {
       capture.as<JS::MaxFrames>().maxFrames--;
     }
   }

@@ -5,12 +5,17 @@
 #ifndef DOM_MEDIA_WEBRTC_LIBWEBRTCGLUE_WEBRTCVIDEOCODECFACTORY_H_
 #define DOM_MEDIA_WEBRTC_LIBWEBRTCGLUE_WEBRTCVIDEOCODECFACTORY_H_
 
+#include "MediaCodecsSupport.h"
 #include "MediaEventSource.h"
 #include "PerformanceRecorder.h"
+#include "api/video_codecs/video_codec.h"
 #include "api/video_codecs/video_decoder_factory.h"
 #include "api/video_codecs/video_encoder_factory.h"
 
 namespace mozilla {
+class EncoderConfig;
+class MediaExtendedMIMEType;
+struct SupportDecoderParams;
 class GmpPluginNotifierInterface {
   virtual void DisconnectAll() = 0;
   virtual MediaEventSource<uint64_t>& CreatedGmpPluginEvent() = 0;
@@ -67,6 +72,9 @@ class WebrtcVideoDecoderFactory : public GmpPluginNotifier,
       const webrtc::Environment& env,
       const webrtc::SdpVideoFormat& format) override;
 
+  static media::DecodeSupportSet SupportsCodec(
+      const MediaExtendedMIMEType& aMime, const SupportDecoderParams& aParams);
+
  private:
   const std::string mPCHandle;
   const TrackingId mTrackingId;
@@ -111,6 +119,8 @@ class WebrtcVideoEncoderFactory : public GmpPluginNotifierInterface,
   std::unique_ptr<webrtc::VideoEncoder> Create(
       const webrtc::Environment& env,
       const webrtc::SdpVideoFormat& format) override;
+
+  static media::EncodeSupportSet SupportsCodec(const EncoderConfig& aConfig);
 
   void DisconnectAll() override { mInternalFactory->DisconnectAll(); }
 

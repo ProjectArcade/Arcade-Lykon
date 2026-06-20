@@ -35,6 +35,9 @@ extern uint32_t MIRTypeToABIResultSize(jit::MIRType);
 
 namespace jit {
 
+// For a defaultable wasm type, synthesize the default constant value.
+MInstruction* NewWasmDefaultConstant(TempAllocator& alloc, wasm::ValType type);
+
 class MWasmNullConstant : public MNullaryInstruction {
   mozilla::Maybe<wasm::RefTypeHierarchy> hierarchy_;
 
@@ -682,37 +685,6 @@ class MWasmLoadInstance : public MUnaryInstruction, public NoTypePolicy::Data {
     hash = addU32ToHash(hash, offset());
     return hash;
   }
-
-  AliasSet getAliasSet() const override { return aliases_; }
-};
-
-class MWasmStoreInstance : public MBinaryInstruction,
-                           public NoTypePolicy::Data {
-  uint32_t offset_;
-  AliasSet aliases_;
-
-  explicit MWasmStoreInstance(MDefinition* instance, MDefinition* value,
-                              uint32_t offset, MIRType type, AliasSet aliases)
-      : MBinaryInstruction(classOpcode, instance, value),
-        offset_(offset),
-        aliases_(aliases) {
-    // Different instance data have different alias classes and only those
-    // classes are allowed.
-    MOZ_ASSERT(aliases_.flags() ==
-                   AliasSet::Store(AliasSet::WasmPendingException).flags() ||
-               aliases.flags() == AliasSet::Store(AliasSet::Any).flags());
-
-    // The only types supported at the moment.
-    MOZ_ASSERT(type == MIRType::Pointer || type == MIRType::Int32 ||
-               type == MIRType::Int64 || type == MIRType::WasmAnyRef);
-  }
-
- public:
-  INSTRUCTION_HEADER(WasmStoreInstance)
-  TRIVIAL_NEW_WRAPPERS
-  NAMED_OPERANDS((0, instance), (1, value))
-
-  uint32_t offset() const { return offset_; }
 
   AliasSet getAliasSet() const override { return aliases_; }
 };
@@ -1844,7 +1816,7 @@ class MWasmStackResultArea : public MNullaryInstruction {
  public:
   class StackResult {
     // Offset in bytes from lowest address of stack result area.
-    uint32_t offset_;
+    uint32_t offset_ = 0;
     MIRType type_;
 
    public:
@@ -2037,9 +2009,10 @@ class MWasmCallBase {
   static AliasSet wasmCallAliasSet() {
     // This is ok because:
     // - numElements is immutable
-    // - the GC will rewrite any array data pointers on move
+    // - the GC will rewrite any array or struct data pointers on move
     AliasSet exclude = AliasSet(AliasSet::WasmArrayNumElements) |
-                       AliasSet(AliasSet::WasmArrayDataPointer);
+                       AliasSet(AliasSet::WasmArrayDataPointer) |
+                       AliasSet(AliasSet::WasmStructOutlineDataPointer);
     return AliasSet::Store(AliasSet::Any) & ~exclude;
   }
 };
@@ -3382,33 +3355,6 @@ class MWasmRefConvertAnyExtern : public MUnaryInstruction,
   AliasSet getAliasSet() const override { return AliasSet::None(); }
 };
 
-// Represents the contents of all fields of a wasm struct.
-// This class will be used for scalar replacement of wasm structs.
-class MWasmStructState : public TempObject {
- private:
-  MDefinition* wasmStruct_;
-  // Represents the fields of this struct.
-  Vector<MDefinition*, 0, JitAllocPolicy> fields_;
-
-  explicit MWasmStructState(TempAllocator& alloc, MDefinition* structObject)
-      : wasmStruct_(structObject), fields_(alloc) {}
-
- public:
-  static MWasmStructState* New(TempAllocator& alloc, MDefinition* structObject);
-  static MWasmStructState* Copy(TempAllocator& alloc, MWasmStructState* state);
-
-  // Init the fields_ vector.
-  [[nodiscard]] bool init();
-
-  size_t numFields() const { return fields_.length(); }
-  MDefinition* wasmStruct() const { return wasmStruct_; }
-
-  // Get the field value based on the position of the field in the struct.
-  MDefinition* getField(uint32_t index) const { return fields_[index]; }
-  // Set the field offset based on the position of the field in the struct.
-  void setField(uint32_t index, MDefinition* def) { fields_[index] = def; }
-};
-
 class MWasmNewStructObject : public MBinaryInstruction,
                              public NoTypePolicy::Data {
  private:
@@ -3447,6 +3393,35 @@ class MWasmNewStructObject : public MBinaryInstruction,
   bool zeroFields() const { return zeroFields_; }
   const wasm::TrapSiteDesc& trapSiteDesc() const { return trapSiteDesc_; }
   gc::AllocKind allocKind() const { return typeDef_->structType().allocKind_; }
+};
+
+// Represents the contents of all fields of a wasm struct.
+// This class will be used for scalar replacement of wasm structs.
+class MWasmStructState : public TempObject {
+ private:
+  MWasmNewStructObject* wasmStruct_;
+  // Represents the fields of this struct.
+  Vector<MDefinition*, 0, JitAllocPolicy> fields_;
+
+  explicit MWasmStructState(TempAllocator& alloc,
+                            MWasmNewStructObject* structObject)
+      : wasmStruct_(structObject), fields_(alloc) {}
+
+  // Init the fields_ vector.
+  [[nodiscard]] bool init(TempAllocator& alloc);
+
+ public:
+  static MWasmStructState* New(TempAllocator& alloc,
+                               MWasmNewStructObject* structObject);
+  static MWasmStructState* Copy(TempAllocator& alloc, MWasmStructState* state);
+
+  size_t numFields() const { return fields_.length(); }
+  MWasmNewStructObject* wasmStruct() const { return wasmStruct_; }
+
+  // Get the field value based on the position of the field in the struct.
+  MDefinition* getField(uint32_t index) const { return fields_[index]; }
+  // Set the field offset based on the position of the field in the struct.
+  void setField(uint32_t index, MDefinition* def) { fields_[index] = def; }
 };
 
 class MWasmNewArrayObject : public MTernaryInstruction,
@@ -3518,6 +3493,7 @@ class MWasmAddSubI128HI64 : public MQuaternaryInstruction,
     return ins->isWasmAddSubI128HI64() && congruentIfOperandsEqual(ins) &&
            ins->toWasmAddSubI128HI64()->isAdd() == isAdd();
   }
+  MDefinition* foldsTo(TempAllocator& alloc) override;
 
 #ifdef JS_JITSPEW
   void getExtras(ExtrasCollector* extras) const override {

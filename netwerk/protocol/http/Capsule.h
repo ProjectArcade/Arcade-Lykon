@@ -234,7 +234,9 @@ class Capsule final {
   }
 
   template <typename CapsuleStruct>
-  explicit Capsule(CapsuleStruct&& aCapsule) : mCapsule(std::move(aCapsule)) {}
+    requires(std::is_constructible_v<CapsuleValue, CapsuleStruct>)
+  explicit Capsule(CapsuleStruct&& aCapsule)
+      : mCapsule(std::forward<CapsuleStruct>(aCapsule)) {}
 
   static void LogBuffer(const uint8_t* aBuffer, uint32_t aLength);
 

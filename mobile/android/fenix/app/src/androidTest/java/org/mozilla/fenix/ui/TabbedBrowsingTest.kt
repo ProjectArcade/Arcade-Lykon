@@ -4,13 +4,11 @@
 
 package org.mozilla.fenix.ui
 
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
-import org.mozilla.fenix.customannotations.SkipLeaks
+import org.mozilla.fenix.customannotations.Converted
 import org.mozilla.fenix.customannotations.SmokeTest
-import org.mozilla.fenix.ext.settings
+import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
 import org.mozilla.fenix.helpers.MockBrowserDataHelper
@@ -29,6 +27,7 @@ import org.mozilla.fenix.ui.robots.browserScreen
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.navigationToolbar
 import org.mozilla.fenix.ui.robots.notificationShade
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 /**
  *  Tests for verifying basic functionality of tabbed browsing
@@ -53,16 +52,14 @@ class TabbedBrowsingTest {
 
     private val mockWebServer get() = fenixTestRule.mockWebServer
 
-    @get:Rule
+    @get:Rule(order = 1)
     val composeTestRule =
-        AndroidComposeTestRule(
-            HomeActivityIntentTestRule.withDefaultSettingsOverrides(
-                skipOnboarding = true,
-            ),
+        AndroidComposeTestRuleV2(
+            HomeActivityIntentTestRule.withDefaultSettingsOverrides(),
         ) { it.activity }
 
-    @get:Rule
-    val memoryLeaksRule = DetectMemoryLeaksRule()
+    @get:Rule(order = 2)
+    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
 
     // @Rule(order = 2)
     // @JvmField
@@ -181,7 +178,6 @@ class TabbedBrowsingTest {
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/903592
     @SmokeTest
     @Test
-    @SkipLeaks
     fun verifyCloseAllPrivateTabsNotificationTest() {
         val defaultWebPage = mockWebServer.getGenericAsset(1)
 
@@ -262,6 +258,11 @@ class TabbedBrowsingTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/903587
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.TabbedBrowsingTest#verifyPrivateTabsTrayWithOpenTabTest"],
+        bug = 2043491,
+        since = "2026-05",
+    )
     @SmokeTest
     @Test
     fun verifyPrivateTabsTrayWithOpenTabTest() {
@@ -418,6 +419,11 @@ class TabbedBrowsingTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1046683
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.TabbedBrowsingTest#verifySyncedTabsWhenUserIsNotSignedInTest"],
+        bug = 2039245,
+        since = "2026-05",
+    )
     @Test
     fun verifySyncedTabsWhenUserIsNotSignedInTest() {
         homeScreen(composeTestRule) {
@@ -518,7 +524,8 @@ class TabbedBrowsingTest {
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3024942
     @Test
     fun verifyTabsTrayListViewTest() {
-        appContext.settings().gridTabView = false
+        appContext.components.settings.gridTabView = false
+        appContext.components.settings.tabGroupsOnboardingEnabled = false
 
         val webPages = mockWebServer.genericAssets
 
@@ -548,7 +555,8 @@ class TabbedBrowsingTest {
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1126911
     @Test
     fun verifyTabsTrayGridViewTest() {
-        appContext.settings().gridTabView = true
+        appContext.components.settings.gridTabView = true
+        appContext.components.settings.tabGroupsOnboardingEnabled = false
 
         val webPages = mockWebServer.genericAssets
 

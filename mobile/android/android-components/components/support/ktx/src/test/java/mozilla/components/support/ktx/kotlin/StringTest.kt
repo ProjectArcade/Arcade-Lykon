@@ -11,7 +11,6 @@ import mozilla.components.support.test.robolectric.testContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -21,6 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import java.util.Calendar
 import java.util.Calendar.MILLISECOND
+import kotlin.test.assertNotNull
 
 const val PUNYCODE = "xn--kpry57d"
 const val IDN = "台灣"

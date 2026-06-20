@@ -10,8 +10,11 @@
 #include "mozilla/Logging.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/PrintedSheetFrame.h"
+#include "mozilla/ReflowInput.h"
 #include "mozilla/StaticPresData.h"
 #include "mozilla/dom/HTMLCanvasElement.h"
+#include "mozilla/gfx/2D.h"
+#include "mozilla/gfx/DrawEventRecorder.h"
 #include "mozilla/gfx/Point.h"
 #include "mozilla/intl/AppDateTimeFormat.h"
 #include "nsCOMPtr.h"
@@ -77,12 +80,6 @@ inline void SanityCheckPagesPerSheetInfo() {
     prevInfoPPS = info.mNumPages;
   }
 #endif
-}
-
-static void MarkPrincipalChildrenDirty(nsIFrame* aFrame) {
-  for (nsIFrame* childFrame : aFrame->PrincipalChildList()) {
-    childFrame->MarkSubtreeDirty();
-  }
 }
 
 const nsPagesPerSheetInfo& nsPagesPerSheetInfo::LookupInfo(int32_t aPPS) {
@@ -307,9 +304,6 @@ void nsPageSequenceFrame::Reflow(nsPresContext* aPresContext,
   }
 
   const bool shouldDoMeasuringReflow = [&]() {
-    if (!aPresContext->FragmentainerAwarePositioningEnabled()) {
-      return false;
-    }
     if (GetPrevInFlow()) {
       // A measuring reflow is only needed on first-in-flow.
       return false;
@@ -322,7 +316,7 @@ void nsPageSequenceFrame::Reflow(nsPresContext* aPresContext,
   if (shouldDoMeasuringReflow) {
     if (!HasAnyStateBits(NS_FRAME_FIRST_REFLOW)) {
       // Mark sheets dirty for an incremental measuring reflow.
-      MarkPrincipalChildrenDirty(this);
+      MarkPrincipalChildrenDirty();
     }
 
     for (nsIFrame* kidFrame : mFrames) {
@@ -366,7 +360,7 @@ void nsPageSequenceFrame::Reflow(nsPresContext* aPresContext,
     }
 
     // Mark sheets dirty for normal reflow below.
-    MarkPrincipalChildrenDirty(this);
+    MarkPrincipalChildrenDirty();
   }
 
   nsIntMargin unwriteableTwips =
@@ -557,12 +551,9 @@ static void GetPrintCanvasElementsInFrame(
   }
   for (const auto& childList : aFrame->ChildLists()) {
     for (nsIFrame* child : childList.mList) {
-      // Check if child is a nsHTMLCanvasFrame.
-      nsHTMLCanvasFrame* canvasFrame = do_QueryFrame(child);
-
-      // If there is a canvasFrame, try to get actual canvas element.
-      if (canvasFrame) {
-        HTMLCanvasElement* canvas =
+      // Check if child is a nsHTMLCanvasFrame, and get the canvas element.
+      if (nsHTMLCanvasFrame* canvasFrame = do_QueryFrame(child)) {
+        auto* canvas =
             HTMLCanvasElement::FromNodeOrNull(canvasFrame->GetContent());
         if (canvas && canvas->GetMozPrintCallback()) {
           aArr->AppendElement(canvas);
@@ -571,8 +562,7 @@ static void GetPrintCanvasElementsInFrame(
       }
 
       if (!child->PrincipalChildList().FirstChild()) {
-        nsSubDocumentFrame* subdocumentFrame = do_QueryFrame(child);
-        if (subdocumentFrame) {
+        if (nsSubDocumentFrame* subdocumentFrame = do_QueryFrame(child)) {
           // Descend into the subdocument
           nsIFrame* root = subdocumentFrame->GetSubdocumentRootFrame();
           child = root;
@@ -659,16 +649,18 @@ nsresult nsPageSequenceFrame::PrePrintNextSheet(nsITimerCallback* aCallback,
       UniquePtr<gfxContext> renderingContext = dc->CreateRenderingContext();
       NS_ENSURE_TRUE(renderingContext, NS_ERROR_OUT_OF_MEMORY);
 
-      DrawTarget* drawTarget = renderingContext->GetDrawTarget();
-      if (NS_WARN_IF(!drawTarget)) {
+      DrawTarget* referenceDt = renderingContext->GetDrawTarget();
+      if (NS_WARN_IF(!referenceDt)) {
         return NS_ERROR_FAILURE;
       }
 
       for (HTMLCanvasElement* canvas : Reversed(mCurrentCanvasList)) {
         CSSIntSize size = canvas->GetSize();
-
-        RefPtr<DrawTarget> canvasTarget = drawTarget->CreateSimilarDrawTarget(
-            size.ToUnknownSize(), drawTarget->GetFormat());
+        RefPtr recorder = MakeAndAddRef<gfx::DrawEventRecorderMemory>(nullptr);
+        RefPtr<DrawTarget> canvasTarget =
+            gfx::Factory::CreateRecordingDrawTarget(
+                recorder, referenceDt,
+                gfx::IntRect(gfx::IntPoint(), size.ToUnknownSize()));
         if (!canvasTarget) {
           continue;
         }

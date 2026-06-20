@@ -1,23 +1,63 @@
-From: Michael Froman <mfroman@mozilla.com>
-Date: Mon, 13 Jan 2025 08:14:00 -0600
-Subject: Bug 1942428 - (fix-69cc695699) uncomment an arg that upstream thinks
- is unused
+From: Jan Grulich <jgrulich@redhat.com>
+Date: Mon, 14 Apr 2025 16:37:00 +0000
+Subject: Bug 1954903 - Update libwebrtc GN configs r=webrtc-reviewers,mjf
 
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/73f9e0e64eb65e9f2579b0f3eb34b88e2b5e5d74
+Update GN config files for the special handling in gn_processor.py for
+gbm, drm and PipeWire libraries.
+
+Also remove libwebrtc/third_party/[gbm,drm,pipewire] libs for which we
+now have a special handling in gn_processor.py.
+
+Differential Revision: https://phabricator.services.mozilla.com/D242101
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/506d4efaf2dc29472623beff64cc2bd0d5555afd
 ---
- modules/rtp_rtcp/source/rtcp_sender.cc | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ modules/desktop_capture/BUILD.gn | 4 ++++
+ modules/portal/BUILD.gn          | 4 +---
+ modules/video_capture/BUILD.gn   | 2 +-
+ 3 files changed, 6 insertions(+), 4 deletions(-)
 
-diff --git a/modules/rtp_rtcp/source/rtcp_sender.cc b/modules/rtp_rtcp/source/rtcp_sender.cc
-index b84bc66316..1762623bc1 100644
---- a/modules/rtp_rtcp/source/rtcp_sender.cc
-+++ b/modules/rtp_rtcp/source/rtcp_sender.cc
-@@ -196,7 +196,7 @@ bool RTCPSender::Sending() const {
-   return sending_;
- }
+diff --git a/modules/desktop_capture/BUILD.gn b/modules/desktop_capture/BUILD.gn
+index 0794c3f9a7..b58c65f337 100644
+--- a/modules/desktop_capture/BUILD.gn
++++ b/modules/desktop_capture/BUILD.gn
+@@ -570,6 +570,10 @@ rtc_library("desktop_capture") {
+       "../../rtc_base:sanitizer",
+       "../portal",
+     ]
++
++    if (build_with_mozilla) {
++      defines += [ "WEBRTC_USE_PIPEWIRE" ]
++    }
+   }
  
--void RTCPSender::SetSendingStatus(const FeedbackState& /* feedback_state */,
-+void RTCPSender::SetSendingStatus(const FeedbackState& feedback_state,
-                                   bool sending) {
-   bool sendRTCPBye = false;
-   {
+   if (rtc_enable_win_wgc) {
+diff --git a/modules/portal/BUILD.gn b/modules/portal/BUILD.gn
+index 0a463c7619..7f91839dfd 100644
+--- a/modules/portal/BUILD.gn
++++ b/modules/portal/BUILD.gn
+@@ -143,11 +143,9 @@ if (!build_with_mozilla) {
+       deps -= [ ":pipewire_stubs" ]
+       defines -= [ "WEBRTC_DLOPEN_PIPEWIRE" ]
+       public_deps = [
+-        "../../third_party/pipewire",
+-        "../../third_party/drm",
+-        "../../third_party/gbm",
+         "../../third_party/libepoxy"
+       ]
++      defines += [ "WEBRTC_USE_PIPEWIRE" ]
+     }
+   }
+ }
+diff --git a/modules/video_capture/BUILD.gn b/modules/video_capture/BUILD.gn
+index 1827e601d6..779bd1701f 100644
+--- a/modules/video_capture/BUILD.gn
++++ b/modules/video_capture/BUILD.gn
+@@ -118,7 +118,7 @@ if (!build_with_chromium || is_linux || is_chromeos) {
+         ]
+         if (build_with_mozilla) {
+           configs -= [ "../portal:pipewire_base" ]
+-          public_deps = [ "../../third_party/pipewire" ]
++          defines = [ "WEBRTC_USE_PIPEWIRE" ]
+         }
+       }
+     }

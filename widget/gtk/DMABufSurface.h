@@ -170,7 +170,12 @@ class DMABufSurface {
 
   void FenceSet();
   void FenceWait();
+  static void FenceWait(RefPtr<mozilla::gl::GLContext> aGL,
+                        RefPtr<mozilla::gfx::FileHandleWrapper> aSyncFd);
   void FenceDelete();
+  static void FenceDelete(RefPtr<mozilla::gl::GLContext> aGL, EGLSyncKHR aSync);
+  void FenceDeleteLocked(const mozilla::MutexAutoLock& aProofOfLock)
+      MOZ_REQUIRES(mSurfaceLock);
 
   void MaybeSemaphoreWait(GLuint aGlTexture);
   void SetSemaphoreFd(int aDuppedRawFd, bool aIsSyncFd = false);
@@ -222,7 +227,7 @@ class DMABufSurface {
 
 #ifdef MOZ_LOGGING
   virtual void Clear(unsigned int aValue) {};
-  virtual void DumpToFile(const char* pFile) {};
+  virtual void DumpToFile(const char* pFile) = 0;
 #endif
 
 #ifdef MOZ_WAYLAND
@@ -494,6 +499,10 @@ class DMABufSurfaceYUV final : public DMABufSurface {
 
 #ifdef MOZ_WAYLAND
   wl_buffer* CreateWlBuffer() override;
+#endif
+
+#ifdef MOZ_LOGGING
+  void DumpToFile(const char* pFile) override;
 #endif
 
  private:

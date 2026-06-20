@@ -28,6 +28,114 @@ newtab-personalize-dialog-label =
 newtab-logo-and-wordmark =
     .aria-label = { -brand-full-name }
 
+## Strings for "Homepage" and "Firefox Home" sections of about:settings#home.
+## Homepage panel
+
+home-homepage-title =
+    .label = Pàgina d’inici
+home-homepage-new-windows =
+    .label = Finestres noves
+home-homepage-new-tabs =
+    .label = Pestanyes noves
+# This option leads to the "Custom Homepage" subpage
+home-homepage-custom-homepage-button =
+    .label = Tria un lloc específic
+
+## Custom URLs subpage
+
+# Subheader on the Custom Homepage subpage. Followed by a form to enter URLs and a list of URLs already saved, if any.
+home-custom-homepage-card-header =
+    .label = Adreces de llocs web
+home-custom-homepage-address =
+    .placeholder = Escriviu una adreça
+home-custom-homepage-address-button =
+    .label = Afegeix l'adreça
+# Shown when no custom websites/URLs to use as a homepage have been added yet
+home-custom-homepage-no-results =
+    .label = Encara no heu afegit cap lloc web.
+home-custom-homepage-delete-address-button =
+    .aria-label = Suprimeix l’adreça
+    .title = Suprimeix l’adreça
+# Further options to use when setting the home page. Two action buttons are placed in line with this prompt
+# to replace the current home page with a currently open page or bookmark.
+home-custom-homepage-replace-with-prompt =
+    .label = Reemplaça amb
+# Button that appears in-line after text "Replace with" (home-custom-homepage-replace-with-prompt)
+home-custom-homepage-current-pages-button =
+    .label = Pàgines obertes actualment
+# Button that appears in-line after text "Replace with" (home-custom-homepage-replace-with-prompt)
+home-custom-homepage-bookmarks-button =
+    .label = Adreces d'interès…
+
+## Firefox Home content
+
+home-prefs-content-header =
+    .label = { -firefox-home-brand-name }
+home-prefs-search-header2 =
+    .label = Cerca
+home-prefs-stories-header2 =
+    .label = Articles
+    .description = Contingut excepcional seleccionat per la família del { -brand-product-name }
+home-prefs-widgets-header =
+    .label = Ginys
+# Lists is a widget on New Tab, similar to a to-do widget
+home-prefs-lists-header =
+    .label = Llistes
+# Timer is a widget on New Tab, similar to the Pomodoro timer.
+home-prefs-timer-header =
+    .label = Temporitzador
+home-prefs-mission-message2 =
+    .message = Els nostres patrocinadors donen suport a la nostra missió de crear un web millor.
+home-prefs-manage-topics-link2 =
+    .label = Gestiona els temes
+home-prefs-choose-wallpaper-link2 =
+    .label = Trieu un fons de pantalla
+# Variables:
+#   $num (number) - Number of rows displayed
+home-prefs-sections-rows-option-srd =
+    .label =
+        { $num ->
+            [one] { $num } fila
+           *[other] { $num } files
+        }
+# Dropdown option shown when an extension replaces the contents of new windows or tabs.
+# Variables:
+#   $extension (string) - Name of the extension
+home-prefs-homepage-extension-option =
+    .label = Extensió ({ $extension })
+home-restore-defaults-srd =
+    .label = Restaura els valors per defecte
+    .accesskey = R
+home-mode-choice-default-fx-srd =
+    .label = { -firefox-home-brand-name } (Per defecte)
+home-mode-choice-custom-srd =
+    .label = URL personalitzats…
+home-mode-choice-blank-srd =
+    .label = Pàgina en blanc
+home-prefs-shortcuts-header-srd =
+    .label = Dreceres
+home-prefs-shortcuts-select =
+    .aria-label = Dreceres
+home-prefs-shortcuts-by-option-sponsored-srd =
+    .label = Dreceres patrocinades
+home-prefs-recommended-by-option-sponsored-stories-srd =
+    .label = Articles patrocinats
+home-prefs-highlights-option-visited-pages-srd =
+    .label = Pàgines visitades
+home-prefs-highlights-options-bookmarks-srd =
+    .label = Adreces d'interès
+home-prefs-highlights-option-most-recent-download-srd =
+    .label = Baixada més recent
+home-prefs-recent-activity-header-srd =
+    .label = Activitat recent
+home-prefs-recent-activity-select =
+    .aria-label = Activitat recent
+home-prefs-weather-header-srd =
+    .label = Informació meteorològica
+home-prefs-support-firefox-header-srd =
+    .label = Doneu suport al { -brand-product-name }
+home-prefs-mission-message-learn-more-link-srd = Descobriu com
+
 ## Search box component.
 
 # "Search" is a verb/action
@@ -140,6 +248,8 @@ newtab-menu-report = Informa
 # Context menu option to personalize New Tab recommended stories by blocking a section of stories,
 # e.g. "Sports". "Block" is a verb here.
 newtab-menu-section-block = Bloca
+# Context menu option to open a support page explaining the New Tab personalization features and privacy controls.
+newtab-menu-section-learn-more = Més informació
 # "Follow", "unfollow", and "following" are social media terms that refer to subscribing to or unsubscribing from a section of stories.
 # e.g. Following the travel section of stories.
 newtab-menu-section-unfollow = Deixa de seguir el tema
@@ -511,8 +621,15 @@ newtab-weather-opt-in-not-now =
     .label = Ara no
 newtab-weather-opt-in-yes =
     .label = Sí
+newtab-weather-opt-in-headline = Obteniu la previsió meteorològica local
+newtab-weather-opt-in-use-location =
+    .label = Utilitza la ubicació
+newtab-weather-opt-in-choose-location = Trieu la ubicació
 # We'll be showing static (fake) weather data if the user has not opted in to using their location
 newtab-weather-static-city = Nova York
+# "Lowest" here refers to the lowest temperature of the day
+newtab-weather-low =
+    .aria-label = Baixa
 # Variables:
 #   $provider (string) - Service provider for weather data
 newtab-weather-see-forecast-description =
@@ -564,8 +681,16 @@ newtab-topic-selection-button-pick-interests = Trieu els vostres interessos
 ## e.g. Following the travel section of stories.
 
 newtab-section-follow-button = Segueix
+# Variables:
+#   $topic (string) - Topic that the user can follow
+newtab-section-follow-button-label =
+    .aria-label = Segueix { $topic }
 newtab-section-following-button = Seguint
 newtab-section-unfollow-button = Deixar de seguir
+# Variables:
+#   $topic (string) - Topic that the user is following and can unfollow
+newtab-section-unfollow-button-label =
+    .aria-label = Seguint: Deixa de seguir { $topic }
 # A modal may appear next to the Follow button, directing users to try out the feature
 newtab-section-follow-highlight-title = Ajusteu el canal
 newtab-section-follow-highlight-subtitle = Seguiu els vostres interessos per a veure més contingut que us agradi.
@@ -577,6 +702,22 @@ newtab-section-follow-highlight-subtitle = Seguiu els vostres interessos per a v
 newtab-section-block-button = Bloqueja
 newtab-section-blocked-button = Blocat
 newtab-section-unblock-button = Desbloca
+# Variables:
+#   $topic (string) - Name of topic that user is following
+newtab-section-follow-topic =
+    .aria-label = Segueix { $topic }
+# Variables:
+#   $topic (string) - Name of topic that user is unfollowing
+newtab-section-unfollow-topic =
+    .aria-label = Deixa de seguir { $topic }
+# Variables:
+#   $topic (string) - Name of topic that user is blocking
+newtab-section-block-topic =
+    .aria-label = Bloca { $topic }
+# Variables:
+#   $topic (string) - Name of topic that user is unblocking
+newtab-section-unblock-topic =
+    .aria-label = Desbloca { $topic }
 
 ## Confirmation modal for blocking a section
 
@@ -586,6 +727,7 @@ newtab-section-confirm-block-topic-p2 = Els temes blocats ja no apareixeran a la
 # Variables:
 #   $topic (string) - Name of topic that user is blocking
 newtab-section-block-topic-button = Bloca { $topic }
+newtab-section-block-cancel-button = Cancel·la
 
 ## Strings for custom wallpaper highlight
 
@@ -606,6 +748,12 @@ newtab-custom-wallpaper-cta = Proveu-ho
 newtab-new-user-custom-wallpaper-title = Trieu un fons de pantalla per a personalitzar el { -brand-product-name }
 newtab-new-user-custom-wallpaper-subtitle = Decoreu cada pestanya nova al vostre gust amb fons de pantalla i colors personalitzats.
 newtab-new-user-custom-wallpaper-cta = Proveu-ho ara
+
+## Strings for Nova wallpaper feature highlight
+
+newtab-wallpaper-feature-highlight-title = Nous fons de pantalla acabats d'arribar
+newtab-wallpaper-feature-highlight-subtitle = Trieu el vostre preferit i feu que cada pestanya nova us faci sentir com a casa.
+newtab-wallpaper-feature-highlight-cta = Trieu un fons de pantalla
 
 ## Strings for download mobile highlight
 
@@ -647,6 +795,20 @@ newtab-report-cancel = Cancel·la
 newtab-report-submit = Envia
 newtab-toast-thanks-for-reporting =
     .message = Gràcies per denunciar-ho.
+newtab-toast-widgets-hidden =
+    .message = Seleccioneu la icona del llapis per tornar a afegir ginys en qualsevol moment.
+# Variables:
+#   $topic (string) - Topic that the user has followed
+newtab-section-toast-follow =
+    .message = Ara seguiu { $topic }.
+# Variables:
+#   $topic (string) - Topic that the user has unfollowed
+newtab-section-toast-unfollow =
+    .message = Ja no seguiu { $topic }.
+# Variables:
+#   $topic (string) - Topic that the user has blocked
+newtab-section-toast-block =
+    .message = Ja no veureu més històries sobre { $topic }.
 
 ## Strings for task / to-do list productivity widget
 
@@ -673,8 +835,6 @@ newtab-widget-lists-button-add-item = Afegeix un element
 newtab-widget-lists-input-add-an-item2 =
     .placeholder = Afegeix un element
     .aria-label = Afegeix un element
-newtab-widget-lists-input-add-an-item =
-    .placeholder = Afegeix un element
 newtab-widget-lists-input-error = Incloeu text per a afegir un element.
 newtab-widget-lists-input-menu-open-link = Obre l'enllaç
 newtab-widget-lists-input-menu-move-up = Mou cap amunt
@@ -692,9 +852,6 @@ newtab-widget-lists-name-placeholder-default =
 newtab-widget-lists-name-placeholder-new2 =
     .placeholder = Llista nova
     .aria-label = Edita el nom de la llista
-# The placeholder value of the name field for a newly created list
-newtab-widget-lists-name-placeholder-new =
-    .placeholder = Llista nova
 newtab-widget-section-title = Ginys
 # Tooltip for hide all widgets button
 newtab-widget-section-hide-all-button =
@@ -727,6 +884,7 @@ newtab-widget-timer-menu-learn-more = Més informació
 newtab-widget-message-title = Mantingueu la concentració amb les llistes i amb un temporitzador integrat
 # to-dos stands for "things to do".
 newtab-widget-message-copy = Des de recordatoris ràpids fins a tasques diàries pendents, sessions de concentració o pauses d'estirament: manteniu la productivitat i la puntualitat.
+newtab-promo-card-title = Col·laboreu amb el { -brand-product-name }
 newtab-promo-card-body = Els nostres patrocinadors donen suport a la nostra missió de crear un web millor
 newtab-promo-card-cta = Més informació
 newtab-promo-card-dismiss-button =

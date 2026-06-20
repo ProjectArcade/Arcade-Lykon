@@ -43,6 +43,11 @@ namespace js {
 
 class JS_PUBLIC_API GenericPrinter;
 
+namespace gc {
+template <uint32_t>
+class MarkingTracerT;
+}  // namespace gc
+
 namespace frontend {
 class ScopeStencil;
 struct ScopeStencilRef;
@@ -314,7 +319,8 @@ class WrappedPtrOperations<Scope*, Wrapper> {
 // The base class of all Scopes.
 //
 class Scope : public gc::TenuredCellWithNonGCPointer<BaseScopeData> {
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class frontend::ScopeStencil;
   friend class js::AbstractBindingIter<JSAtom>;
   friend class js::frontend::RuntimeScopeBindingCache;
@@ -507,7 +513,8 @@ struct alignas(ScopeDataAlignBytes) RuntimeScopeData
 class LexicalScope : public Scope {
   friend class Scope;
   friend class AbstractBindingIter<JSAtom>;
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class frontend::ScopeStencil;
 
  public:
@@ -533,8 +540,8 @@ class LexicalScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
  private:
   static void prepareForScopeCreation(ScopeKind kind, uint32_t firstFrameSlot,
@@ -584,7 +591,8 @@ inline bool Scope::is<LexicalScope>() const {
 class ClassBodyScope : public Scope {
   friend class Scope;
   friend class AbstractBindingIter<JSAtom>;
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class frontend::ScopeStencil;
   friend class AbstractScopePtr;
 
@@ -608,8 +616,8 @@ class ClassBodyScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
  private:
   static void prepareForScopeCreation(ScopeKind kind, uint32_t firstFrameSlot,
@@ -650,7 +658,8 @@ class ClassBodyScope : public Scope {
 // Corresponds to CallObject on environment chain.
 //
 class FunctionScope : public Scope {
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class AbstractBindingIter<JSAtom>;
   friend class AbstractPositionalFormalParameterIter<JSAtom>;
   friend class Scope;
@@ -723,8 +732,8 @@ class FunctionScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
   static void prepareForScopeCreation(FunctionScope::ParserData* data,
                                       bool hasParameterExprs,
@@ -767,7 +776,8 @@ class FunctionScope : public Scope {
 // Corresponds to VarEnvironmentObject on environment chain.
 //
 class VarScope : public Scope {
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class AbstractBindingIter<JSAtom>;
   friend class Scope;
   friend class frontend::ScopeStencil;
@@ -788,8 +798,8 @@ class VarScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
  private:
   static void prepareForScopeCreation(ScopeKind kind,
@@ -835,7 +845,8 @@ inline bool Scope::is<VarScope>() const {
 class GlobalScope : public Scope {
   friend class Scope;
   friend class AbstractBindingIter<JSAtom>;
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
 
  public:
   struct SlotInfo {
@@ -855,8 +866,8 @@ class GlobalScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
   static GlobalScope* createEmpty(JSContext* cx, ScopeKind kind);
 
@@ -909,7 +920,8 @@ class WithScope : public Scope {
 class EvalScope : public Scope {
   friend class Scope;
   friend class AbstractBindingIter<JSAtom>;
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class frontend::ScopeStencil;
 
  public:
@@ -932,8 +944,8 @@ class EvalScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
  private:
   static void prepareForScopeCreation(ScopeKind scopeKind,
@@ -968,7 +980,8 @@ inline bool Scope::is<EvalScope>() const {
 // Corresponds to a ModuleEnvironmentObject on the environment chain.
 //
 class ModuleScope : public Scope {
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class AbstractBindingIter<JSAtom>;
   friend class Scope;
   friend class AbstractScopePtr;
@@ -1013,8 +1026,8 @@ class ModuleScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
  private:
   static void prepareForScopeCreation(ModuleScope::ParserData* data,
@@ -1040,7 +1053,8 @@ class ModuleScope : public Scope {
 class WasmInstanceScope : public Scope {
   friend class AbstractBindingIter<JSAtom>;
   friend class Scope;
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class AbstractScopePtr;
   static const ScopeKind classScopeKind_ = ScopeKind::WasmInstance;
 
@@ -1074,8 +1088,8 @@ class WasmInstanceScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
   static WasmInstanceScope* create(JSContext* cx,
                                    Handle<WasmInstanceObject*> instance);
@@ -1103,7 +1117,8 @@ class WasmInstanceScope : public Scope {
 class WasmFunctionScope : public Scope {
   friend class AbstractBindingIter<JSAtom>;
   friend class Scope;
-  friend class GCMarker;
+  template <uint32_t>
+  friend class gc::MarkingTracerT;
   friend class AbstractScopePtr;
   static const ScopeKind classScopeKind_ = ScopeKind::WasmFunction;
 
@@ -1123,8 +1138,8 @@ class WasmFunctionScope : public Scope {
 
   template <typename NameT>
   using AbstractData =
-      typename std::conditional_t<std::is_same<NameT, JSAtom>::value,
-                                  RuntimeData, ParserData>;
+      typename std::conditional_t<std::is_same_v<NameT, JSAtom>, RuntimeData,
+                                  ParserData>;
 
   static WasmFunctionScope* create(JSContext* cx, Handle<Scope*> enclosing,
                                    uint32_t funcIndex);

@@ -6,7 +6,6 @@
 #define jit_arm64_MacroAssembler_arm64_h
 
 #include "jit/arm64/Assembler-arm64.h"
-#include "jit/arm64/vixl/Debugger-vixl.h"
 #include "jit/arm64/vixl/MacroAssembler-vixl.h"
 #include "jit/AtomicOp.h"
 #include "jit/MoveResolver.h"
@@ -240,7 +239,7 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
 #endif
   }
   // In debug builds only, add a marker that doesn't change the machine's
-  // state.  Note these markers are x16-based, as opposed to the x28-based
+  // state.  Note these markers are x16-based, as opposed to the x20-based
   // ones made by `assertStackPtrsSynced`.
   void addMarker(uint32_t id) {
 #ifdef DEBUG
@@ -658,6 +657,9 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
   void jump(Label* label) { B(label); }
   void jump(JitCode* code) { branch(code); }
   void jump(ImmPtr ptr) {
+    // CodeFromJump doesn't support nop sequences.
+    AutoForbidNops afn(this);
+
     // It is unclear why this sync is necessary:
     // * PSP and SP have been observed to be different in testcase
     //   tests/asm.js/testBug1046688.js.
@@ -1310,6 +1312,9 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
 
   void branch(Condition cond, Label* label) { B(label, cond); }
   void branch(JitCode* target) {
+    // CodeFromJump doesn't support nop sequences.
+    AutoForbidNops afn(this);
+
     // It is unclear why this sync is necessary:
     // * PSP and SP have been observed to be different in testcase
     //   tests/async/debugger-reject-after-fulfill.js
@@ -2017,6 +2022,9 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
   // Emit a BLR or NOP instruction. ToggleCall can be used to patch
   // this instruction.
   CodeOffset toggledCall(JitCode* target, bool enabled) {
+    // CodeFromJump doesn't support nop sequences.
+    AutoForbidNops afn(this);
+
     // The returned offset must be to the first instruction generated,
     // for the debugger to match offset with Baseline's pcMappingEntries_.
     BufferOffset offset = nextOffset();

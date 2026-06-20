@@ -182,6 +182,7 @@ var gUIStateBeforeReset = {
   drawInTitlebar: null,
   currentTheme: null,
   uiDensity: null,
+  uiDensityHadUserValue: null,
   autoTouchMode: null,
   sidebarPositionStart: null,
 };
@@ -1426,8 +1427,9 @@ var CustomizableUIInternal = {
           }
         } else if (
           provider == CustomizableUI.PROVIDER_XUL &&
+          !this.isWidgetRemovable(node) &&
           node.parentNode != container &&
-          !this.isWidgetRemovable(node)
+          !aAreaNode.overflowable?.isInOverflowList(node)
         ) {
           placementsToRemove.add(id);
           continue;
@@ -4499,6 +4501,12 @@ var CustomizableUIInternal = {
         kPrefCustomizationState
       );
       gUIStateBeforeReset.uiDensity = Services.prefs.getIntPref(kPrefUIDensity);
+      // browser.uidensity is sticky, so an explicit value equal to the default
+      // (normal density) still counts as a user value. Remember whether one was
+      // set so undoReset can faithfully restore the automatic (no user value)
+      // state rather than pinning the density to normal.
+      gUIStateBeforeReset.uiDensityHadUserValue =
+        Services.prefs.prefHasUserValue(kPrefUIDensity);
       gUIStateBeforeReset.autoTouchMode =
         Services.prefs.getBoolPref(kPrefAutoTouchMode);
       gUIStateBeforeReset.currentTheme = gSelectedTheme;
@@ -4606,6 +4614,7 @@ var CustomizableUIInternal = {
       drawInTitlebar,
       currentTheme,
       uiDensity,
+      uiDensityHadUserValue,
       autoTouchMode,
       autoHideDownloadsButton,
       sidebarPositionStart,
@@ -4618,7 +4627,11 @@ var CustomizableUIInternal = {
 
     Services.prefs.setCharPref(kPrefCustomizationState, uiCustomizationState);
     Services.prefs.setIntPref(kPrefDrawInTitlebar, drawInTitlebar);
-    Services.prefs.setIntPref(kPrefUIDensity, uiDensity);
+    if (uiDensityHadUserValue) {
+      Services.prefs.setIntPref(kPrefUIDensity, uiDensity);
+    } else {
+      Services.prefs.clearUserPref(kPrefUIDensity);
+    }
     Services.prefs.setBoolPref(kPrefAutoTouchMode, autoTouchMode);
     Services.prefs.setBoolPref(
       kPrefAutoHideDownloadsButton,

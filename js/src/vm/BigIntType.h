@@ -220,6 +220,9 @@ class BigInt final : public js::gc::CellWithLengthAndFlags {
   size_t sizeOfExcludingThis() const;
   size_t sizeOfExcludingThisInNursery() const;
 
+  BigInt(const BigInt& other) = delete;
+  void operator=(const BigInt& other) = delete;
+
   static BigInt* createUninitialized(JSContext* cx, size_t digitLength,
                                      bool isNegative,
                                      js::gc::Heap heap = js::gc::Heap::Default);
@@ -541,9 +544,6 @@ class BigInt final : public js::gc::CellWithLengthAndFlags {
 
   friend struct ::JSStructuredCloneReader;
   friend struct ::JSStructuredCloneWriter;
-
-  BigInt(const BigInt& other) = delete;
-  void operator=(const BigInt& other) = delete;
 
  public:
   static constexpr size_t offsetOfFlags() { return offsetOfHeaderFlags(); }

@@ -9,6 +9,7 @@
 #include "AutoClose.h"
 #include "HttpBaseChannel.h"
 #include "HttpTransactionShell.h"
+#include "nsHttpResponseHead.h"
 #include "nsIReplacedHttpResponse.h"
 #include "TimingStruct.h"
 #include "mozilla/AtomicBitfields.h"
@@ -307,8 +308,13 @@ class nsHttpChannel final : public HttpBaseChannel,
 
   // Based on the proxy configuration determine the strategy for resolving the
   // end server host name.
-  ProxyDNSStrategy GetProxyDNSStrategy();
+  nsIHttpChannelInternal::ProxyDNSStrategy ComputeProxyDNSStrategy();
 
+ public:
+  NS_IMETHOD GetProxyDNSStrategy(
+      nsIHttpChannelInternal::ProxyDNSStrategy* aStrategy) override;
+
+ private:
   // Add Sec-Fetch-Storage-Access headers based on cookie partitioning
   void AddStorageAccessHeadersToRequest();
   bool DispatchRelease();
@@ -319,6 +325,14 @@ class nsHttpChannel final : public HttpBaseChannel,
   // unpartitioned cookies. Therefore needs to have still valid
   // storage-permission granted. Public to be accible from AntiTrackingUtils.
   bool StorageAccessReloadedChannel();
+
+  // Tells the channel to suspend after examining the response
+  void PrimeSuspendAfterExamineResponse();
+  // Cancel the suspension request, or resume if the suspension started
+  void CancelSuspendOrResumeAfterExamineResponse();
+  // Suspend if we called PrimeSuspendAfterExamineResponse
+  // and not CancelSuspendOrResumeAfterExamineResponse
+  void MaybeSuspendAfterExamineResponse();
 
  private:
   // We might synchronously or asynchronously call BeginConnect,
@@ -548,6 +562,8 @@ class nsHttpChannel final : public HttpBaseChannel,
   // writing a new entry. The content type is used in cache internally only.
   void SetCachedContentType();
 
+  bool IsAuthRedirectedChannel() { return !!LoadAuthRedirectedChannel(); }
+
  private:
   // --- MAIN THREAD ONLY OBJECTS ---
   // this section is for main-thread-only objects
@@ -641,7 +657,7 @@ class nsHttpChannel final : public HttpBaseChannel,
 
   // Total time the channel spent suspended. This value is reported to
   // telemetry in nsHttpChannel::OnStartRequest().
-  TimeDuration mSuspendTotalTime{0};
+  TimeDuration mSuspendTotalTime{nullptr};
 
   friend class AutoRedirectVetoNotifier;
   friend class HttpAsyncAborter<nsHttpChannel>;
@@ -818,7 +834,7 @@ class nsHttpChannel final : public HttpBaseChannel,
 
   nsresult LogConsoleError(const char* aTag);
 
-  void SetHTTPSSVCRecord(already_AddRefed<nsIDNSHTTPSSVCRecord>&& aRecord);
+  void SetHTTPSSVCRecord(already_AddRefed<nsIDNSHTTPSSVCRecord> aRecord);
 
   void RecordOnStartTelemetry(nsresult aStatus, bool aIsNavigation);
 
@@ -831,6 +847,12 @@ class nsHttpChannel final : public HttpBaseChannel,
   // cache. When the timer fires we'll notify the cache entry to make
   // all other listeners continue.
   nsCOMPtr<nsITimer> mSuspendTimer;
+  // Tri-state to track whether anti-tracking classification happened
+  // and has completed or not.
+  // Nothing: No anti-tracking classification
+  // Some(true): classification ongoing
+  // Some(false): classification done
+  Maybe<Atomic<bool>> mSuspendAfterExamineResponse;
   bool mWritingToCache = false;
   bool mWaitingForProxy = false;
   bool mStaleRevalidation = false;
@@ -852,9 +874,11 @@ class nsHttpChannel final : public HttpBaseChannel,
   // here to resume DoConnect.
   RefPtr<DNSPromise> mDNSBlockingThenable;
 
-  // We update the value of mProxyConnectResponseCode when OnStartRequest is
-  // called and reset the value when we switch to another failover proxy.
-  int32_t mProxyConnectResponseCode{0};
+  // We update the value of mProxyConnectResponseHead when OnStartRequest is
+  // called and reset the value when we switch to another failover proxy. It is
+  // a shared pointer to the head owned by the connection/transaction, so this
+  // is an addref rather than a deep copy. See bug 2045419.
+  RefPtr<ProxyConnectResponseHead> mProxyConnectResponseHead;
 
   // If mHTTPSSVCRecord has value, it means OnHTTPSRRAvailable() is called and
   // we got the result of HTTPS RR query. Otherwise, it means we are still

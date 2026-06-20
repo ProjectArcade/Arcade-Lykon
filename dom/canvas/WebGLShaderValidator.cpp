@@ -90,14 +90,6 @@ static ShShaderOutput ShaderOutput(gl::GLContext* gl) {
   }
   uint32_t version = gl->ShadingLanguageVersion();
   switch (version) {
-    case 100:
-      return SH_GLSL_COMPATIBILITY_OUTPUT;
-    case 120:
-      return SH_GLSL_COMPATIBILITY_OUTPUT;
-    case 130:
-      return SH_GLSL_130_OUTPUT;
-    case 140:
-      return SH_GLSL_140_OUTPUT;
     case 150:
       return SH_GLSL_150_CORE_OUTPUT;
     case 330:
@@ -121,7 +113,7 @@ static ShShaderOutput ShaderOutput(gl::GLContext* gl) {
       gfxCriticalNote << "Unexpected GLSL version: " << version;
   }
 
-  return SH_GLSL_COMPATIBILITY_OUTPUT;
+  return SH_GLSL_150_CORE_OUTPUT;
 }
 
 std::unique_ptr<webgl::ShaderValidator> WebGLContext::CreateShaderValidator(
@@ -150,6 +142,8 @@ std::unique_ptr<webgl::ShaderValidator> WebGLContext::CreateShaderValidator(
   if (IsWebGL2()) {
     resources.MinProgramTexelOffset = mGLMinProgramTexelOffset;
     resources.MaxProgramTexelOffset = mGLMaxProgramTexelOffset;
+    resources.MaxVertexUniformBlocks = mGLMaxVertexUniformBlocks;
+    resources.MaxFragmentUniformBlocks = mGLMaxFragmentUniformBlocks;
   }
 
   resources.MaxDrawBuffers = MaxValidDrawBuffers();
@@ -212,8 +206,12 @@ std::unique_ptr<webgl::ShaderValidator> WebGLContext::CreateShaderValidator(
 
   // -
 
-  const auto compileOptions =
-      webgl::ChooseValidatorCompileOptions(resources, gl);
+  auto compileOptions = webgl::ChooseValidatorCompileOptions(resources, gl);
+
+  if (IsWebGL2()) {
+    compileOptions.validatePerStageMaxUniformBlocks = true;
+  }
+
   auto ret = webgl::ShaderValidator::Create(shaderType, spec, outputLanguage,
                                             resources, compileOptions);
   if (!ret) return ret;
@@ -485,7 +483,7 @@ bool ShaderValidatorResults::CanLinkTo(const ShaderValidatorResults& vert,
 }
 
 size_t ShaderValidatorResults::SizeOfIncludingThis(
-    const MallocSizeOf fnSizeOf) const {
+    const mozilla::MallocSizeOf fnSizeOf) const {
   auto ret = fnSizeOf(this);
 
   // std::string heap allocations are not measured here because:

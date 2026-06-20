@@ -7,55 +7,83 @@ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 export const DEFAULT_WINDOWS_LAUNCH_ON_LOGIN_NIMBUS_FEATURE_ID =
   "defaultWindowsLaunchOnLogin";
 
+export const DEFAULT_WINDOWS_LAUNCH_ON_LOGIN_PREF =
+  "browser.startup.windowsLaunchOnLogin.defaultEnabled";
+
 const lazy = XPCOMUtils.declareLazy({
-  ClientEnvironmentBase:
-    "resource://gre/modules/components-utils/ClientEnvironment.sys.mjs",
+  AppConstants: "resource://gre/modules/AppConstants.sys.mjs",
+  ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   WindowsLaunchOnLogin: "resource://gre/modules/WindowsLaunchOnLogin.sys.mjs",
-  NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
+  profileService: {
+    service: "@mozilla.org/toolkit/profile-service;1",
+    iid: Ci.nsIToolkitProfileService,
+  },
 });
 
 export var DefaultWindowsLaunchOnLogin = {
-  async firstStartupNewProfile() {
-    if (!lazy.ClientEnvironmentBase.os.isWindows) {
-      return;
-    }
-
-    this.logger.debug(
-      "First startup with a new profile - checking to enable launch on login by default"
+  /**
+   * `browser-before-ui-startup` category entry point.
+   *
+   * Registered to run early in startup so the (unavoidable) wait for Nimbus's
+   * first Remote Settings fetch starts as soon as possible. The Windows
+   * startup apps registry key only matters before the user reboots Windows,
+   * so this does not need to run especially early -- but writing it promptly
+   * minimizes two unkind outcomes: 1) the user closes Firefox before we enable
+   * it, 2) the user opens about:preferences and sees the setting reported as off
+   * before we turn it on.
+   *
+   * The category manager invokes this with a `jsGlobal` first argument, which
+   * we ignore; the real work and its inputs live in `enableOnFirstRunIfNeeded`
+   * so they can be driven directly from tests.
+   */
+  async maybeEnableOnFirstRun() {
+    await this.enableOnFirstRunIfNeeded(
+      lazy.profileService.isFirstRun,
+      lazy.AppConstants.MOZILLA_OFFICIAL
     );
+  },
 
-    const nimbusFeature =
-      lazy.NimbusFeatures[DEFAULT_WINDOWS_LAUNCH_ON_LOGIN_NIMBUS_FEATURE_ID];
-    await nimbusFeature.ready();
-    let metadata = await nimbusFeature.getEnrollmentMetadata();
-    if (!metadata) {
-      this.logger.debug("   - user not enrolled");
+  /**
+   * Enable launch-on-login by default unless Nimbus opts the user out.
+   *
+   * @param {boolean} isFirstRun
+   *   True only on a genuine first run (new install + newly created profile).
+   * @param {boolean} isOfficialBuild
+   *   False for local developer builds, where we skip so `./mach run` doesn't
+   *   register every dev's checkout to launch on login.
+   */
+  async enableOnFirstRunIfNeeded(isFirstRun, isOfficialBuild) {
+    if (
+      lazy.AppConstants.platform !== "win" ||
+      !isOfficialBuild ||
+      !isFirstRun
+    ) {
       return;
     }
 
-    let approval = await lazy.WindowsLaunchOnLogin.getLaunchOnLoginApproved();
-    if (!approval) {
-      this.logger.debug("   - Windows policy denied");
+    // Wait for Nimbus's first Remote Settings update so that any enrollment has
+    // applied its value before we read the pref below.
+    await this.waitForNimbusReady();
+
+    if (
+      !Services.prefs.getBoolPref(DEFAULT_WINDOWS_LAUNCH_ON_LOGIN_PREF, false)
+    ) {
       return;
     }
 
-    nimbusFeature.recordExposureEvent({ once: true });
-
-    const { enabled } = nimbusFeature.getAllVariables({
-      defaultValues: { enabled: false },
-    });
-
-    if (!enabled) {
-      this.logger.debug("   - Nimbus said no");
+    if (!(await lazy.WindowsLaunchOnLogin.getLaunchOnLoginApproved())) {
       return;
     }
 
     await lazy.WindowsLaunchOnLogin.createLaunchOnLogin();
-    this.logger.debug("   - enabled");
   },
 
-  logger: console.createInstance({
-    prefix: "DefaultWindowsLaunchOnLogin",
-    maxLogLevel: "Debug",
-  }),
+  /**
+   * Wait for Nimbus's first Remote Settings update so enrollment for this
+   * feature is knowable.
+   */
+  async waitForNimbusReady() {
+    await lazy.ExperimentAPI.init();
+    await lazy.ExperimentAPI._rsLoader.finishedUpdating();
+  },
 };

@@ -283,12 +283,12 @@ async function assertMixedContentBlockingState(tabbrowser, states = {}) {
   if (stateSecure) {
     is(
       securityViewBG,
-      'url("chrome://global/skin/icons/security.svg")',
+      'url("chrome://global/skin/icons/security-custom-root.svg")',
       "CC using secure icon"
     );
     is(
       securityContentBG,
-      'url("chrome://global/skin/icons/security.svg")',
+      'url("chrome://global/skin/icons/security-custom-root.svg")',
       "CC using secure icon"
     );
   }
@@ -320,12 +320,12 @@ async function assertMixedContentBlockingState(tabbrowser, states = {}) {
       // There is a case here with weak ciphers, but no bc tests are handling this yet.
       is(
         securityViewBG,
-        'url("chrome://global/skin/icons/security.svg")',
+        'url("chrome://global/skin/icons/security-custom-root.svg")',
         "CC using degraded icon"
       );
       is(
         securityContentBG,
-        'url("chrome://global/skin/icons/security.svg")',
+        'url("chrome://global/skin/icons/security-custom-root.svg")',
         "CC using degraded icon"
       );
     }

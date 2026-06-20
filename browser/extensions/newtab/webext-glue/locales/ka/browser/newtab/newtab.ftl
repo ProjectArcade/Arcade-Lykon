@@ -31,6 +31,127 @@ newtab-card-dismiss-button =
     .title = აცილება
     .aria-label = აცილება
 
+## Strings for "Homepage" and "Firefox Home" sections of about:settings#home.
+## Homepage panel
+
+home-homepage-title =
+    .label = საწყისი გვერდი
+home-homepage-new-windows =
+    .label = ახალი ფანჯრები
+home-homepage-new-tabs =
+    .label = ახალი ჩანართები
+# This option leads to the "Custom Homepage" subpage
+home-homepage-custom-homepage-button =
+    .label = აირჩიეთ ცალკეული საიტი
+
+## Custom URLs subpage
+
+# Subheader on the Custom Homepage subpage. Followed by a form to enter URLs and a list of URLs already saved, if any.
+home-custom-homepage-card-header =
+    .label = საიტის მისამართ(ებ)ი
+home-custom-homepage-address =
+    .placeholder = შეიყვანეთ მისამართი
+home-custom-homepage-address-button =
+    .label = მისამართის დამატება
+# Shown when no custom websites/URLs to use as a homepage have been added yet
+home-custom-homepage-no-results =
+    .label = საიტები ჯერ არ დამატებულა.
+home-custom-homepage-delete-address-button =
+    .aria-label = მისამართის წაშლა
+    .title = მისამართის წაშლა
+# Further options to use when setting the home page. Two action buttons are placed in line with this prompt
+# to replace the current home page with a currently open page or bookmark.
+home-custom-homepage-replace-with-prompt =
+    .label = ჩაანაცვლებს
+# Button that appears in-line after text "Replace with" (home-custom-homepage-replace-with-prompt)
+home-custom-homepage-current-pages-button =
+    .label = ახლად გახსნილი გვერდები
+# Button that appears in-line after text "Replace with" (home-custom-homepage-replace-with-prompt)
+home-custom-homepage-bookmarks-button =
+    .label = სანიშნები…
+
+## Firefox Home content
+
+home-prefs-content-header =
+    .label = { -firefox-home-brand-name }
+home-prefs-search-header2 =
+    .label = ძიება
+home-prefs-stories-header2 =
+    .label = ამბები
+    .description = გამორჩეული მასალები, რომელთაც გთავაზობთ { -brand-product-name }-ოჯახი
+home-prefs-widgets-header =
+    .label = ჩანამატები
+# Lists is a widget on New Tab, similar to a to-do widget
+home-prefs-lists-header =
+    .label = სიები
+# Timer is a widget on New Tab, similar to the Pomodoro timer.
+home-prefs-timer-header =
+    .label = წამმზომი
+# Sports is a widget on New Tab showing sports scores and schedules.
+home-prefs-sports-widget-header =
+    .label = სპორტი
+# Clock is a widget on New Tab that displays time zones around the world.
+home-prefs-clocks-header =
+    .label = საათი
+home-prefs-mission-message2 =
+    .message = ჩვენი დამკვეთები მხარს უჭერენ ჩვენს მიზანს უკეთესი ვებსივრცის ჩამოსაყალიბებლად.
+home-prefs-manage-topics-link2 =
+    .label = თემების მართვა
+home-prefs-choose-wallpaper-link2 =
+    .label = ფონის არჩევა
+home-prefs-firefox-logo-header =
+    .label = { -brand-short-name } – ლოგო
+# Informational message bar that appears in the Firefox Home section when the options are disabled.
+# The user must select Firefox Home as their homepage for either new tabs or new windows to enable
+# the features in settings.
+home-prefs-firefox-home-disabled-notice =
+    .message = ამ შესაძლებლობებით სარგებლობისთვის მომართეთ { -firefox-home-brand-name } ახალი ჩანართებითა და ფანჯრებით.
+# Variables:
+#   $num (number) - Number of rows displayed
+home-prefs-sections-rows-option-srd =
+    .label =
+        { $num ->
+            [one] { $num } რიგად
+           *[other] { $num } რიგად
+        }
+# Dropdown option shown when an extension replaces the contents of new windows or tabs.
+# Variables:
+#   $extension (string) - Name of the extension
+home-prefs-homepage-extension-option =
+    .label = გაფართოება ({ $extension })
+home-restore-defaults-srd =
+    .label = ნაგულისხმევის აღდგენა
+    .accesskey = ნ
+home-mode-choice-default-fx-srd =
+    .label = { -firefox-home-brand-name } (ნაგულისხმევი)
+home-mode-choice-custom-srd =
+    .label = მითითებული URL-მისამართები...
+home-mode-choice-blank-srd =
+    .label = ცარიელი გვერდი
+home-prefs-shortcuts-header-srd =
+    .label = მალსახმობები
+home-prefs-shortcuts-select =
+    .aria-label = მალსახმობები
+home-prefs-shortcuts-by-option-sponsored-srd =
+    .label = მალსახმობები დამკვეთებისგან
+home-prefs-recommended-by-option-sponsored-stories-srd =
+    .label = ამბები დამკვეთებისგან
+home-prefs-highlights-option-visited-pages-srd =
+    .label = მონახულებული გვერდები
+home-prefs-highlights-options-bookmarks-srd =
+    .label = სანიშნები
+home-prefs-highlights-option-most-recent-download-srd =
+    .label = ბოლო ჩამოტვირთვები
+home-prefs-recent-activity-header-srd =
+    .label = ბოლო მოქმედებები
+home-prefs-recent-activity-select =
+    .aria-label = ბოლო მოქმედებები
+home-prefs-weather-header-srd =
+    .label = ამინდი
+home-prefs-support-firefox-header-srd =
+    .label = თანადგომა – { -brand-product-name }
+home-prefs-mission-message-learn-more-link-srd = იხილეთ, როგორ
+
 ## Search box component.
 
 # "Search" is a verb/action
@@ -151,6 +272,8 @@ newtab-menu-section-block = აკრძალვა
 # "Follow", "unfollow", and "following" are social media terms that refer to subscribing to or unsubscribing from a section of stories.
 # e.g. Following the travel section of stories.
 newtab-menu-section-unfollow-topic = გამოწერის შეწყვეტა
+# Context menu option to open a support page explaining the New Tab personalization features and privacy controls.
+newtab-menu-section-learn-more = ვრცლად
 # "Follow", "unfollow", and "following" are social media terms that refer to subscribing to or unsubscribing from a section of stories.
 # e.g. Following the travel section of stories.
 newtab-menu-section-unfollow = თემის მიდევნების შეწყვეტა
@@ -210,7 +333,7 @@ newtab-label-download = ჩამოტვირთული
 # This string is used in the story cards to indicate sponsored content
 # Variables:
 #   $sponsorOrSource (string) - The name of a company or their domain
-newtab-label-sponsored = { $sponsorOrSource } · დაკვეთილი
+newtab-label-sponsored = { $sponsorOrSource } · დამკვეთი
 # This string is used at the bottom of story cards to indicate sponsored content
 # Variables:
 #   $sponsor (string) - The name of a sponsor
@@ -366,6 +489,12 @@ newtab-custom-widget-lists-toggle =
     .label = სიები
 newtab-custom-widget-timer-toggle =
     .label = წამმზომი
+newtab-custom-widget-sports-toggle =
+    .label = მსოფლიო თასი
+newtab-custom-widget-clock-toggle =
+    .label = საათი
+newtab-custom-widget-sports-toggle2 =
+    .label = სპორტი
 newtab-custom-widget-section-title = ჩანამატები
 newtab-custom-widget-section-toggle =
     .label = ჩანამატები
@@ -499,7 +628,7 @@ newtab-weather-see-forecast =
     .title = ამინდს გთავაზობთ { $provider }
 # Variables:
 #   $provider (string) - Service provider for weather data
-newtab-weather-sponsored = { $provider } ∙ დაკვეთილი
+newtab-weather-sponsored = { $provider } ∙ დამკვეთი
 newtab-weather-menu-change-location = მდებარეობის შეცვლა
 newtab-weather-change-location-search-input-placeholder =
     .placeholder = მდებარეობის მოძიება
@@ -548,7 +677,7 @@ newtab-weather-low =
 #   $provider (string) - Service provider for weather data
 newtab-weather-see-forecast-description =
     .title = ამინდს გთავაზობთ { $provider }
-    .aria-description = { $provider } ∙ დაკვეთილი
+    .aria-description = { $provider } ∙ დამკვეთი
 
 ## Topic Labels
 
@@ -737,6 +866,8 @@ newtab-widget-lists-label-beta =
 # Variables:
 #   $number (number) - Amount of list items marked complete
 newtab-widget-lists-completed-list = შესრულებული ({ $number })
+newtab-widget-lists-celebration-headline = კარგად იმუშავეთ
+newtab-widget-lists-celebration-subhead = ყველა შესრულდა
 newtab-widget-task-list-menu-copy = ასლი
 newtab-widget-lists-menu-edit = სიის გადარქმევა
 newtab-widget-lists-menu-edit2 =
@@ -749,14 +880,17 @@ newtab-widget-lists-button-add-item = ჩანაწერის დამა�
 newtab-widget-lists-input-add-an-item2 =
     .placeholder = ჩანაწერის დამატება
     .aria-label = ჩანაწერის დამატება
-newtab-widget-lists-input-add-an-item =
-    .placeholder = ჩანაწერის დამატება
 newtab-widget-lists-input-error = დასამატებლად დაურთეთ წარწერა.
 newtab-widget-lists-input-menu-open-link = ბმულის გახსნა
 newtab-widget-lists-input-menu-move-up = აწევა
 newtab-widget-lists-input-menu-move-down = ჩამოწევა
 newtab-widget-lists-input-menu-delete = წაშლა
 newtab-widget-lists-input-menu-edit = ჩასწორება
+newtab-widget-lists-input-menu-edit2 =
+    .aria-label = ჩანაწერის ჩასწორება
+newtab-widget-lists-edit-clear =
+    .aria-label = გაუქმება
+    .title = გაუქმება
 # the + symbol emphasises the functionality of adding a new list
 newtab-widget-lists-dropdown-create =
     .label = + ახალი სიის შექმნა
@@ -773,14 +907,18 @@ newtab-widget-lists-name-placeholder-checklist2 =
 newtab-widget-lists-name-placeholder-new2 =
     .placeholder = ახალი სია
     .aria-label = სიის გადარქმევა
-newtab-widget-lists-name-placeholder-checklist =
-    .placeholder = ჩამონათვალი
-# The placeholder value of the name field for a newly created list
-newtab-widget-lists-name-placeholder-new =
-    .placeholder = ახალი სია
 newtab-widget-section-title = ჩანამატები
 newtab-widget-menu-hide = ჩანამატის დამალვა
 newtab-widget-menu-change-size = ზომის შეცვლა
+# Parent label for a submenu in the widget menu that reorders the widget
+# among its siblings. "Left" and "Right" appear as items inside this submenu.
+newtab-widget-menu-move = გადატანა
+# Submenu item under "Move"; moves the widget one position to the left.
+# RTL locales should translate this as "Right".
+newtab-widget-menu-move-left = მარცხნივ
+# Submenu item under "Move"; moves the widget one position to the right.
+# RTL locales should translate this as "Left".
+newtab-widget-menu-move-right = მარჯვნივ
 newtab-widget-size-small = მომცრო
 newtab-widget-size-medium = საშუალო
 newtab-widget-size-large = მოზრდილი
@@ -797,15 +935,27 @@ newtab-widget-section-minimize =
 newtab-widget-section-menu-button =
     .title = ჩანამატების მენიუ
     .aria-label = ჩანამატების მენიუს გახსნა
+newtab-widget-add-widgets-button =
+    .aria-label = ჩანამატის დამატება
+    .title = ჩანამატის დამატება
+newtab-widget-section-menu-manage = ჩანამატების მართვა
 newtab-widget-section-menu-hide-all = ჩანამატების დამალვა
 newtab-widget-section-menu-learn-more = ვრცლად
 newtab-widget-section-feedback = მოგვახსენეთ თქვენი აზრი
+# Button shown when additional widgets are hidden beyond the
+# first row, allowing users to show them.
+newtab-widget-section-show-more =
+    .label = მეტი ჩანამატის გამოჩენა
+# Button shown when the widgets row is expanded to multiple rows,
+# allowing users to collapse it back to one row.
+newtab-widget-section-show-less =
+    .label = ნაკლები ჩანამატის გამოჩენა
 newtab-widget-lists-name-default = ჩამონათვალი
 
 ## Strings introduced by the Nova redesign of the Timer widget
 
 newtab-widget-timer-notification-title = წამმზომი
-newtab-widget-timer-notification-focus = საქმიანობის დრო ამოიწურა. კარგად იმუშავეთ. გსურთ შესვენება?
+newtab-widget-timer-notification-focus = საქმიანობის დრო ამოიწურა. კარგად გაისარჯეთ. გსურთ შესვენება?
 newtab-widget-timer-notification-break = შესვენების დრო ამოიწურა. მზად ხართ საქმიანობისთვის?
 newtab-widget-timer-notification-warning = შეტყობინებები გამორთულია
 newtab-widget-timer-mode-focus =
@@ -830,6 +980,9 @@ newtab-daily-briefing-card-timestamp = განახლდა { $minutes } წ
 newtab-widget-message-title = მოიკრიბეთ ყურადღება სიებისა და ჩაშენებული წამმზომის მეშვეობით
 # to-dos stands for "things to do".
 newtab-widget-message-copy = სწრაფი შეხსენებები იქნება ეს, თუ ყოველდღიური საქმიანობები, დაძაბული სამუშაო მონაკვეთები თუ შესვენებები განსატვირთად — მიჰყევით და ნუ გადაუხვევთ გეგმებს.
+# One spot refers to a dedicated section on new tab to manage and use widgets
+newtab-widget-message-focus-forecasts-title = ერთიანი სივრცე საქმისთვის, ამინდისთვის და სხვ.
+newtab-widget-message-focus-forecasts-body = გაიხალისეთ დღე ჩანამატებით, რომელთაც გთავაზობთ { -brand-product-name }. შეამოწმეთ ამინდი, მიმართეთ ყურადღება საქმისკენ ან თვალი ადევნეთ მსოფლიოს სხვადასხვა სასაათე სარტყელს.
 # "Make Firefox yours" refers to about:newtab. The call to action here ("Try it now")
 # is to customize the new tab page with a background image or color from
 # the built-in wallpaper collection or uploading your own image.
@@ -842,6 +995,253 @@ newtab-promo-card-cta = ვრცლად
 newtab-promo-card-dismiss-button =
     .title = აცილება
     .aria-label = აცილება
+
+## Strings introduced by the Nova redesign of the Timer widget
+
+# Variables:
+#   $minutes (number) - The currently selected timer duration in minutes
+newtab-widget-timer-start-aria =
+    .aria-label =
+        { $minutes ->
+            [one] გაეშვას { $minutes }-წუთიანი ათვლა
+           *[other] გაეშვას { $minutes }-წუთიანი ათვლა
+        }
+newtab-widget-timer-pause-aria =
+    .aria-label = წამმზომის შეჩერება
+# Variables:
+#   $minutes (number) - The currently selected timer duration in minutes
+newtab-widget-timer-spinbutton-name =
+    .aria-label =
+        { $minutes ->
+            [one] { $minutes } წთ
+           *[other] { $minutes } წთ
+        }
+newtab-widget-timer-decrease-min =
+    .title = დაკლება 1 წუთით
+newtab-widget-timer-increase-min =
+    .title = მომატება 1 წუთით
+newtab-widget-timer-mode-group =
+    .aria-label = უკუმთვლელი
+# Small label shown beneath the live time while the focus timer is running or paused.
+newtab-widget-timer-running-focus = საქმიანობა
+# Small label shown beneath the live time while the break timer is running or paused.
+newtab-widget-timer-running-break = შესვენება
+# Context-menu item to hide the Timer widget. Replaces the shared "Hide widget"
+# copy with a widget-specific string per the Nova design.
+newtab-widget-timer-menu-hide = წამმზომის დამალვა
+# Heading shown inside the Timer widget after a focus session ends.
+newtab-widget-timer-celebration-heading-focus = კარგად გაისარჯეთ
+# Heading shown inside the Timer widget after a break session ends.
+newtab-widget-timer-celebration-heading-break = შესვენების დრო ამოიწურა
+# Message shown inside the Timer widget after a focus session ends.
+newtab-widget-timer-celebration-message-focus = შეისვენებთ?
+# Message shown inside the Timer widget after a break session ends.
+newtab-widget-timer-celebration-message-break = მზად ხართ საქმისთვის?
+
+##
+
+newtab-sports-widget-menu-follow-teams = გუნდის მიყოლა
+newtab-sports-widget-menu-view-schedule = განრიგის ნახვა
+newtab-sports-widget-menu-view-upcoming = მოახლოებულის ნახვა
+newtab-sports-widget-menu-view-results = შედეგების ნახვა
+# Milestone dates (e.g. group stage, semifinals, etc.). Refers to calendar dates.
+newtab-sports-widget-menu-key-dates = საკვანძო თარიღები
+newtab-sports-widget-menu-learn-more = ვრცლად
+# “Keep tabs on” is an informal expression meaning to stay updated on, stay informed on, or regularly follow something (in this case, World Cup matches and updates).
+newtab-sports-widget-keep-tabs = თვალი ადევნეთ მსოფლიო თასს
+newtab-sports-widget-get-updates = მიმდინარე შეხვედრების სიახლეები და სხვ.
+newtab-sports-widget-view-schedule =
+    .label = განრიგის ნახვა
+newtab-sports-widget-follow-teams =
+    .label = გუნდის მიყოლა
+newtab-sports-widget-view-matches =
+    .label = შეხვედრების ნახვა
+# Variables:
+#   $number (number) - Maximum number of teams a user can choose to follow in the team selection state
+newtab-sports-widget-follow-teams-title =
+    { $number ->
+        [one] გამოიწერეთ { $number } გუნდი
+       *[other] გამოიწერეთ { $number } გუნდი
+    }
+newtab-sports-widget-choose-wallpaper =
+    .label = ფონის არჩევა
+newtab-sports-widget-skip = აცილება
+newtab-sports-widget-search-country =
+    .placeholder = ქვეყნის ძიება
+    .aria-label = ქვეყნის ძიება
+newtab-sports-widget-cancel = გაუქმება
+newtab-sports-widget-back-button =
+    .aria-label = უკან
+newtab-sports-widget-done-button =
+    .label = მზადაა
+# Shown in the follow-teams list for a team that has been knocked out of the tournament.
+# Variables:
+#   $teamName (string) - the localized team name (e.g. "Canada").
+newtab-sports-widget-team-name-eliminated = { $teamName } (გამოვარდნილი)
+newtab-sports-widget-view-all =
+    .label = ყველას ნახვა
+newtab-sports-widget-show-less =
+    .label = შემოკლებულად
+# Toggle that filters the list of teams the user follows
+newtab-sports-widget-followed-only-toggle =
+    .label = მხოლოდ გამოწერილი გუნდები
+# Watch is a verb (as in watch matches online).
+newtab-sports-widget-watch =
+    .label = ყურება
+    .title = ეთერში ყურება
+# Watch is a verb (as in watch matches online).
+newtab-sports-widget-watch-icon =
+    .aria-label = ეთერში ყურება
+    .title = ეთერში ყურება
+newtab-sports-widget-watch-dialog-close =
+    .aria-label = დახურვა
+    .title = დახურვა
+# Tag: user can watch without paying (sign-in may still be required).
+newtab-sports-widget-watch-stream-free = უფასო
+# Tag: user can start watching via a trial; continued access may require payment after it ends.
+newtab-sports-widget-watch-stream-free-trial = უფასო საცდელი
+# Tag: provider offers both a no-cost or trial path and a paid path.
+newtab-sports-widget-watch-stream-free-paid = უფასო და ფასიანი
+# Tag: user must pay to watch (subscription, TV provider, premium plan, or add-on).
+newtab-sports-widget-watch-stream-paid = ფასიანი
+# Note: provider only streams some matches, not the full tournament.
+newtab-sports-widget-watch-stream-select-games-only = მხოლოდ თამაშების არჩევა
+# Heading for the list of streaming services available in the user’s country/region.
+newtab-sports-widget-watch-available-region = ხელმისაწვდომი თქვენს მხარეში
+# Heading for the list of streaming services available outside the user’s country/region.
+newtab-sports-widget-watch-available-other-regions = სხვა მხარეებში
+# Button that opens the provider’s stream page in a new tab.
+newtab-sports-widget-watch-play =
+    .aria-label = ეთერის გახსნა
+    .title = ეთერის გახსნა
+newtab-sports-widget-group-stage = ჯგუფური ეტაპი
+newtab-sports-widget-group-a = ჯგუფი A
+newtab-sports-widget-group-b = ჯგუფი B
+newtab-sports-widget-group-c = ჯგუფი C
+newtab-sports-widget-group-d = ჯგუფი D
+newtab-sports-widget-group-e = ჯგუფი E
+newtab-sports-widget-group-f = ჯგუფი F
+newtab-sports-widget-group-g = ჯგუფი G
+newtab-sports-widget-group-h = ჯგუფი H
+newtab-sports-widget-group-i = ჯგუფი I
+newtab-sports-widget-group-j = ჯგუფი J
+newtab-sports-widget-group-k = ჯგუფი K
+newtab-sports-widget-group-l = ჯგუფი L
+newtab-sports-widget-round-32 = 1/32-ფინალი
+newtab-sports-widget-round-16 = 1/16-ფინალი
+newtab-sports-widget-quarter-finals = მეოთხედფინალი
+# The "LIVE" string is meant to be uppercase in English, but other languages and locales may vary in how they handle this.
+newtab-sports-widget-live = ᲞᲘᲠᲓ.
+newtab-custom-widget-live-refresh =
+    .title = ქულების გაახლება
+    .aria-label = ქულების გაახლება
+# Milestone dates (e.g. group stage, semifinals, etc.). Refers to calendar dates.
+newtab-sports-widget-key-dates = საკვანძო თარიღები
+newtab-sports-widget-upcoming = მოახლოებული
+# Used for a match currently ongoing
+newtab-sports-widget-now = ახლა
+newtab-sports-widget-results = შედეგები
+newtab-sports-widget-semi-finals = ნახევარფინალი
+newtab-sports-widget-bronze-finals = ბრინჯაოსთვის
+# Final is the final match for 1st place.
+newtab-sports-widget-final = ფინალი
+# Variables:
+#   $start (Date) - Start date of a tournament stage
+#   $end (Date) - End date of a tournament stage
+newtab-sports-widget-key-date-range = { DATETIME($start, month: "short", day: "numeric") } – { DATETIME($end, month: "short", day: "numeric") }
+# Variables:
+#   $date (Date) - Date of a single tournament event
+newtab-sports-widget-key-date = { DATETIME($date, month: "short", day: "numeric") }
+newtab-sports-widget-delayed = შეყოვნებულია
+newtab-sports-widget-postponed = გადადებულია
+newtab-sports-widget-suspended = შეჩერებულია
+newtab-sports-widget-cancelled = გაუქმებულია
+newtab-sports-widget-information = შეხვედრის შესახებ
+newtab-sports-widget-no-live-data = მიმდინარე შეხვედრის ცნობები არ ახლდება
+newtab-sports-widget-view-results-link = შედეგების ნახვა
+newtab-sports-widget-third-place = მესამეადგილოსანი
+# Runner-up is the team in 2nd place.
+newtab-sports-widget-runner-up = მეორეადგილოსანი
+newtab-sports-widget-champions = გამარჯვებული
+newtab-sports-widget-world-cup-champions = 2026 მსოფლიოს გამარჯვებულები
+# Variables:
+#   $date (Date) - The match start time
+newtab-sports-widget-match-time = { DATETIME($date, hour: "2-digit", minute: "2-digit") }
+newtab-sports-widget-match-full-time = დასრულდა
+newtab-sports-widget-match-penalties = თერთმეტმეტრიანები
+
+## Accessible labels for match rows in the sports widget. These are read by
+## screen readers to announce the match details and status.
+## Variables shared by all messages in this group:
+##   $homeTeam (String) - The full name of the home team (e.g. "Mexico")
+##   $awayTeam (String) - The full name of the away team (e.g. "Russia")
+
+# A finished match row (regular full-time result).
+# Variables:
+#   $homeScore (number) - The home team's regular-time score
+#   $awayScore (number) - The away team's regular-time score
+newtab-sports-widget-match-aria-label-results =
+    .aria-label = { $homeTeam }, { $homeScore } — { $awayTeam }, { $awayScore }
+# A finished match row that went to a penalty shootout.
+# Parenthesized values are the shootout score.
+# Variables:
+#   $homeScore (number) - The home team's regular-time score
+#   $awayScore (number) - The away team's regular-time score
+#   $homePenalty (number) - The home team's penalty shootout score
+#   $awayPenalty (number) - The away team's penalty shootout score
+newtab-sports-widget-match-aria-label-results-penalties =
+    .aria-label = { $homeTeam }, { $homeScore } ({ $homePenalty }) — { $awayTeam }, { $awayScore } ({ $awayPenalty })
+# A match that is currently in progress.
+# Variables:
+#   $homeScore (number) - The home team's current score
+#   $awayScore (number) - The away team's current score
+newtab-sports-widget-match-aria-label-now =
+    .aria-label = პირდაპირი: { $homeTeam }, { $homeScore } — { $awayTeam }, { $awayScore }
+# An upcoming scheduled match row. Announces kickoff time and date.
+# Variables:
+#   $date (Date) - The scheduled kickoff date/time
+newtab-sports-widget-match-aria-label-upcoming =
+    .aria-label = { $homeTeam } —{ $awayTeam }, { DATETIME($date, hour: "numeric", minute: "numeric") }, { DATETIME($date, day: "numeric", month: "long") }
+# An upcoming match row whose status is "delayed".
+newtab-sports-widget-match-aria-label-upcoming-delayed =
+    .aria-label = { $homeTeam } — { $awayTeam }, შეყოვნდა
+# An upcoming match row whose status is "postponed".
+newtab-sports-widget-match-aria-label-upcoming-postponed =
+    .aria-label = { $homeTeam } — { $awayTeam }, გადაიდო
+# An upcoming match row whose status is "suspended".
+newtab-sports-widget-match-aria-label-upcoming-suspended =
+    .aria-label = { $homeTeam } — { $awayTeam }, შეჩერდა
+# An upcoming match row whose status is "cancelled".
+newtab-sports-widget-match-aria-label-upcoming-cancelled =
+    .aria-label = { $homeTeam } — { $awayTeam }, გაუქმდა
+
+## Sports widget — team names (FIFA country codes)
+## Only includes names not adequately covered by standard country-code
+## internationalization tooling.
+
+newtab-sports-widget-team-name-label-bih =
+    .label = ბოსნია და ჰერცეგოვინა
+newtab-sports-widget-team-name-label-civ =
+    .label = კოტ-დ'ივუარი
+newtab-sports-widget-team-name-label-cod =
+    .label = კონგოს დემ. რესპ.
+newtab-sports-widget-team-name-label-eng =
+    .label = ინგლისი
+newtab-sports-widget-team-name-label-sco =
+    .label = შოტლანდია
+
+## Sports widget OMC messages
+## Shown as on-screen messages promoting the Sports widget and World Cup wallpapers.
+
+newtab-sports-widget-message-wallpapers-title = აღნიშნეთ მსოფლიო თასის დაწყება ახალი ფონებით
+newtab-sports-widget-message-wallpapers-body = გადმოიტანეთ ყოველი თამაშის დღის მუხტი ბრაუზერში შეჯიბრების მიმდინარეობისას.
+newtab-sports-widget-message-wallpapers-cta = ფონის არჩევა
+newtab-sports-widget-message-add-widgets-cta =
+    .label = ჩანამატის დამატება
+newtab-sports-widget-message-day-in-play-title = გაიხალისეთ დღე ჩანამატებით, რომელთაც გთავაზობთ { -brand-product-name }
+newtab-sports-widget-message-day-in-play-body = თვალი ადევნეთ მსოფლიო თასს, მიმართეთ ყურადღება საქმისკენ, იხილეთ მსოფლიოს სხვადასხვა სასაათე სარტყელი და ა. შ.
+newtab-sports-widget-message-explore-widgets-cta =
+    .label = მოიძიეთ ჩანამატები
 
 ## Strings for activation window message variants. In certain experiment configurations,
 ## the strings from these variants may be displayed in a message below the search input
@@ -864,3 +1264,76 @@ newtab-activation-window-message-customization-focus-primary-button =
 # the existing widgetry that appears on it.
 newtab-activation-window-message-values-focus-header = ეს სივრცე შეიძლება მოაწყოთ თქვენებურად
 newtab-activation-window-message-values-focus-message = { -brand-product-name } საშუალებას გაძლევთ გვერდები ინახულოთ ისე, როგორც მოგესურვებათ, ინტერნეტში შებიჯებისთანავე. გახადეთ { -brand-product-name } თქვენებური.
+
+## Strings for the Clock widget
+
+# Context menu item: toggle the clock card off.
+newtab-clock-widget-menu-hide = საათის დამალვა
+newtab-clock-widget-menu-learn-more = ვრცლად
+newtab-clock-widget-menu-edit = საათების ჩასწორება
+newtab-clock-widget-menu-switch-to-12h = გადართვა 12-საათიანზე
+newtab-clock-widget-menu-switch-to-24h = გადართვა 24-საათიანზე
+newtab-clock-widget-label-your-clocks = თქვენი საათები
+newtab-clock-widget-search-location-input =
+    .label = მდებარეობა
+    .placeholder = ქალაქის ძიება
+    .aria-label = ქალაქის ძიება
+# "Nickname (optional)" refers to a custom, user-defined label for a saved location
+# (e.g., "Home", "Office", or "School") to make it easier to recognize.
+# Not to be translated as a legal name, username, or alias used for identity verification.
+newtab-clock-widget-input-nickname =
+    .label = მეტსახელი (არასავალდებულო)
+    .placeholder = მეტსახელის დამატება
+    .aria-label = მეტსახელი (არასავალდებულო)
+# "Add new clock" is an icon-only button in the widget toolbar — the
+# attributes are consumed as tooltip/screen-reader label only. The button
+# never renders visible text.
+newtab-clock-widget-button-add =
+    .title = ახალი საათის დამატება
+    .aria-label = ახალი საათის დამატება
+newtab-clock-widget-button-add-clock = დამატება
+newtab-clock-widget-button-cancel = გაუქმება
+newtab-clock-widget-button-back =
+    .title = უკან
+    .aria-label = უკან
+newtab-clock-widget-button-edit-clock =
+    .title = საათის ჩასწორება
+    .aria-label = საათის ჩასწორება
+newtab-clock-widget-button-save = შენახვა
+newtab-clock-widget-button-remove-clock =
+    .title = საათის მოცილება
+    .aria-label = საათის მოცილება
+# Accessible name for a clock row in the "Your clocks" management panel
+# when the row has no user-provided nickname. Read aloud by screen
+# readers when focus lands on the row.
+# Variables:
+#   $city (string) - The city name displayed in the row.
+newtab-clock-widget-edit-item =
+    .aria-label = { $city }
+# Accessible name for a clock row when a user nickname has been set.
+# Variables:
+#   $city (string) - The city name displayed in the row.
+#   $nickname (string) - The user-provided nickname for the row.
+newtab-clock-widget-edit-item-with-nickname =
+    .aria-label = { $city }, მეტსახელი: { $nickname }
+newtab-clock-widget-add-clock-form =
+    .aria-label = საათის დამატება
+newtab-clock-widget-edit-clock-form =
+    .aria-label = საათის ჩასწორება
+# "Search results" is the accessible label for the listbox dropdown that appears
+# below the location search field, listing matching cities as the user types.
+# It means "results of the search", not "search within the results".
+newtab-clock-widget-search-results =
+    .aria-label = ძიების შედეგები
+# Shown in place of the search results when the user's query does not match any
+# supported city — e.g. typing a misspelled name or a place not in the IANA
+# time zone list.
+newtab-clock-widget-search-no-results = არაა შეხვედრები
+# "Open menu for clock" is an icon-only button in the widget toolbar — the
+# attributes are consumed as tooltip/screen-reader label only. The button
+# never renders visible text.
+newtab-clock-widget-menu-button =
+    .title = საათის მენიუს გახსნა
+    .aria-label = საათის მენიუს გახსნა
+# $nickname (String) - The user-defined nickname for a saved clock location (e.g., "Home", "Office").
+newtab-clock-widget-label-nickname-with-value = მეტსახელი: { $nickname }
