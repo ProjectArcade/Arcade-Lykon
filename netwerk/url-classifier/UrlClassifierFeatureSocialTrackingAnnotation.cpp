@@ -4,7 +4,6 @@
 
 #include "UrlClassifierFeatureSocialTrackingAnnotation.h"
 
-#include "mozilla/net/ChannelClassifierUtils.h"
 #include "mozilla/net/UrlClassifierCommon.h"
 #include "nsIClassifiedChannel.h"
 #include "nsContentUtils.h"
@@ -147,7 +146,7 @@ UrlClassifierFeatureSocialTrackingAnnotation::ProcessChannel(
       aList, sClassificationData,
       nsIClassifiedChannel::ClassificationFlags::CLASSIFIED_SOCIALTRACKING);
 
-  ChannelClassifierUtils::AnnotateChannel(
+  UrlClassifierCommon::AnnotateChannel(
       aChannel, flags,
       nsIWebProgressListener::STATE_LOADED_SOCIALTRACKING_CONTENT);
 

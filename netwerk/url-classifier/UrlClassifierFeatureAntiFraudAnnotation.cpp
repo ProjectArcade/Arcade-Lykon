@@ -8,10 +8,8 @@
 #include "mozilla/Logging.h"
 #include "mozilla/StaticPrefs_privacy.h"
 #include "mozilla/StaticPtr.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
 #include "mozilla/net/UrlClassifierCommon.h"
 #include "nsIChannel.h"
-#include "nsILoadInfo.h"
 #include "nsIClassifiedChannel.h"
 #include "nsIWebProgressListener.h"
 #include "nsContentUtils.h"
@@ -102,12 +100,6 @@ UrlClassifierFeatureAntiFraudAnnotation::MaybeCreate(nsIChannel* aChannel) {
     return nullptr;
   }
 
-  RefPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
-  bool isThirdParty = loadInfo->GetIsThirdPartyContextToTopWindow();
-  if (!isThirdParty) {
-    return nullptr;
-  }
-
   MaybeInitialize();
   MOZ_ASSERT(gFeatureAntiFraudAnnotation);
 
@@ -159,7 +151,7 @@ UrlClassifierFeatureAntiFraudAnnotation::ProcessChannel(
 
   UrlClassifierCommon::SetTrackingInfo(aChannel, aList, aHashes);
 
-  ChannelClassifierUtils::AnnotateChannelWithoutNotifying(aChannel, flags);
+  UrlClassifierCommon::AnnotateChannelWithoutNotifying(aChannel, flags);
 
   return NS_OK;
 }

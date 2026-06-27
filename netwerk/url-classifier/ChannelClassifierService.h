@@ -6,13 +6,18 @@
 #define mozilla_net_ChannelClassifierService_h
 
 #include "nsIChannelClassifierService.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
 #include "mozilla/net/UrlClassifierCommon.h"
 #include "nsCOMPtr.h"
 #include "nsTArray.h"
 
 namespace mozilla {
 namespace net {
+
+enum class ChannelBlockDecision {
+  Blocked,
+  Replaced,
+  Allowed,
+};
 
 class UrlClassifierBlockedChannel final
     : public nsIUrlClassifierBlockedChannel {

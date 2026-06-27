@@ -9,10 +9,8 @@
 #include "mozilla/StaticPrefs_privacy.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/ScopedPrefs.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
 #include "mozilla/net/UrlClassifierCommon.h"
 #include "nsIChannel.h"
-#include "nsILoadInfo.h"
 #include "nsIClassifiedChannel.h"
 #include "nsIWebProgressListener.h"
 #include "nsContentUtils.h"
@@ -107,12 +105,6 @@ UrlClassifierFeatureConsentManagerAnnotation::MaybeCreate(
     return nullptr;
   }
 
-  RefPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
-  bool isThirdParty = loadInfo->GetIsThirdPartyContextToTopWindow();
-  if (!isThirdParty) {
-    return nullptr;
-  }
-
   MaybeInitialize();
   MOZ_ASSERT(gFeatureConsentManagerAnnotation);
 
@@ -165,7 +157,7 @@ UrlClassifierFeatureConsentManagerAnnotation::ProcessChannel(
 
   UrlClassifierCommon::SetTrackingInfo(aChannel, aList, aHashes);
 
-  ChannelClassifierUtils::AnnotateChannelWithoutNotifying(aChannel, flags);
+  UrlClassifierCommon::AnnotateChannelWithoutNotifying(aChannel, flags);
 
   return NS_OK;
 }
