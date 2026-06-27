@@ -634,6 +634,24 @@ var LykonShield = {
         "privacy.trackingprotection.fingerprinting.enabled",
         el.checked
       );
+      // When RFP is active, spoof prefers-color-scheme with the user's actual
+      // system preference so sites render correctly while fingerprinting is
+      // still blocked (static value, not observable dynamically).
+      // 0=dark, 1=light, 2=follow-system (default).
+      if (el.checked) {
+        const systemPrefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+        Services.prefs.setIntPref(
+          "layout.css.prefers-color-scheme.content-override",
+          systemPrefersDark ? 0 : 1
+        );
+      } else {
+        Services.prefs.setIntPref(
+          "layout.css.prefers-color-scheme.content-override",
+          2
+        );
+      }
       if (lbl) {
         lbl.textContent = el.checked ? "Active" : "Off";
       }
@@ -1221,6 +1239,38 @@ var LykonCosmeticFilter = {
     "#floatingad",
     "#slide-ad",
     "#interstitial-wrapper",
+    /* Static ad div patterns — common on real sites and test harnesses */
+    "#adBanner",
+    "#ad-banner",
+    "#adContainer",
+    "#ad-container",
+    "#adWrapper",
+    "#ad-wrapper",
+    "#adBox",
+    "#ad-box",
+    "#adSlot",
+    "#ad-slot",
+    "#adUnit",
+    "#ad-unit",
+    "#adSpace",
+    "#ad-space",
+    "#adFrame",
+    "#ad-frame",
+    "#adArea",
+    "#ad-area",
+    "#adHolder",
+    "#ad-holder",
+    "div[id^='ad-']",
+    "div[id^='ads-']",
+    "div[id$='-ad']",
+    "div[id$='-ads']",
+    "div[class^='ad-']",
+    "div[class^='ads-']",
+    "[data-testid*='ad']",
+    "[data-module='ad']",
+    "[data-type='advertisement']",
+    "[aria-label='Advertisement']",
+    "[aria-label='advertisement']",
   ],
 
   /* Collapse (zero out dimensions) — these must shrink to 0 */
@@ -1398,7 +1448,11 @@ var LykonCosmeticFilter = {
     }
   },
   _ensureGlobalStylesheetState() {
-    this._unregisterGlobalStylesheet();
+    if (this._isShieldEnabled()) {
+      this._registerGlobalStylesheet();
+    } else {
+      this._unregisterGlobalStylesheet();
+    }
   },
 
   /* ─────────────────────────────────────────────────
@@ -1501,6 +1555,13 @@ var LykonCosmeticFilter = {
       if (!this._isEnabledForCurrentContext(siteShieldSettings, doc)) return;
     } catch (e) {}
     this._injectStylesheet(doc);
+    ChromeUtils.idleDispatch(() => {
+      try {
+        if (!doc.defaultView || doc.defaultView.closed) return;
+        this._jsHidePass(doc);
+        this._stickyAdEviction(doc);
+      } catch (e) {}
+    });
   },
 
   /* ─────────────────────────────────────────────────
@@ -2043,38 +2104,63 @@ var LykonCosmeticFilter = {
 
   _collapseEmptyContainers(doc) {
     try {
-      const hiddenEls = doc.querySelectorAll(
-        '[style*="display: none"][style*="important"]'
-      );
-      for (const el of hiddenEls) {
-        let parent = el.parentElement;
-        if (!parent || parent === doc.body || parent === doc.documentElement)
-          continue;
-        const tag = parent.tagName?.toLowerCase();
-        if (
-          [
-            "body",
-            "html",
-            "main",
-            "nav",
-            "header",
-            "footer",
-            "article",
-            "section",
-          ].includes(tag)
-        )
-          continue;
-        const visibleChildren = Array.from(parent.children).filter(c => {
-          const cs = doc.defaultView?.getComputedStyle(c);
-          return cs && cs.display !== "none" && cs.visibility !== "hidden";
+      const STRUCTURAL = new Set([
+        "body", "html", "main", "nav", "header", "footer", "article", "section",
+      ]);
+
+      const collapse = el => {
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("height", "0", "important");
+        el.style.setProperty("min-height", "0", "important");
+        el.style.setProperty("overflow", "hidden", "important");
+        el.style.setProperty("margin", "0", "important");
+        el.style.setProperty("padding", "0", "important");
+      };
+
+      /* Pass 1 — collapse wrappers around already-hidden children
+         (our JS hider sets inline style with !important via setProperty,
+         so check computed display instead of the raw style string) */
+      const allEls = doc.querySelectorAll("div, aside, figure, span");
+      for (const el of allEls) {
+        if (STRUCTURAL.has(el.tagName?.toLowerCase())) continue;
+        const cs = doc.defaultView?.getComputedStyle(el);
+        if (!cs || cs.display === "none") continue;
+
+        const children = Array.from(el.children);
+        if (children.length === 0) continue;
+
+        const allHidden = children.every(c => {
+          const ccs = doc.defaultView?.getComputedStyle(c);
+          return ccs && (ccs.display === "none" || ccs.visibility === "hidden");
         });
-        if (visibleChildren.length === 0 && parent.style.display !== "none") {
-          parent.style.setProperty("display", "none", "important");
-          parent.style.setProperty("height", "0", "important");
-          parent.style.setProperty("overflow", "hidden", "important");
-          parent.style.setProperty("margin", "0", "important");
-          parent.style.setProperty("padding", "0", "important");
-        }
+        if (allHidden) collapse(el);
+      }
+
+      /* Pass 2 — collapse wrapper divs left behind by network-blocked ads.
+         When the network layer blocks an ad request, the container div
+         remains in the DOM but its child ins/iframe has zero rendered size. */
+      const networkBlockedSelectors = [
+        "ins.adsbygoogle",
+        "[data-ad-slot]",
+        "[data-ad-client]",
+        "[id*='aswift_']",
+        "[id*='google_ads_']",
+        "[id^='div-gpt-ad-']",
+      ];
+      for (const sel of networkBlockedSelectors) {
+        try {
+          for (const el of doc.querySelectorAll(sel)) {
+            const cs = doc.defaultView?.getComputedStyle(el);
+            if (!cs || cs.display === "none") continue;
+            if (el.offsetWidth === 0 && el.offsetHeight === 0) {
+              collapse(el);
+              const parent = el.parentElement;
+              if (parent && !STRUCTURAL.has(parent.tagName?.toLowerCase())) {
+                collapse(parent);
+              }
+            }
+          }
+        } catch (e) {}
       }
     } catch (e) {}
   },

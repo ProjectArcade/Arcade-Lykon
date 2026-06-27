@@ -66,19 +66,44 @@ class _CosmeticFilterInjector {
   }
 
   getSelectorsForClassesAndIds(classes, ids, exceptions = []) {
+    let selectors = [];
     try {
-      return lazy.AdblockService.getHiddenClassIdSelectors(
+      selectors = lazy.AdblockService.getHiddenClassIdSelectors(
         classes,
         ids,
         exceptions
-      );
+      ) || [];
     } catch (e) {
       console.warn(
         "[CosmeticFilterInjector] getHiddenClassIdSelectors error:",
         e
       );
-      return [];
     }
+
+    // Heuristic: automatically learn and hide divs with ad-related class or id names
+    const adKeywords = ["adbox", "banner_ads", "bnaner_ads", "adsbox", "textads"];
+    
+    if (classes && Array.isArray(classes)) {
+      for (const className of classes) {
+        if (adKeywords.some(kw => className.toLowerCase().includes(kw))) {
+          if (!selectors.includes(`.${className}`)) {
+            selectors.push(`.${className}`);
+          }
+        }
+      }
+    }
+    
+    if (ids && Array.isArray(ids)) {
+      for (const id of ids) {
+        if (adKeywords.some(kw => id.toLowerCase().includes(kw))) {
+          if (!selectors.includes(`#${id}`)) {
+            selectors.push(`#${id}`);
+          }
+        }
+      }
+    }
+
+    return selectors;
   }
 
   buildCssFromResources(resources) {
