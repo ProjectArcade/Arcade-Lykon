@@ -13,7 +13,7 @@
 #include "mozilla/StaticPtr.h"
 #include "mozilla/RefPtr.h"
 #include "mozilla/ThreadSafety.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 #include "nsIAsyncShutdown.h"
 #include "nsIChannel.h"
 #include "nsIClassifiedChannel.h"

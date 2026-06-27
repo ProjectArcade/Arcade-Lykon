@@ -22,7 +22,7 @@
 #include "mozilla/net/HttpChannelChild.h"
 #include "mozilla/net/CacheEntryWriteHandleChild.h"
 #include "mozilla/net/PBackgroundDataBridge.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 
 #include "AltDataOutputStreamChild.h"
 #include "CookieServiceChild.h"
@@ -1172,7 +1172,7 @@ void HttpChannelChild::DoOnStopRequest(nsIRequest* aRequest,
     // NB: We use aChannelStatus here instead of mStatus because if there was an
     // nsCORSListenerProxy on this request, it will override the tracking
     // protection's return value.
-    if (ChannelClassifierUtils::IsClassifierBlockingErrorCode(aChannelStatus) ||
+    if (UrlClassifierCommon::IsClassifierBlockingErrorCode(aChannelStatus) ||
         aChannelStatus == NS_ERROR_MALWARE_URI ||
         aChannelStatus == NS_ERROR_UNWANTED_URI ||
         aChannelStatus == NS_ERROR_BLOCKED_URI ||
@@ -1190,7 +1190,7 @@ void HttpChannelChild::DoOnStopRequest(nsIRequest* aRequest,
       rv = GetMatchedFullHash(fullhash);
       NS_ENSURE_SUCCESS_VOID(rv);
 
-      ChannelClassifierUtils::SetBlockedContent(this, aChannelStatus, list,
+      UrlClassifierCommon::SetBlockedContent(this, aChannelStatus, list,
                                                 provider, fullhash);
     }
   };

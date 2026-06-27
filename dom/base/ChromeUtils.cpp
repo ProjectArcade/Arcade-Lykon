@@ -66,7 +66,7 @@
 #include "mozilla/ipc/UtilityProcessSandboxing.h"
 #include "mozilla/layers/WebRenderBridgeChild.h"
 #include "mozilla/layers/WebRenderLayerManager.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 #include "nsContentUtils.h"
 #include "nsControllerCommandTable.h"
 #include "nsDocShell.h"
@@ -2578,7 +2578,7 @@ already_AddRefed<Promise> ChromeUtils::EnsureHeadlessContentProcess(
 /* static */
 bool ChromeUtils::IsClassifierBlockingErrorCode(GlobalObject& aGlobal,
                                                 uint32_t aError) {
-  return net::ChannelClassifierUtils::IsClassifierBlockingErrorCode(
+  return net::UrlClassifierCommon::IsClassifierBlockingErrorCode(
       static_cast<nsresult>(aError));
 }
 

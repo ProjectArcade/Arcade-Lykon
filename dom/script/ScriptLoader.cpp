@@ -65,7 +65,7 @@
 #include "mozilla/dom/SpeculationRules.h"
 #include "mozilla/dom/WindowContext.h"
 #include "mozilla/glean/DomMetrics.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 #include "mozilla/net/HttpBaseChannel.h"
 #include "nsAboutProtocolUtils.h"
 #include "nsCRT.h"
@@ -1061,7 +1061,7 @@ nsresult ScriptLoader::StartLoadInternal(
 
   LOG(("ScriptLoadRequest (%p): mode=%u tracking=%d", aRequest,
        unsigned(aRequest->GetScriptLoadContext()->mScriptMode),
-       net::ChannelClassifierUtils::IsTrackingClassificationFlag(
+       net::UrlClassifierCommon::IsTrackingClassificationFlag(
            aRequest->GetScriptLoadContext()
                ->GetClassificationFlags()
                .thirdPartyFlags,
@@ -4788,7 +4788,7 @@ void ScriptLoader::ReportErrorToConsole(ScriptLoadRequest* aRequest,
   } else if (aResult == NS_ERROR_DOM_WEBEXT_CONTENT_SCRIPT_URI) {
     MOZ_ASSERT(!isScript);
     message = "WebExtContentScriptModuleSourceNotAllowed";
-  } else if (net::ChannelClassifierUtils::IsClassifierBlockingErrorCode(
+  } else if (net::UrlClassifierCommon::IsClassifierBlockingErrorCode(
                  aResult)) {
     // Blocking classifier error codes already show their own console messages.
     return;
@@ -4851,7 +4851,7 @@ void ScriptLoader::HandleLoadError(ScriptLoadRequest* aRequest,
    * We make a note of this script node by including it in a dedicated
    * array of blocked tracking nodes under its parent document.
    */
-  if (net::ChannelClassifierUtils::IsClassifierBlockingErrorCode(aResult)) {
+  if (net::UrlClassifierCommon::IsClassifierBlockingErrorCode(aResult)) {
     nsCOMPtr<nsIContent> cont = do_QueryInterface(
         aRequest->GetScriptLoadContext()->GetScriptElementForUrlClassifier());
     mDocument->AddBlockedNodeByClassifier(cont);

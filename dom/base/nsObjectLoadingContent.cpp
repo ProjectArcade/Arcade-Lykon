@@ -64,7 +64,7 @@
 #include "mozilla/dom/ScriptSettings.h"
 #include "mozilla/dom/UserActivation.h"
 #include "mozilla/dom/nsCSPContext.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 #include "mozilla/net/DocumentChannel.h"
 #include "mozilla/widget/IMEData.h"
 #include "nsChannelClassifier.h"
@@ -324,7 +324,7 @@ nsObjectLoadingContent::OnStartRequest(nsIRequest* aRequest) {
     return NS_ERROR_FAILURE;
   }
 
-  if (ChannelClassifierUtils::IsClassifierBlockingErrorCode(status)) {
+  if (UrlClassifierCommon::IsClassifierBlockingErrorCode(status)) {
     mContentBlockingEnabled = true;
     return NS_ERROR_FAILURE;
   }
@@ -351,7 +351,7 @@ nsObjectLoadingContent::OnStopRequest(nsIRequest* aRequest,
   // fingerprinting, cryptomining, etc.).
   // We make a note of this object node by including it in a dedicated
   // array of blocked tracking nodes under its parent document.
-  if (ChannelClassifierUtils::IsClassifierBlockingErrorCode(aStatusCode)) {
+  if (UrlClassifierCommon::IsClassifierBlockingErrorCode(aStatusCode)) {
     nsCOMPtr<nsIContent> thisNode =
         do_QueryInterface(static_cast<nsIObjectLoadingContent*>(this));
     if (thisNode && thisNode->IsInComposedDoc()) {

@@ -8,7 +8,7 @@
 #include "ContentClassifierPrefMirror.h"
 #include "mozilla/Logging.h"
 #include "mozilla/net/HttpBaseChannel.h"
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 #include "MainThreadUtils.h"
 #include "nsDebug.h"
 #include "mozilla/ContentClassifierEngine.h"
@@ -713,7 +713,7 @@ void ContentClassifierService::MaybeAnnotateChannel(
                   "MaybeAnnotateChannel - url={} feature={}",
                   uri->GetSpecOrDefault(), feature.mName);
     }
-    net::ChannelClassifierUtils::AnnotateChannel(
+    net::UrlClassifierCommon::AnnotateChannel(
         aChannel, feature.mClassificationFlag, feature.mLoadedState);
   }
 }
@@ -756,12 +756,12 @@ net::ChannelBlockDecision ContentClassifierService::MaybeCancelChannel(
             ("MaybeCancelChannel - url=%s", uri->GetSpecOrDefault().get()));
   }
 
-  if (net::ChannelClassifierUtils::IsAllowListed(aChannel)) {
+  if (net::UrlClassifierCommon::IsAllowListed(aChannel)) {
     return net::ChannelBlockDecision::Allowed;
   }
 
   net::ChannelBlockDecision decision = net::ChannelBlockDecision::Allowed;
-  net::ChannelClassifierUtils::MaybeBlockChannel(
+  net::UrlClassifierCommon::MaybeBlockChannel(
       aChannel, "content-classifier"_ns, "content-classifier-block"_ns,
       blockingFeature->mBlockingErrorCode, blockingFeature->mReplacedState,
       blockingFeature->mAllowedState, &decision);

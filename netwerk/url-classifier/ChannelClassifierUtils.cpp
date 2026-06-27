@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "mozilla/net/ChannelClassifierUtils.h"
+#include "mozilla/net/UrlClassifierCommon.h"
 
 #include "ChannelClassifierService.h"
 #include "mozilla/AntiTrackingUtils.h"
@@ -62,7 +62,7 @@ static constexpr BlockingErrorCode sBlockingErrorCodes[] = {
 }  // namespace
 
 /* static */
-bool ChannelClassifierUtils::IsClassifierBlockingErrorCode(nsresult aError) {
+bool UrlClassifierCommon::IsClassifierBlockingErrorCode(nsresult aError) {
   // In theory we can iterate through the features, but at the moment, we can
   // just have a simple check here.
   for (const auto& blockingErrorCode : sBlockingErrorCodes) {
@@ -75,7 +75,7 @@ bool ChannelClassifierUtils::IsClassifierBlockingErrorCode(nsresult aError) {
 }
 
 /* static */
-bool ChannelClassifierUtils::IsClassifierBlockingEventCode(
+bool UrlClassifierCommon::IsClassifierBlockingEventCode(
     uint32_t aEventCode) {
   for (const auto& blockingErrorCode : sBlockingErrorCodes) {
     if (aEventCode == blockingErrorCode.mBlockingEventCode) {
@@ -86,7 +86,7 @@ bool ChannelClassifierUtils::IsClassifierBlockingEventCode(
 }
 
 /* static */
-uint32_t ChannelClassifierUtils::GetClassifierBlockingEventCode(
+uint32_t UrlClassifierCommon::GetClassifierBlockingEventCode(
     nsresult aErrorCode) {
   for (const auto& blockingErrorCode : sBlockingErrorCodes) {
     if (aErrorCode == blockingErrorCode.mErrorCode) {
@@ -97,7 +97,7 @@ uint32_t ChannelClassifierUtils::GetClassifierBlockingEventCode(
 }
 
 /* static */ const char*
-ChannelClassifierUtils::ClassifierBlockingErrorCodeToConsoleMessage(
+UrlClassifierCommon::ClassifierBlockingErrorCodeToConsoleMessage(
     nsresult aError, nsACString& aCategory) {
   for (const auto& blockingErrorCode : sBlockingErrorCodes) {
     if (aError == blockingErrorCode.mErrorCode) {
@@ -110,7 +110,7 @@ ChannelClassifierUtils::ClassifierBlockingErrorCodeToConsoleMessage(
 }
 
 /* static */
-nsresult ChannelClassifierUtils::SetBlockedContent(
+nsresult UrlClassifierCommon::SetBlockedContent(
     nsIChannel* aChannel, nsresult aErrorCode, const nsACString& aList,
     const nsACString& aProvider, const nsACString& aFullHash) {
   NS_ENSURE_ARG(!aList.IsEmpty());
@@ -278,7 +278,7 @@ void LowerPriorityHelper(nsIChannel* aChannel) {
     nsCOMPtr<nsISupportsPriority> p = do_QueryInterface(aChannel);
     if (p) {
       UC_LOG(
-          ("ChannelClassifierUtils::LowerPriorityHelper - "
+          ("UrlClassifierCommon::LowerPriorityHelper - "
            "setting PRIORITY_LOWEST for channel %p",
            aChannel));
       p->SetPriority(nsISupportsPriority::PRIORITY_LOWEST);
@@ -289,7 +289,7 @@ void LowerPriorityHelper(nsIChannel* aChannel) {
 }  // namespace
 
 // static
-void ChannelClassifierUtils::SetClassificationFlagsHelper(
+void UrlClassifierCommon::SetClassificationFlagsHelper(
     nsIChannel* aChannel, uint32_t aClassificationFlags, bool aIsThirdParty) {
   MOZ_ASSERT(aChannel);
 
@@ -309,7 +309,7 @@ void ChannelClassifierUtils::SetClassificationFlagsHelper(
 }
 
 // static
-void ChannelClassifierUtils::AnnotateChannel(nsIChannel* aChannel,
+void UrlClassifierCommon::AnnotateChannel(nsIChannel* aChannel,
                                              uint32_t aClassificationFlags,
                                              uint32_t aLoadingState) {
   MOZ_ASSERT(XRE_IsParentProcess());
@@ -347,7 +347,7 @@ void ChannelClassifierUtils::AnnotateChannel(nsIChannel* aChannel,
 }
 
 // static
-void ChannelClassifierUtils::AnnotateChannelWithoutNotifying(
+void UrlClassifierCommon::AnnotateChannelWithoutNotifying(
     nsIChannel* aChannel, uint32_t aClassificationFlags) {
   MOZ_ASSERT(XRE_IsParentProcess());
   MOZ_ASSERT(aChannel);
@@ -372,7 +372,7 @@ void ChannelClassifierUtils::AnnotateChannelWithoutNotifying(
 }
 
 /* static */
-nsresult ChannelClassifierUtils::MaybeBlockChannel(
+nsresult UrlClassifierCommon::MaybeBlockChannel(
     nsIChannel* aChannel, const nsACString& aFeatureName,
     const nsACString& aList, nsresult aErrorCode, uint32_t aReplacedEvent,
     uint32_t aAllowedEvent, ChannelBlockDecision* aOutDecision) {
@@ -399,7 +399,7 @@ nsresult ChannelClassifierUtils::MaybeBlockChannel(
   SetBlockedContent(aChannel, aErrorCode, aList, ""_ns, ""_ns);
 
   UC_LOG(
-      ("ChannelClassifierUtils::MaybeBlockChannel - feature=%s "
+      ("UrlClassifierCommon::MaybeBlockChannel - feature=%s "
        "cancelling channel %p",
        PromiseFlatCString(aFeatureName).get(), aChannel));
 
@@ -414,7 +414,7 @@ nsresult ChannelClassifierUtils::MaybeBlockChannel(
 }
 
 // static
-bool ChannelClassifierUtils::IsAllowListed(nsIChannel* aChannel) {
+bool UrlClassifierCommon::IsAllowListed(nsIChannel* aChannel) {
   nsCOMPtr<nsIHttpChannelInternal> channel = do_QueryInterface(aChannel);
   if (NS_WARN_IF(!channel)) {
     return false;
@@ -425,7 +425,7 @@ bool ChannelClassifierUtils::IsAllowListed(nsIChannel* aChannel) {
   bool isAllowListed = false;
   if (StaticPrefs::channelclassifier_allowlist_example()) {
     UC_LOG(
-        ("ChannelClassifierUtils::IsAllowListed - "
+        ("UrlClassifierCommon::IsAllowListed - "
          "check allowlisting test domain on channel %p",
          aChannel));
 
@@ -458,7 +458,7 @@ bool ChannelClassifierUtils::IsAllowListed(nsIChannel* aChannel) {
 
   if (isAllowListed) {
     UC_LOG(
-        ("ChannelClassifierUtils::IsAllowListed - user override on channel %p",
+        ("UrlClassifierCommon::IsAllowListed - user override on channel %p",
          aChannel));
   }
 
@@ -466,7 +466,7 @@ bool ChannelClassifierUtils::IsAllowListed(nsIChannel* aChannel) {
 }
 
 /* static */
-bool ChannelClassifierUtils::IsPassiveContent(nsIChannel* aChannel) {
+bool UrlClassifierCommon::IsPassiveContent(nsIChannel* aChannel) {
   MOZ_ASSERT(aChannel);
 
   nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
@@ -480,7 +480,7 @@ bool ChannelClassifierUtils::IsPassiveContent(nsIChannel* aChannel) {
 }
 
 // static
-bool ChannelClassifierUtils::IsTrackingClassificationFlag(uint32_t aFlag,
+bool UrlClassifierCommon::IsTrackingClassificationFlag(uint32_t aFlag,
                                                           bool aIsPrivate) {
   bool isLevel2ListEnabled =
       aIsPrivate
@@ -504,14 +504,14 @@ bool ChannelClassifierUtils::IsTrackingClassificationFlag(uint32_t aFlag,
 }
 
 // static
-bool ChannelClassifierUtils::IsSocialTrackingClassificationFlag(
+bool UrlClassifierCommon::IsSocialTrackingClassificationFlag(
     uint32_t aFlag) {
   return (aFlag & nsIClassifiedChannel::ClassificationFlags::
                       CLASSIFIED_ANY_SOCIAL_TRACKING) != 0;
 }
 
 // static
-bool ChannelClassifierUtils::IsCryptominingClassificationFlag(uint32_t aFlag,
+bool UrlClassifierCommon::IsCryptominingClassificationFlag(uint32_t aFlag,
                                                               bool aIsPrivate) {
   if (aFlag &
       nsIClassifiedChannel::ClassificationFlags::CLASSIFIED_CRYPTOMINING) {

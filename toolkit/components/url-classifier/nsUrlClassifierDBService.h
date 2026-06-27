@@ -53,7 +53,7 @@ nsresult TablesToResponse(const nsACString& tables);
 }  // namespace safebrowsing
 
 namespace net {
-class AntiTrackingChannelClassifierUtils;
+class AsyncUrlChannelClassifier;
 }
 
 }  // namespace mozilla
@@ -64,7 +64,7 @@ class nsUrlClassifierDBService final : public nsIUrlClassifierDBService,
                                        public nsIURIClassifier,
                                        public nsIUrlClassifierInfo,
                                        public nsIObserver {
-  friend class mozilla::net::AntiTrackingChannelClassifierUtils;
+  friend class mozilla::net::AsyncUrlChannelClassifier;
 
  public:
   class FeatureHolder;
