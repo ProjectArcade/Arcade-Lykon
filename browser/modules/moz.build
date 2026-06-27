@@ -140,7 +140,6 @@ EXTRA_JS_MODULES += [
     "SharingUtils.sys.mjs",
     "SiteDataManager.sys.mjs",
     "SitePermissions.sys.mjs",
-    "TorWindow.sys.mjs",
     "TransientPrefs.sys.mjs",
     "UpdatePolicyEnforcer.sys.mjs",
     "URILoadingHelper.sys.mjs",
@@ -157,8 +156,6 @@ MOZ_SRC_FILES += [
     "ContextId.sys.mjs",
     "ObserverForwarder.sys.mjs",
     "PrivateBrowsingUI.sys.mjs",
-    "UnexpectedScriptObserver.sys.mjs",
-    "WebAuthnPromptHelper.sys.mjs",
 ]
 
 if CONFIG["MOZ_WIDGET_TOOLKIT"] == "windows":

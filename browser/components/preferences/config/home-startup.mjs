@@ -29,7 +29,9 @@ Preferences.addAll([
 
 if (Services.prefs.getBoolPref("browser.settings-redesign.enabled")) {
   SettingGroupManager.registerGroups({
-    defaultBrowserHome: window.createDefaultBrowserConfig(),
+    defaultBrowserHome: window.createDefaultBrowserConfig({
+      hiddenFromSearch: true,
+    }),
     startupHome: window.createStartupConfig(),
   });
 }

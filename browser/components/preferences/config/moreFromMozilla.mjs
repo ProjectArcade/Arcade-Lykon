@@ -116,7 +116,7 @@ function getProducts() {
       region: "global",
       link: {
         l10nId: "more-from-moz-mdn-box-link",
-        iconSrc: "chrome://global/skin/icons/mdn.svg",
+        iconSrc: "chrome://browser/skin/preferences/mdn-logo.svg",
         actionURL: "https://developer.mozilla.org/docs/Learn_web_development",
       },
     },
@@ -126,13 +126,13 @@ function getProducts() {
       region: "global",
       link: {
         l10nId: "more-from-moz-thunderbird-box-link",
-        iconSrc: "chrome://browser/skin/preferences/thunderbird-color-16.svg",
+        iconSrc: "chrome://browser/skin/preferences/thunderbird-16.svg",
         actionURL: "https://www.thunderbird.net/",
       },
     },
     {
       id: "solo-ai",
-      l10nId: "more-from-moz-solo-card-1",
+      l10nId: "more-from-moz-solo-card",
       region: "global",
       link: {
         l10nId: "more-from-moz-solo-box-link",
@@ -142,7 +142,7 @@ function getProducts() {
     },
     {
       id: "mozilla-new-products",
-      l10nId: "more-from-moz-new-products-card2",
+      l10nId: "more-from-moz-new-products-card",
       region: "global",
       link: {
         l10nId: "more-from-moz-new-products-box-link",
@@ -170,10 +170,10 @@ Preferences.addSetting({
 Preferences.addSetting({
   id: "promoGroupLink",
   getControlConfig: config => {
-    let href = getURL({
-      url: "https://www.mozilla.org/firefox/browsers/mobile/",
-      region: "global",
-    });
+    let actionURL = lazy.BrowserUtils.isChinaRepack()
+      ? "https://www.firefox.com.cn/browsers/mobile/"
+      : "https://www.mozilla.org/firefox/browsers/mobile/";
+    let href = getURL({ url: actionURL, region: "global" });
     return {
       ...config,
       controlAttrs: {
@@ -190,10 +190,15 @@ Preferences.addSetting({
     let option =
       lazy.NimbusFeatures.moreFromMozilla.getVariable("template") || "default";
     let templateName = option === "default" ? "simple" : option;
+    let cnSuffix =
+      lazy.BrowserUtils.isChinaRepack() && templateName.includes("simple")
+        ? "-cn"
+        : "";
+    let imagesrc = `chrome://browser/content/preferences/more-from-mozilla-qr-code-${templateName}${cnSuffix}.svg`;
     return {
       ...config,
       controlAttrs: {
-        imagesrc: `chrome://browser/content/preferences/more-from-mozilla-qr-code-${templateName}.svg`,
+        imagesrc,
         imagealignment: "start",
       },
     };
@@ -204,11 +209,10 @@ Preferences.addSetting({
   id: "firefoxMobilePromoLink",
   visible: () => lazy.BrowserUtils.sendToDeviceEmailsSupported(),
   getControlConfig: config => {
-    let href = getURL({
-      url: "https://www.mozilla.org/firefox/mobile/get-app/?v=mfm",
-      region: "global",
-      hasEmail: true,
-    });
+    let actionURL = lazy.BrowserUtils.isChinaRepack()
+      ? "https://www.firefox.com.cn/mobile/get-app/"
+      : "https://www.mozilla.org/firefox/mobile/get-app/?v=mfm";
+    let href = getURL({ url: actionURL, region: "global", hasEmail: true });
     return {
       ...config,
       controlAttrs: {

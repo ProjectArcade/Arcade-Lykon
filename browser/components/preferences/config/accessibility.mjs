@@ -9,7 +9,17 @@ const { AppConstants } = ChromeUtils.importESModule(
   "resource://gre/modules/AppConstants.sys.mjs"
 );
 
+/* Accessibility
+ * accessibility.browsewithcaret
+   - true enables keyboard navigation and selection within web pages using a
+     visible caret, false uses normal keyboard navigation with no caret
+ * accessibility.typeaheadfind
+   - when set to true, typing outside text areas and input boxes will
+     automatically start searching for what's typed within the current
+     document; when set to false, no search action happens */
 Preferences.addAll([
+  { id: "accessibility.browsewithcaret", type: "bool" },
+  { id: "accessibility.typeaheadfind", type: "bool" },
   { id: "accessibility.blockautorefresh", type: "bool" },
   { id: "accessibility.tabfocus", type: "int" },
   { id: "browser.display.document_color_use", type: "int" },
@@ -22,18 +32,6 @@ Preferences.addAll([
   { id: "media.hardwaremediakeys.enabled", type: "bool" },
 ]);
 
-let srdEnabled = Services.prefs.getBoolPref(
-  "browser.settings-redesign.enabled",
-  false
-);
-
-if (!srdEnabled) {
-  Preferences.addAll([
-    { id: "accessibility.browsewithcaret", type: "bool" },
-    { id: "accessibility.typeaheadfind", type: "bool" },
-  ]);
-}
-
 if (AppConstants.platform === "win") {
   Preferences.addAll([{ id: "ui.osk.enabled", type: "bool" }]);
 }
@@ -42,6 +40,11 @@ Preferences.addSetting({
   id: "useOnScreenKeyboard",
   pref: AppConstants.platform == "win" ? "ui.osk.enabled" : undefined,
   visible: () => AppConstants.platform == "win",
+});
+
+Preferences.addSetting({
+  id: "useCursorNavigation",
+  pref: "accessibility.browsewithcaret",
 });
 
 Preferences.addSetting(
@@ -86,6 +89,11 @@ Preferences.addSetting(
 Preferences.addSetting({
   id: "alwaysUnderlineLinks",
   pref: "layout.css.always_underline_links",
+});
+
+Preferences.addSetting({
+  id: "searchStartTyping",
+  pref: "accessibility.typeaheadfind",
 });
 
 Preferences.addSetting({
@@ -463,18 +471,6 @@ Preferences.addSetting({
   },
 });
 
-// Bug 2028609: remove these settings when the pref is flipped
-if (!srdEnabled) {
-  Preferences.addSetting({
-    id: "useCursorNavigationAccess",
-    pref: "accessibility.browsewithcaret",
-  });
-  Preferences.addSetting({
-    id: "searchStartTypingAccess",
-    pref: "accessibility.typeaheadfind",
-  });
-}
-
 SettingGroupManager.registerGroups({
   zoom: {
     l10nId: "preferences-default-zoom-label",
@@ -492,7 +488,7 @@ SettingGroupManager.registerGroups({
       },
       {
         id: "zoomWarning",
-        l10nId: "preferences-text-zoom-override-warning2",
+        l10nId: "preferences-text-zoom-override-warning",
         control: "moz-message-bar",
         controlAttrs: {
           type: "warning",
@@ -570,23 +566,12 @@ SettingGroupManager.registerGroups({
     headingLevel: 2,
     items: [
       { id: "useOnScreenKeyboard", l10nId: "browsing-use-onscreen-keyboard" },
-      // Bug 2028609: remove these settings when the pref is flipped
-      ...(!srdEnabled
-        ? [
-            {
-              id: "useCursorNavigationAccess",
-              l10nId: "browsing-use-cursor-navigation",
-            },
-            {
-              id: "searchStartTypingAccess",
-              l10nId: "browsing-search-on-start-typing",
-            },
-          ]
-        : []),
+      { id: "useCursorNavigation", l10nId: "browsing-use-cursor-navigation" },
       {
         id: "useFullKeyboardNavigation",
         l10nId: "browsing-use-full-keyboard-navigation",
       },
+      { id: "searchStartTyping", l10nId: "browsing-search-on-start-typing" },
       {
         id: "mediaControlToggleEnabled",
         l10nId: "browsing-media-control",
