@@ -97,7 +97,6 @@ security.doh.settings:
           The `value` of the event. Mirrors to the Legacy Telemetry
           event's `value` parameter.
         type: string
-    telemetry_mirror: SecurityDohSettings_ModeChanged_Button
 
   provider_choice_value:
     type: event
@@ -120,7 +119,6 @@ security.doh.settings:
           The `value` of the event. Mirrors to the Legacy Telemetry
           event's `value` parameter.
         type: string
-    telemetry_mirror: SecurityDohSettings_ProviderChoice_Value
 
 intl.ui.browser_language:
   manage_main:
