@@ -1351,18 +1351,21 @@ dependencies = [
  "crash_helper_common",
  "dirs",
  "env_logger",
+ "linked-hash-map",
  "log",
  "minidump-writer",
  "mozannotation_server",
  "mozbuild",
  "mozilla-central-workspace-hack",
  "nix",
+ "num-derive",
  "num-traits",
  "once_cell",
  "rust_minidump_writer_linux",
  "thiserror 2.0.12",
  "uuid",
  "windows-sys",
+ "yaml-rust2",
 ]
 
 [[package]]
