@@ -28,11 +28,7 @@ class nsIURI;
 namespace mozilla {
 namespace net {
 
-enum class ChannelBlockDecision {
-  Blocked,
-  Replaced,
-  Allowed,
-};
+enum class ChannelBlockDecision;
 
 class UrlClassifierCommon final {
  public:

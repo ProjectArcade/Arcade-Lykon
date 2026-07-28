@@ -998,7 +998,7 @@ nsresult AsyncUrlChannelClassifier::CheckChannel(
                     contentClassifier->MaybeAnnotateChannel(channel, annotateResult);
                   }
                   if (shouldCancel) {
-                    contentClassifier->MaybeCancelChannel(channel, cancelResult);
+                    (void)contentClassifier->MaybeCancelChannel(channel, cancelResult);
                     callbackFromFeature();
                   } else if (task) {
                     task->CompleteClassification();

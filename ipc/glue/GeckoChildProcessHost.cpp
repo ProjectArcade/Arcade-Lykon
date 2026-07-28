@@ -1131,7 +1131,18 @@ Result<Ok, LaunchError> BaseProcessLauncher::DoSetup() {
 
   if (!CrashReporter::IsDummy() && CrashReporter::GetEnabled() &&
       mProcessType != GeckoProcessType_ForkServer) {
-    if (!CrashReporter::RegisterChildIPCChannel(mChildArgs, mChildID)) {
+#if defined(MOZ_WIDGET_COCOA) || defined(XP_WIN)
+    geckoargs::sCrashReporter.Put(CrashReporter::GetChildNotificationPipe(),
+                                  mChildArgs);
+#elif defined(XP_UNIX) && !defined(XP_IOS)
+    UniqueFileHandle childCrashFd = CrashReporter::GetChildNotificationPipe();
+    if (!childCrashFd) {
+      return Err(LaunchError("DuplicateFileHandle failed"));
+    }
+    geckoargs::sCrashReporter.Put(std::move(childCrashFd), mChildArgs);
+#endif  // XP_UNIX && !XP_IOS
+
+    if (!CrashReporter::RegisterChildIPCChannel(mChildArgs)) {
       NS_WARNING("Could not create an IPC channel to the crash helper");
     }
   }
@@ -1735,17 +1746,10 @@ RefPtr<ProcessLaunchPromise> WindowsProcessLauncher::DoLaunch() {
         mLaunchOptions->env_map, mProcessType, mEnableSandboxLogging,
         cachedNtdllThunk, &mResults.mHandle);
     if (err.isOk()) {
-      base::ProcessId childPid = base::GetProcId(mResults.mHandle);
-      EnvironmentLog logger = EnvironmentLog("MOZ_PROCESS_LOG");
-      logger.print("==> process %d launched child process %d (%S)\n",
-                   base::GetCurrentProcId(), childPid,
-                   mCmdLine->command_line_string().c_str());
-      if (!CrashReporter::ChildProcessProxyRendezvous(mChildID, childPid,
-                                                      mResults.mHandle)) {
-        logger.print(
-            "==> process %d could not rendez-vous with the crash helper\n",
-            childPid);
-      }
+      EnvironmentLog("MOZ_PROCESS_LOG")
+          .print("==> process %d launched child process %d (%S)\n",
+                 base::GetCurrentProcId(), base::GetProcId(mResults.mHandle),
+                 mCmdLine->command_line_string().c_str());
 
       return ProcessLaunchPromise::CreateAndResolve(std::move(mResults),
                                                     __func__);
@@ -1761,15 +1765,7 @@ RefPtr<ProcessLaunchPromise> WindowsProcessLauncher::DoLaunch() {
                                                  __func__);
   }
 
-  base::ProcessId childPid = base::GetProcId(mResults.mHandle);
-  if (!CrashReporter::ChildProcessProxyRendezvous(mChildID, childPid,
-                                                  mResults.mHandle)) {
-    NS_WARNING(
-        nsPrintfCString(
-            "Could not rendez-vous with crash helper on behalf of process %d",
-            mChildID)
-            .get());
-  }
+
 
   return ProcessLaunchPromise::CreateAndResolve(std::move(mResults), __func__);
 }
