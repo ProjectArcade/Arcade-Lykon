@@ -24,6 +24,7 @@
 #include "nsIClassifiedChannel.h"
 #include "mozilla/dom/Document.h"
 #include "nsIDocShell.h"
+#include "nsPIDOMWindowInlines.h"
 #include "nsIHttpChannel.h"
 #include "nsIHttpChannelInternal.h"
 #include "nsIParentChannel.h"
