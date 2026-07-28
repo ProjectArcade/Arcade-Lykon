@@ -28,6 +28,12 @@ class nsIURI;
 namespace mozilla {
 namespace net {
 
+enum class ChannelBlockDecision {
+  Blocked,
+  Replaced,
+  Allowed,
+};
+
 class UrlClassifierCommon final {
  public:
   static const nsCString::size_type sMaxSpecLength;
@@ -43,6 +49,20 @@ class UrlClassifierCommon final {
                                     const nsACString& aList,
                                     const nsACString& aProvider,
                                     const nsACString& aFullHash);
+
+  static bool IsClassifierBlockingErrorCode(nsresult aError);
+
+  static bool IsClassifierBlockingEventCode(uint32_t aEventCode);
+
+  static uint32_t GetClassifierBlockingEventCode(nsresult aErrorCode);
+
+  static const char* ClassifierBlockingErrorCodeToConsoleMessage(
+      nsresult aError, nsACString& aCategory);
+
+  static nsresult MaybeBlockChannel(
+      nsIChannel* aChannel, const nsACString& aFeatureName,
+      const nsACString& aList, nsresult aErrorCode, uint32_t aReplacedEvent,
+      uint32_t aAllowedEvent, ChannelBlockDecision* aOutDecision);
 
   static nsresult SetTrackingInfo(nsIChannel* channel,
                                   const nsTArray<nsCString>& aLists,

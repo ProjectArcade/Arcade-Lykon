@@ -957,14 +957,16 @@ nsresult AsyncUrlChannelClassifier::CheckChannel(
        channel = nsCOMPtr<nsIChannel>(aChannel)]() mutable -> void {
         MOZ_ASSERT(!NS_IsMainThread());
 
+        ContentClassifierResult cancelResult;
+        ContentClassifierResult annotateResult;
         bool shouldCancel = false;
         bool shouldAnnotate = false;
 
         if (contentClassifier && contentClassifier->IsInitialized() &&
             contentClassifierRequest.isSome()) {
-          ContentClassifierResult cancelResult =
+          cancelResult =
               contentClassifier->ClassifyForCancel(*contentClassifierRequest);
-          ContentClassifierResult annotateResult =
+          annotateResult =
               contentClassifier->ClassifyForAnnotate(*contentClassifierRequest);
 
           shouldCancel = cancelResult.Hit();
@@ -981,6 +983,8 @@ nsresult AsyncUrlChannelClassifier::CheckChannel(
             NS_NewRunnableFunction(
                 "AsyncUrlChannelClassifier::CheckChannel - return",
                 [task, channel, shouldCancel, shouldAnnotate,
+                 cancelResult = std::move(cancelResult),
+                 annotateResult = std::move(annotateResult),
                  callbackFromFeature = std::move(callbackFromFeature),
                  contentClassifier]() -> void {
                   nsCOMPtr<nsILoadInfo> loadInfo;
@@ -991,10 +995,10 @@ nsresult AsyncUrlChannelClassifier::CheckChannel(
                   }
 
                   if (shouldAnnotate) {
-                    contentClassifier->AnnotateChannel(channel);
+                    contentClassifier->MaybeAnnotateChannel(channel, annotateResult);
                   }
                   if (shouldCancel) {
-                    contentClassifier->CancelChannel(channel);
+                    contentClassifier->MaybeCancelChannel(channel, cancelResult);
                     callbackFromFeature();
                   } else if (task) {
                     task->CompleteClassification();

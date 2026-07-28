@@ -4,6 +4,8 @@
 
 #include "mozilla/net/UrlClassifierCommon.h"
 
+#include "ChannelClassifierService.h"
+
 #include "mozilla/AntiTrackingUtils.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/Components.h"
@@ -750,6 +752,63 @@ bool UrlClassifierCommon::ShouldProcessWithProtectionFeature(
   }
 
   return shouldProcess;
+}
+
+bool UrlClassifierCommon::IsClassifierBlockingErrorCode(nsresult aError) {
+  return UrlClassifierFeatureFactory::IsClassifierBlockingErrorCode(aError);
+}
+
+bool UrlClassifierCommon::IsClassifierBlockingEventCode(uint32_t aEventCode) {
+  return UrlClassifierFeatureFactory::IsClassifierBlockingEventCode(aEventCode);
+}
+
+uint32_t UrlClassifierCommon::GetClassifierBlockingEventCode(nsresult aErrorCode) {
+  return UrlClassifierFeatureFactory::GetClassifierBlockingEventCode(aErrorCode);
+}
+
+const char* UrlClassifierCommon::ClassifierBlockingErrorCodeToConsoleMessage(nsresult aError, nsACString& aCategory) {
+  return UrlClassifierFeatureFactory::ClassifierBlockingErrorCodeToConsoleMessage(aError, aCategory);
+}
+
+nsresult UrlClassifierCommon::MaybeBlockChannel(
+    nsIChannel* aChannel, const nsACString& aFeatureName,
+    const nsACString& aList, nsresult aErrorCode, uint32_t aReplacedEvent,
+    uint32_t aAllowedEvent, ChannelBlockDecision* aOutDecision) {
+  MOZ_ASSERT(aChannel);
+  MOZ_ASSERT(aOutDecision);
+
+  ChannelBlockDecision decision =
+      ChannelClassifierService::OnBeforeBlockChannel(aChannel, aFeatureName,
+                                                     aList);
+  *aOutDecision = decision;
+
+  if (decision != ChannelBlockDecision::Blocked) {
+    uint32_t event = decision == ChannelBlockDecision::Replaced ? aReplacedEvent
+                                                                : aAllowedEvent;
+
+    // Treat a Replaced decision (resource swapped for a shim) as a blocked
+    // event so consumers see it as a block.
+    bool blocked = decision == ChannelBlockDecision::Replaced;
+    ContentBlockingNotifier::OnEvent(aChannel, event, blocked);
+
+    return NS_OK;
+  }
+
+  SetBlockedContent(aChannel, aErrorCode, aList, ""_ns, ""_ns);
+
+  UC_LOG(
+      ("UrlClassifierCommon::MaybeBlockChannel - feature=%s "
+       "cancelling channel %p",
+       PromiseFlatCString(aFeatureName).get(), aChannel));
+
+  nsCOMPtr<nsIHttpChannelInternal> httpChannel = do_QueryInterface(aChannel);
+  if (httpChannel) {
+    (void)httpChannel->CancelByURLClassifier(aErrorCode);
+  } else {
+    (void)aChannel->Cancel(aErrorCode);
+  }
+
+  return NS_OK;
 }
 
 }  // namespace net
