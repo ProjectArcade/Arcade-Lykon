@@ -53,6 +53,7 @@ DIRS += [
     "newtab",
     "originattributes",
     "pagedata",
+    "passwordmgr",
     "permissions",
     "places",
     "preferences",
