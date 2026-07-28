@@ -1051,6 +1051,31 @@ nsXULAppInfo::AddRef() { return 1; }
 NS_IMETHODIMP_(MozExternalRefCountType)
 nsXULAppInfo::Release() { return 1; }
 
+namespace mozilla {
+nsresult MarkProfileEncryptedDatabases() {
+  return NS_OK;
+}
+} // namespace mozilla
+
+NS_IMETHODIMP
+nsXULAppInfo::MarkProfileEncryptedDatabases() {
+  return mozilla::MarkProfileEncryptedDatabases();
+}
+
+NS_IMETHODIMP
+nsXULAppInfo::GetRemotingName(nsACString& aResult) {
+  if (XRE_IsContentProcess()) {
+    aResult.AssignLiteral("");
+    return NS_OK;
+  }
+  if (gAppData && gAppData->remotingName) {
+    aResult.Assign(gAppData->remotingName);
+  } else if (gAppData && gAppData->name) {
+    aResult.Assign(gAppData->name);
+  }
+  return NS_OK;
+}
+
 NS_IMETHODIMP
 nsXULAppInfo::GetVendor(nsACString& aResult) {
   if (XRE_IsContentProcess()) {
